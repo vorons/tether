@@ -69,8 +69,9 @@ local function parse_json_str(s)
     for key, val in s:gmatch('"([^"]+)"[%s]*:[%s]*(%d+%.?%d*)') do
         obj[key] = tonumber(val)
     end
-    for key, val in s:gmatch('"([^"]+)"[%s]*:[%s]*(true|false)') do
-        obj[key] = (val == "true")
+    for key, val in s:gmatch('"([^"]+)"[%s]*:[%s]*(%S+)') do
+        val = val:gsub("[,%}]]$", "")
+        if val == "true" then obj[key] = true elseif val == "false" then obj[key] = false end
     end
     return next(obj) and obj or nil
 end
@@ -91,15 +92,23 @@ end
 local function session_files(workspace)
     ensure_dir()
     local files = {}
-    for fname in io.popen("ls -1t " .. SESSION_DIR .. "/*.jsonl 2>/dev/null"):lines() do
-        if fname:match("%.jsonl$") then
+    local ok, result = pcall(function()
+        local f = io.popen("find " .. SESSION_DIR .. " -name '*.jsonl' -type f -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -100")
+        local r = f:read("*a")
+        f:close()
+        return r
+    end)
+    if not ok then return files end
+    for line in result:gmatch("[^]+") do
+        local mtime, fname = line:match("^(%S+)%s+(.+)")
+        if fname and fname:match("%.jsonl$") then
             local id = fname:match("([^/]+)%.jsonl$")
             local events = read_events(id)
             local meta = events[#events] and events[#events].meta
             if meta and meta.workspace == workspace then
                 files[#files + 1] = {
                     id = id,
-                    mtime = fname:match("%.jsonl$") and fname or 0,
+                    mtime = mtime,
                     first_line = events[1] and events[1].content or "",
                     ts = events[1] and events[1].ts or "",
                 }

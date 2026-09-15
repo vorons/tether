@@ -8,6 +8,7 @@ local cfg = nil
 local key = ""
 
 local expanded = {}  -- tool_call_id -> true if expanded
+local expand_all = false
 local thinking_visible = true
 local diff_text = ""
 local confirmation_active = false
@@ -220,6 +221,8 @@ function M.run()
     cfg = config.load()
     key = config.api_key(cfg)
     draw_banner()
+    draw_status()
+    draw_hint()
     out("› ")
 
     while true do
@@ -230,17 +233,23 @@ function M.run()
         if confirmation_active then
             if handle_confirmation_input(c) then
                 draw_banner()
+                draw_status()
+                draw_hint()
                 out("› ")
             end
         elseif diff_text ~= "" then
             if handle_diff_input(c) then
                 draw_banner()
+                draw_status()
+                draw_hint()
                 out("› ")
             end
         elseif c == 3 or c == 4 then
             break
         elseif c == 12 then
             draw_banner()
+            draw_status()
+            draw_hint()
             out("› ")
         elseif c == 27 then
             drain_escape()
@@ -249,12 +258,21 @@ function M.run()
                 commit_input()
             end
         elseif c == 15 then -- Ctrl+O
-            -- toggle expand/collapse
+            expand_all = not expand_all
             draw_banner()
+            draw_status()
+            draw_hint()
             out("› ")
         elseif c == 20 then -- Ctrl+T
             thinking_visible = not thinking_visible
             draw_banner()
+            draw_status()
+            draw_hint()
+            out("› ")
+        elseif c == 12 then -- Ctrl+L
+            draw_banner()
+            draw_status()
+            draw_hint()
             out("› ")
         elseif c == 127 or c == 8 then
             if #input_buf > 0 then

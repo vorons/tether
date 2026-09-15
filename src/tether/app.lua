@@ -1,6 +1,8 @@
 -- tether M5: app entry — CLI parsing, session resume, TUI/print modes
 local M = {}
 
+local version = false
+
 local function parse_args()
     local args = arg or {}
     local opts = {
@@ -28,8 +30,8 @@ local function parse_args()
         elseif a == "--debug" then
             opts.debug = true
         elseif a == "--version" or a == "-v" then
-            print("tether 0.1.0")
-            os.exit(0)
+            version = true
+            return opts
         end
         i = i + 1
     end
@@ -92,6 +94,10 @@ local function run_inner()
 end
 
 function M.run()
+    if version then
+        print("tether 0.1.0")
+        os.exit(0)
+    end
     local ok, err = pcall(run_inner)
     if not ok then
         io.stderr:write("tether: " .. tostring(err) .. "\n")

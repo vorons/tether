@@ -60,8 +60,9 @@ local function parse_json_str(s)
     for key, val in s:gmatch('"([^"]+)"[%s]*:[%s]*(%d+%.?%d*)') do
         obj[key] = tonumber(val)
     end
-    for key, val in s:gmatch('"([^"]+)"[%s]*:[%s]*(true|false)') do
-        obj[key] = (val == "true")
+    for key, val in s:gmatch('"([^"]+)"[%s]*:[%s]*(%S+)') do
+        val = val:gsub("[,%}]]$", "")
+        if val == "true" then obj[key] = true elseif val == "false" then obj[key] = false end
     end
     return next(obj) and obj or nil
 end

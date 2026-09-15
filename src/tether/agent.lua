@@ -83,14 +83,15 @@ end
 local function parse_args(args_str)
     if not args_str or args_str == "" then return {} end
     local result = {}
-    for k, v in args_str:gmatch('"(%w+)"%s*:%s*"(.-)"') do
+    for k, v in args_str:gmatch('"(%w+)"[%s]*:[%s]*"([^"]*)"') do
         result[k] = v
     end
-    for k, v in args_str:gmatch('"(%w+)"%s*:%s*(%d+)') do
+    for k, v in args_str:gmatch('"(%w+)"[%s]*:[%s]*(%d+%.?%d*)') do
         result[k] = tonumber(v)
     end
-    for k, v in args_str:gmatch('"(%w+)"%s*:%s*(true|false)') do
-        result[k] = (v == "true")
+    for k, v in args_str:gmatch('"(%w+)"[%s]*:[%s]*(%S+)') do
+        v = v:gsub("[,%}]]$", "")
+        if v == "true" then result[k] = true elseif v == "false" then result[k] = false end
     end
     if next(result) then return result end
     return {}

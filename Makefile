@@ -30,6 +30,15 @@ $(EMBED_OUT): $(LUA_MODS) tools/embed.lua
 		tools_lua src/tether/tools.lua
 
 test: tether
+	@luac -p src/tether/app.lua
+	@luac -p src/tether/ui.lua
+	@luac -p src/tether/config.lua
+	@luac -p src/tether/session.lua
+	@luac -p src/tether/api.lua
+	@luac -p src/tether/agent.lua
+	@luac -p src/tether/tools.lua
+	@echo "=== luac ok ==="
+	lua tests/lua_tests.lua
 	sh tests/host_smoke.sh
 
 clean:

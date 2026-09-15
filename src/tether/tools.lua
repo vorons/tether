@@ -26,15 +26,6 @@ local function within_workspace(path, cfg)
     return rel ~= path
 end
 
-local function run_to_file(cmd, outfile)
-    tether.exec(cmd .. " > " .. outfile)
-    local f = io.open(outfile, "r")
-    local data = f and f:read("*a") or ""
-    if f then f:close() end
-    os.remove(outfile)
-    return data
-end
-
 local function now_ms()
     return math.floor(os.clock() * 1000)
 end
@@ -74,30 +65,56 @@ function M.read(args)
     return { content = table.concat(out, "\n"), line_count = #lines }
 end
 
-function M.list(args)
-    local path = args.path and resolve(args.path) or WS
-    local data = run_to_file(
-        string.format("ls -1A %s 2>/dev/null", sq(path)),
-        "/tmp/tether_list.txt")
+local function dir_entries(path)
     local entries = {}
-    for entry in data:gmatch("([^\n]+)") do
+    local ok, dir = pcall(function()
+        local f = io.popen("ls -1A " .. sq(path) .. " 2>/dev/null")
+        local result = f:read("*a")
+        f:close()
+        return result
+    end)
+    if not ok then return entries end
+    for entry in dir:gmatch("[^\n]+") do
         if entry ~= "." and entry ~= ".." then
             entries[#entries + 1] = entry
         end
     end
     table.sort(entries)
+    return entries
+end
+
+function M.list(args)
+    local path = args.path and resolve(args.path) or WS
+    local entries = dir_entries(path)
     return { entries = entries, count = #entries }
+end
+
+local function dir_files(base)
+    local files = {}
+    local ok, result = pcall(function()
+        local f = io.popen("find " .. sq(base) .. " -type f 2>/dev/null")
+        local r = f:read("*a")
+        f:close()
+        return r
+    end)
+    if not ok then return files end
+    for file in result:gmatch("[^\n]+") do
+        files[#files + 1] = to_rel(file)
+    end
+    return files
 end
 
 function M.glob(args)
     local base = args.path and resolve(args.path) or WS
-    local data = run_to_file(
-        string.format("find %s -name %s -type f 2>/dev/null | head -500",
-                      sq(base), sq(args.pattern)),
-        "/tmp/tether_glob.txt")
+    local pattern = args.pattern or ""
+    local all_files = dir_files(base)
     local files = {}
-    for file in data:gmatch("([^\n]+)") do
-        files[#files + 1] = to_rel(file)
+    local lp = pattern:gsub("%.", "%%."):gsub("%.%.", ".*"):gsub("%*", ".*")
+    for _, f in ipairs(all_files) do
+        local basename = f:match("([^/]+)$") or f
+        if basename:match(lp) then
+            files[#files + 1] = f
+        end
     end
     table.sort(files)
     return { files = files, count = #files }
@@ -107,25 +124,28 @@ function M.grep(args)
     local base = args.path and resolve(args.path) or WS
     local max = args.max_results or 100
     local ic = args.ignore_case and "-i " or ""
+    local pattern = args.pattern or ""
 
-    local data = run_to_file(
-        string.format("rg -n --no-heading %s%s %s %s 2>/dev/null | head %d",
-                      ic, sq(args.pattern), sq(base), "0", max),
-        "/tmp/tether_grep.txt")
-
-    if data == "" then
-        data = run_to_file(
-            string.format("grep -rn%s %s %s 2>/dev/null | head %d",
-                         ic, sq(args.pattern), sq(base), max),
-            "/tmp/tether_grep.txt")
+    local data = ""
+    local ok = pcall(function()
+        local f = io.popen("rg -n --no-heading " .. ic .. sq(pattern) .. " " .. sq(base) .. " 2>/dev/null | head " .. max)
+        data = f:read("*a")
+        f:close()
+    end)
+    if not ok or data == "" then
+        ok = pcall(function()
+            local f = io.popen("grep -rn" .. ic .. " " .. sq(pattern) .. " " .. sq(base) .. " 2>/dev/null | head " .. max)
+            data = f:read("*a")
+            f:close()
+        end)
     end
 
     local matches = {}
-    for line in data:gmatch("([^\n]+)") do
-        local path, num, text = line:match("^(.-):(%d+):(.*)$")
-        if path and num then
+    for line in data:gmatch("[^\n]+") do
+        local p, num, text = line:match("^(.-):(%d+):(.*)$")
+        if p and num then
             matches[#matches + 1] = {
-                path = to_rel(path),
+                path = to_rel(p),
                 line = tonumber(num),
                 text = text,
             }
@@ -134,18 +154,26 @@ function M.grep(args)
     return { matches = matches, count = #matches }
 end
 
+local function atomic_write(path, content)
+    local tmp = path .. ".tmp." .. math.random(100000, 999999)
+    local f = io.open(tmp, "w")
+    if not f then return nil, "cannot open temp file" end
+    f:write(content)
+    f:close()
+    os.rename(tmp, path)
+    return true
+end
+
 function M.write(args, cfg)
     local path = resolve(args.path)
     if not within_workspace(path, cfg) then
         return nil, "write outside workspace requires confirmation"
     end
     local content = args.content or ""
-    local f = io.open(path, "w")
-    if not f then
+    local ok, err = atomic_write(path, content)
+    if not ok then
         return nil, string.format("cannot write %s", to_rel(args.path))
     end
-    f:write(content)
-    f:close()
     return { bytes = #content, path = to_rel(args.path) }
 end
 
@@ -230,11 +258,13 @@ function M.patch(patch_str, cfg)
         end
 
         if ok then
-            local f2 = io.open(full_path, "w")
+            local tmp = full_path .. ".tmp." .. math.random(100000, 999999)
+            local f2 = io.open(tmp, "w")
             if f2 then
                 f2:write(table.concat(content_lines, "\n"))
                 if #content_lines > 0 then f2:write("\n") end
                 f2:close()
+                os.rename(tmp, full_path)
             end
             total_add = total_add + add_count
             total_del = total_del + del_count
@@ -246,16 +276,17 @@ function M.patch(patch_str, cfg)
 
     return { files = files_applied, add = total_add, del = total_del }
 end
+
 function M.run(args, cfg)
     local command = args.command or ""
-    local timeout = (args.timeout or cfg and cfg.tools and cfg.tools.run_shell and cfg.tools.run_shell.timeout) or 120
+    local timeout_val = (args.timeout or (cfg and cfg.tools and cfg.tools.run_shell and cfg.tools.run_shell.timeout)) or 120
     local cwd = args.cwd and resolve(args.cwd) or WS
     if not within_workspace(cwd, cfg) then
         return nil, "run outside workspace requires confirmation"
     end
 
     local cmd = string.format("timeout %d env TETHER_WORKSPACE=%s sh -c %s 2>&1",
-                              timeout, sq(cwd), sq(command))
+                              timeout_val, sq(cwd), sq(command))
     local start_ms = now_ms()
     local outfile = "/tmp/tether_run_out.txt"
     tether.exec(cmd .. " > " .. outfile)
