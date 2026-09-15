@@ -79,9 +79,8 @@ static int l_write(lua_State *L)
 static int l_exec(lua_State *L)
 {
     const char *cmd = luaL_checkstring(L, 1);
-    char fullcmd[4096];
-    snprintf(fullcmd, sizeof(fullcmd), "sh -c %s", cmd);
-    int code = system(fullcmd);
+    /* system() already runs via sh -c, so pass cmd directly */
+    int code = system(cmd);
     int exit_code = WEXITSTATUS(code);
     lua_pushboolean(L, exit_code == 0);
     lua_pushinteger(L, exit_code);
@@ -116,6 +115,96 @@ static int l_tty(lua_State *L)
     return 1;
 }
 
+/* --- pipe API for SSE streaming --- */
+
+#include <sys/wait.h>
+#include <poll.h>
+
+struct pipe_state {
+    int fd;
+    int child;
+    int eof;
+    char buf[8192];
+    size_t buf_len;
+    size_t buf_pos;
+};
+static struct pipe_state g_pipe;
+
+/* tether.open_pipe(cmd) -> handle | err */
+static int l_open_pipe(lua_State *L)
+{
+    const char *cmd = luaL_checkstring(L, 1);
+    int fds[2];
+    if (pipe(fds) != 0) {
+        luaL_error(L, "pipe: %s", strerror(errno));
+    }
+    pid_t pid = fork();
+    if (pid == 0) {
+        /* child */
+        close(fds[0]);
+        dup2(fds[1], STDOUT_FILENO);
+        dup2(fds[1], STDERR_FILENO);
+        close(fds[1]);
+        execl("/bin/sh", "sh", "-c", cmd, (char *)NULL);
+        _exit(127);
+    } else if (pid > 0) {
+        close(fds[1]);
+        g_pipe.fd = fds[0];
+        g_pipe.child = pid;
+        g_pipe.eof = 0;
+        g_pipe.buf_len = 0;
+        g_pipe.buf_pos = 0;
+        lua_pushinteger(L, 1); /* handle */
+        return 1;
+    } else {
+        close(fds[0]); close(fds[1]);
+        luaL_error(L, "fork: %s", strerror(errno));
+    }
+    return 0;
+}
+
+/* tether.read_line(handle) -> line | nil  (blocks) */
+static int l_read_line(lua_State *L)
+{
+    if (g_pipe.eof) { lua_pushnil(L); return 1; }
+    /* consume existing buffer first */
+    char line[8192];
+    size_t pos = 0;
+    while (1) {
+        char c;
+        if (g_pipe.buf_pos < g_pipe.buf_len) {
+            c = g_pipe.buf[g_pipe.buf_pos++];
+        } else {
+            ssize_t n = read(g_pipe.fd, &c, 1);
+            if (n == 0) { g_pipe.eof = 1; break; }
+            if (n < 0 && errno != EINTR) { g_pipe.eof = 1; break; }
+            if (n < 0) continue; /* EINTR */
+        }
+        if (c == '\n') break;
+        line[pos++] = c;
+        if (pos >= sizeof(line) - 1) break;
+    }
+    line[pos] = '\0';
+    lua_pushlstring(L, line, pos);
+    return 1;
+}
+
+/* tether.close_pipe() */
+static int l_close_pipe(lua_State *L)
+{
+    (void)L;
+    if (g_pipe.fd >= 0) { close(g_pipe.fd); g_pipe.fd = -1; }
+    if (g_pipe.child > 0) { waitpid(g_pipe.child, NULL, 0); g_pipe.child = 0; }
+    g_pipe.eof = 0;
+    return 0;
+}
+
+static int l_pipe_eof(lua_State *L)
+{
+    lua_pushboolean(L, g_pipe.eof);
+    return 1;
+}
+
 static luaL_Reg tether_api[] = {
     {"read_char",  l_read_char},
     {"write",       l_write},
@@ -123,6 +212,10 @@ static luaL_Reg tether_api[] = {
     {"realpath",    l_realpath},
     {"getcwd",      l_getcwd},
     {"is_tty",      l_tty},
+    {"open_pipe",   l_open_pipe},
+    {"read_line",   l_read_line},
+    {"close_pipe",  l_close_pipe},
+    {"pipe_eof",    l_pipe_eof},
     {NULL, NULL}
 };
 
@@ -157,6 +250,9 @@ static int load_module(lua_State *L, const char *src, const char *name)
 
 int main(void)
 {
+    g_pipe.fd = -1;
+    g_pipe.child = 0;
+    g_pipe.eof = 1;
     int interactive = isatty(STDIN_FILENO) == 1;
 
     if (interactive) {
@@ -181,6 +277,7 @@ int main(void)
     struct { const char *src; const char *name; } mods[] = {
         { ui_lua,     "ui"     },
         { config_lua, "config" },
+        { tools_lua,  "tools"  },
         { api_lua,    "api"    },
         { agent_lua,  "agent"  },
         { app_lua,    "app"    },

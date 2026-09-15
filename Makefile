@@ -2,7 +2,7 @@ CC      ?= cc
 CFLAGS  ?= -std=c11 -Wall -Wextra -Werror -O2 -D_POSIX_C_SOURCE=200809L
 LUA_DIR = vendor/lua-5.4.6/src
 EMBED_OUT = src/host/embed.c
-LUA_MODS = src/tether/app.lua src/tether/ui.lua src/tether/config.lua src/tether/api.lua src/tether/agent.lua
+LUA_MODS = src/tether/app.lua src/tether/ui.lua src/tether/config.lua src/tether/api.lua src/tether/agent.lua src/tether/tools.lua
 
 LUA_SRCS = lapi.c lauxlib.c lbaselib.c lcode.c lcorolib.c lctype.c \
            ldblib.c ldebug.c ldo.c ldump.c lfunc.c lgc.c linit.c \
@@ -25,7 +25,8 @@ $(EMBED_OUT): $(LUA_MODS) tools/embed.lua
 		ui_lua src/tether/ui.lua \
 		config_lua src/tether/config.lua \
 		api_lua src/tether/api.lua \
-		agent_lua src/tether/agent.lua
+		agent_lua src/tether/agent.lua \
+		tools_lua src/tether/tools.lua
 
 test: tether
 	sh tests/host_smoke.sh

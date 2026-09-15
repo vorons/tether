@@ -24,7 +24,8 @@ for _, f in ipairs(files) do
     w:write(string.format("  0x%02x,", b))
     if i % 12 == 0 then w:write("\n") end
   end
-  w:write("\n};\n\n")
+  w:write("  0x00,\n")
+  w:write("};\n\n")
   w:write(string.format("const char *%s = (const char *)%s;\n\n", nm, arr))
 end
 w:close()
