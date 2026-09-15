@@ -454,7 +454,7 @@ local function commit_input()
 
     local ok, err = pcall(agent.turn, S.cfg, key, text, function(ev)
         if ev.type == "text_delta" then
-            -- streaming handled in draw_full
+            out(ev.text or "")
         elseif ev.type == "error" then
             table.insert(S.transcript, {role = "error", text = ev.message or "error"})
         elseif ev.type == "confirmation" then
@@ -472,6 +472,8 @@ local function commit_input()
     if not ok then
         table.insert(S.transcript, {role = "error", text = err or "unknown"})
     end
+    draw_full()
+    out(A.user_gutter .. " ")
     return nil
 end
 
