@@ -1,0 +1,4 @@
+tether
+vendor/
+build/
+*.o
