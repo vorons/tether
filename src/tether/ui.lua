@@ -370,6 +370,7 @@ local function clear_input()
     S.input_lines = {""}
     S.input_line = 1
     S.input_col = 0
+    draw_full()
 end
 
 local function add_to_history(text)
@@ -442,6 +443,8 @@ local function commit_input()
         if cmd then
             local result = handle_slash_command(cmd)
             clear_input()
+            draw_full()
+            out(A.user_gutter .. " ")
             if result == "quit" then return "quit" end
             return
         end
@@ -645,6 +648,8 @@ function M.run()
                 S.input_line = S.input_line + 1
                 table.insert(S.input_lines, S.input_line, "")
             end
+            draw_full()
+            out(A.user_gutter .. " ")
         elseif c == 127 or c == 8 then -- Backspace
             if #S.input_lines[S.input_line] > 0 then
                 S.input_lines[S.input_line] = S.input_lines[S.input_line]:sub(1, -2)
@@ -652,9 +657,13 @@ function M.run()
                 table.remove(S.input_lines, S.input_line)
                 S.input_line = S.input_line - 1
             end
+            draw_full()
+            out(A.user_gutter .. " ")
         elseif c >= 32 and c <= 126 then -- printable
             S.input_lines[S.input_line] = S.input_lines[S.input_line] .. string.char(c)
             S.input_col = S.input_col + 1
+            draw_full()
+            out(A.user_gutter .. " ")
         elseif c == 9 then -- Tab
             -- ignore during input
         end
