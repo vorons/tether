@@ -29,11 +29,19 @@ static void restore_termios(void)
     }
 }
 
+static volatile sig_atomic_t g_resize_requested = 0;
+
 static void on_sigterm(int sig)
 {
     (void)sig;
     restore_termios();
     _exit(0);
+}
+
+static void on_sigwinch(int sig)
+{
+    (void)sig;
+    g_resize_requested = 1;
 }
 
 static int init_termios(void)
@@ -221,6 +229,13 @@ static int l_pipe_eof(lua_State *L)
     return 1;
 }
 
+static int l_resize_requested(lua_State *L)
+{
+    lua_pushboolean(L, g_resize_requested);
+    g_resize_requested = 0;
+    return 1;
+}
+
 static luaL_Reg tether_api[] = {
     {"read_char",  l_read_char},
     {"write",       l_write},
@@ -233,6 +248,7 @@ static luaL_Reg tether_api[] = {
     {"read_line",   l_read_line},
     {"close_pipe",  l_close_pipe},
     {"pipe_eof",    l_pipe_eof},
+    {"resize_requested", l_resize_requested},
     {NULL, NULL}
 };
 
@@ -279,6 +295,7 @@ int main(int argc, char **argv)
         }
         atexit(restore_termios);
         signal(SIGTERM, on_sigterm);
+        signal(SIGWINCH, on_sigwinch);
     }
 
     lua_State *L = luaL_newstate();

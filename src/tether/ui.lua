@@ -61,10 +61,20 @@ local function out(s) tether.write(s) end
 local function is_ascii() return false end
 
 local function update_size()
-    local size = tether.get_terminal_size()
-    if size and size.width and size.height then
-        S.term_width = size.width
-        S.term_height = size.height
+    if tether.resize_requested() then
+        local size = tether.get_terminal_size()
+        if size and size.width and size.height then
+            S.term_width = size.width
+            S.term_height = size.height
+        end
+        draw_full()
+        out(A.user_gutter .. " ")
+    else
+        local size = tether.get_terminal_size()
+        if size and size.width and size.height then
+            S.term_width = size.width
+            S.term_height = size.height
+        end
     end
 end
 
@@ -78,15 +88,15 @@ local function cyan(s) return "\x1b[36;1m" .. s .. "\x1b[0m" end
 local function yellow(s) return "\x1b[33;1m" .. s .. "\x1b[0m" end
 local function red(s) return "\x1b[31;1m" .. s .. "\x1b[0m" end
 local function green(s) return "\x1b[32m" .. s .. "\x1b[0m" end
-local function trunc(s, maxw) if #s <= maxw then return s end return s:sub(1, maxw - 1) end
+local function trunc(s, maxw) if utf8.len(s) <= maxw then return s end return utf8.sub(s, 1, maxw - 1) end
 local function maxw() return math.max(S.term_width - 2, 20) end
 
 local function wrap_text(text, width)
     local lines = {}
     for line in text:gmatch("[^\n]*") do
-        while #line > width do
-            table.insert(lines, line:sub(1, width))
-            line = line:sub(width + 1)
+        while utf8.len(line) > width do
+            table.insert(lines, utf8.sub(line, 1, width))
+            line = utf8.sub(line, width + 1)
         end
         if #line > 0 then table.insert(lines, line) end
     end
@@ -370,7 +380,9 @@ local function clear_input()
     S.input_lines = {""}
     S.input_line = 1
     S.input_col = 0
+    S.input_offset = 0
     draw_full()
+    out(A.user_gutter .. " ")
 end
 
 local function add_to_history(text)
@@ -383,15 +395,14 @@ end
 
 local function navigate_history(dir)
     if #S.history_items == 0 then return end
-    S.history_idx = math.max(0, math.min(#S.history_items, S.history_idx + dir))
+    S.history_idx = math.max(1, math.min(#S.history_items, S.history_idx + dir))
     if S.history_idx > 0 then
         S.input_lines = {S.history_items[S.history_idx]}
         S.input_line = 1
         S.input_col = #S.input_lines[1]
+        S.input_offset = 0
     else
-        S.input_lines = {""}
-        S.input_line = 1
-        S.input_col = 0
+        clear_input()
     end
 end
 
@@ -443,8 +454,6 @@ local function commit_input()
         if cmd then
             local result = handle_slash_command(cmd)
             clear_input()
-            draw_full()
-            out(A.user_gutter .. " ")
             if result == "quit" then return "quit" end
             return
         end
