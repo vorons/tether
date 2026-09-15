@@ -52,6 +52,20 @@ local function json_decode(s)
     return nil
 end
 
+local function parse_json_str(s)
+    local obj = {}
+    for key, val in s:gmatch('"([^"]+)"[%s]*:[%s]*"([^"]*)"') do
+        obj[key] = val
+    end
+    for key, val in s:gmatch('"([^"]+)"[%s]*:[%s]*(%d+%.?%d*)') do
+        obj[key] = tonumber(val)
+    end
+    for key, val in s:gmatch('"([^"]+)"[%s]*:[%s]*(true|false)') do
+        obj[key] = (val == "true")
+    end
+    return next(obj) and obj or nil
+end
+
 local function parse_sse_line(line, on_event)
     if line:sub(1, 6) ~= "data: " then return end
     local payload = line:sub(7)
@@ -59,7 +73,7 @@ local function parse_sse_line(line, on_event)
         on_event({ type = "done" })
         return
     end
-    local obj = json_decode(payload)
+    local obj = parse_json_str(payload)
     if not obj then return end
 
     local choice = obj.choices and obj.choices[1]

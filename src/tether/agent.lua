@@ -60,6 +60,7 @@ end
 
 local function should_confirm(tool_name, args, cfg)
     if not cfg then return false end
+    if cfg.allow_outside_workspace then return false end
     local path = args.path or args.command
     if not path then return false end
     if path:find("^/") then return true end

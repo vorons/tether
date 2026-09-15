@@ -23,7 +23,6 @@ local function default_config()
             input_max_lines = 8,
         },
         tools = { run_shell = { timeout = 120 } },
-        auto_approve = {},
         system_prompt = nil,
         log_level = "info",
     }

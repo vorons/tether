@@ -61,14 +61,28 @@ local function append_event(id, event)
     return true
 end
 
+local function parse_json_str(s)
+    local obj = {}
+    for key, val in s:gmatch('"([^"]+)"[%s]*:[%s]*"([^"]*)"') do
+        obj[key] = val
+    end
+    for key, val in s:gmatch('"([^"]+)"[%s]*:[%s]*(%d+%.?%d*)') do
+        obj[key] = tonumber(val)
+    end
+    for key, val in s:gmatch('"([^"]+)"[%s]*:[%s]*(true|false)') do
+        obj[key] = (val == "true")
+    end
+    return next(obj) and obj or nil
+end
+
 local function read_events(id)
     local path = session_path(id)
     local f = io.open(path, "r")
     if not f then return {} end
     local events = {}
     for line in f:lines() do
-        local ok, obj = pcall(function() return load("return " .. line)() end)
-        if ok and obj then events[#events + 1] = obj end
+        local obj = parse_json_str(line)
+        if obj then events[#events + 1] = obj end
     end
     f:close()
     return events

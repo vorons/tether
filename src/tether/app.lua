@@ -54,14 +54,14 @@ local function run_inner()
     end
 
     -- Resume logic
+    local resume_id = nil
     if opts.resume or not cfg.workspace then
-        local session = require("session")
         local ws = opts.workspace or cfg.workspace or tether.getcwd()
-        local id, ts, first_line = session.latest(ws)
+        local id = session.latest(ws)
         if id and not opts.workspace then
+            resume_id = id
             local messages = session.resume(id)
             if messages then
-                local agent = require("agent")
                 agent.clear()
                 for _, msg in ipairs(messages) do
                     if msg.role == "user" then
@@ -74,15 +74,13 @@ local function run_inner()
         end
     end
 
-    -- Start new session if not resuming
-    local session = require("session")
+    -- Start new session or reuse resumed one
     local ws = opts.workspace or cfg.workspace or tether.getcwd()
-    local id = session.new_session(ws, cfg.model)
+    local id = resume_id or session.new_session(ws, cfg.model)
 
     cfg._session_id = id
 
     -- Run TUI
-    local ui = assert(ui, "ui module not loaded")
     ui.run()
 
     -- End session
@@ -94,9 +92,10 @@ local function run_inner()
 end
 
 function M.run()
-    local ok = pcall(run_inner)
+    local ok, err = pcall(run_inner)
     if not ok then
-        os.exit(0)
+        io.stderr:write("tether: " .. tostring(err) .. "\n")
+        os.exit(1)
     end
 end
 

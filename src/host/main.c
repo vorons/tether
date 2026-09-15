@@ -275,6 +275,7 @@ int main(int argc, char **argv)
 
     int rc = 0;
     struct { const char *src; const char *name; } mods[] = {
+        { session_lua, "session" },
         { ui_lua,     "ui"     },
         { config_lua, "config" },
         { tools_lua,  "tools"  },

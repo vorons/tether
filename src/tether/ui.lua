@@ -36,7 +36,9 @@ local function draw_banner()
             else
                 local summary = ""
                 if result.bytes then summary = " " .. result.bytes .. "B" end
-                if result.content then summary = " " .. (#result.content:gsub("[^\n]","")) .. "str" end
+                if result.content and type(result.content) == "string" then
+                    summary = " " .. (#result.content:gsub("[^\n]","")) .. "str"
+                end
                 if result.line_count then summary = " " .. result.line_count .. "lines" end
                 if result.add and result.del then summary = " +" .. result.add .. " -" .. result.del end
                 if result.exit_code ~= nil then summary = " exit " .. result.exit_code end

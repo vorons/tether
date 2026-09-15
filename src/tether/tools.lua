@@ -254,7 +254,8 @@ function M.run(args, cfg)
         return nil, "run outside workspace requires confirmation"
     end
 
-    local cmd = string.format("cd %s && timeout %d sh -c %s 2>&1", sq(cwd), timeout, sq(command))
+    local cmd = string.format("timeout %d env TETHER_WORKSPACE=%s sh -c %s 2>&1",
+                              timeout, sq(cwd), sq(command))
     local start_ms = now_ms()
     local outfile = "/tmp/tether_run_out.txt"
     tether.exec(cmd .. " > " .. outfile)
