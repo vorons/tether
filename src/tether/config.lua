@@ -19,9 +19,11 @@ local function default_config()
             thinking = "collapsed",
             ascii = "auto",
             wrap = true,
+            collapse = { read = 20, list = 30, grep = 15 },
             input_max_lines = 8,
         },
         tools = { run_shell = { timeout = 120 } },
+        auto_approve = {},
         system_prompt = nil,
         log_level = "info",
     }
