@@ -40,6 +40,7 @@ end
 
 local function run_inner()
     local opts = parse_args()
+    if version then print("tether 0.1.0"); os.exit(0) end
 
     if opts.print_mode then
         local ui = assert(ui, "ui module not loaded")
@@ -94,10 +95,6 @@ local function run_inner()
 end
 
 function M.run()
-    if version then
-        print("tether 0.1.0")
-        os.exit(0)
-    end
     local ok, err = pcall(run_inner)
     if not ok then
         io.stderr:write("tether: " .. tostring(err) .. "\n")
