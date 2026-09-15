@@ -477,47 +477,6 @@ local function commit_input()
     return nil
 end
 
-local function handle_arrow_key(seq)
-    if seq == "A" then -- up
-        navigate_history(-1)
-    elseif seq == "B" then -- down
-        navigate_history(1)
-    end
-end
-
-local function handle_escape()
-    local c1 = tether.read_char()
-    if not c1 then return end
-    c1 = c1 & 0xFF
-    if c1 == 91 then -- [
-        local c2 = tether.read_char()
-        if not c2 then return end
-        c2 = c2 & 0xFF
-        if c2 == 65 then handle_arrow_key("A") -- up
-        elseif c2 == 66 then handle_arrow_key("B") -- down
-        elseif c2 == 67 then -- right (ignore)
-        elseif c2 == 68 then -- left (ignore)
-        elseif c2 == 53 then -- page up
-            S.scroll_offset = math.max(0, S.scroll_offset - 10)
-        elseif c2 == 54 then -- page down
-            S.scroll_offset = S.scroll_offset + 10
-        end
-    elseif c1 == 79 then -- O
-        local c2 = tether.read_char()
-        if not c2 then return end
-        c2 = c2 & 0xFF
-        if c2 == 65 then -- F1 (ignore)
-        elseif c2 == 66 then -- F2 (ignore)
-        elseif c2 == 67 then -- F3 (ignore)
-        elseif c2 == 68 then -- F4 (ignore)
-        elseif c2 == 72 then -- Home (ignore)
-        elseif c2 == 70 then -- End (ignore)
-        elseif c2 == 53 then S.scroll_offset = math.max(0, S.scroll_offset - 10)
-        elseif c2 == 54 then S.scroll_offset = S.scroll_offset + 10
-        end
-    end
-end
-
 local function handle_palette_key(c)
     if c == 27 then S.palette_active = false; return true end
     if c == 13 then
@@ -552,17 +511,22 @@ end
 
 local function drain_escape()
     local c = tether.read_char()
-    if not c then return end
+    if not c then return nil end
     c = c & 0xFF
-    if c ~= 91 and c ~= 79 then return end
+    if c ~= 91 and c ~= 79 then return nil end
     local c2 = tether.read_char()
-    if not c2 then return end
+    if not c2 then return nil end
     c2 = c2 & 0xFF
-    while c2 and c2 >= 65 and c2 <= 90 do
-        c2 = tether.read_char()
-        if not c2 then break end
-        c2 = c2 & 0xFF
+    if c2 >= 49 and c2 <= 57 then
+        local c3 = tether.read_char()
+        if c3 then c3 = c3 & 0xFF end
     end
+    if c2 == 65 then return "up"
+    elseif c2 == 66 then return "down"
+    elseif c2 == 67 then return "right"
+    elseif c2 == 68 then return "left"
+    end
+    return nil
 end
 
 function M.run()
@@ -669,7 +633,10 @@ function M.run()
             S.help_active = true
             draw_full()
         elseif c == 27 then -- ESC
-            drain_escape()
+            local dir = drain_escape()
+            if dir == "up" then navigate_history(-1)
+            elseif dir == "down" then navigate_history(1)
+            end
         elseif c == 13 then -- Enter (send)
             local result = commit_input()
             if result == "quit" then break end
