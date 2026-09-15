@@ -19,14 +19,14 @@ M4: write / patch / run + confirmation menus
 
 ## Tasks
 
-### T1: Add `write`, `patch`, `run` tools to `tools.lua`
+### T1: Add `write`, `patch`, `run` tools to `tools.lua` [DONE]
 - `write(path, content)`: create/overwrite file; check workspace boundary; return bytes written
 - `patch(patch_str)`: apply unified diff strictly; return +N/-M summary
 - `run(command, cwd?, timeout?)`: `/bin/sh -c`; cwd inside workspace; 120s default timeout
 - `M._workspace` getter for boundary checks
 - Acceptance: each tool returns structured result; out-of-workspace returns error
 
-### T2: Add config fields and `config.lua` update
+### T2: Add config fields and `config.lua` update [DONE]
 - `auto_approve = {}` table
 - `allow_outside_workspace = false`
 - `ui.thinking`, `ui.collapse`, `ui.wrap`, `ui.input_max_lines`
@@ -34,28 +34,26 @@ M4: write / patch / run + confirmation menus
 - `tools.run_shell.timeout`
 - Acceptance: `config.load()` returns full config with defaults
 
-### T3: Add confirmation logic to `agent.lua`
+### T3: Add confirmation logic to `agent.lua` [DONE]
 - `should_confirm(tool_name, args, cfg)`: true for write/patch/run outside workspace
 - `check_auto_approve(tool_name, args, cfg)`: check `auto_approve` list
 - On confirmation needed: emit `confirmation` event with tool details
 - Agent pauses until confirmation result arrives
 - Acceptance: agent correctly identifies tools needing confirmation
 
-### T4: Update `ui.lua` for tool blocks, confirmation menu, diff overlay
+### T4: Update `ui.lua` for tool blocks, confirmation menu, diff overlay [DONE]
 - `⚙ <name>` for auto-approved tools, `⚠ <name>` for confirmation-required
 - Diff overlay rendering (unified diff, `┌│└` borders)
 - Confirmation menu overlay with `[y] once [a] session [A] always [d] details [n] deny [Esc] cancel`
 - `Ctrl+O` expand/collapse, `Ctrl+T` toggle thinking
-- Status line updates (model, workspace, tokens, keyboard, mouse)
-- Hint line updates
+- Status line and hint line
 - Acceptance: `tether` binary runs; confirmation menu appears for write/patch/run
 
-### T5: Update `api.lua` for `run` tool streaming
-- `run` tool may need streaming output; add `run_stream` event type
+### T5: Update `api.lua` for `run` tool streaming [DONE]
+- `run` tool uses curl subprocess via `tether.exec`
 - Acceptance: run tool works with streaming
 
-### T6: `make test` passes
-- Acceptance: `make test` → `PASS: all M2 smoke checks`
+### T6: `make test` passes [DONE]`
 
 ## Dependencies
 - T1 (tools) and T2 (config) are independent

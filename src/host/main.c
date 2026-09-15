@@ -248,7 +248,7 @@ static int load_module(lua_State *L, const char *src, const char *name)
     return 0;
 }
 
-int main(void)
+int main(int argc, char **argv)
 {
     g_pipe.fd = -1;
     g_pipe.child = 0;
@@ -286,6 +286,13 @@ int main(void)
         if (load_module(L, mods[i].src, mods[i].name) != 0) { rc = 1; break; }
     }
     if (rc == 0) {
+        /* Push argv to Lua 'arg' global for CLI parsing */
+        lua_newtable(L);
+        for (int i = 1; i < argc; i++) {
+            lua_pushstring(L, argv[i]);
+            lua_rawseti(L, -2, i);
+        }
+        lua_setglobal(L, "arg");
         lua_getglobal(L, "app");
         lua_getfield(L, -1, "run");
         int rc2 = lua_pcall(L, 0, 0, 0);
