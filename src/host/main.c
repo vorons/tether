@@ -7,6 +7,7 @@
 #include <errno.h>
 #include <signal.h>
 #include <termios.h>
+#include <sys/ioctl.h>
 #include <limits.h>
 #include <lua.h>
 #include <lauxlib.h>
@@ -106,6 +107,21 @@ static int l_getcwd(lua_State *L)
     if (getcwd(buf, sizeof(buf)) == NULL)
         luaL_error(L, "getcwd: %s", strerror(errno));
     lua_pushstring(L, buf);
+    return 1;
+}
+
+static int l_get_terminal_size(lua_State *L)
+{
+    struct winsize ws;
+    if (ioctl(STDIN_FILENO, TIOCGWINSZ, &ws) == 0) {
+        lua_newtable(L);
+        lua_pushinteger(L, ws.ws_col);
+        lua_setfield(L, -2, "width");
+        lua_pushinteger(L, ws.ws_row);
+        lua_setfield(L, -2, "height");
+    } else {
+        lua_pushnil(L);
+    }
     return 1;
 }
 
@@ -212,6 +228,7 @@ static luaL_Reg tether_api[] = {
     {"realpath",    l_realpath},
     {"getcwd",      l_getcwd},
     {"is_tty",      l_tty},
+    {"get_terminal_size", l_get_terminal_size},
     {"open_pipe",   l_open_pipe},
     {"read_line",   l_read_line},
     {"close_pipe",  l_close_pipe},

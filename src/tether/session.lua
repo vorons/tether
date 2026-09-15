@@ -89,7 +89,7 @@ local function read_events(id)
     return events
 end
 
-local function session_files(workspace)
+local function list_session_files(workspace)
     ensure_dir()
     local files = {}
     local ok, result = pcall(function()
@@ -138,12 +138,17 @@ function M.append(id, event)
     return append_event(id, event)
 end
 
+function M.session_files(workspace)
+    ensure_dir()
+    return list_session_files(workspace)
+end
+
 function M.read(id)
     return read_events(id)
 end
 
 function M.latest(workspace)
-    local files = session_files(workspace)
+    local files = list_session_files(workspace)
     if #files == 0 then return nil end
     return files[1].id, files[1].ts, files[1].first_line
 end
