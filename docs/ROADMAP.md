@@ -1,7 +1,7 @@
 # tether roadmap
 
 - [x] M1: C host + raw mode + TUI echo
-- [ ] M2: OpenAI-compatible streaming chat in TUI
+- [x] M2: OpenAI-compatible streaming chat in TUI
 - [ ] M3: read / list / glob / grep tools
 - [ ] M4: write / patch / run + confirmation menus
 - [ ] M5: sessions, config, `-r` resume

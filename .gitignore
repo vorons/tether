@@ -1,4 +1,5 @@
-tether
 vendor/
 build/
 *.o
+src/host/embed.c
+/tether

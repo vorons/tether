@@ -1,6 +1,17 @@
 #!/bin/sh
-# smoke: EOF path exits 0
-if [ ! -x ./tether ]; then echo "FAIL: ./tether missing or not executable"; exit 1; fi
-printf "ab" | ./tether > /dev/null 2>&1
+# tests/host_smoke.sh — M2: verify binary exists and EOF path exits 0
+fail() { echo "FAIL: $1"; exit 1; }
+
+[ -x ./tether ] || fail "./tether missing or not executable"
+
+# EOF path: piped stdin -> read_char returns 0 -> clean exit
+printf "abc" | ./tether > /dev/null 2>&1
 code=$?
-if [ "$code" -eq 0 ]; then echo "PASS: EOF exit 0"; else echo "FAIL: exit $code"; exit 1; fi
+[ "$code" -eq 0 ] || fail "EOF path exit $code (expected 0)"
+
+# /dev/null also exits 0
+./tether </dev/null > /dev/null 2>&1
+code=$?
+[ "$code" -eq 0 ] || fail "/dev/null exit $code (expected 0)"
+
+echo "PASS: all M2 smoke checks"
