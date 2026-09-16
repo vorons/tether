@@ -375,7 +375,14 @@ end
 
 local function navigate_history(dir)
     if #S.history_items == 0 then return end
-    S.history_idx = math.max(1, math.min(#S.history_items, S.history_idx + dir))
+    local new_idx = S.history_idx + dir
+    if new_idx > #S.history_items then
+        S.history_idx = 0
+    elseif new_idx < 1 then
+        S.history_idx = 1
+    else
+        S.history_idx = new_idx
+    end
     if S.history_idx > 0 then
         S.input_lines = {S.history_items[S.history_idx]}
         S.input_line = 1
@@ -539,9 +546,11 @@ local function drain_escape()
     local c2 = tether.read_char_nb()
     if not c2 then return nil end
     c2 = c2 & 0xFF
-    if c2 >= 49 and c2 <= 57 then
-        local c3 = tether.read_char_nb()
-        if c3 then c3 = c3 & 0xFF end
+    -- Skip intermediate params (digits and semicolons)
+    while c2 >= 48 and c2 <= 57 or c2 == 59 do
+        c2 = tether.read_char_nb()
+        if not c2 then return nil end
+        c2 = c2 & 0xFF
     end
     if c2 == 65 then return "up"
     elseif c2 == 66 then return "down"
@@ -657,7 +666,7 @@ function M.run()
             local dir = drain_escape()
             if dir == "up" then
                 if S.input_lines[S.input_line] == "" and #S.input_lines == 1 then
-                    navigate_history(-1)
+                    navigate_history(1)
                 else
                     S.input_line = math.max(1, S.input_line - 1)
                     S.input_col = math.min(S.input_col, #S.input_lines[S.input_line])
@@ -666,7 +675,7 @@ function M.run()
                 end
             elseif dir == "down" then
                 if S.input_lines[S.input_line] == "" and #S.input_lines == 1 then
-                    navigate_history(1)
+                    navigate_history(-1)
                 else
                     S.input_line = math.min(#S.input_lines, S.input_line + 1)
                     S.input_col = math.min(S.input_col, #S.input_lines[S.input_line])
