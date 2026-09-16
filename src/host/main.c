@@ -281,6 +281,38 @@ static int l_resize_requested(lua_State *L)
     return 1;
 }
 
+/* T15: sleep — used by API retry backoff */
+#include <time.h>
+
+static int l_sleep(lua_State *L)
+{
+    double secs = luaL_optnumber(L, 1, 0.0);
+    if (secs <= 0.0) return 0;
+    long us = (long)(secs * 1000000);
+    struct timespec ts;
+    ts.tv_sec = us / 1000000;
+    ts.tv_nsec = (us % 1000000) * 1000L;
+    nanosleep(&ts, NULL);
+    return 0;
+}
+
+static int l_detect_kb_protocol(lua_State *L)
+{
+    const char *tp = getenv("TERM_PROGRAM");
+    const char *tm = getenv("TERM");
+    if (tp && (strstr(tp, "kitty") || strstr(tp, "Kitty"))) {
+        lua_pushinteger(L, 1); /* kitty */
+        return 1;
+    }
+    if ((tp && (strstr(tp, "VTE") || strstr(tp, "alacritty") || strstr(tp, "gnome"))) ||
+        (tm && (strstr(tm, "xterm") || strstr(tm, "vte") || strstr(tm, "gnome")))) {
+        lua_pushinteger(L, 2); /* modifyOtherKeys */
+        return 1;
+    }
+    lua_pushinteger(L, 0); /* plain */
+    return 1;
+}
+
 static luaL_Reg tether_api[] = {
     {"read_char",       l_read_char},
     {"read_char_nb",    l_read_char_nb},
@@ -295,6 +327,8 @@ static luaL_Reg tether_api[] = {
     {"close_pipe",  l_close_pipe},
     {"pipe_eof",    l_pipe_eof},
     {"resize_requested", l_resize_requested},
+    {"sleep",         l_sleep},
+    {"detect_kb_protocol", l_detect_kb_protocol},
     {NULL, NULL}
 };
 
