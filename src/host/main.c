@@ -6,6 +6,7 @@
 #include <unistd.h>
 #include <errno.h>
 #include <signal.h>
+#include <sys/select.h>
 #include <termios.h>
 #include <sys/ioctl.h>
 #include <limits.h>
@@ -44,6 +45,19 @@ static void on_sigwinch(int sig)
     g_resize_requested = 1;
 }
 
+static void setup_signal_handlers(void)
+{
+    struct sigaction sa_term, sa_winch;
+    sa_term.sa_handler = on_sigterm;
+    sigemptyset(&sa_term.sa_mask);
+    sa_term.sa_flags = 0;
+    sigaction(SIGTERM, &sa_term, NULL);
+    sa_winch.sa_handler = on_sigwinch;
+    sigemptyset(&sa_winch.sa_mask);
+    sa_winch.sa_flags = SA_RESTART;
+    sigaction(SIGWINCH, &sa_winch, NULL);
+}
+
 static int init_termios(void)
 {
     struct termios raw;
@@ -56,7 +70,7 @@ static int init_termios(void)
     raw.c_lflag &= ~(ECHO | ICANON | ISIG | IEXTEN);
     raw.c_cc[VMIN] = 1;
     raw.c_cc[VTIME] = 0;
-    if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw) == -1)
+    if (tcsetattr(STDIN_FILENO, TCSANOW, &raw) == -1)
         return -1;
     termios_active = 1;
     return 0;
@@ -69,7 +83,26 @@ static int l_read_char(lua_State *L)
     char c;
     ssize_t n = read(STDIN_FILENO, &c, 1);
     if (n != 1)
-        lua_pushinteger(L, n == 0 ? 0 : -1);
+        lua_pushnil(L);
+    else
+        lua_pushinteger(L, (unsigned char)c);
+    return 1;
+}
+
+static int l_read_char_nb(lua_State *L)
+{
+    fd_set fds;
+    struct timeval tv;
+    FD_ZERO(&fds);
+    FD_SET(STDIN_FILENO, &fds);
+    tv.tv_sec = 0;
+    tv.tv_usec = 50000;
+    int ready = select(STDIN_FILENO + 1, &fds, NULL, NULL, &tv);
+    if (ready <= 0) { lua_pushnil(L); return 1; }
+    char c;
+    ssize_t n = read(STDIN_FILENO, &c, 1);
+    if (n != 1)
+        lua_pushnil(L);
     else
         lua_pushinteger(L, (unsigned char)c);
     return 1;
@@ -237,8 +270,9 @@ static int l_resize_requested(lua_State *L)
 }
 
 static luaL_Reg tether_api[] = {
-    {"read_char",  l_read_char},
-    {"write",       l_write},
+    {"read_char",       l_read_char},
+    {"read_char_nb",    l_read_char_nb},
+    {"write",           l_write},
     {"exec",        l_exec},
     {"realpath",    l_realpath},
     {"getcwd",      l_getcwd},
@@ -290,12 +324,11 @@ int main(int argc, char **argv)
 
     if (interactive) {
         if (init_termios() != 0) {
-            perror("tcgetattr");
+            perror("tcsetattr");
             return 1;
         }
         atexit(restore_termios);
-        signal(SIGTERM, on_sigterm);
-        signal(SIGWINCH, on_sigwinch);
+        setup_signal_handlers();
     }
 
     lua_State *L = luaL_newstate();

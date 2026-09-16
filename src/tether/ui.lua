@@ -3,6 +3,7 @@ local M = {}
 
 -- State
 local S = {
+    key = nil,
     transcript = {},
     input_lines = {""},
     input_line = 1,
@@ -416,7 +417,7 @@ local function handle_slash_command(cmd)
         S.palette_active = true
         S.palette_filter = ""
         S.palette_items = {}
-        local models = api.list_models and api.list_models() or {}
+        local models = (api and api.list_models) and api.list_models() or {}
         for _, m in ipairs(models) do table.insert(S.palette_items, "/model " .. m) end
         table.insert(S.palette_items, "(ввести имя модели вручную)")
         S.palette_selected = 1
@@ -467,7 +468,7 @@ local function commit_input()
     clear_input()
     S.busy = true
 
-    local ok, err = pcall(agent.turn, S.cfg, key, text, function(ev)
+    local ok, err = pcall(function() agent.turn(S.cfg, S.key or "", text, function(ev)
         if ev.type == "text_delta" then
             out(ev.text or "")
         elseif ev.type == "error" then
@@ -482,7 +483,7 @@ local function commit_input()
             S.tokens_used = ev.usage.used or 0
             S.tokens_max = ev.usage.max or 32768
         end
-    end)
+    end) end)
     S.busy = false
     if not ok then
         table.insert(S.transcript, {role = "error", text = err or "unknown"})
@@ -525,15 +526,15 @@ local function handle_palette_key(c)
 end
 
 local function drain_escape()
-    local c = tether.read_char()
+    local c = tether.read_char_nb()
     if not c then return nil end
     c = c & 0xFF
     if c ~= 91 and c ~= 79 then return nil end
-    local c2 = tether.read_char()
+    local c2 = tether.read_char_nb()
     if not c2 then return nil end
     c2 = c2 & 0xFF
     if c2 >= 49 and c2 <= 57 then
-        local c3 = tether.read_char()
+        local c3 = tether.read_char_nb()
         if c3 then c3 = c3 & 0xFF end
     end
     if c2 == 65 then return "up"
@@ -546,7 +547,7 @@ end
 
 function M.run()
     S.cfg = config.load()
-    key = config.api_key(S.cfg)
+    S.key = config.api_key(S.cfg)
     S.model_name = S.cfg.model or "unknown"
     S.workspace = S.cfg.workspace or tether.getcwd()
     S.session_id = session.new_session(S.workspace, S.cfg.model)
