@@ -69,7 +69,7 @@ local function update_size()
             S.term_height = size.height
         end
         draw_full()
-        out(A.user_gutter .. " ")
+        out(cyan(A.user_gutter) .. " ")
     else
         local size = tether.get_terminal_size()
         if size and size.width and size.height then
@@ -148,9 +148,8 @@ local function render_message(msg, mw)
     return lines
 end
 
-local function draw_transcript()
+local function draw_transcript(maxh)
     local mw = maxw()
-    local maxh = S.term_height - 8
     local start = S.scroll_offset + 1
     local count = 0
     for i = 1, #S.transcript do
@@ -176,9 +175,8 @@ end
 
 local function draw_input()
     local mw = maxw()
-    local max_lines = (S.cfg and S.cfg.ui and S.cfg.ui.input_max_lines) or 8
     local prefix = cyan(A.user_gutter) .. " "
-    for i = 1, math.min(#S.input_lines, max_lines) do
+    for i = 1, #S.input_lines do
         local line = S.input_lines[i]
         local disp = prefix .. line
         if #disp > mw then disp = trunc(disp, mw) end
@@ -187,14 +185,12 @@ local function draw_input()
         end
         out(disp .. "\n")
     end
-    for i = #S.input_lines + 1, max_lines do out("\n") end
 end
 
 local function draw_palette()
     if not S.palette_active then return end
     local mw = maxw()
     local maxh = math.min(#S.palette_items, 10)
-    out("\x1b[2J\x1b[H")
     out(A.corner_tl .. string.rep(A.border_h, mw) .. A.corner_tr .. "\n")
     for i = 1, 10 do
         if i <= #S.palette_items then
@@ -478,7 +474,10 @@ end
 
 local function draw_full()
     clear()
-    draw_transcript()
+    local input_lines = math.min(#S.input_lines, (S.cfg and S.cfg.ui and S.cfg.ui.input_max_lines) or 8)
+    local reserved = input_lines + 3
+    local transcript_h = math.max(S.term_height - reserved, 1)
+    draw_transcript(transcript_h)
     if S.diff_text ~= "" and not S.palette_active then
         draw_diff_overlay()
         return
@@ -488,7 +487,10 @@ local function draw_full()
     if S.status_active then draw_status_overlay(); return end
     if S.resume_active then draw_resume_picker(); return end
     draw_error_banner()
+    local input_row = S.term_height - (input_lines + 2)
+    out(string.format("\x1b[%d;1H", input_row))
     draw_input()
+    out(string.format("\x1b[%d;1H", input_row + input_lines))
     out("\x1b[90m" .. string.rep("─", S.term_width) .. "\x1b[0m\n")
     draw_palette()
     draw_hint()
@@ -563,7 +565,6 @@ function M.run()
         S.mouse_reporting = true
     end
 
-    clear()
     draw_full()
     show_cursor()
 
