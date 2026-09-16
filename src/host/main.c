@@ -65,7 +65,7 @@ static int init_termios(void)
         return -1;
     raw = orig_termios;
     raw.c_iflag &= ~(BRKINT | ICRNL | INPCK | ISTRIP | IXON);
-    raw.c_oflag &= ~OPOST;
+    /* OPOST kept enabled: \n -> \r\n translation for proper line rendering */
     raw.c_cflag |= CS8;
     raw.c_lflag &= ~(ECHO | ICANON | ISIG | IEXTEN);
     raw.c_cc[VMIN] = 1;
@@ -115,6 +115,18 @@ static int l_write(lua_State *L)
     ssize_t w = write(STDOUT_FILENO, s, len);
     if (w == -1)
         luaL_error(L, "write: %s", strerror(errno));
+    if (w != (ssize_t)len) {
+        /* partial write: retry remaining bytes */
+        const char *ptr = s + w;
+        size_t remaining = len - w;
+        while (remaining > 0) {
+            w = write(STDOUT_FILENO, ptr, remaining);
+            if (w == -1) break;
+            ptr += w;
+            remaining -= w;
+        }
+    }
+    fflush(stdout);
     return 0;
 }
 
