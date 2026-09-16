@@ -4,7 +4,7 @@ local M = {}
 M.history = {}
 M.pending_confirmation = nil
 
-local system_prompt = [==[
+local system_prompt = (config and config.get_system_prompt and config.get_system_prompt()) or [==[
 You are tether, a code assistant running inside a terminal.
 
 Available tools:
@@ -63,10 +63,13 @@ local function should_confirm(tool_name, args, cfg)
     if cfg.allow_outside_workspace then return false end
     local path = args.path or args.command
     if not path then return false end
-    if path:find("^/") then return true end
-    local resolved = tools._resolve(path)
-    local rel = tools._to_rel(resolved)
-    if rel ~= path then return true end
+    -- absolute paths always need confirmation
+    if path:sub(1, 1) == "/" then return true end
+    local ws = tools._workspace()
+    local resolved = ws .. "/" .. path
+    if not resolved:match(ws .. "$") and not resolved:match(ws .. "/") then
+        return true
+    end
     return false
 end
 
@@ -80,28 +83,108 @@ local function check_auto_approve(tool_name, args, cfg)
     return false
 end
 
+-- Minimal JSON parser (recursive descent, no load, no globals)
+local function json_parse(s)
+    local pos = 1
+    local function skip_ws()
+        while pos <= #s and s:sub(pos,pos):match("[%s]") do pos = pos + 1 end
+    end
+    local function parse_value()
+        skip_ws()
+        local c = s:sub(pos,pos)
+        if c == nil then return nil end
+        if c == '"' then
+            pos = pos + 1
+            local buf = {}
+            while true do
+                local ch = s:sub(pos,pos)
+                if ch == nil then break end
+                if ch == '"' then pos = pos + 1; return table.concat(buf)
+                elseif ch == '\\' then
+                    local esc = s:sub(pos+1,pos+1)
+                    local m = {["n"]="\n",["t"]="\t",["r"]="\r",["b"]="\b",["f"]="\f",['"']='"',['\\']='\\'}
+                    buf[#buf+1] = m[esc] or ""
+                    pos = pos + 2
+                else
+                    buf[#buf+1] = ch
+                    pos = pos + 1
+                end
+            end
+            return table.concat(buf)
+        elseif c == "{" then
+            pos = pos + 1
+            local obj = {}
+            skip_ws()
+            if s:sub(pos,pos) == "}" then pos = pos + 1; return obj end
+            while true do
+                skip_ws()
+                local key
+                if s:sub(pos,pos) == '"' then
+                    key = parse_value()
+                else
+                    local ks = s:match("[%w_%-]+", pos)
+                    if not ks then break end
+                    key = ks
+                    pos = pos + #key
+                end
+                skip_ws()
+                if s:sub(pos,pos) ~= ":" then break end
+                pos = pos + 1
+                obj[key] = parse_value()
+                skip_ws()
+                local nx = s:sub(pos,pos)
+                if nx == "," then pos = pos + 1
+                elseif nx == "}" then pos = pos + 1; break
+                else break end
+            end
+            return obj
+        elseif c == "[" then
+            pos = pos + 1
+            local arr = {}
+            skip_ws()
+            if s:sub(pos,pos) == "]" then pos = pos + 1; return arr end
+            while true do
+                arr[#arr+1] = parse_value()
+                skip_ws()
+                local nx = s:sub(pos,pos)
+                if nx == "," then pos = pos + 1
+                elseif nx == "]" then pos = pos + 1; break
+                else break end
+            end
+            return arr
+        elseif s:sub(pos, pos+3) == "true" then
+            pos = pos + 4; return true
+        elseif s:sub(pos, pos+4) == "false" then
+            pos = pos + 5; return false
+        elseif s:sub(pos, pos+3) == "null" then
+            pos = pos + 4; return nil
+        else
+            local st, fin = s:find("%-?%d+%.?%d*[eE]?[%+%-]?%d*", pos)
+            if st then
+                local num = s:sub(st, fin)
+                pos = fin + 1
+                return tonumber(num)
+            end
+            return nil
+        end
+    end
+    return parse_value()
+end
+
 local function parse_args(args_str)
     if not args_str or args_str == "" then return {} end
-    local result = {}
-    for k, v in args_str:gmatch('"(%w+)"[%s]*:[%s]*"([^"]*)"') do
-        result[k] = v
-    end
-    for k, v in args_str:gmatch('"(%w+)"[%s]*:[%s]*(%d+%.?%d*)') do
-        result[k] = tonumber(v)
-    end
-    for k, v in args_str:gmatch('"(%w+)"[%s]*:[%s]*(%S+)') do
-        v = v:gsub("[,%}]]$", "")
-        if v == "true" then result[k] = true elseif v == "false" then result[k] = false end
-    end
-    if next(result) then return result end
+    local ok, result = pcall(json_parse, args_str)
+    if ok and type(result) == "table" then return result end
     return {}
 end
 
-function M.turn(cfg, api_key, user_text, on_event)
+function M.turn(cfg, api_key, user_text, on_event, skip_user)
     if #M.history == 0 then
         table.insert(M.history, { role = "system", content = system_prompt })
     end
-    M.add_user(user_text)
+    if not skip_user then
+        M.add_user(user_text)
+    end
 
     local max_iterations = 50
     local iteration = 0
@@ -198,14 +281,17 @@ end
 function M.confirm(id, decision, cfg)
     if not M.pending_confirmation then return end
     local tc = M.pending_confirmation
+    local handled = false
     for _, detail in ipairs(tc.tool_calls) do
         if detail.id == id then
             local result, err
-            if decision == "allow" then
+            if decision == "allow" or decision == "session" or decision == "always" then
                 result, err = execute_tool(detail.name, detail.args, cfg)
+                handled = true
             else
                 result = nil
                 err = "denied by user"
+                handled = true
             end
             if result then
                 M.add_tool_result(id, result)
@@ -214,7 +300,28 @@ function M.confirm(id, decision, cfg)
             end
         end
     end
-    M.pending_confirmation = nil
+    if handled then
+        M.pending_confirmation = nil
+    end
+    return handled
+end
+
+-- Continue the agent loop after a confirmation was resolved,
+-- without adding a new user message.
+function M.continue(cfg, api_key, on_event)
+    local ok = M.turn(cfg, api_key, "", on_event, true)
+    return ok
+end
+
+M.system_prompt = nil
+
+function M.set_system_prompt(p)
+    M.system_prompt = p
+end
+
+function M.get_system_prompt()
+    if not M.system_prompt or M.system_prompt == "" then return nil end
+    return M.system_prompt
 end
 
 return M

@@ -92,14 +92,16 @@ end
 local function list_session_files(workspace)
     ensure_dir()
     local files = {}
-    local ok, result = pcall(function()
+    local data
+    local ok, res = pcall(function()
         local f = io.popen("find " .. SESSION_DIR .. " -name '*.jsonl' -type f -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -100")
         local r = f:read("*a")
         f:close()
         return r
     end)
-    if not ok then return files end
-    for line in result:gmatch("[^]+") do
+    if ok then data = res end
+    if not data then return files end
+    for line in data:gmatch("[^\n]+") do
         local mtime, fname = line:match("^(%S+)%s+(.+)")
         if fname and fname:match("%.jsonl$") then
             local id = fname:match("([^/]+)%.jsonl$")
