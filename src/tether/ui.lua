@@ -277,7 +277,7 @@ local function draw_help_overlay()
     out("\x1b[2J\x1b[H")
     out(A.corner_tl .. string.rep(A.border_h, mw) .. A.corner_tr .. "\n")
     local help_text = {
-        "Ввод         Enter отправить · Ctrl+J newline",
+        "Ввод         Enter отправить · Ctrl+J новая строка",
         "              ↑↓ история · Ctrl+A/E/U/W/K",
         "Навигация     PgUp/PgDn · Ctrl+Home/End",
         "Транскрипт    Ctrl+O развернуть · Ctrl+T thinking",
