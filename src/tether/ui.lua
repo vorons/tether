@@ -107,7 +107,7 @@ end
 local function render_message(msg, mw)
     local lines = {}
     if msg.role == "user" then
-        local prefix = A.user_gutter .. " "
+        local prefix = cyan(A.user_gutter) .. " "
         for _, l in ipairs(wrap_text(msg.text, mw - #prefix)) do
             table.insert(lines, prefix .. l)
         end
@@ -177,13 +177,13 @@ end
 local function draw_input()
     local mw = maxw()
     local max_lines = (S.cfg and S.cfg.ui and S.cfg.ui.input_max_lines) or 8
-    local prefix = A.user_gutter .. " "
+    local prefix = cyan(A.user_gutter) .. " "
     for i = 1, math.min(#S.input_lines, max_lines) do
         local line = S.input_lines[i]
         local disp = prefix .. line
         if #disp > mw then disp = trunc(disp, mw) end
         if i == S.input_line then
-            disp = disp .. "\x1b[7m ▌\x1b[0m"
+            disp = disp .. "\x1b[7m " .. utf8.char(0x2588) .. "\x1b[0m"
         end
         out(disp .. "\n")
     end
@@ -232,7 +232,7 @@ local function draw_hint()
     elseif S.resume_active then
         text = "↑↓ выбрать · Enter возобновить · Esc закрыть"
     else
-        text = "Enter отправить · Ctrl+J newline · Ctrl+C выход · / палитра · ? помощь"
+        text = "Enter отправить · Ctrl+J новая строка · Ctrl+C отмена · ? помощь"
     end
     out(dim("  " .. trunc(text, mw)) .. "\n")
 end
@@ -368,7 +368,7 @@ local function clear_input()
     S.input_col = 0
     S.input_offset = 0
     draw_full()
-    out(A.user_gutter .. " ")
+    out(cyan(A.user_gutter) .. " ")
 end
 
 local function add_to_history(text)
@@ -489,6 +489,7 @@ local function draw_full()
     if S.resume_active then draw_resume_picker(); return end
     draw_error_banner()
     draw_input()
+    out("\x1b[90m" .. string.rep("─", S.term_width) .. "\x1b[0m\n")
     draw_palette()
     draw_hint()
     draw_status()
@@ -652,8 +653,24 @@ function M.run()
             draw_full()
         elseif c == 27 then -- ESC
             local dir = drain_escape()
-            if dir == "up" then navigate_history(-1)
-            elseif dir == "down" then navigate_history(1)
+            if dir == "up" then
+                if S.input_lines[S.input_line] == "" and #S.input_lines == 1 then
+                    navigate_history(-1)
+                else
+                    S.input_line = math.max(1, S.input_line - 1)
+                    S.input_col = math.min(S.input_col, #S.input_lines[S.input_line])
+                    draw_full()
+                    out(cyan(A.user_gutter) .. " ")
+                end
+            elseif dir == "down" then
+                if S.input_lines[S.input_line] == "" and #S.input_lines == 1 then
+                    navigate_history(1)
+                else
+                    S.input_line = math.min(#S.input_lines, S.input_line + 1)
+                    S.input_col = math.min(S.input_col, #S.input_lines[S.input_line])
+                    draw_full()
+                    out(cyan(A.user_gutter) .. " ")
+                end
             end
         elseif c == 13 then -- Enter (send)
             local result = commit_input()
@@ -664,7 +681,7 @@ function M.run()
                 table.insert(S.input_lines, S.input_line, "")
             end
             draw_full()
-            out(A.user_gutter .. " ")
+            out(cyan(A.user_gutter) .. " ")
         elseif c == 127 or c == 8 then -- Backspace
             if #S.input_lines[S.input_line] > 0 then
                 S.input_lines[S.input_line] = S.input_lines[S.input_line]:sub(1, -2)
@@ -673,14 +690,50 @@ function M.run()
                 S.input_line = S.input_line - 1
             end
             draw_full()
-            out(A.user_gutter .. " ")
+            out(cyan(A.user_gutter) .. " ")
+        elseif c == 1 then -- Ctrl+A (beginning of line)
+            S.input_col = 0
+            draw_full()
+            out(cyan(A.user_gutter) .. " ")
+        elseif c == 5 then -- Ctrl+E (end of line)
+            S.input_col = #S.input_lines[S.input_line]
+            draw_full()
+            out(cyan(A.user_gutter) .. " ")
+        elseif c == 21 then -- Ctrl+U (kill line)
+            S.input_lines[S.input_line] = ""
+            S.input_col = 0
+            draw_full()
+            out(cyan(A.user_gutter) .. " ")
+        elseif c == 23 then -- Ctrl+W (backward kill word)
+            local line = S.input_lines[S.input_line]
+            local col = S.input_col
+            local trimmed = line:sub(1, col)
+            local _, _, new_trimmed = trimmed:gsub("%s*%S+%s*$", "")
+            S.input_lines[S.input_line] = new_trimmed .. line:sub(col + 1)
+            S.input_col = #new_trimmed
+            draw_full()
+            out(cyan(A.user_gutter) .. " ")
+        elseif c == 11 then -- Ctrl+K (kill to end of line)
+            S.input_lines[S.input_line] = S.input_lines[S.input_line]:sub(1, S.input_col)
+            draw_full()
+            out(cyan(A.user_gutter) .. " ")
         elseif c >= 32 and c <= 126 then -- printable
             S.input_lines[S.input_line] = S.input_lines[S.input_line] .. string.char(c)
             S.input_col = S.input_col + 1
             draw_full()
-            out(A.user_gutter .. " ")
-        elseif c == 9 then -- Tab
-            -- ignore during input
+            out(cyan(A.user_gutter) .. " ")
+        elseif c == 47 then -- /
+            if not S.palette_active then
+                S.palette_active = true
+                S.palette_filter = ""
+                S.palette_items = {
+                    "/help", "/clear", "/compact", "/model", "/resume",
+                    "/new", "/status", "/log", "/quit"
+                }
+                S.palette_selected = 1
+            end
+            draw_full()
+            out(cyan(A.user_gutter) .. " ")
         end
 
         ::continue::
