@@ -575,7 +575,8 @@ local function render_status(L)
     end
     local parts = { S.model_name or "?", ws }
     if S.tokens_max and S.tokens_max > 0 then
-        parts[#parts + 1] = string.format("%.1fk/%.1fk (%.0f%%)",
+        local est = S.tokens_estimated and "≈" or ""
+        parts[#parts + 1] = est .. string.format("%.1fk/%.1fk (%.0f%%)",
             S.tokens_used / 1024, S.tokens_max / 1024,
             S.tokens_used / S.tokens_max * 100)
     end
@@ -785,7 +786,18 @@ local function execute_command(cmd)
         return
     end
     if cmd == "compact" then
-        S.transcript[#S.transcript + 1] = { role = "system", text = "── summary ──" }
+        -- summarize current transcript, reset agent history
+        local summary_parts = {}
+        for _, e in ipairs(S.transcript) do
+            local role = e.role or "?"
+            local text = e.text or e.body or ""
+            if #text > 200 then text = text:sub(1, 200) .. "…" end
+            summary_parts[#summary_parts + 1] = role .. ": " .. text
+        end
+        local summary = table.concat(summary_parts, "\n")
+        S.transcript = { role = "system", text = "── summary ──\n" .. summary }
+        if agent then agent.clear() end
+        S.tokens_used = math.floor(#summary / 4)
         bump_transcript()
         return
     end
@@ -798,22 +810,23 @@ local function execute_command(cmd)
         return
     end
     if cmd == "model" then
-        local ok, models = pcall(api.list_models, S.cfg, S.api_key or "")
-        if ok and models and #models > 0 then
-            local items = {}
-            for _, m in ipairs(models) do
-                items[#items + 1] = {
-                    label = m.id or m,
-                    desc = m.name or m.id or "",
-                    cmd = "model_set:" .. (m.id or m),
-                }
+        local ok, models = pcall(api.list_models_live, S.cfg, S.api_key or "")
+        if not ok then models = nil end
+        if not (models and #models > 0) then
+            models = {}
+            for _, m in ipairs(api.list_models()) do
+                models[#models + 1] = { id = m, name = m }
             end
-            S.overlay = "model"
-            S.overlay_data = { items = items, sel = 1, current = S.model_name }
-        else
-            S.transcript[#S.transcript + 1] = { role = "system", text = "(нет доступных моделей)" }
-            bump_transcript()
         end
+        local items = {}
+        for _, m in ipairs(models) do
+            items[#items + 1] = {
+                label = m.id or m,
+                desc = m.name or m.id or "",
+            }
+        end
+        S.overlay = "model"
+        S.overlay_data = { items = items, sel = 1, current = S.model_name }
         return
     end
     if cmd == "resume" then
@@ -879,6 +892,10 @@ local function handle_agent_event(ev)
     elseif ev.type == "usage" and ev.usage then
         S.tokens_used = ev.usage.used or S.tokens_used
         S.tokens_max  = ev.usage.max  or S.tokens_max
+        S.tokens_estimated = false
+    elseif ev.type == "context_compressed" then
+        S.transcript[#S.transcript + 1] = { role = "system", text = "↘ контекст сжат" }
+        S.tokens_estimated = true
     end
     -- Fallback: estimate tokens when API does not provide usage
     if not ev.usage then
@@ -887,6 +904,7 @@ local function handle_agent_event(ev)
             total = total + (#(e.text or "") + #(e.body or "")) / 4
         end
         S.tokens_used = math.max(S.tokens_used, math.floor(total))
+        S.tokens_estimated = true
     end
     if ev.type == "confirmation" then
         local detail = ev.details and ev.details[1]
@@ -1145,12 +1163,13 @@ local function handle_key(k)
     if k.kind == "ctrl" then
         if k.code == 17 then S.quit = true; return end         -- Ctrl+Q
         if k.code == 3 then                                     -- Ctrl+C
-            if S.palette_active then
-                input_clear()
-                return
-            end
+            if S.palette_active then input_clear(); return end
             if #S.input > 0 then input_clear()
-            else S.quit = true end
+            elseif os.clock() - (S.last_ctrl_c or 0) < 1.0 then
+                S.quit = true                                   -- double Ctrl+C
+            else
+                S.last_ctrl_c = os.clock()                        -- single: mark, abort stream
+            end
             return
         end
     end

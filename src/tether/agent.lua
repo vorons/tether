@@ -178,6 +178,50 @@ local function parse_args(args_str)
     return {}
 end
 
+local function estimate_tokens(history)
+    local total = 0
+    for _, m in ipairs(history) do
+        local c = m.content
+        if type(c) == "string" then total = total + #c / 4
+        elseif type(c) == "table" then
+            for _, tc in ipairs(c) do
+                total = total + #(tc["function"] and (tc["function"].arguments or "") or "") / 4
+            end
+        end
+    end
+    return math.ceil(total)
+end
+
+local function should_summarize(history, cfg)
+    local max_tokens = (cfg.context and cfg.context.max_tokens) or 32768
+    local threshold  = (cfg.context and cfg.context.summarize_at) or 0.7
+    return estimate_tokens(history) > threshold * max_tokens
+end
+
+-- Compress old history: keep system + last N messages, summarize the rest
+local function compress_history(history)
+    local N = 4
+    if #history <= N + 1 then return history end
+    local system = history[1]
+    local keep_from = math.max(2, #history - N + 1)
+    local old = {}
+    for i = 2, keep_from - 1 do old[#old + 1] = history[i] end
+    local keep = {}
+    for i = keep_from, #history do keep[#keep + 1] = history[i] end
+    local parts = {}
+    for _, m in ipairs(old) do
+        local c = m.content
+        if type(c) == "string" then
+            parts[#parts + 1] = m.role .. ": " .. (c:sub(1, 200) .. (c:len() > 200 and "…" or ""))
+        end
+    end
+    local summary = table.concat(parts, "\n")
+    local new_history = { system }
+    new_history[#new_history + 1] = { role = "system", content = "── summary ──\n" .. summary }
+    for _, m in ipairs(keep) do new_history[#new_history + 1] = m end
+    return new_history
+end
+
 function M.turn(cfg, api_key, user_text, on_event, skip_user)
     if #M.history == 0 then
         table.insert(M.history, { role = "system", content = system_prompt })
@@ -192,6 +236,12 @@ function M.turn(cfg, api_key, user_text, on_event, skip_user)
     while iteration < max_iterations do
         iteration = iteration + 1
         local tool_calls = {}
+
+        -- Auto-compress if context is getting full
+        if should_summarize(M.history, cfg) then
+            M.history = compress_history(M.history)
+            on_event({ type = "context_compressed" })
+        end
 
         local ok = api.stream(cfg, api_key, M.history, function(ev)
             if ev.type == "text_delta" then
@@ -308,6 +358,10 @@ end
 
 -- Continue the agent loop after a confirmation was resolved,
 -- without adding a new user message.
+M.estimate_tokens = estimate_tokens
+M.compress_history = compress_history
+M.should_summarize = should_summarize
+
 function M.continue(cfg, api_key, on_event)
     local ok = M.turn(cfg, api_key, "", on_event, true)
     return ok

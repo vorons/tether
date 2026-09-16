@@ -158,4 +158,30 @@ function M.list_models()
     return {"gpt-4o-mini", "gpt-4o", "gpt-4-turbo"}
 end
 
+function M.list_models_live(cfg, api_key)
+    if not cfg or not api_key or api_key == "" then
+        return nil, "no api key"
+    end
+    local url = cfg.base_url .. "/models"
+    local cmd = string.format(
+        "curl -s -X GET '%s' -H 'Authorization: Bearer %s'",
+        url, api_key)
+    local handle = tether.open_pipe(cmd)
+    if not handle or handle == 0 then return nil, "curl failed" end
+    local buf = {}
+    while true do
+        local line = tether.read_line(handle)
+        if not line or line == "" then break end
+        buf[#buf + 1] = line
+    end
+    tether.close_pipe(handle)
+    local body = table.concat(buf)
+    -- minimal JSON: extract "id" values
+    local result = {}
+    for id in body:gmatch('"id"[%s]*:[%s]*"([^"]+)"') do
+        result[#result + 1] = { id = id, name = id }
+    end
+    return #result > 0 and result or nil, #result > 0 and nil or "empty model list"
+end
+
 return M
