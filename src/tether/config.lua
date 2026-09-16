@@ -11,6 +11,7 @@ local function default_config()
         allow_outside_workspace = false,
         auto_approve = {},
         context = { max_tokens = 32768, summarize_at = 0.7 },
+        retries = 3,
         ui = {
             theme = "default",
             header = false,

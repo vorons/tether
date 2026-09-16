@@ -6,7 +6,13 @@ local M = {}
 -- ============================================================
 local ESC = "\27"
 local function w(s) tether.write(s) end
-local function sgr(c, s) return ESC .. "[" .. c .. "m" .. s .. ESC .. "[0m" end
+
+-- T20: ASCII mode — NO_COLOR=1 or TERM=dumb → strip all ANSI + non-ASCII glyphs
+local _ascii = (os.getenv("NO_COLOR") == "1") or (os.getenv("TERM") == "dumb")
+local function sgr(c, s)
+    if _ascii then return s end
+    return ESC .. "[" .. c .. "m" .. s .. ESC .. "[0m"
+end
 local function cyan(s)   return sgr("36;1", s) end
 local function yellow(s) return sgr("33;1", s) end
 local function red(s)    return sgr("31;1", s) end
@@ -14,6 +20,24 @@ local function green(s)  return sgr("32",   s) end
 local function dim(s)    return sgr("2",    s) end
 local function italic(s) return sgr("3",    s) end
 local function rev(s)    return sgr("7",    s) end
+
+local function glyph(g)
+    if not _ascii then return g end
+    local map = {
+        ["\226\128\176"] = "[?]",  -- ◻
+        ["\226\128\177"] = "[x]",  -- ◻
+        ["\255\180\177"] = "->",   -- arrow
+        ["\226\142\156"]  = "*",   -- ⚙ gear
+        ["\226\128\150"]  = "!",   -- ⚠ warning
+        ["\226\128\155"]  = "x",   -- ✗
+        ["\226\128\148"]  = "v",   -- ✓
+        ["\226\128\156"]  = "!",   -- ❌
+        ["\226\128\185"]  = ">>",  -- ➡
+        ["\226\128\184"]  = "<<",  -- ⬅
+        ["\226\128\154"]  = "o",   -- ⬤
+    }
+    return map[g] or g
+end
 
 -- ============================================================
 -- UTF-8 / string helpers
@@ -581,6 +605,12 @@ local function render_status(L)
             S.tokens_used / S.tokens_max * 100)
     end
     parts[#parts + 1] = "🖱 on"
+    -- T16: keyboard protocol indicator
+    if S.kb_protocol == 1 then
+        parts[#parts + 1] = "⌨ kitty"
+    elseif S.kb_protocol == 2 then
+        parts[#parts + 1] = "⌨ xterm"
+    end
     local text = table.concat(parts, " · ")
     text = trunc(text, L.w - 2)
     local pad = L.w - ulen(text)
@@ -720,11 +750,13 @@ end
 -- ============================================================
 -- Key reading
 -- ============================================================
+local paste_buf = nil  -- T13: bracketed paste buffer
 local function read_key()
     local b = tether.read_char()
     if b == nil or b == -1 then return nil end
     local c = b & 0xFF
 
+    -- bracketed paste start: ESC[200~ → accumulate until ESC[201~
     if c == 27 then
         local b2 = tether.read_char_nb()
         if b2 == nil then return { kind = "esc" } end
@@ -741,6 +773,35 @@ local function read_key()
                 params[#params + 1] = string.char(c3)
             else
                 local p = table.concat(params)
+                if p == "200" and c3 == 126 then
+                    -- Bracketed paste: read chars until ESC[201~
+                    local buf = {}
+                    while true do
+                        local ch = tether.read_char()
+                        if ch == nil or ch == -1 then break end
+                        local cc = ch & 0xFF
+                        if cc == 27 then
+                            -- Possible end marker ESC[201~
+                            local b4 = tether.read_char_nb()
+                            if b4 and (b4 & 0xFF) == 91 then
+                                local b5 = tether.read_char_nb()
+                                if b5 and (b5 & 0xFF) == 50 then
+                                    local b6 = tether.read_char_nb()
+                                    if b6 and (b6 & 0xFF) == 49 then
+                                        local b7 = tether.read_char_nb()
+                                        if b7 and (b7 & 0xFF) == 126 then
+                                            return { kind = "paste", text = table.concat(buf) }
+                                        end
+                                    end
+                                end
+                            end
+                            buf[#buf + 1] = string.char(cc)
+                        elseif cc >= 32 or cc == 10 then
+                            buf[#buf + 1] = string.char(cc)
+                        end
+                    end
+                    return { kind = "paste", text = table.concat(buf) }
+                end
                 local names = {
                     [65] = "up", [66] = "down", [67] = "right", [68] = "left",
                     [72] = "home", [70] = "end",
@@ -753,6 +814,20 @@ local function read_key()
                                  ["4"]="end", ["5"]="pgup", ["6"]="pgdn",
                                  ["7"]="home", ["8"]="end" })[p]
                     if m then return { kind = "special", name = m, params = p } end
+                end
+                -- T17: mouse SGR (1006) — final byte M (press) / m (release),
+                -- params = col;row;code. Scroll code: 64=down, 65=up.
+                if c3 == 77 or c3 == 109 then
+                    local col, row, code = p:match("(%d+);(%d+);(%d+)")
+                    col, row, code = tonumber(col), tonumber(row), tonumber(code)
+                    local name
+                    if code == 32 then name = "press"
+                    elseif code == 33 then name = "release"
+                    elseif code == 64 then name = "scroll_up"
+                    elseif code == 65 then name = "scroll_down"
+                    else name = "unknown" end
+                    return { kind = "mouse", name = name,
+                             col = col, row = row, button = code }
                 end
                 return { kind = "special", name = "unknown", final = c3, params = p }
             end
@@ -896,6 +971,12 @@ local function handle_agent_event(ev)
     elseif ev.type == "context_compressed" then
         S.transcript[#S.transcript + 1] = { role = "system", text = "↘ контекст сжат" }
         S.tokens_estimated = true
+    elseif ev.type == "retry" then
+        S.transcript[#S.transcript + 1] = {
+            role = "system",
+            text = string.format("↻ повтор %d (ждём %.1fs): %s",
+                ev.attempt or 1, ev.delay or 0.5, ev.reason or ""),
+        }
     end
     -- Fallback: estimate tokens when API does not provide usage
     if not ev.usage then
@@ -1039,6 +1120,53 @@ local function handle_ctrl(code)
     end
 end
 
+local function b64encode(s)
+    local chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+    local function c6(v) return chars:sub(v + 1, v + 1) end
+    local out2 = {}
+    local i = 1
+    while i + 2 <= #s do
+        local a = string.byte(s:sub(i, i))
+        local b = string.byte(s:sub(i+1, i+1))
+        local cc = string.byte(s:sub(i+2, i+2))
+        local n = a * 65536 + b * 256 + cc
+        out2[#out2+1] = c6(math.floor(n / 262144))
+        out2[#out2+1] = c6(math.floor(n / 4096) % 64)
+        out2[#out2+1] = c6(math.floor(n / 64) % 64)
+        out2[#out2+1] = c6(n % 64)
+        i = i + 3
+    end
+    local rem = #s - (i - 1)
+    if rem == 1 then
+        local a = string.byte(s:sub(i, i))
+        out2[#out2+1] = c6(math.floor(a / 4))        -- bits 2-7
+        out2[#out2+1] = c6((a % 4) * 16)             -- bits 0-1 → first 2 of second
+        out2[#out2+1] = "=="
+    elseif rem == 2 then
+        local a = string.byte(s:sub(i, i))
+        local b = string.byte(s:sub(i+1, i+1))
+        local n = a * 256 + b
+        out2[#out2+1] = c6(math.floor(n / 1024))     -- bits 10-15
+        out2[#out2+1] = c6(math.floor(n / 16) % 64)  -- bits 4-9
+        out2[#out2+1] = c6((n % 16) * 4)             -- bits 0-3
+        out2[#out2+1] = "="
+    end
+    return table.concat(out2)
+end
+
+local function copy_last_assistant()
+    -- T18: copy last assistant response via OSC 52
+    local last_text = ""
+    for i = #S.transcript, 1, -1 do
+        if S.transcript[i].role == "assistant" then
+            last_text = S.transcript[i].text or ""
+            break
+        end
+    end
+    if last_text == "" then return end
+    w(ESC .. "]52;c;" .. b64encode(last_text) .. string.char(7))
+end
+
 local function resolve_confirmation(decision)
     local detail = S.confirmation and S.confirmation.detail
     S.confirmation = nil
@@ -1102,6 +1230,20 @@ local function handle_confirmation_key(k)
             end
         end
     end
+    -- T17: click on a confirmation option
+    if k.kind == "mouse" and k.name == "press" then
+        local c = S.confirmation
+        if c and c.options then
+            local L = layout()
+            local n = #c.options
+            local first_opt_row = L.input_row - n  -- options render just above input
+            if k.row >= first_opt_row and k.row <= first_opt_row + n - 1 then
+                S.confirmation_sel = k.row - first_opt_row + 1
+                local dec = { [1] = "allow", [2] = "session", [3] = "details", [4] = "deny" }
+                resolve_confirmation(dec[S.confirmation_sel] or "deny")
+            end
+        end
+    end
 end
 
 local function handle_overlay_key(k)
@@ -1159,10 +1301,35 @@ local function handle_key(k)
     if S.overlay then handle_overlay_key(k); return end
     if S.confirmation then handle_confirmation_key(k); return end
 
+    -- T17: mouse SGR — scroll transcript, click palette/confirmation items
+    if k.kind == "mouse" then
+        if k.name == "scroll_up" then
+            S.scroll = math.max(0, S.scroll - math.max(1, math.floor(S.h / 4)))
+            if S.scroll == 0 then S.user_scrolled = false end
+            return
+        end
+        if k.name == "scroll_down" then
+            S.scroll = S.scroll + math.max(1, math.floor(S.h / 4))
+            S.user_scrolled = true
+            return
+        end
+        if k.name == "press" then
+            local L = layout()
+            if S.palette_active and k.row >= L.palette_row + 1
+                and k.row <= L.palette_row + math.min(#S.palette_items, L.palette_h - 2) then
+                local idx = k.row - L.palette_row
+                local it = S.palette_items[idx]
+                if it then execute_command(it.cmd) end
+                return
+            end
+        end
+        return
+    end
+
     -- global ctrl
     if k.kind == "ctrl" then
         if k.code == 17 then S.quit = true; return end         -- Ctrl+Q
-        if k.code == 3 then                                     -- Ctrl+C
+        if k.code == 3 then                                     -- Ctrl+C / Ctrl+Shift+C
             if S.palette_active then input_clear(); return end
             if #S.input > 0 then input_clear()
             elseif os.clock() - (S.last_ctrl_c or 0) < 1.0 then
@@ -1172,6 +1339,18 @@ local function handle_key(k)
             end
             return
         end
+    end
+
+    -- T18: kitty keyboard protocol — Ctrl+Shift+C as ESC[4:53;96C
+    if k.kind == "special" and k.params == "4:53;96" then
+        copy_last_assistant()
+        return
+    end
+    -- T18: X11 fallback — Shift+Ctrl+C as ESC[1;2C
+    if k.kind == "special" and k.params and k.params:match("^1;2%a") then
+        local key = k.params:match("(%a)$")
+        if key == "C" then copy_last_assistant() end
+        return
     end
 
     -- palette mode
@@ -1205,7 +1384,18 @@ local function handle_key(k)
     end
 
     -- normal mode
-    if k.kind == "text" then input_insert(k.char)
+    if k.kind == "paste" then
+        local text = k.text or ""
+        for i = 1, #text do
+            local ch = text:sub(i, i)
+            if ch == "\n" then
+                S.input = S.input .. "\n"
+            else
+                input_insert(ch)
+            end
+        end
+        S.cursor = #S.input
+    elseif k.kind == "text" then input_insert(k.char)
     elseif k.kind == "enter" then commit_input()
     elseif k.kind == "newline" then input_insert("\n")
     elseif k.kind == "backspace" then input_backspace()
@@ -1240,6 +1430,16 @@ function M.run()
     if S.cfg.ui and S.cfg.ui.mouse and S.cfg.ui.mouse ~= "off" then
         w(ESC .. "[?1006h" .. ESC .. "[?1000h")
     end
+    -- T13: enable bracketed paste
+    if not _ascii then
+        w(ESC .. "[?2004h")
+    end
+    -- T16: keyboard protocol detection
+    local ok, proto = pcall(tether.detect_kb_protocol)
+    S.kb_protocol = (ok and type(proto) == "number") and proto or 0
+    if S.kb_protocol == 1 then
+        w(ESC .. "[?u")
+    end
 
     palette_sync()
     redraw()
@@ -1258,7 +1458,7 @@ function M.run()
         redraw()
     end
 
-    w(ESC .. "[?1006l" .. ESC .. "[?1000l" .. ESC .. "[?25h" .. "\n")
+    w(ESC .. "[?1006l" .. ESC .. "[?1000l" .. ESC .. "[?2004l" .. ESC .. "[?25h" .. "\n")
 end
 
 return M

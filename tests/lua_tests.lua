@@ -356,6 +356,108 @@ do
     if not ok then error(err, 0) end
 end
 
+-- T15: API retry logic — mock a pipe that returns a 429 body on attempt 1,
+-- then a successful SSE stream on attempt 2. Also test exhaustion -> error.
+do
+    -- Each open_pipe returns a unique handle index into a per-handle script.
+    -- script[handle] = array of lines to return; empty array = empty body.
+    local api_mod = assert(loadfile("src/tether/api.lua"))()
+
+    local function run_stream(script, cfg)
+        local handles = 0
+        local _G_old_tether = _G.tether
+        _G.tether = {
+            open_pipe = function()
+                handles = handles + 1
+                return handles
+            end,
+            read_line = function(handle)
+                local q = script[handle]
+                if not q then return nil end
+                if #q == 0 then return nil end
+                return table.remove(q, 1)
+            end,
+            pipe_eof = function(handle)
+                local q = script[handle] or {}
+                return (#q == 0) and 1 or 0
+            end,
+            close_pipe = function() end,
+            sleep = function() end,
+        }
+        local events = {}
+        local function on_event(ev) events[#events + 1] = ev end
+        local ok = api_mod.stream(cfg or { base_url = "http://x", model = "m", retries = 3 },
+            "key", { { role = "user", content = "hi" } }, on_event)
+        _G.tether = _G_old_tether
+        return ok, events, handles
+    end
+
+    -- Case 1: attempt 1 -> 429 body, attempt 2 -> SSE success
+    local ok1, ev1, handles1 = run_stream({
+        [1] = { '{"error":{"status":429,"code":"rate_limit"}}' },
+        [2] = { 'data: {"choices":[{"delta":{"content":"ok"},"finish_reason":"stop"}]}' },
+    })
+    assert_true(ok1, "T15 success after retry")
+    assert_eq(handles1, 2, "T15 two pipe opens")
+    local saw_retry = false
+    for _, ev in ipairs(ev1) do if ev.type == "retry" then saw_retry = true end end
+    assert_true(saw_retry, "T15 retry event emitted")
+
+    -- Case 2: all attempts return 429 -> fail with error after exhaustion
+    local ok2, ev2, handles2 = run_stream({
+        [1] = { '{"error":{"status":429}}' },
+        [2] = { '{"error":{"status":429}}' },
+        [3] = { '{"error":{"status":429}}' },
+    }, { base_url = "http://x", model = "m", retries = 3 })
+    assert_false(ok2, "T15 fail after max retries")
+    assert_eq(handles2, 3, "T15 three pipe opens")
+    local saw_error = false
+    for _, ev in ipairs(ev2) do if ev.type == "error" then saw_error = true end end
+    assert_true(saw_error, "T15 error on exhaustion")
+
+    -- Case 3: empty body -> retryable, then success
+    local ok3, ev3, handles3 = run_stream({
+        [1] = {},
+        [2] = { 'data: {"choices":[{"delta":{"content":"x"},"finish_reason":"stop"}]}' },
+    })
+    assert_true(ok3, "T15 empty body retried")
+    assert_eq(handles3, 2, "T15 empty body two opens")
+end
+
+-- T19: print mode — parse --print/-p with optional prompt, mark non-interactive
+do
+    -- Mirror app.lua parse_args logic inline (app.lua uses global 'arg')
+    local function parse_args(args)
+        local opts = { interactive = true, print_mode = false, print_prompt = nil }
+        local i = 1
+        while i <= #args do
+            local a = args[i]
+            if a == "--print" or a == "-p" then
+                opts.print_mode = true
+                opts.interactive = false
+                if args[i + 1] and not args[i + 1]:match("^%-") then
+                    opts.print_prompt = args[i + 1]
+                    i = i + 1
+                end
+            end
+            i = i + 1
+        end
+        return opts
+    end
+    local o = parse_args({ "--print", "hello" })
+    assert_true(o.print_mode, "T19 print_mode true")
+    assert_false(o.interactive, "T19 interactive false")
+    assert_eq(o.print_prompt, "hello", "T19 prompt captured")
+
+    local o2 = parse_args({ "-p" })
+    assert_true(o2.print_mode, "T19 short -p sets print_mode")
+    assert_eq(o2.print_prompt, nil, "T19 no prompt -> nil")
+
+    local o3 = parse_args({ "--print", "--model", "gpt" })
+    assert_true(o3.print_mode, "T19 print with following flags")
+    assert_eq(o3.print_prompt, nil, "T19 --print followed by flag -> no prompt")
+end
+
 print(string.format("PASS: %d/%d", passed, passed + failed))
 if failed > 0 then
     os.exit(1)

@@ -11,6 +11,7 @@ local function parse_args()
         model = nil,
         resume = nil,
         print_mode = false,
+        print_prompt = nil,
         debug = false,
     }
     local i = 1
@@ -27,6 +28,10 @@ local function parse_args()
         elseif a == "--print" or a == "-p" then
             opts.print_mode = true
             opts.interactive = false
+            if args[i + 1] and not args[i + 1]:match("^%-") then
+                opts.print_prompt = args[i + 1]
+                i = i + 1
+            end
         elseif a == "--debug" then
             opts.debug = true
         elseif a == "--version" or a == "-v" then
@@ -43,8 +48,51 @@ local function run_inner()
     if version then print("tether 0.1.0"); os.exit(0) end
 
     if opts.print_mode then
-        local ui = assert(ui, "ui module not loaded")
-        ui.run()
+        -- Non-interactive: run a single agent turn, print final text to stdout
+        local cfg = config.load()
+        if opts.workspace then cfg.workspace = opts.workspace end
+        if opts.model then cfg.model = opts.model end
+        local api_key = config.api_key(cfg) or ""
+        local prompt = opts.print_prompt
+        if not prompt then
+            -- read prompt from stdin (piped)
+            prompt = io.read("*a")
+        end
+        if not prompt or prompt:match("^%s*$") then
+            io.stderr:write("tether: --print requires a prompt argument or stdin input\n")
+            os.exit(1)
+        end
+        agent.add_user(prompt)
+        local text_chunks = {}
+        local had_error = false
+        local function on_event(ev)
+            if ev.type == "text_delta" then
+                text_chunks[#text_chunks + 1] = ev.text
+            elseif ev.type == "error" then
+                had_error = true
+                io.stderr:write("tether: " .. (ev.message or "") .. "\n")
+            end
+        end
+        local ok, err = pcall(agent.turn, cfg, api_key, "", on_event, true)
+        if not ok then
+            io.stderr:write("tether: agent error: " .. tostring(err) .. "\n")
+            os.exit(1)
+        end
+        -- collect the last assistant text from agent history
+        local history = agent.get_history()
+        local last_text = ""
+        for i = #history, 1, -1 do
+            if history[i].role == "assistant" and type(history[i].content) == "string" then
+                last_text = history[i].content
+                break
+            end
+        end
+        if last_text == "" and had_error then
+            io.stderr:write("tether: no response text\n")
+            os.exit(1)
+        end
+        io.write(last_text)
+        io.write("\n")
         return
     end
 

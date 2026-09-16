@@ -112,7 +112,44 @@ local function parse_sse_line(line, on_event)
     end
 end
 
-local function http_request(cfg, api_key, messages, on_event)
+-- T15: detect whether an HTTP response body is a retryable error (429 / 5xx).
+-- curl-piped streams can't report the status code directly, so we infer it
+-- from the body: OpenAI-compatible APIs return a plain JSON error body on
+-- 4xx/5xx (not an SSE stream). Rate-limit responses include "rate_limit" or
+-- a 429 status. Retry on empty bodies and retryable error JSON.
+local function is_retryable_body(body)
+    if body == nil or body == "" then return true, "empty response" end
+    local first = body:match("^[%s]*(%S)")
+    -- SSE streams start with "data:" — a non-SSE body on a streaming request
+    -- is an HTTP error JSON.
+    if first == "d" then return false, nil end
+    local status = tonumber(body:match('"status"[%s]*:[%s]*(%d+)'))
+        or tonumber(body:match('"code"[%s]*:[%s]*"?([%d]+)"?'))
+    if status and (status == 429 or status >= 500) then
+        return true, tostring(status)
+    end
+    local lowered = body:lower()
+    if lowered:find("rate.?limit") or lowered:find("rate_limit")
+        or lowered:find("too many requests") or lowered:find("overloaded")
+        or lowered:find("internal server error") or lowered:find("bad gateway")
+        or lowered:find("service unavailable") then
+        return true, "rate limit / server error body"
+    end
+    return false, nil
+end
+
+-- Extract a Retry-After / retry_after value from the body, if present.
+local function extract_retry_after(body)
+    if not body then return nil end
+    local v = body:match('"[Rr]etry[_-]?[Aa]fter"[%s]*:[%s]*([%d%.]+)')
+    if v then return tonumber(v) end
+    return nil
+end
+
+local function http_request(cfg, api_key, messages, on_event, attempt)
+    attempt = attempt or 1
+    local max_retries = (cfg.retries and tonumber(cfg.retries)) or 3
+    local backoffs = { 0.5, 1.0, 2.0 }
     local url = cfg.base_url .. "/chat/completions"
     local req = string.format(
         '{"model":"%s","messages":%s,"stream":true}',
@@ -120,19 +157,27 @@ local function http_request(cfg, api_key, messages, on_event)
 
     local body_esc = req:gsub("'", "'\\''")
     local cmd = string.format(
-        "curl -s -N -X POST '%s' -H 'Authorization: Bearer %s' -H 'Content-Type: application/json' -d '%s'",
+        "curl -s -N -X POST '%s' -H 'Authorization: Bearer %s' -H 'Content-Type: application/json' -d '%s' 2>/dev/null",
         url, api_key, body_esc)
 
     local handle = tether.open_pipe(cmd)
     if not handle or handle == 0 then
+        if attempt < max_retries then
+            pcall(tether.sleep, backoffs[attempt])
+            return http_request(cfg, api_key, messages, on_event, attempt + 1)
+        end
         on_event({ type = "error", message = "curl failed to start" })
         return false
     end
 
     local ok = true
+    local got_data = false
+    local buf = {}
     while true do
         local line = tether.read_line(handle)
         if not line or line == "" then break end
+        buf[#buf + 1] = line
+        got_data = true
         local ok2, err = pcall(parse_sse_line, line, on_event)
         if not ok2 then
             on_event({ type = "error", message = "SSE parse: " .. tostring(err) })
@@ -143,6 +188,25 @@ local function http_request(cfg, api_key, messages, on_event)
     end
 
     tether.close_pipe(handle)
+
+    -- Decide whether to retry based on the body content.
+    local body = table.concat(buf, "\n")
+    local retryable, reason = is_retryable_body(body)
+    if retryable and attempt < max_retries then
+        local delay = backoffs[math.min(attempt, #backoffs)]
+        local retry_after = extract_retry_after(body)
+        if retry_after then delay = retry_after end
+        pcall(tether.sleep, delay)
+        on_event({ type = "retry", attempt = attempt, delay = delay, reason = reason })
+        return http_request(cfg, api_key, messages, on_event, attempt + 1)
+    end
+
+    if retryable and attempt >= max_retries then
+        on_event({ type = "error", message = "API failed after " .. max_retries
+            .. " attempts: " .. tostring(reason or "empty response") })
+        return false
+    end
+
     return ok
 end
 
