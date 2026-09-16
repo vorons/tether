@@ -256,24 +256,6 @@ local function draw_status()
     out("\x1b[7m " .. line .. " \x1b[0m\n")
 end
 
-local function draw_full()
-    clear()
-    draw_transcript()
-    if S.diff_text ~= "" and not S.palette_active then
-        draw_diff_overlay()
-        return
-    end
-    if S.help_active then draw_help_overlay(); return end
-    if S.log_active then draw_log_overlay(); return end
-    if S.status_active then draw_status_overlay(); return end
-    if S.resume_active then draw_resume_picker(); return end
-    draw_error_banner()
-    draw_input()
-    draw_palette()
-    draw_hint()
-    draw_status()
-    hide_cursor()
-end
 
 local function draw_diff_overlay()
     local mw = maxw()
@@ -491,6 +473,26 @@ local function commit_input()
     draw_full()
     out(A.user_gutter .. " ")
     return nil
+end
+
+
+local function draw_full()
+    clear()
+    draw_transcript()
+    if S.diff_text ~= "" and not S.palette_active then
+        draw_diff_overlay()
+        return
+    end
+    if S.help_active then draw_help_overlay(); return end
+    if S.log_active then draw_log_overlay(); return end
+    if S.status_active then draw_status_overlay(); return end
+    if S.resume_active then draw_resume_picker(); return end
+    draw_error_banner()
+    draw_input()
+    draw_palette()
+    draw_hint()
+    draw_status()
+    hide_cursor()
 end
 
 local function handle_palette_key(c)
