@@ -181,6 +181,9 @@ local function draw_input()
         local line = S.input_lines[i]
         local disp = prefix .. line
         if #disp > mw then disp = trunc(disp, mw) end
+        if i == S.input_line then
+            disp = disp .. "\x1b[7m ▌\x1b[0m"
+        end
         out(disp .. "\n")
     end
     for i = #S.input_lines + 1, max_lines do out("\n") end
