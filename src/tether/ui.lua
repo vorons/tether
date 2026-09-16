@@ -1082,6 +1082,7 @@ end
 local function handle_ctrl(code)
     if code == 1 then move_line_start()
     elseif code == 5 then move_line_end()
+    elseif code == 10 then input_insert("\n")   -- Ctrl+J fallback newline
     elseif code == 11 then kill_to_end()
     elseif code == 12 then
         S.screen = {}
