@@ -190,22 +190,20 @@ end
 local function draw_palette()
     if not S.palette_active then return end
     local mw = maxw()
-    local maxh = math.min(#S.palette_items, 10)
+    local input_lines = math.min(#S.input_lines, (S.cfg and S.cfg.ui and S.cfg.ui.input_max_lines) or 8)
+    local input_row = S.term_height - (input_lines + 2)
+    local avail = math.max(S.term_height - (input_row + input_lines), 1)
+    local maxh = math.min(#S.palette_items, avail)
     out(A.corner_tl .. string.rep(A.border_h, mw) .. A.corner_tr .. "\n")
-    for i = 1, 10 do
-        if i <= #S.palette_items then
-            local item = S.palette_items[i]
-            if i == S.palette_selected then
-                out(reverse(" " .. trunc(item, mw - 2) .. "\n"))
-            else
-                out(" " .. trunc(item, mw - 2) .. "\n")
-            end
+    for i = 1, maxh do
+        local item = S.palette_items[i]
+        if i == S.palette_selected then
+            out(reverse(" " .. trunc(item, mw - 2) .. "\n"))
         else
-            out(string.rep(" ", mw) .. "\n")
+            out(" " .. trunc(item, mw - 2) .. "\n")
         end
     end
     out(A.corner_bl .. string.rep(A.border_h, mw) .. A.corner_br .. "\n")
-    out(dim(" ↑↓ выбрать · Tab дополнить · Enter выполнить · Esc закрыть ") .. "\n")
 end
 
 local function draw_hint()
@@ -491,10 +489,13 @@ local function draw_full()
     out(string.format("\x1b[%d;1H", input_row))
     draw_input()
     out(string.format("\x1b[%d;1H", input_row + input_lines))
-    out("\x1b[90m" .. string.rep("─", S.term_width) .. "\x1b[0m\n")
-    draw_palette()
-    draw_hint()
-    draw_status()
+    if S.palette_active then
+        draw_palette()
+    else
+        out("\x1b[90m" .. string.rep("─", S.term_width) .. "\x1b[0m\n")
+        draw_hint()
+        draw_status()
+    end
     hide_cursor()
 end
 
@@ -718,11 +719,6 @@ function M.run()
             S.input_lines[S.input_line] = S.input_lines[S.input_line]:sub(1, S.input_col)
             draw_full()
             out(cyan(A.user_gutter) .. " ")
-        elseif c >= 32 and c <= 126 then -- printable
-            S.input_lines[S.input_line] = S.input_lines[S.input_line] .. string.char(c)
-            S.input_col = S.input_col + 1
-            draw_full()
-            out(cyan(A.user_gutter) .. " ")
         elseif c == 47 then -- /
             if not S.palette_active then
                 S.palette_active = true
@@ -733,6 +729,11 @@ function M.run()
                 }
                 S.palette_selected = 1
             end
+            draw_full()
+            out(cyan(A.user_gutter) .. " ")
+        elseif c >= 32 and c <= 126 then -- printable
+            S.input_lines[S.input_line] = S.input_lines[S.input_line] .. string.char(c)
+            S.input_col = S.input_col + 1
             draw_full()
             out(cyan(A.user_gutter) .. " ")
         end
