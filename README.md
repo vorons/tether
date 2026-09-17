@@ -16,12 +16,44 @@ make clean    # wipe build artifacts
 ./tether                  # interactive TUI
 ./tether --workspace ~/myproj
 ./tether --model claude-opus
-./tether --print          # non-interactive (prints tool output)
-./tether --resume         # resume latest session
+./tether --print "prompt"  # non-interactive one-shot; or pipe stdin
+./tether --resume         # resume latest session for this workspace
 ./tether -r -w ~/proj -m o3
 ./tether --version        # print version and exit
-./tether --debug          # verbose logging
+./tether --debug          # verbose logging to ~/.tether/log/tether.log
 ```
+
+The model list depends on your OpenAI-compatible provider; `/model` falls
+back to a static list — set `model = "..."` in `~/.tether/config.lua` for
+direct control.
+
+```sh
+```
+
+## Slash commands
+
+`/help /clear /compact /model /resume /new /status /log /quit`
+
+- `/resume` opens a picker of the last 10 sessions for the workspace.
+- Confirmation menu for `write`/`patch`/`run` outside workspace: `[y] once`,
+  `[a] session`, `[A] always` (persists to `~/.tether/auto_approve.lua`),
+  `[d] details`, `[n] deny`, `Esc` cancels the turn. Digits `1..6` work too.
+
+## TUI features
+
+- **Markdown-lite rendering** of assistant replies: code blocks in a frame,
+  inline code, bold/italic, lists, headings.
+- **Search**: `Ctrl+F`, then `Enter`/`n`/`N`/`F3`/`Shift+F3` to jump between
+  matches, `Esc` to cancel; the active match line is highlighted.
+- **Token bar** in the status line (green → yellow at summarize threshold →
+  red at 90%+).
+- **Mouse modes** (`ui.mouse` in `~/.tether/config.lua`):
+  `"auto"` (default — mouse only over menus, native text selection works),
+  `"on"` (always), `"off"` (never), `"selection"` (off + manual copy).
+  With mouse on, hold `Shift` while dragging to use terminal-native selection.
+- **Alt-screen** opt-in: `ui.alt_screen = true` repaints in the alternate
+  screen buffer; default `false` keeps native terminal scrollback.
+- **ASCII fallback**: on `TERM=dumb`/`NO_COLOR` all glyphs degrade to ASCII.
 
 ## Architecture
 
@@ -39,7 +71,8 @@ make clean    # wipe build artifacts
 
 - **SSE via pipes**: `api.lua` uses `tether.open_pipe` → `tether.read_line` for non-blocking streaming
 - **Lua-only logic**: All agent logic lives in Lua; C host has zero AI knowledge
-- **`load` removed**: JSON parsing uses `string.gmatch` patterns, never `load("return " .. s)`
+- **No `load`**: all JSON parsing is hand-rolled recursive descent or gmatch patterns (see `docs/decisions/2026-09-17-lua-json-parser.md`)
+- **Secrets**: the API key is passed to curl via a private header file (`chmod 600`), never in argv
 - **Shell injection**: `tools.run` uses `env TETHER_WORKSPACE=<dir> sh -c` with `timeout`
 
 ## Testing

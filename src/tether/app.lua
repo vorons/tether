@@ -52,16 +52,30 @@ local function run_inner()
         local cfg = config.load()
         if opts.workspace then cfg.workspace = opts.workspace end
         if opts.model then cfg.model = opts.model end
+        cfg.debug = opts.debug
+        -- Design §14: workspace defaults to cwd; -w overrides (tools read cfg.workspace)
+        if not cfg.workspace then cfg.workspace = tether.getcwd() end
+        local rp = tether.realpath(cfg.workspace)
+        if rp then cfg.workspace = rp end
+
         local api_key = config.api_key(cfg) or ""
         local prompt = opts.print_prompt
         if not prompt then
-            -- read prompt from stdin (piped)
+            -- read prompt from stdin only when piped (audit #4: no TTY hang)
+            if tether.is_tty() then
+                io.stderr:write("tether: --print requires a prompt argument or piped stdin\n")
+                os.exit(1)
+            end
             prompt = io.read("*a")
         end
         if not prompt or prompt:match("^%s*$") then
             io.stderr:write("tether: --print requires a prompt argument or stdin input\n")
             os.exit(1)
         end
+
+        local sid = session.new_session(cfg.workspace, cfg.model)
+        cfg._session_id = sid
+
         agent.add_user(prompt)
         local text_chunks = {}
         local had_error = false
@@ -73,7 +87,7 @@ local function run_inner()
                 io.stderr:write("tether: " .. (ev.message or "") .. "\n")
             end
         end
-        local ok, err = pcall(agent.turn, cfg, api_key, "", on_event, true)
+        local ok, err = pcall(agent.turn, cfg, api_key, prompt, on_event)
         if not ok then
             io.stderr:write("tether: agent error: " .. tostring(err) .. "\n")
             os.exit(1)
@@ -87,7 +101,15 @@ local function run_inner()
                 break
             end
         end
-        if last_text == "" and had_error then
+        if last_text == "" then
+            for _, c in ipairs(text_chunks) do last_text = last_text .. c end
+        end
+        session.append(sid, {
+            ts = os.date(), type = "session_end",
+            meta = { workspace = cfg.workspace, model = cfg.model },
+        })
+        -- M7/D5: tech-spec contract — exit 1 on error OR empty response
+        if last_text == "" then
             io.stderr:write("tether: no response text\n")
             os.exit(1)
         end
@@ -103,13 +125,17 @@ local function run_inner()
     if opts.model then
         cfg.model = opts.model
     end
+    cfg.debug = opts.debug
+    -- Design §7: workspace = cwd unless -w; realpath with symlinks expanded
+    if not cfg.workspace then cfg.workspace = tether.getcwd() end
+    local rp = tether.realpath(cfg.workspace)
+    if rp then cfg.workspace = rp end
 
-    -- Resume logic
+    -- Resume logic (design §10): only with -r
     local resume_id = nil
-    if opts.resume or not cfg.workspace then
-        local ws = opts.workspace or cfg.workspace or tether.getcwd()
-        local id = session.latest(ws)
-        if id and not opts.workspace then
+    if opts.resume then
+        local id = session.latest(cfg.workspace)
+        if id then
             resume_id = id
             local messages = session.resume(id)
             if messages then
@@ -118,17 +144,26 @@ local function run_inner()
                     if msg.role == "user" then
                         agent.add_user(msg.content)
                     elseif msg.role == "assistant" then
-                        agent.add_assistant(msg.content)
+                        if msg.tool_calls then
+                            agent.add_assistant({ tool_calls = msg.tool_calls })
+                        else
+                            agent.add_assistant(msg.content)
+                        end
+                    elseif msg.role == "tool" then
+                        -- M7/D4: without tool results the API rejects the
+                        -- first turn after resume (400: tool_call without
+                        -- tool response).
+                        agent.add_tool_result(msg.tool_call_id, msg.content or "")
                     end
                 end
             end
+        else
+            io.stderr:write("tether: no previous session for this workspace; starting a new one\n")
         end
     end
 
     -- Start new session or reuse resumed one
-    local ws = opts.workspace or cfg.workspace or tether.getcwd()
-    local id = resume_id or session.new_session(ws, cfg.model)
-
+    local id = resume_id or session.new_session(cfg.workspace, cfg.model)
     cfg._session_id = id
 
     -- Run TUI
@@ -136,9 +171,9 @@ local function run_inner()
 
     -- End session
     session.append(id, {
-        ts = os.date("*t"),
+        ts = os.date(),
         type = "session_end",
-        meta = { workspace = ws, model = cfg.model },
+        meta = { workspace = cfg.workspace, model = cfg.model },
     })
 end
 
