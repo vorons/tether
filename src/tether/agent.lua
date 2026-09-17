@@ -56,7 +56,7 @@ local function slog(cfg, event)
 end
 
 local function log_message(cfg, role, content)
-    slog(cfg, { ts = os.date("*t"), type = "message", role = role, content = content })
+    slog(cfg, { ts = os.date(), type = "message", role = role, content = content })
 end
 
 -- --- tool summaries (design §6.5) -------------------------------------------
@@ -370,6 +370,9 @@ local function compress_history(history)
     if #history <= N + 1 then return history end
     local system = history[1]
     local keep_from = math.max(2, #history - N + 1)
+    while keep_from > 2 and history[keep_from].role == "tool" do
+        keep_from = keep_from - 1
+    end
     local old = {}
     for i = 2, keep_from - 1 do old[#old + 1] = history[i] end
     local keep = {}
@@ -399,7 +402,7 @@ local function run_tool_call(cfg, on_event, id, name, args)
     end
     M.add_tool_result(id, res.error and { error = res.error } or res)
     slog(cfg, {
-        ts = os.date("*t"), type = "tool_result",
+        ts = os.date(), type = "tool_result",
         tool_call_id = id, name = name,
         result = res.error and { error = res.error } or { summary = tool_summary(name, res) },
     })
@@ -519,7 +522,7 @@ local function main_loop(cfg, api_key, on_event)
             }
         end
         M.add_assistant({ tool_calls = tc_list })
-        slog(cfg, { ts = os.date("*t"), type = "message", role = "assistant",
+        slog(cfg, { ts = os.date(), type = "message", role = "assistant",
                     content = "", tool_calls = tc_list })
 
         -- Build the queue of calls for this step
@@ -531,7 +534,7 @@ local function main_loop(cfg, api_key, on_event)
             if on_event then
                 on_event({ type = "tool_call_start", id = tc.id, name = tc.name })
             end
-            slog(cfg, { ts = os.date("*t"), type = "tool_call",
+            slog(cfg, { ts = os.date(), type = "tool_call",
                         tool_call_id = tc.id, name = tc.name, args = args })
         end
 

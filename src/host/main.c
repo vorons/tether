@@ -196,8 +196,33 @@ struct pipe_state {
     char buf[8192];
     size_t buf_len;
     size_t buf_pos;
+    char *line;        /* accumulator: SSE lines can exceed any fixed buffer */
+    size_t line_len;
+    size_t line_cap;
 };
 static struct pipe_state g_pipe;
+
+static void pipe_line_reset(void)
+{
+    free(g_pipe.line);
+    g_pipe.line = NULL;
+    g_pipe.line_len = 0;
+    g_pipe.line_cap = 0;
+}
+
+/* append one byte to the line accumulator; NULL on OOM (drops the line) */
+static int pipe_line_put(char c)
+{
+    if (g_pipe.line_len + 1 >= g_pipe.line_cap) {
+        size_t cap = g_pipe.line_cap ? g_pipe.line_cap * 2 : 8192;
+        char *grown = realloc(g_pipe.line, cap);
+        if (!grown) return 0;
+        g_pipe.line = grown;
+        g_pipe.line_cap = cap;
+    }
+    g_pipe.line[g_pipe.line_len++] = c;
+    return 1;
+}
 
 /* tether.open_pipe(cmd) -> handle | err */
 static int l_open_pipe(lua_State *L)
@@ -223,6 +248,7 @@ static int l_open_pipe(lua_State *L)
         g_pipe.eof = 0;
         g_pipe.buf_len = 0;
         g_pipe.buf_pos = 0;
+        pipe_line_reset();
         lua_pushinteger(L, 1); /* handle */
         return 1;
     } else {
@@ -236,9 +262,7 @@ static int l_open_pipe(lua_State *L)
 static int l_read_line(lua_State *L)
 {
     if (g_pipe.eof) { lua_pushnil(L); return 1; }
-    /* consume existing buffer first */
-    char line[8192];
-    size_t pos = 0;
+    pipe_line_reset();
     while (1) {
         char c;
         if (g_pipe.buf_pos < g_pipe.buf_len) {
@@ -250,11 +274,11 @@ static int l_read_line(lua_State *L)
             if (n < 0) continue; /* EINTR */
         }
         if (c == '\n') break;
-        line[pos++] = c;
-        if (pos >= sizeof(line) - 1) break;
+        if (!pipe_line_put(c)) { g_pipe.eof = 1; break; } /* OOM: drop and report */
     }
-    line[pos] = '\0';
-    lua_pushlstring(L, line, pos);
+    /* an empty line ("\n") must surface as "" — SSE event separators are
+       valid mid-stream; nil is reserved for real EOF (read() == 0) */
+    lua_pushlstring(L, g_pipe.line ? g_pipe.line : "", g_pipe.line_len);
     return 1;
 }
 
@@ -265,6 +289,7 @@ static int l_close_pipe(lua_State *L)
     if (g_pipe.fd >= 0) { close(g_pipe.fd); g_pipe.fd = -1; }
     if (g_pipe.child > 0) { waitpid(g_pipe.child, NULL, 0); g_pipe.child = 0; }
     g_pipe.eof = 0;
+    pipe_line_reset();
     return 0;
 }
 

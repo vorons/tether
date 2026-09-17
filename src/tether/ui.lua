@@ -141,6 +141,64 @@ M.set_wrap = function(v) _wrap_enabled = v and true or false end
 -- UTF-8 / string helpers
 -- ============================================================
 local function ulen(s) return utf8.len(s) or #s end
+-- M10: display-width per codepoint, adapted from terminal.lua's
+-- terminal.text.width approach (pure-Lua wcwidth): combining marks and
+-- zero-width joiners are 0 columns, East-Asian wide/fullwidth/emoji are 2,
+-- everything printable is 1. Control characters are excluded from width
+-- math by callers (they never reach the transcript as-is).
+local function char_width(cp)
+    if not cp or cp < 32 then return 0 end          -- C0 controls
+    if cp == 0x7F then return 0 end                 -- DEL
+    -- combining marks and zero-width (approximate Unicode ranges)
+    if (cp >= 0x0300 and cp <= 0x036F)   -- combining diacritical marks
+        or (cp >= 0x0483 and cp <= 0x0489)
+        or (cp >= 0x0591 and cp <= 0x05BD)
+        or (cp >= 0x0610 and cp <= 0x061A)
+        or (cp >= 0x064B and cp <= 0x065F)
+        or (cp >= 0x0E31 and cp <= 0x0E3A and cp ~= 0x0E32 and cp ~= 0x0E33)
+        or (cp >= 0x200B and cp <= 0x200F)   -- ZWSP..RLM
+        or cp == 0x2028 or cp == 0x2029
+        or (cp >= 0x2060 and cp <= 0x2064)
+        or cp == 0xFEFF                       -- BOM/ZWNBSP
+        or (cp >= 0xFE00 and cp <= 0xFE0F)   -- variation selectors
+        or (cp >= 0x1AB0 and cp <= 0x1AFF)
+        or (cp >= 0x20D0 and cp <= 0x20FF) then
+        return 0
+    end
+    -- East-Asian Wide/Fullwidth + emoji
+    if (cp >= 0x1100 and cp <= 0x115F)   -- Hangul Jamo
+        or (cp >= 0x2E80 and cp <= 0x303E)   -- CJK radicals, Kangxi, CJK symbols
+        or (cp >= 0x3041 and cp <= 0x33FF)   -- Hiragana..CJK compat
+        or (cp >= 0x3400 and cp <= 0x4DBF)   -- CJK ext A
+        or (cp >= 0x4E00 and cp <= 0x9FFF)   -- CJK unified
+        or (cp >= 0xA000 and cp <= 0xA4CF)   -- Yi
+        or (cp >= 0xAC00 and cp <= 0xD7A3)   -- Hangul syllables
+        or (cp >= 0xF900 and cp <= 0xFAFF)   -- CJK compat ideographs
+        or (cp >= 0xFE10 and cp <= 0xFE19)   -- vertical forms
+        or (cp >= 0xFE30 and cp <= 0xFE6F)   -- CJK compat forms
+        or (cp >= 0xFF00 and cp <= 0xFF60)   -- fullwidth forms
+        or (cp >= 0xFFE0 and cp <= 0xFFE6)
+        or (cp >= 0x1F300 and cp <= 0x1F64F) -- emoji pictographs
+        or (cp >= 0x1F900 and cp <= 0x1F9FF) -- supplemental symbols
+        or (cp >= 0x20000 and cp <= 0x3FFFD) then -- CJK ext B+
+        return 2
+    end
+    return 1
+end
+M.char_width = char_width
+
+-- Display width of a string: strips ANSI SGR, sums per-codepoint widths.
+-- (ulen counted escape bytes and gave CJK 1 column — both produced the
+-- stray-character artifacts seen while scrolling.)
+local function vlen(s)
+    if not s or s == "" then return 0 end
+    s = s:gsub("\27%[[0-9;?]*[a-zA-Z]", "")
+    local w = 0
+    for _, cp in utf8.codes(s) do
+        w = w + char_width(cp)
+    end
+    return w
+end
 -- M8 fix: utf8.sub does NOT exist in the Lua 5.4 stdlib (it worked only
 -- inside the embedded binary if it defined one; plain lua crashed).
 -- Build char-index slicing on utf8.offset instead.
@@ -310,9 +368,23 @@ M.md_render = md_render
 
 local function trunc(s, maxw)
     if maxw < 1 then return "" end
-    if ulen(s) <= maxw then return s end
-    return usub(s, 1, maxw - 1) .. "…"
+    if vlen(s) <= maxw then return s end
+    local i, width = 1, 0
+    while i <= #s do
+        local _, finish = s:find("^\27%[[0-9;?]*[a-zA-Z]", i)
+        if finish then
+            i = finish + 1
+        else
+            local w = char_width(utf8.codepoint(s, i))
+            if width + w > maxw - 1 then break end
+            width = width + w
+            i = utf8.offset(s, 2, i) or (#s + 1)
+        end
+    end
+    return s:sub(1, i - 1) .. "…" .. ESC .. "[0m"
 end
+M.vlen = vlen   -- export (M9/T39: SGR-aware display width)
+M.trunc = trunc -- export (M9/T39)
 
 -- ============================================================
 -- Constants
@@ -322,16 +394,54 @@ local CONFIRM_DIGITS = { "allow", "session", "always", "details", "deny", "cance
 M.CONFIRM_DIGITS = CONFIRM_DIGITS
 
 local SLASH_COMMANDS = {
-    { label = "/help",    desc = "справка по клавишам",              cmd = "help" },
+    -- M9: /help, /status, /log removed per user request
     { label = "/clear",   desc = "очистить транскрипт",              cmd = "clear" },
     { label = "/compact", desc = "сжать контекст (суммаризация)",    cmd = "compact" },
     { label = "/model",   desc = "сменить модель",                   cmd = "model" },
     { label = "/resume",  desc = "возобновить сессию для workspace", cmd = "resume" },
     { label = "/new",     desc = "начать новую сессию",              cmd = "new" },
-    { label = "/status",  desc = "полный статус сессии",             cmd = "status" },
-    { label = "/log",     desc = "последние ошибки из лога",         cmd = "log" },
     { label = "/quit",    desc = "выход",                            cmd = "quit" },
 }
+M.SLASH_COMMANDS = SLASH_COMMANDS
+
+-- M10: keymap as data (idea from terminal.lua input.keymap) — the single
+-- source of truth for keyboard bindings. Consumed by docs/tests; the help
+-- overlay is gone (M9), so this table is where bindings stay documented.
+local KEYMAP = {
+    ["enter"]      = "send",
+    ["ctrl+j"]     = "newline",
+    ["ctrl+c"]     = "abort/quit",
+    ["ctrl+q"]     = "quit",
+    ["ctrl+r"]     = "resume picker",
+    ["ctrl+n"]     = "new session",
+    ["ctrl+o"]     = "expand all",
+    ["ctrl+t"]     = "toggle thinking",
+    ["ctrl+l"]     = "clear screen",
+    ["ctrl+a"]     = "line start",
+    ["ctrl+e"]     = "line end",
+    ["ctrl+u"]     = "kill to start",
+    ["ctrl+w"]     = "kill word",
+    ["ctrl+k"]     = "kill to end",
+    ["up"]         = "history prev / scroll",
+    ["down"]       = "history next / scroll",
+    ["pgup"]       = "scroll up",
+    ["pgdn"]       = "scroll down",
+    ["home"]       = "jump to top (input empty)",
+    ["end"]        = "jump to bottom (input empty)",
+    ["esc"]        = "cancel/confirmation deny",
+    ["1"]          = "confirm allow",
+    ["2"]          = "confirm session",
+    ["3"]          = "confirm always",
+    ["4"]          = "confirm details",
+    ["5"]          = "confirm deny",
+    ["6"]          = "confirm cancel",
+    ["y"]          = "confirm allow",
+    ["a"]          = "confirm session",
+    ["A"]          = "confirm always",
+    ["d"]          = "confirm details",
+    ["n"]          = "confirm deny",
+}
+M.KEYMAP = KEYMAP
 
 -- ============================================================
 -- State
@@ -391,8 +501,9 @@ local function new_state()
         overlay = nil,
         overlay_data = nil,
 
-        search = nil, -- M8/R6: { input, active, matches, idx }
         mouse_enabled = nil, -- M8/R8: last emitted tracking state
+        last_transcript_top = nil, -- M9/M10: viewport invalidation for scroll repaint
+        last_transcript_w = nil,   -- M10: width guard for scroll-region reuse
 
         history = {},
         history_pos = 0,
@@ -444,7 +555,8 @@ local function layout()
     end
     local error_h = S.error_banner and 1 or 0
 
-    local fixed = shown_in + palette_h + error_h + 2
+    -- M9: hint row removed — its line is returned to the transcript
+    local fixed = shown_in + palette_h + error_h + 1
     local th = S.h - fixed
     if th < 1 then th = 1 end
 
@@ -459,7 +571,6 @@ local function layout()
         input_total = total,
         palette_row = 1 + th + error_h + shown_in,
         palette_h = palette_h,
-        hint_row = S.h - 1,
         status_row = S.h,
     }
 end
@@ -648,11 +759,11 @@ local function load_history()
         local text = line:match('"text":"(.*)"')
         if text then
             text = text:gsub('\\"', '"'):gsub("\\\\", "\\"):gsub("\\n", "\n"):gsub("\\t", "\t")
-            -- dedupe consecutive entries globally
-            if text ~= seen_last then
-                seen_last = text
-                -- filter by current workspace
-                if not wsp or wsp == S.workspace then
+            -- N4: filter by workspace FIRST, then dedupe consecutive entries —
+            -- deduping before the filter merged duplicates across workspaces.
+            if not wsp or wsp == S.workspace then
+                if text ~= seen_last then
+                    seen_last = text
                     S.history[#S.history + 1] = text
                 end
             end
@@ -745,7 +856,7 @@ local function render_entry(e, width)
             local elapsed = ""
             if e.started_at then
                 local secs = os.time() - e.started_at
-                elapsed = string.format(" %s %.1fs", ascii and "." or "…", secs)
+                elapsed = string.format(" %s %.1fs", (M._ascii_mode or M._env_ascii or _ascii) and "." or "…", secs)
             end
             head = head .. "  " .. dim("…" .. elapsed)
         elseif e.summary and e.summary ~= "" then
@@ -825,72 +936,81 @@ local function scroll_indicator(total, scroll, visible_h)
 end
 M.scroll_indicator = scroll_indicator
 
--- M8/R6: search helpers over the live UI state (scans display_lines)
-local function search_rescan()
-    if not S.search then return end
-    S.search.matches = M.search_matches(display_lines(), S.search.input)
-    S.search.active = S.search.input ~= nil and S.search.input ~= ""
-    if #S.search.matches == 0 then S.search.idx = 0 end
-end
-
--- dir=1 next match, dir=-1 previous; scrolls so the match is visible
-local function search_goto(dir)
-    if not S.search then return end
-    local ms = S.search.matches or {}
-    if #ms == 0 then return end
-    local idx = (S.search.idx or 0)
-    idx = idx + dir
-    if idx > #ms then idx = 1 elseif idx < 1 then idx = #ms end
-    S.search.idx = idx
-    local L = layout()
-    S.scroll = M.search_scroll_for(#display_lines(), ms[idx], L.transcript_h)
-    S.user_scrolled = true
-    bump_transcript()
-end
-
--- M8/R6: transcript search. Case-insensitive substring match over rendered
--- display lines; scroll math puts the match in the lower two-thirds of the
--- viewport. Both helpers are exported for unit tests.
-function M.search_matches(lines, query)
-    local out = {}
-    if not query or query == "" then return out end
-    local q = query:lower()
-    for i, l in ipairs(lines or {}) do
-        if (l:gsub("%c", ""):lower()):find(q, 1, true) then
-            out[#out + 1] = i
-        end
-    end
-    return out
-end
-
-function M.search_scroll_for(total, match_idx, visible_h)
-    if not total or total <= 0 or not match_idx or not visible_h or visible_h <= 0 then
-        return 0
-    end
-    local max_scroll = total - visible_h
-    if max_scroll < 0 then max_scroll = 0 end
-    -- place the match at the 2/3 line of the viewport (spec: lower third)
-    local target_row = math.floor(visible_h * 2 / 3 + 0.5)
-    local scroll = match_idx - target_row
-    if scroll < 0 then scroll = 0 end
-    if scroll > max_scroll then scroll = max_scroll end
-    return scroll
+-- M10: hardware scroll-region shift, adapted from terminal.lua's
+-- terminal.scroll approach. Returns an escape sequence that sets DECSTBM
+-- (top..bottom inclusive, 1-based screen rows), scrolls the region by
+-- |shift| lines with SU (up) / SD (down), then resets the region.
+-- Guard rails: zero/nil shift, shift >= region size or an invalid region
+-- return "" — the caller then falls back to per-row repaint.
+function M.scroll_shift_seq(h, top, bottom, shift)
+    if not shift or shift == 0 then return "" end
+    if not h or not top or not bottom then return "" end
+    if top < 1 or bottom > h or top > bottom then return "" end
+    local region = bottom - top + 1
+    local amount = shift > 0 and shift or -shift
+    if amount >= region then return "" end
+    local move = (shift > 0)
+        and (ESC .. "[" .. amount .. "S")
+        or  (ESC .. "[" .. amount .. "T")
+    return ESC .. "[" .. top .. ";" .. bottom .. "r" .. move .. ESC .. "[r"
 end
 
 local function render_transcript(L)
     local lines = display_lines()
     local total = #lines
+    -- M10: clamp scroll so the viewport can never move past the top of the
+    -- transcript. Over-scroll made top negative and the scroll indicator
+    -- report nonsense (⏸ +36 on a 4-line transcript).
+    local max_scroll = total - 1
+    if max_scroll < 0 then max_scroll = 0 end
+    if S.scroll > max_scroll then S.scroll = max_scroll end
+    if S.scroll < 0 then S.scroll = 0 end
     local bottom = total - S.scroll
     if bottom > total then bottom = total end
     if bottom < 1 then bottom = 1 end
     local top = bottom - L.transcript_h + 1
+    if top < 1 then top = 1 end
+    -- M9: scrolling shifts every visible row; the row diff must not compare
+    -- against rows painted for the PREVIOUS viewport (they had different
+    -- content and interleaved SGR open/close), otherwise stale fragments
+    -- leak through as stray characters. Invalidate the window when the
+    -- scroll offset changes.
+    if S.last_transcript_top ~= top then
+        -- M10: hardware scroll-region shift (terminal.lua approach).
+        -- When the previous viewport is a strict subset/superset of the new
+        -- one and the shift is smaller than the region, scroll the region
+        -- with SU/SD instead of repainting every row; only the newly
+        -- exposed rows are then repainted by the normal diff below.
+        if S.last_transcript_top
+            and S.last_transcript_w == L.w
+            and S.cfg.ui.alt_screen ~= true then
+            local old_top = S.last_transcript_top
+            local delta = old_top - top -- >0: content moved up (scroll down)
+            -- M10 fix: the scroll region operates on SCREEN rows of the
+            -- transcript window (transcript_row..transcript_row+h-1), NOT on
+            -- transcript line indices. Mixing them (as the first draft did)
+            -- produced a tiny/invalid region and SU/SD never fired.
+            local seq = M.scroll_shift_seq(L.h, L.transcript_row,
+                L.transcript_row + L.transcript_h - 1, delta)
+            if seq ~= "" and delta ~= 0 then
+                frame_put(seq)
+                -- the shift physically moved row contents: forget every
+                -- cached row inside the region so the diff repaints the
+                -- freshly exposed lines (and only them)
+                for r = L.transcript_row, L.transcript_row + L.transcript_h - 1 do
+                    S.screen[r] = nil
+                end
+            end
+        end
+        for r = L.transcript_row, L.transcript_row + L.transcript_h - 1 do
+            S.screen[r] = nil
+        end
+        S.last_transcript_top = top
+        S.last_transcript_w = L.w
+    end
     for i = 1, L.transcript_h do
         local idx = top + i - 1
         local text = (idx >= 1 and idx <= total) and lines[idx] or ""
-        -- M8/R6: inverse-video the active search match line (simplified per spec)
-        if S.search and S.search.active and S.search.matches[S.search.idx] == idx then
-            text = rev(text)
-        end
         set_row(L.transcript_row + i - 1, text)
     end
 end
@@ -925,17 +1045,15 @@ end
 
 local function render_palette(L)
     if not S.palette_active or #S.palette_items == 0 then return end
+    -- M9: no frame; selected item is accent-colored, not reverse-video
     local shown = math.min(#S.palette_items, L.palette_h - 2)
-    set_row(L.palette_row, dim("┌" .. string.rep("─", math.max(L.w - 2, 0)) .. "┐"))
     for i = 1, shown do
         local it = S.palette_items[i]
         local text = string.format(" %-10s %s", it.label or "", it.desc or "")
-        text = trunc(text, L.w - 3)
+        text = trunc(text, L.w - 2)
         local row = L.palette_row + i
-        set_row(row, (i == S.palette_sel) and rev(text) or text)
+        set_row(row, (i == S.palette_sel) and sgr_role("accent", text) or dim(text))
     end
-    set_row(L.palette_row + shown + 1,
-        dim("└" .. string.rep("─", math.max(L.w - 2, 0)) .. "┘"))
 end
 
 -- M7/D1+N1: dangerous-command detection, extracted for testability.
@@ -959,45 +1077,17 @@ local SPINNER = { "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇",
 -- M8/R1: ASCII spinner for TERM=dumb / NO_COLOR
 local SPINNER_ASCII = { "|", "/", "-", "\\" }
 M.SPINNER_ASCII = SPINNER_ASCII
-local function render_hint(L)
-    local text
-    if S.palette_active then
-        text = "↑↓ выбрать · Tab дополнить · Enter выполнить · Esc закрыть"
-    elseif S.confirmation then
-        text = "↑↓ выбрать · Enter подтвердить · 1-6 · y/a/A/d/n · Esc отмена"
-    elseif S.busy then
-        -- M8/R1: ASCII spinner in dumb terminals; M8/R3: elapsed seconds
-        local frames = (M._ascii_mode or M._env_ascii or _ascii) and SPINNER_ASCII or SPINNER
-        local sp = frames[(S.spinner_frame % #frames) + 1]
-        local secs = S.busy_started_at and (os.time() - S.busy_started_at) or 0
-        text = string.format("%s tether думает… %ds · Ctrl+C прервать · Ctrl+O развернуть · PgUp/PgDn скролл",
-            sp, secs)
-    elseif S.overlay then
-        text = "Esc закрыть"
-    elseif S.search then
-        -- M8/R7 hint: «Esc отмена · n/N следующий/предыдущий»
-        text = "поиск: " .. (S.search.input or "") .. " ─ Esc отмена · n/N следующий/предыдущий"
-    else
-        text = "Enter отправить · Ctrl+J новая строка · Ctrl+C отмена · ? помощь"
-    end
-    set_row(L.hint_row, dim(trunc(text, L.w)))
-end
+-- M9: hint row removed per user request (spinner with elapsed seconds still
+-- shown in the status line while busy)
 
--- M8/R5: token bar — 10 cells, green <70% (summarize_at), yellow >=70%, red >=90%;
--- ASCII variant renders [###-------] instead of ▓▓░░. Exported for unit tests.
-function M.token_bar(pct, summarize_at, ascii)
+-- M9: token usage as plain text (bar removed per user request); colors kept:
+-- green <summarize_at, yellow >=summarize_at (default 70%%), red >=90%%.
+-- Clamped to 0..100. Exported for unit tests.
+function M.token_pct(pct, summarize_at)
     summarize_at = summarize_at or 0.7
     if pct < 0 then pct = 0 elseif pct > 1 then pct = 1 end
-    local cells = 10
-    local filled = math.floor(pct * cells + 0.5)
-    local bar, bar_ascii = "", ""
-    for i = 1, cells do
-        bar = bar .. (i <= filled and "▓" or "░")
-        bar_ascii = bar_ascii .. (i <= filled and "#" or "-")
-    end
     local color = pct >= 0.9 and red or (pct >= summarize_at and yellow or green)
-    local body = ascii and ("[" .. bar_ascii .. "]") or bar
-    return color(string.format("%s %d%%", body, math.floor(pct * 100)))
+    return color(string.format("%d%%", math.floor(pct * 100)))
 end
 
 local function render_status(L)
@@ -1008,11 +1098,11 @@ local function render_status(L)
     end
     local parts = { S.model_name or "?", ws }
     if S.tokens_max and S.tokens_max > 0 then
-        -- M8/R5: token bar with thresholds from cfg.context.summarize_at
+        -- M9: plain-text token percent, colored by summarize thresholds
         local pct = S.tokens_used / S.tokens_max
         local summarize_at = (S.cfg.context and S.cfg.context.summarize_at) or 0.7
         parts[#parts + 1] = (S.tokens_estimated and "≈" or "") ..
-            M.token_bar(pct, summarize_at, M._ascii_mode or M._env_ascii or _ascii)
+            M.token_pct(pct, summarize_at)
     end
     -- M8/R3: scroll indicator — hidden lines below when user scrolled up
     if S.user_scrolled then
@@ -1031,7 +1121,7 @@ local function render_status(L)
     end
     local text = table.concat(parts, " · ")
     text = trunc(text, L.w - 2)
-    local pad = L.w - ulen(text)
+    local pad = L.w - vlen(text) -- M9: display width, not raw char count
     if pad > 0 then text = text .. string.rep(" ", pad) end
     set_row(L.status_row, rev(text))
 end
@@ -1058,43 +1148,8 @@ end
 
 local function render_overlay()
     local ov = S.overlay
-    if ov == "help" then
-        overlay_full("помощь", {
-            "Ввод        Enter отправить · Ctrl+J новая строка",
-            "             ↑↓ история · Ctrl+A/E/U/W/K",
-            "Навигация    PgUp/PgDn · ← → · Home/End",
-            "             G/End — в конец (jump-to-bottom)",
-            "Поиск        Ctrl+F искать · Enter/n · N · F3/Shift+F3 · Esc",
-            "Транскрипт   Ctrl+O развернуть · Ctrl+T thinking",
-            "             Ctrl+L очистить экран",
-            "Сессия       Ctrl+R возобновить · Ctrl+N новая",
-            "             Ctrl+Q выход",
-            "Палитра      /help /clear /compact /model /resume",
-            "             /new /status /log /quit",
-            "Мышь         режим ui.mouse = auto|on|off|selection;",
-            "             в auto выделяйте текст как обычно —",
-            "             при подтверждении мышь включается сама",
-            "             (Shift+drag выделяет даже при вкл. мыши)",
-            "Прочее       ? помощь · Esc закрыть",
-        }, "? или Esc закрыть")
-    elseif ov == "status" then
-        local n_tools = 0
-        for _, e in ipairs(S.transcript) do
-            if e.role == "tool" then n_tools = n_tools + 1 end
-        end
-        overlay_full("статус", {
-            "Сессия:    " .. tostring(S.session_id),
-            "Workspace: " .. tostring(S.workspace),
-            "Модель:    " .. tostring(S.model_name),
-            "Токены:    " .. tostring(S.tokens_used) .. "/" .. tostring(S.tokens_max),
-            "Tool calls:" .. tostring(n_tools),
-            "Старт:     " .. tostring(S.started_at or os.date("%Y-%m-%d %H:%M:%S")),
-            "Лог:       " .. (os.getenv("HOME") or "") .. "/.tether/log/tether.log",
-        }, "Esc закрыть")
-    elseif ov == "log" then
-        local lines = (S.overlay_data and S.overlay_data.lines) or { "(лог пуст)" }
-        overlay_full("лог", lines, "Esc закрыть")
-    elseif ov == "diff" then
+    -- M9: help/status/log overlays removed per user request
+    if ov == "diff" then
         local src = (S.overlay_data and S.overlay_data.text) or ""
         local lines = {}
         for _, l in ipairs(wrap(src, math.max(S.w - 4, 1))) do
@@ -1154,8 +1209,10 @@ local function place_cursor(L)
     if row_in < 1 or row_in > L.input_h then return end
     local ln = lines[li]
     local col = S.cursor - ln.from
+    -- N2: terminal column counts display cells, not bytes — multibyte input
+    -- (кириллица) used to drift the caret left of its real position.
     local term_row = L.input_row + row_in - 1
-    local term_col = 3 + col   -- "› " = 2 cols
+    local term_col = 3 + vlen(ln.text:sub(1, col))  -- "› " = 2 cols
     frame_put(ESC .. "[" .. term_row .. ";" .. term_col .. "H")
     frame_put(ESC .. "[?25h")
 end
@@ -1177,7 +1234,6 @@ local function redraw()
         render_error_banner(L)
         render_input(L)
         render_palette(L)
-        render_hint(L)
         render_status(L)
     end
 
@@ -1299,39 +1355,18 @@ local function start_new_session(banner)
     bump_transcript()
 end
 
-local function load_log_overlay()
-    local lines = {}
-    local path = (os.getenv("HOME") or "") .. "/.tether/log/tether.log"
-    local f = io.open(path, "r")
-    if not f then
-        lines[1] = "(лог пуст — запустите с --debug)"
-        return lines
-    end
-    local all = {}
-    for line in f:lines() do all[#all + 1] = line end
-    f:close()
-    -- last 200 lines (§6.8)
-    local start = math.max(1, #all - 199)
-    for i = start, #all do lines[#lines + 1] = all[i] end
-    if #lines == 0 then lines[1] = "(лог пуст)" end
-    return lines
-end
+-- M9: load_log_overlay removed together with the /log command
 
 local function execute_command(cmd)
     input_clear()
     debug_log("command: " .. tostring(cmd))
     if cmd == "quit" then S.quit = true; return end
-    if cmd == "help" then S.overlay = "help"; return end
-    if cmd == "status" then S.overlay = "status"; return end
+    -- M9: /help, /status, /log removed per user request (unknown commands
+    -- fall through to the warning below)
     if cmd == "clear" then
         -- §6.8: clears in-memory transcript only; disk session untouched
         S.transcript = {}
         bump_transcript()
-        return
-    end
-    if cmd == "log" then
-        S.overlay = "log"
-        S.overlay_data = { lines = load_log_overlay() }
         return
     end
     if cmd == "compact" then
@@ -1457,8 +1492,12 @@ local function handle_agent_event(ev)
                 ev.attempt or 1, ev.delay or 0.5, ev.reason or ""),
         }
     end
-    -- Fallback: estimate tokens from the real agent history (not just UI text)
-    if ev.type ~= "usage" and agent and agent.estimate_tokens then
+    -- Fallback: estimate tokens from the real agent history. Estimate is
+    -- O(history) — refresh only on coarse events, not on every streamed delta.
+    local significant = ev.type == "tool_call_start" or ev.type == "tool_result"
+        or ev.type == "context_compressed" or ev.type == "aborted"
+        or ev.type == "confirmation"
+    if significant and agent and agent.estimate_tokens then
         local est = agent.estimate_tokens(agent.get_history())
         if est > 0 then
             S.tokens_used = est
@@ -1558,6 +1597,15 @@ local function handle_special(k)
         if S.cursor > 0 then S.cursor = S.cursor - 1 end
     elseif k.name == "right" then
         if S.cursor < #S.input then S.cursor = S.cursor + 1 end
+    elseif k.name == "home" and S.input == "" then
+        -- M8/R3: Home jumps to top of transcript (input empty);
+        -- with text in input, Home moves to line start (branch below)
+        S.user_scrolled = true
+        S.scroll = math.max(0, #display_lines())
+    elseif k.name == "end" and S.input == "" then
+        -- M8/R3: End jumps to bottom (follow mode) when input is empty
+        S.scroll = 0
+        S.user_scrolled = false
     elseif k.name == "home" then move_line_start()
     elseif k.name == "end" then move_line_end()
     elseif k.name == "delete" then input_delete()
@@ -1583,14 +1631,6 @@ local function handle_special(k)
     elseif k.name == "pgdn" then
         S.scroll = math.max(0, S.scroll - math.max(1, math.floor(S.h / 2)))
         if S.scroll == 0 then S.user_scrolled = false end
-    elseif k.name == "end" and S.input == "" then
-        -- M8/R3: End jumps to bottom (follow mode) when input is empty
-        S.scroll = 0
-        S.user_scrolled = false
-    elseif k.name == "home" and S.input == "" then
-        -- M8/R3: Home jumps to top of transcript
-        S.user_scrolled = true
-        S.scroll = math.max(0, #display_lines())
     end
 end
 
@@ -1615,14 +1655,6 @@ local function handle_ctrl(code)
     elseif code == 18 then
         -- Ctrl+R: resume picker
         execute_command("resume")
-    elseif code == 6 then
-        -- M8/R6: Ctrl+F — enter search mode (or re-run to exit)
-        if S.search then
-            S.search = nil
-        else
-            S.search = { input = "", active = false, matches = {}, idx = 0 }
-        end
-        bump_transcript()
     end
 end
 
@@ -1792,7 +1824,9 @@ local function handle_overlay_key(k)
         bump_transcript()
         return
     end
-    if k.kind == "text" and (k.char == "q" or k.char == "?") then
+    -- M9: "?" binding removed with the help overlay; plain q inside overlays
+    -- is no longer a close key (it was ambiguous while typing "q")
+    if k.kind == "text" and k.char == "q" and ov == "diff" then
         S.overlay = nil; S.overlay_data = nil
         bump_transcript()
         return
@@ -1871,35 +1905,6 @@ local function handle_key(k)
 
     if S.overlay then handle_overlay_key(k); return end
     if S.confirmation then handle_confirmation_key(k); return end
-
-    -- M8/R6: search mode — Ctrl+F entry/exit handled in handle_ctrl;
-    -- here we consume typing/n/N while search is active.
-    if S.search then
-        if k.kind == "text" then
-            S.search.input = (S.search.input or "") .. k.char
-            search_rescan()
-            return
-        elseif k.kind == "backspace" then
-            S.search.input = (S.search.input or ""):sub(1, -2)
-            search_rescan()
-            return
-        elseif k.kind == "enter" then
-            search_rescan()
-            search_goto(1) -- like n: first match
-            return
-        elseif k.kind == "esc" or (k.kind == "ctrl" and k.code == 6) then
-            S.search = nil
-            bump_transcript()
-            return
-        elseif k.kind == "special" then
-            if k.name == "f3" then search_goto(1)
-            elseif k.name == "sf3" then search_goto(-1)
-            else search_goto(k.char == "N" and -1 or 1)
-            end
-            return
-        end
-        -- anything else: fall through (scroll keys still work)
-    end
 
     -- M8/R3: Enter on an active error banner opens the full error overlay
     if k.kind == "enter" and S.error_banner then
@@ -2031,6 +2036,8 @@ function M.run()
         S.api_key = S.cfg.api_key
     end
     S.debug = S.cfg.debug or false
+    -- F3: token budget percent must follow the configured budget
+    S.tokens_max = (S.cfg.context and S.cfg.context.max_tokens) or 32768
     -- M8/R2: wire config keys to the theme/wrap seams
     if S.cfg.ui and S.cfg.ui.theme then M.set_theme(S.cfg.ui.theme) end
     if S.cfg.ui then M.set_wrap(S.cfg.ui.wrap ~= false) end

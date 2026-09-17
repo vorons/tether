@@ -236,14 +236,19 @@ local function http_request(cfg, api_key, messages, on_event, attempt)
     if handle and handle ~= 0 then
         while true do
             local line = tether.read_line(handle)
-            if not line or line == "" then break end
-            buf[#buf + 1] = line
-            got_data = true
-            local ok2, err = pcall(parse_sse_line, line, on_event)
-            if not ok2 then
-                on_event({ type = "error", message = "SSE parse: " .. tostring(err) })
-                ok = false
-                break
+            if not line then break end
+            -- SSE framing: an empty line is an EVENT BOUNDARY, not EOF.
+            -- Breaking on "" used to drop everything after the first event
+            -- separator (multi-event streams lost deltas).
+            if line ~= "" then
+                buf[#buf + 1] = line
+                got_data = true
+                local ok2, err = pcall(parse_sse_line, line, on_event)
+                if not ok2 then
+                    on_event({ type = "error", message = "SSE parse: " .. tostring(err) })
+                    ok = false
+                    break
+                end
             end
             if tether.pipe_eof(handle) == 1 or tether.pipe_eof() == 1 then break end
         end

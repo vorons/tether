@@ -33,13 +33,15 @@ JSONL at `~/.tether/sessions/<id>.jsonl`. One event per line. `-r` picks latest 
 - **Single binary (M6, done):** Lua modules embedded as C arrays via `tools/embed.lua` generator. No external Lua install needed; binary is standalone.
 - **OpenAI-compatible first:** Anthropic/Google adapters share the same `stream()`/`list_models()` contract.
 - **Retries:** `cfg.retries` attempts (default 3), exponential backoff (0.5/1/2s), only on 429/5xx/empty/network. Respects `Retry-After`. No retry on 4xx. Emits `retry` event.
+- **SSE pipe reading:** C `read_line` accumulates unbounded lines (no 8KB cap); empty SSE lines surface as `""` (event boundary), `nil` only at real EOF; the Lua loop skips empty lines and continues until `pipe_eof`.
 - **Confirmation policy:** `write`, `patch`, `run` outside workspace require user confirmation. `[A] always` persists to `~/.tether/config.lua` `auto_approve`.
 - **Token budget:** `context.max_tokens` (default 32768); summarize at 70% via `context.summarize_at`.
-- **UI regions:** transcript (flex) / error banner / input / palette / hint / status line. No header.
+- **Compression boundary:** retained tool results include their preceding assistant tool-call message.
+- **UI regions:** transcript (flex) / error banner / input / palette / status line. No header, no hint row (M9).
 - **Input modes:** bracketed paste (`ESC[200~…ESC[201~`); mouse SGR (`[?1006h`, wheel → transcript scroll, click → palette/confirmation select); keyboard protocol detection (`TERM_PROGRAM`/`TERM` → kitty `ESC[?u` + `Ctrl+Shift+C` copy, modifyOtherKeys/VTE/X11 → `Ctrl+J` newline fallback); `Ctrl+C` double-tap quit. OSC 52 clipboard with pbcopy/xclip/wl-copy fallback.
 - **ASCII mode:** `NO_COLOR=1` or `TERM=dumb` strips ANSI codes, replaces Unicode glyphs with ASCII equivalents.
 - **System prompt:** configurable via `config.system_prompt` (string or file path).
-- **Debug log:** `--debug` writes to `~/.tether/log/tether.log`; `/log` overlay shows last 200 lines.
+- **Debug log:** `--debug` writes to `~/.tether/log/tether.log` (file only; no TUI overlay — M9).
 - **UI collapse:** `ui.collapse.read/list/grep` thresholds cap tool block display height.
 - **SSE tool_call assembly (M7):** argument deltas are emitted RAW (still
   JSON-escaped) and addressed by `id` or `index` (continuation chunks carry no

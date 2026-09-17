@@ -32,7 +32,7 @@ direct control.
 
 ## Slash commands
 
-`/help /clear /compact /model /resume /new /status /log /quit`
+`/clear /compact /model /resume /new /quit`
 
 - `/resume` opens a picker of the last 10 sessions for the workspace.
 - Confirmation menu for `write`/`patch`/`run` outside workspace: `[y] once`,
@@ -43,10 +43,8 @@ direct control.
 
 - **Markdown-lite rendering** of assistant replies: code blocks in a frame,
   inline code, bold/italic, lists, headings.
-- **Search**: `Ctrl+F`, then `Enter`/`n`/`N`/`F3`/`Shift+F3` to jump between
-  matches, `Esc` to cancel; the active match line is highlighted.
-- **Token bar** in the status line (green → yellow at summarize threshold →
-  red at 90%+).
+- **Token usage** in the status line as plain text, colored by threshold
+  (green → yellow at summarize threshold → red at 90%+).
 - **Mouse modes** (`ui.mouse` in `~/.tether/config.lua`):
   `"auto"` (default — mouse only over menus, native text selection works),
   `"on"` (always), `"off"` (never), `"selection"` (off + manual copy).
