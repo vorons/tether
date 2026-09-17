@@ -8,8 +8,47 @@ local ESC = "\27"
 local function w(s) tether.write(s) end
 
 -- T20: ASCII mode — NO_COLOR=1 or TERM=dumb → strip all ANSI + non-ASCII glyphs
--- M8/R1 test seam: tests override M._ascii_mode; production reads env once.
+-- M8/R1 test seam: tests override M._ascii_mode or M._env_ascii; production
+-- reads env once. cfg.ui.ascii ("auto"|"on"|"off") overrides via M.ascii_active.
 local _ascii = (os.getenv("NO_COLOR") == "1") or (os.getenv("TERM") == "dumb")
+M._env_ascii = _ascii
+
+-- cfg.ui.ascii resolution: "on" forces, "off" beats env, else env/auto.
+function M.ascii_active(cfg_ascii)
+    if cfg_ascii == "on" then return true end
+    if cfg_ascii == "off" then return false end
+    return M._env_ascii or M._ascii_mode or false
+end
+
+-- Effective ascii flag used everywhere at render time.
+local function ascii_active()
+    local ua = S.cfg and S.cfg.ui and S.cfg.ui.ascii
+    return M.ascii_active(ua)
+end
+
+-- cfg.ui.thinking resolution: "collapsed" hides thinking on start (Ctrl+T
+-- toggles as before). Unknown/nil -> expanded (previous behavior).
+function M.initial_thinking_visible(cfg_thinking)
+    return cfg_thinking ~= "collapsed"
+end
+
+-- cfg.ui.collapse.{read,list,grep} caps the visible body lines per tool type;
+-- unknown tool or missing table -> default_cap (200, the previous hardcode).
+function M.tool_collapse_cap(tool_name, collapse_tbl, default_cap)
+    if type(collapse_tbl) ~= "table" then return default_cap or 200 end
+    local v = collapse_tbl[tool_name]
+    if type(v) == "number" and v > 0 then return v end
+    return default_cap or 200
+end
+
+-- cfg.ui.keyboard_protocol override: "auto" (nil) -> C-side detection,
+-- "kitty" -> 1, "modifyOtherKeys" -> 2, anything else -> 0 (plain, safe).
+function M.kb_protocol_from_config(cfg_kb)
+    if cfg_kb == nil or cfg_kb == "auto" then return nil end
+    if cfg_kb == "kitty" then return 1 end
+    if cfg_kb == "modifyOtherKeys" then return 2 end
+    return 0
+end
 
 -- M8/R1: glyph → ASCII mapping (single pass, longest-first via explicit scan).
 -- The spec promises TERM=dumb renders pure ASCII; the old code only stripped
@@ -22,7 +61,7 @@ local GLYPH_MAP = {
     ["↑"] = "^", ["↓"] = "v", ["←"] = "<", ["→"] = ">",
 }
 local function to_ascii(s)
-    if not (M._ascii_mode or _ascii) then return s end
+    if not (M._ascii_mode or M._env_ascii or _ascii) then return s end
     local out = {}
     local i = 1
     while i <= #s do
@@ -46,7 +85,7 @@ end
 M.to_ascii = to_ascii
 
 local function sgr(c, s)
-    if (M._ascii_mode or _ascii) then return to_ascii(s) end
+    if (M._ascii_mode or M._env_ascii or _ascii) then return to_ascii(s) end
     return ESC .. "[" .. c .. "m" .. s .. ESC .. "[0m"
 end
 
@@ -129,7 +168,7 @@ local function wrap(text, width)
                 if n <= width then out[#out + 1] = line; break end
                 if not _wrap_enabled then
                     -- M8/R2: wrap off → truncate with arrow marker
-                    out[#out + 1] = (M._ascii_mode or _ascii)
+                    out[#out + 1] = (M._ascii_mode or M._env_ascii or _ascii)
                         and usub(line, 1, width - 1) .. ">"
                         or usub(line, 1, width - 1) .. "→"
                     break
@@ -207,7 +246,7 @@ local function md_strip_inline(s, ansi_fn)
 end
 
 local function md_render(text, width, ansi_fn)
-    local ascii = M._ascii_mode or _ascii
+    local ascii = M._ascii_mode or M._env_ascii or _ascii
     local box = ascii and { tl = "+", tr = "+", bl = "+", br = "+", h = "-", v = "|" }
                             or { tl = "┌", tr = "┐", bl = "└", br = "┘", h = "─", v = "│" }
     local bullet = ascii and "-" or "•"
@@ -340,7 +379,7 @@ local function new_state()
 
         expanded = {},
         expand_all = false,
-        thinking_visible = true,
+        thinking_visible = true, -- M8 follow-up: overridden from cfg.ui.thinking in run()
 
         palette_active = false,
         palette_items = {},
@@ -717,7 +756,8 @@ local function render_entry(e, width)
                      (e.always_show or e.status == "error" or S.expanded[e.id] or S.expand_all)
         if show then
             local bl = wrap(e.body, math.max(width - 2, 1))
-            local cap = e.collapse_lines or 200
+            local cap = e.collapse_lines
+                or M.tool_collapse_cap(e.name, S.cfg and S.cfg.ui and S.cfg.ui.collapse, 200)
             for i, l in ipairs(bl) do
                 if i > cap then
                     out[#out + 1] = "  " .. dim("… (" .. (#bl - i + 1) .. " строк скрыто)")
@@ -927,7 +967,7 @@ local function render_hint(L)
         text = "↑↓ выбрать · Enter подтвердить · 1-6 · y/a/A/d/n · Esc отмена"
     elseif S.busy then
         -- M8/R1: ASCII spinner in dumb terminals; M8/R3: elapsed seconds
-        local frames = (M._ascii_mode or _ascii) and SPINNER_ASCII or SPINNER
+        local frames = (M._ascii_mode or M._env_ascii or _ascii) and SPINNER_ASCII or SPINNER
         local sp = frames[(S.spinner_frame % #frames) + 1]
         local secs = S.busy_started_at and (os.time() - S.busy_started_at) or 0
         text = string.format("%s tether думает… %ds · Ctrl+C прервать · Ctrl+O развернуть · PgUp/PgDn скролл",
@@ -972,7 +1012,7 @@ local function render_status(L)
         local pct = S.tokens_used / S.tokens_max
         local summarize_at = (S.cfg.context and S.cfg.context.summarize_at) or 0.7
         parts[#parts + 1] = (S.tokens_estimated and "≈" or "") ..
-            M.token_bar(pct, summarize_at, M._ascii_mode or _ascii)
+            M.token_bar(pct, summarize_at, M._ascii_mode or M._env_ascii or _ascii)
     end
     -- M8/R3: scroll indicator — hidden lines below when user scrolled up
     if S.user_scrolled then
@@ -981,7 +1021,7 @@ local function render_status(L)
             parts[#parts + 1] = "⏸ +" .. hidden
         end
     end
-    if not ((S.cfg.ui and S.cfg.ui.mouse == "off") or (M._ascii_mode or _ascii)) then
+    if not ((S.cfg.ui and S.cfg.ui.mouse == "off") or (M._ascii_mode or M._env_ascii or _ascii)) then
         parts[#parts + 1] = "🖱 " .. (S.mouse_mode or "auto")
     end
     if S.kb_protocol == 1 then
@@ -1994,6 +2034,13 @@ function M.run()
     -- M8/R2: wire config keys to the theme/wrap seams
     if S.cfg.ui and S.cfg.ui.theme then M.set_theme(S.cfg.ui.theme) end
     if S.cfg.ui then M.set_wrap(S.cfg.ui.wrap ~= false) end
+    -- M8 follow-up: dead keys now wired — ascii/thinking/collapse/kb_protocol
+    if S.cfg.ui and S.cfg.ui.ascii then
+        M._env_ascii = M.ascii_active(S.cfg.ui.ascii)
+    end
+    if S.cfg.ui then
+        S.thinking_visible = M.initial_thinking_visible(S.cfg.ui.thinking)
+    end
     S.started_at = os.date("%Y-%m-%d %H:%M:%S")
     init_debug_log()
 
@@ -2020,9 +2067,15 @@ function M.run()
     if not _ascii then
         w(ESC .. "[?2004h")
     end
-    -- T16: keyboard protocol detection
-    local ok, proto = pcall(tether.detect_kb_protocol)
-    S.kb_protocol = (ok and type(proto) == "number") and proto or 0
+    -- T16: keyboard protocol detection; cfg.ui.keyboard_protocol overrides
+    -- ("auto"/nil -> detect; "kitty"/"modifyOtherKeys"/"plain" -> fixed).
+    local cfg_proto = S.cfg.ui and M.kb_protocol_from_config(S.cfg.ui.keyboard_protocol)
+    if cfg_proto then
+        S.kb_protocol = cfg_proto
+    else
+        local ok, proto = pcall(tether.detect_kb_protocol)
+        S.kb_protocol = (ok and type(proto) == "number") and proto or 0
+    end
     if S.kb_protocol == 1 then
         w(ESC .. "[?u")
     end

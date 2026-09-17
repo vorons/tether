@@ -903,6 +903,47 @@ do
   print("T37 mouse states: OK")
 end
 
+-- T38: dead cfg.ui keys wired (M8 follow-up): ascii/thinking/collapse/kb_protocol
+do
+  local ui = dofile("src/tether/ui.lua")
+  -- ascii: M.ascii_active() merges cfg.ui.ascii ("auto"|"on"|"off") with env flag
+  assert_notnil(ui.ascii_active, "T38 ui.ascii_active exported")
+  ui._env_ascii = false
+  assert_eq(ui.ascii_active(nil), false, "T38 nil cfg -> env only")
+  assert_eq(ui.ascii_active("auto"), false, "T38 auto -> env only")
+  assert_eq(ui.ascii_active("on"), true, "T38 ascii=on forces ascii")
+  assert_eq(ui.ascii_active("off"), false, "T38 ascii=off with env off")
+  ui._env_ascii = true
+  assert_eq(ui.ascii_active("off"), false, "T38 ascii=off beats env")
+  assert_eq(ui.ascii_active("auto"), true, "T38 auto+env -> ascii")
+  assert_eq(ui.ascii_active(nil), true, "T38 nil cfg + env -> ascii")
+  assert_eq(ui.ascii_active("garbage"), true, "T38 unknown value falls back to auto")
+  -- thinking: initial visibility from cfg.ui.thinking ("collapsed"|"expanded")
+  assert_notnil(ui.initial_thinking_visible, "T38 ui.initial_thinking_visible exported")
+  assert_eq(ui.initial_thinking_visible("collapsed"), false, "T38 collapsed -> hidden")
+  assert_eq(ui.initial_thinking_visible("expanded"), true, "T38 expanded -> visible")
+  assert_eq(ui.initial_thinking_visible(nil), true, "T38 nil -> default expanded")
+  assert_eq(ui.initial_thinking_visible("junk"), true, "T38 junk -> default expanded")
+  -- collapse: per-tool cap from cfg.ui.collapse.{read,list,grep} + fallback
+  assert_notnil(ui.tool_collapse_cap, "T38 ui.tool_collapse_cap exported")
+  local col = { read = 5, list = 7, grep = 9 }
+  assert_eq(ui.tool_collapse_cap("read", col, 200), 5, "T38 read cap")
+  assert_eq(ui.tool_collapse_cap("list", col, 200), 7, "T38 list cap")
+  assert_eq(ui.tool_collapse_cap("grep", col, 200), 9, "T38 grep cap")
+  assert_eq(ui.tool_collapse_cap("run", col, 200), 200, "T38 other tool -> fallback")
+  assert_eq(ui.tool_collapse_cap("read", nil, 200), 200, "T38 nil table -> fallback")
+  assert_eq(ui.tool_collapse_cap("read", { read = 5 }, nil), 5, "T38 nil default passes configured cap")
+  -- keyboard_protocol: config override "auto"|"kitty"|"modifyOtherKeys"|"plain"
+  assert_notnil(ui.kb_protocol_from_config, "T38 ui.kb_protocol_from_config exported")
+  assert_eq(ui.kb_protocol_from_config("auto"), nil, "T38 auto -> detect (nil)")
+  assert_eq(ui.kb_protocol_from_config(nil), nil, "T38 nil -> detect")
+  assert_eq(ui.kb_protocol_from_config("kitty"), 1, "T38 kitty -> 1")
+  assert_eq(ui.kb_protocol_from_config("modifyOtherKeys"), 2, "T38 modifyOtherKeys -> 2")
+  assert_eq(ui.kb_protocol_from_config("plain"), 0, "T38 plain -> 0")
+  assert_eq(ui.kb_protocol_from_config("junk"), 0, "T38 junk -> plain (safe)")
+  print("T38 cfg.ui keys: OK")
+end
+
 print(string.format("PASS: %d/%d", passed, passed + failed))
 if failed > 0 then
     os.exit(1)

@@ -22,7 +22,6 @@ local function default_config()
             wrap = true,
             collapse = { read = 20, list = 30, grep = 15 },
             input_max_lines = 8,
-            mouse_selection = false,
             alt_screen = false, -- M8/R9: false keeps native scrollback
         },
         tools = { run_shell = { timeout = 120 } },
