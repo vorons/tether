@@ -32,7 +32,10 @@ static void restore_termios(void)
 
 static volatile sig_atomic_t g_resize_requested = 0;
 
-static void on_sigterm(int sig)
+/* SIGTERM/SIGINT: restore the terminal (a no-op when raw mode was never
+   enabled) and exit cleanly. Raw mode disables ISIG, so an in-terminal
+   Ctrl+C arrives as byte 0x03 and only an external signal lands here. */
+static void on_exit_signal(int sig)
 {
     (void)sig;
     restore_termios();
@@ -48,10 +51,11 @@ static void on_sigwinch(int sig)
 static void setup_signal_handlers(void)
 {
     struct sigaction sa_term, sa_winch;
-    sa_term.sa_handler = on_sigterm;
+    sa_term.sa_handler = on_exit_signal;
     sigemptyset(&sa_term.sa_mask);
     sa_term.sa_flags = 0;
     sigaction(SIGTERM, &sa_term, NULL);
+    sigaction(SIGINT, &sa_term, NULL);
     sa_winch.sa_handler = on_sigwinch;
     sigemptyset(&sa_winch.sa_mask);
     sa_winch.sa_flags = SA_RESTART;
@@ -393,13 +397,17 @@ int main(int argc, char **argv)
     g_pipe.eof = 1;
     int interactive = isatty(STDIN_FILENO) == 1;
 
+    /* Install signal handling in every mode: SIGINT/SIGTERM restore the
+       terminal (no-op when raw mode was never enabled) and exit cleanly.
+       SIGWINCH only matters for the TUI. */
+    setup_signal_handlers();
+
     if (interactive) {
         if (init_termios() != 0) {
             perror("tcsetattr");
             return 1;
         }
         atexit(restore_termios);
-        setup_signal_handlers();
     }
 
     lua_State *L = luaL_newstate();

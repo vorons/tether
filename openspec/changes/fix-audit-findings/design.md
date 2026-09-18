@@ -200,6 +200,16 @@ Anthropic/Gemini converters pass the text through as their text block/part.
   objects, so `obj.error` was always nil and the `error` branch was dead. It now
   detects `"error"` in the payload and reports `error.message` (T108).
 
+## Verify follow-up
+
+- **External SIGINT (fixed).** The `host` delta required an externally delivered
+  SIGINT to restore the terminal, but `main.c` only handled SIGTERM/SIGWINCH and
+  installed handlers in tty mode only. `on_exit_signal` now covers SIGINT too and
+  `setup_signal_handlers()` runs in every mode (the restore is a no-op when raw
+  mode was never enabled). Covered by the new `tests/host_smoke.sh` SIGINT check;
+  in-terminal Ctrl+C is unchanged (raw mode disables ISIG, so it arrives as byte
+  `0x03`).
+
 ## Follow-up resolved
 
 - **`a/` `b/` diff prefixes (D10).** `tools.patch` applies the `+++` path

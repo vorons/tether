@@ -39,3 +39,7 @@
 ## 5. Follow-up: a//b/ patch prefixes
 
 - [x] 5.1 Strip one leading `a/`/`b/` component in `tools.patch` and in the agent's patch-policy target and treat `/dev/null` as a missing side; verify T112 covers git-style, prefix-less and new-file headers and `make test` is green
+
+## 6. Verify follow-up: external SIGINT
+
+- [x] 6.1 Install the SIGINT handler alongside SIGTERM (in every mode, not only the tty) so an external signal restores the terminal and exits 0, and add a `tests/host_smoke.sh` check; verify `make test` is green
