@@ -13,6 +13,7 @@ local function parse_args()
         print_mode = false,
         print_prompt = nil,
         debug = false,
+        agents_files = {},
     }
     local i = 1
     while i <= #args do
@@ -34,6 +35,12 @@ local function parse_args()
             end
         elseif a == "--debug" then
             opts.debug = true
+        elseif a == "--agents-file" then
+            local path = args[i + 1]
+            if path and not path:match("^%-") then
+                opts.agents_files[#opts.agents_files + 1] = path
+                i = i + 1
+            end
         elseif a == "--version" or a == "-v" then
             version = true
             return opts
@@ -52,6 +59,11 @@ local function run_inner()
         local cfg = config.load()
         if opts.workspace then cfg.workspace = opts.workspace end
         if opts.model then cfg.model = opts.model end
+        -- context-injection: CLI agents files feed the composed prompt (merged
+        -- after cfg.agents_files by context.compose).
+        if #opts.agents_files > 0 then
+            cfg._cli_agents_files = opts.agents_files
+        end
         cfg.debug = opts.debug
         -- Design §14: workspace defaults to cwd; -w overrides (tools read cfg.workspace)
         if not cfg.workspace then cfg.workspace = tether.getcwd() end
@@ -76,7 +88,8 @@ local function run_inner()
         local sid = session.new_session(cfg.workspace, cfg.model)
         cfg._session_id = sid
 
-        agent.add_user(prompt)
+        -- 1.5: agent.turn adds (and journals) the user message; adding it here
+        -- too would send the prompt twice.
         local text_chunks = {}
         local had_error = false
         local function on_event(ev)
@@ -124,6 +137,9 @@ local function run_inner()
     end
     if opts.model then
         cfg.model = opts.model
+    end
+    if #opts.agents_files > 0 then
+        cfg._cli_agents_files = opts.agents_files
     end
     cfg.debug = opts.debug
     -- Design §7: workspace = cwd unless -w; realpath with symlinks expanded

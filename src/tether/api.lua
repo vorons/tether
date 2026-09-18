@@ -98,13 +98,25 @@ end
 -- right after curl exits.
 local function header_file(lines)
     local path = ("/tmp/tether_h_%d_%d"):format(os.time(), math.random(100000, 999999))
+    -- 3.5: create the file, lock it down, then write the key — no window in
+    -- which the secret is world-readable, and no key is written if chmod fails.
     local f = io.open(path, "w")
     if not f then return nil end
+    f:close()
+    local ok = os.execute("chmod 600 " .. path)
+    if ok ~= true and ok ~= 0 then
+        os.remove(path)
+        return nil
+    end
+    f = io.open(path, "w")
+    if not f then
+        os.remove(path)
+        return nil
+    end
     for _, ln in ipairs(lines) do
         f:write(ln .. "\n")
     end
     f:close()
-    os.execute("chmod 600 " .. path)
     return path
 end
 
@@ -224,6 +236,10 @@ end
 function M.stream(cfg, api_key, messages, on_event)
     return http_request(cfg, api_key, messages, on_event)
 end
+
+-- 3.5 test seam: expose the private header-file writer so tests can assert
+-- the mode is 600 before the key is written.
+M._header_file = header_file
 
 function M.list_models(cfg)
     local _, P = provider_of(cfg)

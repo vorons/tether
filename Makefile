@@ -30,6 +30,7 @@ $(EMBED_OUT): $(LUA_MODS) tools/embed.lua
 		provider_anthropic_lua src/tether/providers/anthropic.lua \
 		provider_gemini_lua src/tether/providers/gemini.lua \
 		api_lua src/tether/api.lua \
+		context_lua src/tether/context.lua \
 		agent_lua src/tether/agent.lua \
 		tools_lua src/tether/tools.lua
 
@@ -44,9 +45,16 @@ test: tether
 	@luac -p src/tether/providers/anthropic.lua
 	@luac -p src/tether/providers/gemini.lua
 	@luac -p src/tether/agent.lua
+	@luac -p src/tether/context.lua
 	@luac -p src/tether/tools.lua
 	@echo "=== luac ok ==="
 	lua tests/lua_tests.lua
+	@CTX_H=$$(mktemp -d); CTX_W=$$(mktemp -d); \
+		rm -rf "$$CTX_H" "$$CTX_W"; mkdir -p "$$CTX_H" "$$CTX_W"; \
+		HOME="$$CTX_H" TETHER_TEST_WORKSPACE="$$CTX_W" lua tests/context_tests.lua; rc=$$?; \
+		rm -rf "$$CTX_H" "$$CTX_W"; \
+		if [ $$rc -ne 0 ]; then exit $$rc; fi
+	sh tests/context_e2e.sh "$(CURDIR)/tether"
 	sh tests/host_smoke.sh
 
 clean:

@@ -48,11 +48,11 @@ function M._resolve(path, cfg) return resolve(path, cfg) end
 function M._to_rel(path, cfg) return to_rel(path, cfg) end
 function M._within(path, cfg) return within_workspace(path, cfg) end
 
-function M.read(args)
-    local path = resolve(args.path, args._cfg)
+function M.read(args, cfg)
+    local path = resolve(args.path, cfg)
     local f = io.open(path, "rb")
     if not f then
-        return nil, string.format("cannot open %s", to_rel(args.path, args._cfg))
+        return nil, string.format("cannot open %s", to_rel(args.path, cfg))
     end
     local data = f:read(1024 * 1024)
     f:close()
@@ -60,12 +60,17 @@ function M.read(args)
         return nil, "read failed"
     end
     if data:sub(1, 8192):find("\0", 1, true) then
-        return nil, string.format("%s is binary", to_rel(args.path, args._cfg))
+        return nil, string.format("%s is binary", to_rel(args.path, cfg))
     end
+    -- 3.3: split without emitting a phantom trailing line for \n-terminated files
+    local body = data
+    if body:sub(-1) == "\n" then body = body:sub(1, -2) end
     local lines = {}
-    for line in data:gmatch("([^\n]*)\n?") do
-        lines[#lines + 1] = line
-        if #lines > 200000 then break end
+    if body ~= "" then
+        for line in body:gmatch("[^\n]*") do
+            lines[#lines + 1] = line
+            if #lines > 200000 then break end
+        end
     end
     local offset = args.offset or 1
     local limit = args.limit or 10000
@@ -74,6 +79,18 @@ function M.read(args)
         out[#out + 1] = string.format("%d\t%s", i, lines[i])
     end
     return { content = table.concat(out, "\n"), line_count = #lines }
+end
+
+local function is_dir(path)
+    local f = io.open(path, "r")
+    if not f then return false end
+    f:close()
+    -- 2.4: a directory's realpath with a trailing "/" is the directory itself;
+    -- for a file that path cannot resolve (ENOTDIR) so realpath returns nil.
+    local rp = tether.realpath and tether.realpath(path .. "/") or nil
+    if not rp then return false end
+    local norm = (path:gsub("/+$", ""))
+    return rp == norm
 end
 
 local function dir_entries(path)
@@ -92,10 +109,58 @@ local function dir_entries(path)
     return entries
 end
 
-function M.list(args)
-    local path = args.path and resolve(args.path, args._cfg) or current_workspace(args._cfg)
+function M.list(args, cfg)
+    local path = args.path and resolve(args.path, cfg) or current_workspace(cfg)
     local entries = dir_entries(path)
     return { entries = entries, count = #entries }
+end
+
+-- 4.1/4.4: path completion primitive. Takes a user-typed token (may start
+-- with @, may be relative), returns a list of matching candidates.
+--   prefix = "/abs/path"          → list entries under that absolute dir
+--   prefix = "src"                 → workspace-relative candidates matching prefix
+--   prefix = "src/"                → list entries inside src/
+--   prefix = "@src"               → same as "src", leading @ preserved in UI
+-- Absolute tokens starting with "/" or containing ".." are refused (return {}).
+-- Results capped at 200 with a truncation flag.
+function M.path_complete(token, cfg)
+    local ws = current_workspace(cfg)
+    -- refuse absolute and traversal tokens
+    if token:sub(1, 1) == "/" then return { candidates = {}, truncated = false } end
+    if token:find("%.%./") or token:find("^%.%./") or token:find("/%.%./")
+        or token:find("^%.%./") then
+        return { candidates = {}, truncated = false }
+    end
+    -- strip leading @
+    local clean = token:gsub("^@", "")
+    -- split into dir part and file prefix
+    local dir, filepfx
+    local slash = clean:match("^(.*)/")
+    if slash then
+        dir = slash
+        filepfx = clean:sub(#slash + 2)
+    else
+        dir = ""
+        filepfx = clean
+    end
+    local abs_dir = (dir == "") and ws or (ws .. "/" .. dir)
+    -- check we are still inside the workspace
+    if not within_workspace(abs_dir, cfg) then
+        return { candidates = {}, truncated = false }
+    end
+    local entries = dir_entries(abs_dir)
+    local candidates = {}
+    local limit = 200
+    local truncated = false
+    for _, e in ipairs(entries) do
+        if e:sub(1, #filepfx) == filepfx then
+            -- 4.4: directories get a trailing / so a second completion lists inside them
+            local label = is_dir(abs_dir .. "/" .. e) and (e .. "/") or e
+            candidates[#candidates + 1] = label
+            if #candidates >= limit then truncated = true break end
+        end
+    end
+    return { candidates = candidates, truncated = truncated }
 end
 
 -- Design §7 glob: *, **, ?, [abc], [!abc]; sort by path; limit 500.
@@ -136,8 +201,8 @@ local function glob_to_pattern(p)
     return "^" .. table.concat(out) .. "$"
 end
 
-function M.glob(args)
-    local base = args.path and resolve(args.path, args._cfg) or current_workspace(args._cfg)
+function M.glob(args, cfg)
+    local base = args.path and resolve(args.path, cfg) or current_workspace(cfg)
     local pattern = args.pattern or ""
     local all_files = {}
     local ok = pcall(function()
@@ -160,7 +225,7 @@ function M.glob(args)
         -- match against the whole relative path (** may span dirs) or basename
         local name = rel:match("([^/]+)$") or rel
         if rel:match(lp) or name:match(lp) then
-            files[#files + 1] = to_rel(f, args._cfg)
+            files[#files + 1] = to_rel(f, cfg)
             if #files >= 500 then break end -- design §7: limit 500
         end
     end
@@ -168,8 +233,8 @@ function M.glob(args)
     return { files = files, count = #files }
 end
 
-function M.grep(args)
-    local base = args.path and resolve(args.path, args._cfg) or current_workspace(args._cfg)
+function M.grep(args, cfg)
+    local base = args.path and resolve(args.path, cfg) or current_workspace(cfg)
     local max = args.max_results or 100
     local ic = args.ignore_case and "-i " or ""
     local pattern = args.pattern or ""
@@ -203,7 +268,7 @@ function M.grep(args)
         end
         if p and num then
             matches[#matches + 1] = {
-                path = to_rel(p, args._cfg),
+                path = to_rel(p, cfg),
                 line = tonumber(num),
                 column = tonumber(col) or 1,
                 text = text,
@@ -224,16 +289,16 @@ local function atomic_write(path, content)
 end
 
 function M.write(args, cfg)
-    local path = resolve(args.path, args._cfg or cfg)
-    if not within_workspace(path, args._cfg or cfg) then
+    local path = resolve(args.path, cfg)
+    if not within_workspace(path, cfg) then
         return nil, "write outside workspace requires confirmation"
     end
     local content = args.content or ""
     local ok, err = atomic_write(path, content)
     if not ok then
-        return nil, string.format("cannot write %s", to_rel(args.path, args._cfg or cfg))
+        return nil, string.format("cannot write %s", to_rel(args.path, cfg))
     end
-    return { bytes = #content, path = to_rel(args.path, args._cfg or cfg) }
+    return { bytes = #content, path = to_rel(args.path, cfg) }
 end
 
 function M.patch(patch_str, cfg)
@@ -242,19 +307,33 @@ function M.patch(patch_str, cfg)
     local current_file = nil
     local current_hunk = nil
 
-    for _, line in ipairs(patch_str:gmatch("[^\n]*")) do
+    -- (pre-existing) gmatch returns an iterator; wrapping it in ipairs raised
+    -- "attempt to index a function value" — the patch tool could never run.
+    -- The `a/`/`b/` component that `diff -u` / git add to a header is not part
+    -- of the real path; strip one leading component and treat /dev/null as
+    -- "no such side" (new/deleted file). Applies to both header styles.
+    local function diff_path(p)
+        if not p or p == "/dev/null" then return nil end
+        return p:match("^[ab]/(.+)$") or p
+    end
+
+    for line in patch_str:gmatch("[^\n]*") do
         if line:match("^%-%-%-%s+%S+") then
-            current_file = line:match("^%-%-%-%s+([^%s]+)")
+            current_file = diff_path(line:match("^%-%-%-%s+([^%s]+)"))
             current_hunk = nil
-            if not file_patches[current_file] then
+            if current_file and not file_patches[current_file] then
                 file_patches[current_file] = { hunks = {} }
             end
         elseif line:match("^%+%+%+%s+%S+") then
-            -- take the b/ path if present (prefer it over a/)
-            local bpath = line:match("^%+%+%+%s+([^%s]+)")
-            if bpath and current_file then
-                file_patches[bpath] = file_patches[current_file]
-                if bpath ~= current_file then file_patches[current_file] = nil end
+            -- take the +++ path (stripped of a//b/); a new file has --- /dev/null
+            local bpath = diff_path(line:match("^%+%+%+%s+([^%s]+)"))
+            if bpath then
+                if current_file then
+                    file_patches[bpath] = file_patches[current_file]
+                    if bpath ~= current_file then file_patches[current_file] = nil end
+                elseif not file_patches[bpath] then
+                    file_patches[bpath] = { hunks = {} }
+                end
                 current_file = bpath
             end
         elseif line:match("^@@") then
@@ -284,7 +363,7 @@ function M.patch(patch_str, cfg)
     for fname, fdata in pairs(file_patches) do
         local full_path = resolve(fname, c)
         if not within_workspace(full_path, c) then
-            return nil, string.format("patch outside workspace: %s", fname)
+            return nil, string.format("%s outside workspace requires confirmation", fname)
         end
         local f = io.open(full_path, "r")
         local content = f and f:read("*a") or ""
@@ -346,9 +425,14 @@ function M.patch(patch_str, cfg)
 end
 
 function M.run(args, cfg)
-    local c = args._cfg or cfg
+    local c = cfg
     local command = args.command or ""
-    local timeout_val = (args.timeout or (c and c.tools and c.tools.run_shell and c.tools.run_shell.timeout)) or 120
+    -- 3.7: the model may send a string/float timeout; coerce before %d.
+    local timeout_val = tonumber(args.timeout)
+        or (c and c.tools and c.tools.run_shell and tonumber(c.tools.run_shell.timeout))
+        or 120
+    if timeout_val < 1 then timeout_val = 1 end
+    timeout_val = math.floor(timeout_val)
     local cwd = args.cwd and resolve(args.cwd, c) or current_workspace(c)
     if not within_workspace(cwd, c) then
         return nil, "run outside workspace requires confirmation"

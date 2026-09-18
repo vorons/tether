@@ -32,8 +32,13 @@ local function encode_messages(messages)
                     '{"id":"%s","type":"function","function":{"name":"%s","arguments":"%s"}}',
                     jesc(tc.id or ""), jesc(tc["function"].name), jesc(tc["function"].arguments or ""))
             end
+            -- 1.2: keep any assistant text emitted alongside the tool calls
+            local text = content.text
+            local content_json = (type(text) == "string" and text ~= "")
+                and ('"' .. jesc(text) .. '"') or "null"
             items[#items + 1] = string.format(
-                '{"role":"assistant","content":null,"tool_calls":[%s]}', table.concat(tcs, ","))
+                '{"role":"assistant","content":%s,"tool_calls":[%s]}',
+                content_json, table.concat(tcs, ","))
         elseif m.role == "tool" then
             items[#items + 1] = string.format(
                 '{"role":"tool","tool_call_id":"%s","content":"%s"}',
@@ -126,8 +131,12 @@ local function parse_sse_line(line, on_event)
     end
 
     -- error payloads: {"error":{"message":"...","status":429}}
-    if obj.error and not content then
-        on_event({ type = "error", message = obj.error_message or obj.error or "api error" })
+    -- 3.4: detect the error from the payload (parse_json_str does not keep
+    -- nested objects, so obj.error was never set) and surface the real text.
+    if not content and payload:find('"error"', 1, true) then
+        local msg = payload:match('"message"[%s]*:[%s]*"([^"]*)"')
+        if msg then msg = json_unescape(msg) end
+        on_event({ type = "error", message = msg or "api error" })
     end
 end
 

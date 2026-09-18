@@ -125,9 +125,10 @@ The client SHALL expose, per provider, a static fallback model list and a live l
 - **WHEN** the active provider is `anthropic` and the live listing fails
 - **THEN** the static Claude list is returned, not the OpenAI list
 
-> drift: design.md §6.8 says `/model` falls back to the static list;
-> the static list is a fixed 12-entry set and provider-specific, so
-> `cfg.model` is the intended direct control (README notes this).
+> `/model` falls back to the static list of the *active* provider (the
+> OpenAI fallback is the fixed 12-entry set); `cfg.model` remains the
+> direct control for pinning a model (README notes this). design.md
+> §6.8 now documents the same behavior.
 
 ### Requirement: Provider dispatch preserves canonical events
 The client SHALL route `stream(cfg, api_key, messages, on_event)` and `list_models*()` through the active provider adapter while emitting the existing canonical event set in stream order: `text_delta` (content unescaped exactly once at this layer), `reasoning_delta`, `tool_call_start` (id, name), `tool_call_delta` (raw arguments fragment), `usage` (used = prompt+completion tokens, plus both raw fields), `retry`, `error`, `done`. Retry/backoff, `Retry-After`, key-in-argv, and non-SSE-error contracts apply unchanged to every provider.

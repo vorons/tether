@@ -81,6 +81,105 @@ function M.json_encode(v)
     return "null"
 end
 
+-- Recursive-descent JSON parser (ADR: no load()). Shared by agent.lua and
+-- session.lua after fix-audit-findings 3.9 — previously each module carried
+-- its own copy. An unterminated string returns what was read instead of
+-- looping (truncated tool_call arguments are common).
+function M.json_decode(s)
+    local pos = 1
+    local function skip_ws()
+        while pos <= #s and s:sub(pos,pos):match("[%s]") do pos = pos + 1 end
+    end
+    local function parse_value()
+        skip_ws()
+        local c = s:sub(pos,pos)
+        if c == nil then return nil end
+        if c == '"' then
+            pos = pos + 1
+            local buf = {}
+            while true do
+                if pos > #s then break end
+                local ch = s:sub(pos,pos)
+                if ch == '"' then pos = pos + 1; return table.concat(buf)
+                elseif ch == '\\' then
+                    local esc = s:sub(pos+1,pos+1)
+                    local m = {["n"]="\n",["t"]="\t",["r"]="\r",["b"]="\b",["f"]="\f",['"']='"',['\\']='\\',["/"]="/"}
+                    if esc == "u" then
+                        local hex = s:sub(pos+2,pos+5)
+                        local code = tonumber(hex, 16) or 0
+                        pos = pos + 6
+                        buf[#buf+1] = utf8 and utf8.char and utf8.char(code) or ""
+                    else
+                        buf[#buf+1] = m[esc] or ""
+                        pos = pos + 2
+                    end
+                else
+                    buf[#buf+1] = ch
+                    pos = pos + 1
+                end
+            end
+            return table.concat(buf)
+        elseif c == "{" then
+            pos = pos + 1
+            local obj = {}
+            skip_ws()
+            if s:sub(pos,pos) == "}" then pos = pos + 1; return obj end
+            while true do
+                skip_ws()
+                local key
+                if s:sub(pos,pos) == '"' then
+                    key = parse_value()
+                else
+                    local ks = s:match("[%w_%-]+", pos)
+                    if not ks then break end
+                    key = ks
+                    pos = pos + #key
+                end
+                skip_ws()
+                if s:sub(pos,pos) ~= ":" then break end
+                pos = pos + 1
+                obj[key] = parse_value()
+                skip_ws()
+                local nx = s:sub(pos,pos)
+                if nx == "," then pos = pos + 1
+                elseif nx == "}" then pos = pos + 1; break
+                else break end
+            end
+            return obj
+        elseif c == "[" then
+            pos = pos + 1
+            local arr = {}
+            skip_ws()
+            if s:sub(pos,pos) == "]" then pos = pos + 1; return arr end
+            while true do
+                arr[#arr+1] = parse_value()
+                skip_ws()
+                local nx = s:sub(pos,pos)
+                if nx == "," then pos = pos + 1
+                elseif nx == "]" then pos = pos + 1; break
+                else break end
+            end
+            return arr
+        elseif s:sub(pos, pos+3) == "true" then
+            pos = pos + 4; return true
+        elseif s:sub(pos, pos+4) == "false" then
+            pos = pos + 5; return false
+        elseif s:sub(pos, pos+3) == "null" then
+            pos = pos + 4; return nil
+        else
+            local st, fin = s:find("%-?%d+%.?%d*[eE][%+%-]?%d+", pos)
+            if not st then st, fin = s:find("%-?%d+%.?%d*", pos) end
+            if st then
+                local num = s:sub(st, fin)
+                pos = fin + 1
+                return tonumber(num)
+            end
+            return nil
+        end
+    end
+    return parse_value()
+end
+
 -- Canonical static tool schema (OpenAI function format). Anthropic/Gemini
 -- adapters convert FROM this shape; agent.execute_tool names must match.
 function M.tools_schema()

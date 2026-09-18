@@ -5,7 +5,7 @@ local M = {}
 -- ANSI
 -- ============================================================
 local ESC = "\27"
-local function w(s) tether.write(s) end
+local function w(s) if tether and tether.write then tether.write(s) end end
 
 -- T20: ASCII mode — NO_COLOR=1 or TERM=dumb → strip all ANSI + non-ASCII glyphs
 -- M8/R1 test seam: tests override M._ascii_mode or M._env_ascii; production
@@ -13,10 +13,11 @@ local function w(s) tether.write(s) end
 local _ascii = (os.getenv("NO_COLOR") == "1") or (os.getenv("TERM") == "dumb")
 M._env_ascii = _ascii
 
--- cfg.ui.ascii resolution: "on" forces, "off" beats env, else env/auto.
+-- cfg.ui.ascii resolution: "on" (legacy true) forces, "off" (legacy false)
+-- beats env, anything else ("auto"/nil/unknown) falls back to env/auto.
 function M.ascii_active(cfg_ascii)
-    if cfg_ascii == "on" then return true end
-    if cfg_ascii == "off" then return false end
+    if cfg_ascii == "on" or cfg_ascii == true then return true end
+    if cfg_ascii == "off" or cfg_ascii == false then return false end
     return M._env_ascii or M._ascii_mode or false
 end
 
@@ -24,6 +25,31 @@ end
 local function ascii_active()
     local ua = S.cfg and S.cfg.ui and S.cfg.ui.ascii
     return M.ascii_active(ua)
+end
+
+local _colorterm = os.getenv("COLORTERM")
+M._color_depth = nil -- test seam
+function M.color_depth()
+    if M._color_depth then return M._color_depth end
+    if M._ascii_mode or M._env_ascii or _ascii then return "none" end
+    if _colorterm == "truecolor" or _colorterm == "24bit" then return "truecolor" end
+    return "256"
+end
+M.get_color_depth = M.color_depth
+
+-- 7.3: ui.highlight ("auto" default / "on" / "off") vs depth precedence.
+-- S may be nil (md_render is a pure function callable before M.run):
+-- cfg absent ⇒ "auto". "off" beats everything; "auto"/"on" = on unless depth
+-- is "none" (ASCII/NO_COLOR/dumb); mono theme emits no SGR naturally
+-- (roles missing ⇒ raw text), so no special case here.
+-- Note: this function is called from md_render which runs after M.run() has
+-- created the local S; it reads M._get_state() (nil-safe) instead of the
+-- local S upvalue (declared later in the file, so not visible here).
+local function highlight_enabled()
+    local st = M._get_state()
+    local hl = (st and st.cfg and st.cfg.ui and st.cfg.ui.highlight) or "auto"
+    if hl == "off" then return false end
+    return M.color_depth() ~= "none"
 end
 
 -- cfg.ui.thinking resolution: "collapsed" hides thinking on start (Ctrl+T
@@ -95,10 +121,15 @@ local THEMES = {
     default = {
         accent = "36;1", warn = "33;1", error = "31;1", success = "32",
         dim = "2", italic = "3", reverse = "7", bold = "1",
+        -- 7.1: syntax roles (token kinds); default to 16-color codes so
+        -- truecolor/256 render with the same palette. ponytail: no brighter
+        -- per-depth variants; add one if a 256-color theme gets complaints.
+        comment = "2;38", string = "32", number = "33", keyword = "36;1",
     },
     solarized = {
         accent = "36", warn = "33", error = "31", success = "32",
         dim = "2", italic = "3", reverse = "7", bold = "1",
+        comment = "2;38", string = "32", number = "33", keyword = "36",
     },
     mono = {}, -- every role missing ⇒ no SGR emitted
 }
@@ -106,22 +137,29 @@ local _theme_name = "default"
 
 -- M8/R2: wrap toggle (cfg.ui.wrap); false = truncate to width instead.
 local _wrap_enabled = true
-local function cyan(s)   return sgr("36;1", s) end
-local function yellow(s) return sgr("33;1", s) end
-local function red(s)    return sgr("31;1", s) end
-local function green(s)  return sgr("32",   s) end
-local function dim(s)    return sgr("2",    s) end
-local function italic(s) return sgr("3",    s) end
-local function rev(s)    return sgr("7",    s) end
 
 -- M8/R2: role-based color — theme table drives the code; missing role in a
--- theme (e.g. mono) returns the raw text with no SGR at all.
+-- theme (e.g. mono) returns the raw text with no SGR at all; depth
+-- "none" (ASCII/NO_COLOR/dumb) also forces raw text (7.1: never highlight),
+-- still mapping the glyphs (to_ascii) so ASCII mode stays pure ASCII.
 local function sgr_role(role, s)
     local theme = THEMES[_theme_name] or THEMES.default
+    if M.color_depth() == "none" then return to_ascii(s) end
     local code = theme[role]
     if not code then return to_ascii(s) end
     return sgr(code, s)
 end
+
+-- Role helpers: every UI color goes through the active theme, so selecting
+-- `mono` really drops all color and `solarized` re-tints the whole interface
+-- (previously these helpers emitted fixed SGR codes and ignored the theme).
+local function cyan(s)   return sgr_role("accent",  s) end
+local function yellow(s) return sgr_role("warn",    s) end
+local function red(s)    return sgr_role("error",   s) end
+local function green(s)  return sgr_role("success", s) end
+local function dim(s)    return sgr_role("dim",     s) end
+local function italic(s) return sgr_role("italic",  s) end
+local function rev(s)    return sgr_role("reverse", s) end
 
 -- Exports for unit tests + runtime config hookup (M8/R2)
 M.THEMES = THEMES
@@ -268,7 +306,10 @@ local function wrap_words(para, width, cont_prefix, cont_width)
     local function emit()
         local t = {}
         for _, u in ipairs(cur) do t[#t + 1] = u.t end
-        local s = table.concat(t):gsub(" +\27", "\27"):gsub(" +$", "")
+        -- trim only trailing spaces; do NOT strip leading spaces (indentation
+        -- matters for code blocks) nor spaces immediately before an SGR
+        -- sequence (they are code text, not wrap artifacts)
+        local s = table.concat(t):gsub(" +$", "")
         if s == "" and #lines > 0 then return end
         if (not first) and cont_prefix then s = cont_prefix .. s end
         lines[#lines + 1] = s
@@ -321,9 +362,15 @@ local function wrap(text, width)
             out[#out + 1] = ""
         elseif not _wrap_enabled then
             -- M8/R2: wrap off → truncate with arrow marker
+            -- 7.4: cut at a display-width boundary; drop any SGR sequence
+            -- dangling past the cut (usub can split one mid-escape, which
+            -- would leave \27[3 bytes that are not a full SGR and break
+            -- the strip-invariant).
+            local cut = usub(para, 1, width - 1)
+            cut = cut:gsub("\27%[[0-9;?]*[^a-zA-Z]", ""):gsub("\27$", "")
             out[#out + 1] = (M._ascii_mode or M._env_ascii or _ascii)
-                and usub(para, 1, width - 1) .. ">"
-                or usub(para, 1, width - 1) .. "→"
+                and cut .. ">"
+                or cut .. "→"
         else
             for _, l in ipairs(wrap_words(para, width)) do
                 out[#out + 1] = l
@@ -397,6 +444,166 @@ local function md_strip_inline(s, ansi_fn)
     return table.concat(out)
 end
 
+-- M11/7.1: code-block syntax highlighting (7.2 tokenizer, 7.3 integration).
+-- Depth: COLORTERM=truecolor|24bit -> "truecolor", else "256"; ascii/
+-- NO_COLOR/TERM=dumb -> "none". Test seam: M._color_depth set in the ANSI
+-- section drives color_depth(); roles resolve via sgr_role (mono theme ⇒ raw text).
+
+-- ============================================================
+-- 7.2: per-line syntax token scanner (stateful for block comments)
+-- ============================================================
+-- tokenize_line(line, lang, state) → ordered {text, kind} tokens, kind in
+-- {comment, string, number, keyword, plain}. `state` is an in/out table
+-- (one per fence block): state.bc = inside /* */ , state.str = open triple
+-- quote (python). Unknown lang → single plain token (7.5).
+local function _kwset(list)
+    local s = {}
+    for _, w in ipairs(list) do s[w] = true end
+    return s
+end
+local HL_LANGS = {
+    lua = { lc = "--", kw = _kwset({"local","function","end","return","if","then","else","elseif","for","while","do","in","nil","true","false","repeat","until","not","and","or","break"}) },
+    c   = { lc = "//", bo = "/*", bc = "*/", kw = _kwset({"int","char","void","if","else","for","while","do","return","static","const","struct","typedef","sizeof","unsigned","long","float","double","switch","case","break","continue","sizeof"}) },
+    sh  = { lc = "#", kw = _kwset({"if","then","else","fi","for","do","done","while","case","esac","function","local","return","echo","export","set","readonly"}) },
+    python = { lc = "#", triple = true, kw = _kwset({"def","return","if","else","elif","for","while","import","from","as","class","try","except","finally","with","in","not","and","or","None","True","False","lambda","pass","yield","global","assert","raise","print","len"}) },
+    js  = { lc = "//", bo = "/*", bc = "*/", kw = _kwset({"var","let","const","function","return","if","else","for","while","class","new","export","import","from","async","await","true","false","null","undefined","of","in","typeof"}) },
+    go  = { lc = "//", bo = "/*", bc = "*/", kw = _kwset({"func","package","return","if","else","for","range","go","defer","chan","map","type","struct","interface","var","const","true","false","nil","error","len","make"}) },
+    rust = { lc = "//", bo = "/*", bc = "*/", kw = _kwset({"fn","let","mut","if","else","for","while","match","return","impl","trait","pub","use","mod","struct","enum","const","true","false","loop","async","await","where","crate","self","move","dyn"}) },
+    json = { kw = _kwset({"true","false","null"}) },
+}
+HL_LANGS.h = HL_LANGS.c
+HL_LANGS.bash = HL_LANGS.sh
+HL_LANGS.ts = HL_LANGS.js
+-- string quotes per language family
+HL_LANGS.c.strq, HL_LANGS.h.strq = { '"', "'" }, { '"', "'" }
+HL_LANGS.go.strq = { '"', "'", '`' }
+HL_LANGS.js.strq, HL_LANGS.ts.strq = { "'", '"', "`" }, { "'", '"', "`" }
+HL_LANGS.rust.strq = { "'", '"' }
+HL_LANGS.lua.strq = { "'", '"' }
+HL_LANGS.sh.strq, HL_LANGS.bash.strq = { "'", '"' }, { "'", '"' }
+HL_LANGS.python.strq = { "'", '"' }
+HL_LANGS.json.strq = { '"' }
+
+function M.tokenize_line(line, lang, state)
+    lang = lang and lang:lower()
+    local L = lang and HL_LANGS[lang]
+    if not L then return {{ text = line, kind = "plain" }} end
+    state = state or {}
+    local toks, n, i = {}, #line, 1
+    local buf = {}
+    local function flush()
+        if #buf > 0 then toks[#toks + 1] = { text = table.concat(buf), kind = "plain" } end
+        buf = {}
+    end
+    local function add(kind, t) if t ~= "" then toks[#toks + 1] = { text = t, kind = kind } end end
+    local strq = L.strq or { "'", '"' }
+    while i <= n do
+        local c = line:sub(i, i)
+        local closed, j, q
+        -- open/continue triple-quoted string (python)
+        if L.triple and (state.str or line:sub(i, i + 2):match("^[[\"']{3}$")) then
+            local tri = state.str or line:sub(i, i + 2)
+            local start = state.str and i or i + 3
+            local cclose = line:find(tri, start, true)
+            if cclose then
+                flush()
+                add("string", line:sub(i, cclose + 2))
+                state.str = nil; i = cclose + 3
+            else
+                flush()
+                add("string", line:sub(i))
+                state.str = tri; i = n + 1
+            end
+        else
+            local consumed = false
+            -- block comment (c/js/go/rust family)
+            if L.bo then
+                if state.bc then
+                    cclose = line:find(L.bc, i, true)
+                    if cclose then
+                        add("comment", line:sub(i, cclose + #L.bc - 1)); state.bc = nil; i = cclose + #L.bc
+                    else
+                        add("comment", line:sub(i)); i = n + 1
+                    end
+                    consumed = true
+                elseif line:sub(i, i + #L.bo - 1) == L.bo then
+                    flush()
+                    cclose = line:find(L.bc, i + #L.bo, true)
+                    if cclose then
+                        add("comment", line:sub(i, cclose + #L.bc - 1)); i = cclose + #L.bc
+                    else
+                        add("comment", line:sub(i)); state.bc = true; i = n + 1
+                    end
+                    consumed = true
+                end
+            end
+            if not consumed then
+                -- line comment
+                if L.lc and line:sub(i, i + #L.lc - 1) == L.lc then
+                    flush(); add("comment", line:sub(i)); i = n + 1; consumed = true
+                elseif c:match("[%\"']") then
+                    local qmatch = strq[1]
+                    for _, qq in ipairs(strq) do if c == qq then qmatch = qq; break end end
+                    if c == qmatch then
+                        flush()
+                        j = i + 1
+                        closed = false
+                        while j <= n do
+                            local cj = line:sub(j, j)
+                            if cj == "\\" then j = j + 2
+                            elseif cj == qmatch then closed = true; break
+                            else j = j + 1 end
+                        end
+                        if closed then add("string", line:sub(i, j)); i = j + 1; consumed = true
+                        else add("string", line:sub(i)); i = n + 1; consumed = true end
+                    end
+                end
+            end
+            if not consumed and c:match("%d") then
+                local num
+                if c == "0" and line:sub(i + 1, i + 1):lower() == "x" then
+                    num = line:match("0[xX][%a%d_]*", i)
+                else
+                    num = line:match("%d+", i)
+                end
+                if num and num ~= "." then
+                    flush(); add("number", num); i = i + #num; consumed = true
+                end
+            end
+            if not consumed and c:match("[%a_]\z") then
+                local w = line:match("^[%a_][%a%d_]*", i)
+                if w then
+                    if L.kw[w] then flush(); add("keyword", w)
+                    else buf[#buf + 1] = w end
+                    i = i + #w; consumed = true
+                end
+            end
+            if not consumed then
+                buf[#buf + 1] = c; i = i + 1
+            end
+        end
+    end
+    flush()
+    return toks
+end
+
+-- 7.3: render a source line as SGR-colored text (token-scoped SGR wraps, so
+-- the existing SGR-aware wrap() can split it at any char boundary later).
+-- Plain tokens emit no SGR at all (default foreground).
+local HL_ROLE = { comment = "comment", string = "string", number = "number", keyword = "keyword" }
+function M.highlight_line(line, lang, state)
+    local toks = M.tokenize_line(line, lang, state)
+    local out = {}
+    for _, t in ipairs(toks) do
+        local role = HL_ROLE[t.kind]
+        -- 7.4: mono theme ⇒ sgr_role returns the raw token (roles missing),
+        -- so the strip-invariant is byte-exact even when roles are requested.
+        if role then out[#out + 1] = sgr_role(role, t.text)
+        else out[#out + 1] = t.text end
+    end
+    return table.concat(out)
+end
+
 local function md_render(text, width, ansi_fn)
     local ascii = M._ascii_mode or M._env_ascii or _ascii
     local box = ascii and { tl = "+", tr = "+", bl = "+", br = "+", h = "-", v = "|" }
@@ -418,13 +625,23 @@ local function md_render(text, width, ansi_fn)
             local inner = math.max(width - 4, 1)
             out[#out + 1] = box.tl .. box.h .. lang
                 .. string.rep(box.h, math.max(inner - ulen(lang), 1)) .. box.tr
+            -- 7.3: highlight when the fence lang is known (case-insensitive);
+            -- unknown/absent langs render plain (7.5). Tokenize each source
+            -- line, emit SGR-colored text, then run it through the existing
+            -- SGR-aware wrap (zero-width SGR cells, so split boundaries never
+            -- land inside a sequence).
+            local hl_state = HL_LANGS[fence:lower()] and highlight_enabled() and {} or nil
             i = i + 1
             -- continuation indent needs room; absurdly narrow frames fall
             -- back to plain wrapping with no indent
             local cpre, cw = "  ", inner - 2
             if inner < 4 then cpre, cw = "", inner end
             while i <= #lines and not lines[i]:match("^%s*%`%`%`%s*$") do
-                for _, seg in ipairs(wrap_words(lines[i], inner, cpre, cw)) do
+                local body_line = lines[i]
+                if hl_state then
+                    body_line = M.highlight_line(body_line, fence, hl_state)
+                end
+                for _, seg in ipairs(wrap_words(body_line, inner, cpre, cw)) do
                     out[#out + 1] = box.v .. " " .. seg
                         .. string.rep(" ", math.max(inner - vlen(seg), 0)) .. " " .. box.v
                 end
@@ -480,6 +697,10 @@ local function trunc(s, maxw)
     return s:sub(1, i - 1) .. "…" .. ESC .. "[0m"
 end
 M.vlen = vlen   -- export (M9/T39: SGR-aware display width)
+-- 7.4: test seam — strip every SGR escape sequence (text-invariant checks).
+-- 7.4: test seam — strip every SGR escape sequence (text-invariant checks).
+-- Same pattern vlen() uses so a strip round-trips width exactly.
+M._strip_sgr = function(s) return ((s or ""):gsub("\27%[[0-9;?]*[a-zA-Z]", "")) end
 M.trunc = trunc -- export (M9/T39)
 
 -- ============================================================
@@ -489,6 +710,14 @@ M.trunc = trunc -- export (M9/T39)
 local CONFIRM_DIGITS = { "allow", "session", "always", "details", "deny", "cancel" }
 M.CONFIRM_DIGITS = CONFIRM_DIGITS
 
+-- §6.6: spinner frames for the "thinking" placeholder and the busy status
+-- field. ASCII variant for TERM=dumb / NO_COLOR (M8/R1). Declared here (not
+-- next to their first use) so both the transcript tail and the status line
+-- can reach them as upvalues.
+local SPINNER = { "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏" }
+local SPINNER_ASCII = { "|", "/", "-", "\\" }
+M.SPINNER_ASCII = SPINNER_ASCII
+
 local SLASH_COMMANDS = {
     -- M9: /help, /status, /log removed per user request
     { label = "/clear",   desc = "очистить транскрипт",              cmd = "clear" },
@@ -497,8 +726,53 @@ local SLASH_COMMANDS = {
     { label = "/resume",  desc = "возобновить сессию для workspace", cmd = "resume" },
     { label = "/new",     desc = "начать новую сессию",              cmd = "new" },
     { label = "/quit",    desc = "выход",                            cmd = "quit" },
+    { label = "/copy",    desc = "копировать из транскрипта",        cmd = "copy" },
+    { label = "/skills",  desc = "скиллы проекта",                   cmd = "skills" },
 }
 M.SLASH_COMMANDS = SLASH_COMMANDS
+
+-- 3.1: fuzzy_match / fuzzy_score — subsequence matcher, prefix ranked first,
+-- declaration-order ties, empty filter lists all. Exported so tests and the
+-- palette_sync rewrite can use the same primitive.
+function M.fuzzy_score(filter, label)
+    -- prefix gets the best score; subsequence gets a lower score; no match → nil
+    local fl = filter:lower()
+    local ll = label:lower()
+    if fl == "" then return 1000 end
+    if ll:find(fl, 1, true) == 1 then return 1000 end
+    -- subsequence scan
+    local pos = 1
+    for c in fl:gmatch("(.)") do
+        local found = ll:find(c, pos, true)
+        if not found then return nil end
+        pos = found + 1
+    end
+    -- count gap for ranking (smaller gap → better); ties broken by label length
+    local gaps = 0
+    local p2 = 1
+    for c in fl:gmatch("(.)") do
+        local f = ll:find(c, p2, true)
+        gaps = gaps + (f - p2)
+        p2 = f + 1
+    end
+    return math.max(0, 500 - gaps)
+end
+
+function M.fuzzy_rank(filter, labels)
+    -- returns indices into labels sorted by score desc, declaration-order ties
+    local scored = {}
+    for i, lab in ipairs(labels) do
+        local s = M.fuzzy_score(filter, lab)
+        if s then scored[#scored + 1] = { idx = i, score = s } end
+    end
+    table.sort(scored, function(a, b)
+        if a.score == b.score then return a.idx < b.idx end
+        return a.score > b.score
+    end)
+    local out = {}
+    for i, x in ipairs(scored) do out[i] = x.idx end
+    return out
+end
 
 -- M10: keymap as data (idea from terminal.lua input.keymap) — the single
 -- source of truth for keyboard bindings. Consumed by docs/tests; the help
@@ -581,8 +855,23 @@ local function new_state()
 
         transcript = {},
         transcript_ver = 0,
-        transcript_cache = nil,
-        transcript_cache_ver = -1,
+        known_count = 0,     -- entries seen at the last bump (append detection)
+
+        -- Virtualized transcript model: per-entry row caches plus a prefix-sum
+        -- height index (see "Transcript model" below).
+        index_w = nil,           -- width the index was built for
+        index_start = {},        -- index_start[i] = first row of entry i (1-based)
+        index_h = {},            -- index_h[i] = entry height in rows
+        index_total = 0,         -- total transcript rows
+        index_dirty_from = nil,  -- prefix sums must be rebuilt from this entry
+        cached_rows = 0,         -- wrapped rows retained across entries
+        use_counter = 0,         -- stamp source for the LRU approximation
+        visible_lo = 0,          -- entries framing the viewport (eviction guard)
+        visible_hi = -1,
+        last_transcript_h = nil,
+
+        confirm_entry = nil,     -- synthetic tail entries
+        placeholder_entry = nil,
 
         input = "",
         cursor = 0,  -- byte offset
@@ -590,15 +879,28 @@ local function new_state()
         busy = false,
         quit = false,
 
+        -- A: turn feedback. waiting = request sent, no token yet (placeholder
+        -- row); streaming = deltas arriving (caret on the newest line).
+        waiting = false,
+        streaming = false,
+
         error_banner = nil,
 
-        expanded = {},
         expand_all = false,
         thinking_visible = true, -- M8 follow-up: overridden from cfg.ui.thinking in run()
 
         palette_active = false,
+        palette_mode = "command",
         palette_items = {},
         palette_sel = 1,
+        _in_copy_palette = nil,  -- 5.2: set when the /copy palette is open
+
+        -- 5.4: one-shot confirmation; cleared on the next keypress in handle_key
+        toast = nil,
+
+        -- 4.2/4.3: path completion state. original = token exactly as typed
+        -- before the first Tab; items = candidate labels; sel = current index.
+        completion = nil,
 
         confirmation = nil,
         confirmation_sel = 1,
@@ -625,10 +927,79 @@ local function new_state()
     }
 end
 
+-- Structural change by appending (new turn, new tool entry, system line):
+-- existing entries keep their rows and heights, so this costs O(new entries).
 local function bump_transcript()
     S.transcript_ver = S.transcript_ver + 1
-    S.transcript_cache = nil
+    local n = #S.transcript
+    local from = (S.known_count or 0) + 1
+    for i = from, n do
+        local e = S.transcript[i]
+        e.pos = i
+        e.ver = e.ver or 0
+    end
+    if from <= n and (not S.index_dirty_from or S.index_dirty_from > from) then
+        S.index_dirty_from = from
+    end
+    S.known_count = n
 end
+
+-- In-place change that can affect ANY entry (expand-all, thinking toggle, a new
+-- width). Every entry is re-derived, so these stay rare on purpose: content
+-- edits go through touch_entry instead.
+local function invalidate_all()
+    local n = #S.transcript
+    for i = 1, n do
+        local e = S.transcript[i]
+        e.pos = i
+        e.ver = (e.ver or 0) + 1
+    end
+    S.index_dirty_from = 1
+    S.transcript_ver = S.transcript_ver + 1
+    S.known_count = n
+end
+
+-- One entry's content changed (a streamed delta, a tool result): only that
+-- entry is re-derived, so a long session never re-measures on a delta.
+local function touch_entry(e)
+    if not e then return end
+    e.ver = (e.ver or 0) + 1
+    S.transcript_ver = S.transcript_ver + 1
+    local pos = e.pos
+    if pos then
+        if not S.index_dirty_from or S.index_dirty_from > pos then
+            S.index_dirty_from = pos
+        end
+    else
+        S.index_dirty_from = 1 -- unknown position: rebuild from the start
+    end
+end
+
+-- The whole list was replaced (/, /new, /resume, /clear).
+local function reset_transcript(list)
+    S.transcript = list or {}
+    S.known_count = 0
+    S.index_dirty_from = 1
+    S.visible_lo, S.visible_hi = 0, -1
+    bump_transcript()
+end
+M._touch_entry = touch_entry
+M._invalidate_all = invalidate_all
+
+-- A: spinner frame for this repaint (paint() advances S.spinner_frame).
+-- Nil-safe like the other seams: callers may run before run() created S.
+local function spinner_glyph()
+    local frames = (M._ascii_mode or M._env_ascii or _ascii) and SPINNER_ASCII or SPINNER
+    local frame = (S and S.spinner_frame) or 0
+    return frames[(frame % #frames) + 1]
+end
+M.spinner_glyph = spinner_glyph
+
+-- A: caret marking the tail of text that is still arriving.
+local function caret_glyph()
+    return (M._ascii_mode or M._env_ascii or _ascii) and "|" or "▌"
+end
+M.caret_glyph = caret_glyph
 
 -- ============================================================
 -- Layout
@@ -661,7 +1032,10 @@ local function layout()
     local error_h = S.error_banner and 1 or 0
 
     -- M9: hint row removed — its line is returned to the transcript
-    local fixed = shown_in + palette_h + error_h + 1
+    -- footer: input block, then 1-row dim separator, then status line — the
+    -- separator must be reserved here too (F1b), otherwise it lands on the
+    -- last input row and paints over the input field.
+    local fixed = shown_in + palette_h + error_h + 1 + 1
     local th = S.h - fixed
     if th < 1 then th = 1 end
 
@@ -676,6 +1050,7 @@ local function layout()
         input_total = total,
         palette_row = 1 + th + error_h + shown_in,
         palette_h = palette_h,
+        separator_row = S.h - 1, -- footer: dim rule between input and status
         status_row = S.h,
     }
 end
@@ -701,10 +1076,15 @@ local function set_row(row, content)
     S.screen[row] = content
 end
 
+-- Test seam: last-painted content of a screen row (F1b/5b assertions).
+M._row = function(row) return S and S.screen[row] or nil end
+
 -- ============================================================
 -- Palette: derived from input
 -- ============================================================
 local function palette_sync()
+    if S._in_copy_palette then return end -- 5.2: copy palette is set explicitly
+    if S._in_skills_palette then return end -- 6.1: skills palette is set explicitly
     local first = S.input
     local nl = first:find("\n", 1, true)
     if nl then first = first:sub(1, nl - 1) end
@@ -724,12 +1104,13 @@ local function palette_sync()
     end
 
     S.palette_active = true
+    -- 3.2: fuzzy ranking; declaration-order tie-breaks, empty filter lists all
+    local labels = {}
+    for _, c in ipairs(SLASH_COMMANDS) do labels[#labels + 1] = c.label end
+    local order = M.fuzzy_rank(filter, labels)
     local items = {}
-    for _, c in ipairs(SLASH_COMMANDS) do
-        local name = c.label:sub(2):lower()
-        if filter == "" or name:find(filter, 1, true) == 1 then
-            items[#items + 1] = c
-        end
+    for _, idx in ipairs(order) do
+        items[#items + 1] = SLASH_COMMANDS[idx]
     end
     S.palette_items = items
     if S.palette_sel < 1 then S.palette_sel = 1 end
@@ -738,8 +1119,120 @@ local function palette_sync()
 end
 
 -- ============================================================
+-- Path completion (4.2/4.3/4.4): Tab outside the palette completes the
+-- token under the cursor against the workspace, rendered in the palette
+-- region. Unique candidate applies in place; several open the palette
+-- with the first applied and later Tabs cycle (wrapping); Esc restores
+-- the token as typed; any other key keeps the applied text.
+-- ============================================================
+-- Token = text from the cursor back to the previous whitespace or line
+-- start; a leading @ is a mention prefix, kept verbatim in the input.
+local function completion_token()
+    local lines = input_lines()
+    for _, ln in ipairs(lines) do
+        if S.cursor >= ln.from and S.cursor <= ln.from + #ln.text then
+            local upto = ln.text:sub(1, S.cursor - ln.from)
+            local token = upto:match("([^%s]*)$") or ""
+            local pos = ln.from + 1 + #upto - #token
+            return token, pos
+        end
+    end
+    return nil
+end
+
+local function completion_apply(label)
+    local comp = S.completion
+    if not comp then return end
+    local at = comp.original:match("^(@)")
+    local replace = at and ("@" .. label) or label
+    local head = S.input:sub(1, comp.start - 1)
+    S.input = head .. replace .. (comp.tail or "")
+    S.cursor = comp.start + #replace
+end
+-- 4.3: gated on ui.path_completion; Tab inside an open palette keeps its
+-- command-completion meaning (handled by the palette branch of handle_key).
+-- Resolves the tools module lazily: tests can override M._tools_stub to
+-- stub path_complete without touching the real filesystem.
+M._tools_stub = nil
+-- 6.1: seam for tests to stub skill discovery (mirrors M._tools_stub).
+M._skills_stub = nil
+local function path_complete_tab()
+    if S.palette_active then return end
+    if S.cfg and S.cfg.ui and S.cfg.ui.path_completion == false then return end
+    local tools_mod = M._tools_stub
+        or (pcall(require, "tools") and package.loaded.tools)
+        or nil
+    if tools_mod == nil or tools_mod.path_complete == nil then return end
+    local token, token_pos = completion_token()
+    if not token or token == "" then return end
+    local r = tools_mod.path_complete(token, { workspace = S.workspace })
+    local cands = (r and r.candidates) or {}
+    if #cands == 0 then return end -- no candidates -> input unchanged, no palette
+    if #cands == 1 then
+        -- one-shot apply; no cycle state to restore
+        local one_comp = { start = token_pos, stop = token_pos + #token, original = token }
+        S.completion = one_comp
+        completion_apply(cands[1])
+        S.completion = nil
+        return
+    end
+    local comp = S.completion or {}
+    comp.start = comp.start or token_pos
+    if not comp.original then
+        comp.original = S.input:sub(comp.start, comp.start + #token - 1)
+        comp.tail = S.input:sub(comp.start + #token)
+    end
+    comp.items = cands
+    if not S.palette_active then
+        S.palette_mode = "path"
+        S.palette_active = true
+        S.palette_items = {}
+        for _, c in ipairs(cands) do
+            S.palette_items[#S.palette_items + 1] = { label = c, desc = "" }
+        end
+        S.palette_sel = 1
+    else
+        S.palette_sel = (S.palette_sel % #comp.items) + 1
+    end
+    S.completion = comp
+    completion_apply(comp.items[S.palette_sel])
+end
+
+-- 4.2: Esc while the completion palette is open restores the token exactly
+-- as typed before the first Tab.
+local function completion_cancel()
+    local comp = S.completion
+    if not comp then return end
+    S.completion = nil
+    S.input = S.input:sub(1, comp.start - 1) .. comp.original .. (comp.tail or "")
+    S.cursor = comp.start + #comp.original
+    S.palette_active = false
+    S.palette_mode = "command"
+    S.palette_items = {}
+    S.palette_sel = 1
+    palette_sync()
+end
+
+-- 4.2: any non-tab/non-esc key during active completion keeps the applied
+-- text and clears the cycle state (input is not touched).
+local function completion_commit()
+    if S.completion then
+        S.completion = nil
+        S.palette_active = false
+        S.palette_mode = "command"
+        S.palette_items = {}
+        S.palette_sel = 1
+        palette_sync()
+    end
+end
+
+-- ============================================================
 -- Input model
 -- ============================================================
+-- Test seams: drive path_complete_tab / handle_key from a test harness
+-- after run() has set up S. Placed here (after all local functions are
+-- declared) so the closures capture the locals correctly.
+M._path_complete_tab = function() if S then path_complete_tab() end end
 local function input_insert(s)
     if s:find("\n", 1, true) then
         local total = #input_lines()
@@ -769,7 +1262,9 @@ end
 local function input_clear()
     S.input = ""
     S.cursor = 0
-    palette_sync()
+    -- 6.1: palette modes set explicitly (copy/skills) survive input_clear;
+    -- palette_sync is a no-op for them via the _in_*_palette flags.
+    if not S._in_copy_palette and not S._in_skills_palette then palette_sync() end
 end
 
 local function cursor_line_col()
@@ -930,8 +1425,33 @@ local function with_prefix(prefix, pad_n, body)
 end
 
 local function render_entry(e, width)
+    -- Synthetic tail entries go through the same path as real entries so the
+    -- height index, the scroll indicator and the parity helper stay consistent.
+    if e.virt == "placeholder" then
+        -- the spinner frame is painted on this row by render_transcript
+        return { "", dim("✻ tether думает…") }
+    end
+    if e.virt == "confirm" then
+        local c = S.confirmation
+        if not c then return {} end
+        local out = { "", yellow("⚠ " .. (c.label or "подтверждение")) }
+        for _, l in ipairs(wrap(c.body or "", width - 2)) do
+            out[#out + 1] = "  " .. l
+        end
+        for i, opt in ipairs(c.options or {}) do
+            local t = "  " .. opt
+            out[#out + 1] = (i == S.confirmation_sel) and rev(t) or t
+        end
+        return out
+    end
     local role = e.role or "system"
-    if role == "user" then
+    if role == "separator" then
+        -- tui: Turn separators — dim rule with the local submission time
+        local label = "── " .. (e.text or "") .. " "
+        local fill = width - vlen(label)
+        if fill < 1 then fill = 1 end
+        return { dim(label .. string.rep("─", fill)) }
+    elseif role == "user" then
         return with_prefix(cyan("›") .. " ", 2,
             wrap(e.text or "", math.max(width - 2, 1)))
     elseif role == "assistant" then
@@ -966,7 +1486,7 @@ local function render_entry(e, width)
         end
         local out = { head }
         local show = e.body and e.body ~= "" and
-                     (e.always_show or e.status == "error" or S.expanded[e.id] or S.expand_all)
+                     (e.status == "error" or S.expand_all)
         if show then
             local bl = wrap(e.body, math.max(width - 2, 1))
             local cap = e.collapse_lines
@@ -984,33 +1504,191 @@ local function render_entry(e, width)
     return {}
 end
 
-local function display_lines()
-    if S.transcript_cache and S.transcript_cache_ver == S.transcript_ver then
-        return S.transcript_cache
+-- ============================================================
+-- Transcript model (virtualized: per-entry row caches + height index)
+-- ============================================================
+-- One render path for everything on screen. Entries are rendered on demand and
+-- their wrapped rows cached per entry; the transcript height lives in a
+-- prefix-sum index so a repaint touches the viewport instead of the session.
+-- The confirmation menu and the waiting placeholder are synthetic tail entries
+-- (S.confirm_entry / S.placeholder_entry) so heights, the scroll indicator and
+-- the parity helper see them exactly like real entries.
+local function visible_count()
+    local n = #S.transcript
+    if S.confirm_entry then n = n + 1 end
+    if S.placeholder_entry then n = n + 1 end
+    return n
+end
+
+local function entry_at(i)
+    local n = #S.transcript
+    if i <= n then return S.transcript[i] end
+    local k = i - n
+    if S.confirm_entry then
+        if k == 1 then return S.confirm_entry end
+        k = k - 1
     end
-    local L = layout()
-    local lines = {}
-    for _, e in ipairs(S.transcript) do
-        for _, l in ipairs(render_entry(e, L.w)) do
-            lines[#lines + 1] = l
-        end
-    end
+    if S.placeholder_entry and k == 1 then return S.placeholder_entry end
+    return nil
+end
+
+-- Called whenever S.confirmation or S.waiting changes: keeps the synthetic tail
+-- entries in sync and invalidates the index from the tail (cheap — they sit
+-- last). A fresh confirm entry bumps its version so the menu's rows re-render
+-- (the selected option is styled in the rows).
+local function sync_tail()
     if S.confirmation then
-        local c = S.confirmation
-        lines[#lines + 1] = ""
-        lines[#lines + 1] = yellow("⚠ " .. (c.label or "подтверждение"))
-        for _, l in ipairs(wrap(c.body or "", L.w - 2)) do
-            lines[#lines + 1] = "  " .. l
+        S.confirm_entry = S.confirm_entry or { virt = "confirm", ver = 0 }
+        S.confirm_entry.ver = (S.confirm_entry.ver or 0) + 1
+    else
+        S.confirm_entry = nil
+    end
+    if S.waiting then
+        S.placeholder_entry = S.placeholder_entry or { virt = "placeholder", ver = 0 }
+    else
+        S.placeholder_entry = nil
+    end
+    local n = #S.transcript + 1
+    if not S.index_dirty_from or S.index_dirty_from > n then S.index_dirty_from = n end
+end
+M._sync_tail = sync_tail
+
+-- Rows this entry would occupy when wrapped to `width`; measured without
+-- retaining the rows, so an off-screen entry costs a wrap pass once per
+-- content/width change and no cached memory.
+local function entry_height(e, width)
+    if e.height ~= nil and e.h_w == width and e.h_ver == (e.ver or 0) then return e.height end
+    if e.rows and e.rows_w == width and e.rows_ver == (e.ver or 0) then
+        e.height, e.h_w, e.h_ver = #e.rows, width, (e.ver or 0)
+        return e.height
+    end
+    local rows = render_entry(e, width)
+    e.height, e.h_w, e.h_ver = #rows, width, (e.ver or 0)
+    return e.height
+end
+
+-- Documented bound on retained wrapped rows: max(4 x viewport, 1024) rows total,
+-- and no single entry may pin more than half of it (a giant entry is re-rendered
+-- per repaint instead of filling the cache).
+local function cache_bound()
+    local vh = S.last_transcript_h
+    if not vh or vh < 1 then vh = (S.h or 24) - 6 end
+    if vh < 1 then vh = 1 end
+    return math.max(4 * vh, 1024)
+end
+
+local function evict_cached_rows()
+    local bound = cache_bound()
+    while (S.cached_rows or 0) > bound do
+        local best, best_use = nil, nil
+        for i = 1, visible_count() do
+            -- never evict the entries framing the viewport: they are repainted
+            -- immediately, which would make eviction pointless thrash
+            if i ~= S.visible_lo and i ~= S.visible_hi then
+                local e = entry_at(i)
+                if e and e.rows then
+                    local u = e.used or 0
+                    if not best_use or u < best_use then best, best_use = e, u end
+                end
+            end
         end
-        local opts = c.options or {}
-        for i, opt in ipairs(opts) do
-            local t = "  " .. opt
-            lines[#lines + 1] = (i == S.confirmation_sel) and rev(t) or t
+        if not best then return end
+        S.cached_rows = (S.cached_rows or 0) - #best.rows
+        best.rows, best.rows_w, best.rows_ver = nil, nil, nil
+    end
+end
+
+local function entry_rows(e, width)
+    if e.rows and e.rows_w == width and e.rows_ver == (e.ver or 0) then
+        S.use_counter = (S.use_counter or 0) + 1
+        e.used = S.use_counter
+        return e.rows
+    end
+    local rows = render_entry(e, width)
+    if S.cached_rows and #rows > cache_bound() / 2 then
+        return rows -- too big to cache; re-rendered on the next repaint
+    end
+    if e.rows then S.cached_rows = (S.cached_rows or 0) - #e.rows end
+    e.rows, e.rows_w, e.rows_ver = rows, width, (e.ver or 0)
+    S.use_counter = (S.use_counter or 0) + 1
+    e.used = S.use_counter
+    S.cached_rows = (S.cached_rows or 0) + #rows
+    evict_cached_rows()
+    return rows
+end
+M.cache_rows = function() return S.cached_rows or 0 end
+
+-- Rebuild the prefix-sum height index, from the first dirty entry (O(1) for a
+-- plain append) or from the start when the width changed.
+local function ensure_index(width)
+    if S.index_w == width and not S.index_dirty_from then return S.index_total end
+    local n = visible_count()
+    local from, rows = 1, 0
+    if S.index_w == width and S.index_dirty_from and S.index_dirty_from <= n then
+        from = S.index_dirty_from
+        rows = (from > 1) and (S.index_start[from - 1] or 0) or 0
+    else
+        S.index_start, S.index_h = {}, {}
+    end
+    for i = from, n do
+        local e = entry_at(i)
+        local h = e and entry_height(e, width) or 0
+        S.index_h[i] = h
+        rows = rows + h
+        S.index_start[i] = rows - h + 1
+    end
+    for i = n + 1, #S.index_start do
+        S.index_start[i], S.index_h[i] = nil, nil
+    end
+    S.index_w, S.index_total, S.index_dirty_from = width, rows, nil
+    return rows
+end
+
+function M.transcript_height(width)
+    if not S then return 0 end
+    return ensure_index(width or S.w)
+end
+
+local function entry_of_row(k, width)
+    ensure_index(width)
+    local lo, hi, best = 1, visible_count(), nil
+    while lo <= hi do
+        local mid = (lo + hi) // 2
+        local s = S.index_start[mid]
+        if s and s <= k then best, lo = mid, mid + 1 else hi = mid - 1 end
+    end
+    return best
+end
+
+local function row_text(k, width)
+    local i = entry_of_row(k, width)
+    if not i then return "" end
+    local e = entry_at(i)
+    if not e then return "" end
+    local rows = entry_rows(e, width)
+    return rows[k - (S.index_start[i] or 0) + 1] or ""
+end
+
+-- Parity seam: the same rows the viewport path produces, but for the whole
+-- transcript. Tests compare the two to prove virtualization changes nothing.
+function M._render_all(width)
+    if not S then return {} end
+    local out = {}
+    ensure_index(width or S.w)
+    for i = 1, visible_count() do
+        local e = entry_at(i)
+        if e then
+            for _, r in ipairs(entry_rows(e, width or S.w)) do out[#out + 1] = r end
         end
     end
-    S.transcript_cache = lines
-    S.transcript_cache_ver = S.transcript_ver
-    return lines
+    return out
+end
+
+-- Full-render wrapper kept for the rare call sites that index rows directly
+-- (mouse hit-testing, Home). The per-frame status indicator uses
+-- M.transcript_height instead.
+local function display_lines()
+    return M._render_all(layout().w)
 end
 
 -- ============================================================
@@ -1048,8 +1726,8 @@ function M.scroll_shift_seq(h, top, bottom, shift)
 end
 
 local function render_transcript(L)
-    local lines = display_lines()
-    local total = #lines
+    local total = ensure_index(L.w)
+    S.last_transcript_h = L.transcript_h -- cache bound follows the viewport
     -- M10: clamp scroll so the viewport can never move past the top of the
     -- transcript. Over-scroll made top negative and the scroll indicator
     -- report nonsense (⏸ +36 on a 4-line transcript).
@@ -1100,9 +1778,45 @@ local function render_transcript(L)
         S.last_transcript_top = top
         S.last_transcript_w = L.w
     end
+    -- A: live tail — the newest line carries the spinner while no token has
+    -- arrived yet, and the caret while deltas are still streaming. Applied at
+    -- paint time so the wrapped-line cache stays untouched.
+    local tail = ""
+    if not S.user_scrolled and total > 0 then
+        if S.waiting then tail = " " .. spinner_glyph()
+        elseif S.streaming then tail = caret_glyph() end
+    end
+    -- tui: Scroll position indicator — the same count as the status line, painted
+    -- on the newest visible row. Only the rows the viewport needs are rendered:
+    -- row_text() maps a transcript row to its entry and caches that entry's rows.
+    local marker = ""
+    if S.user_scrolled and not S.overlay then
+        local hidden = scroll_indicator(total, S.scroll, L.transcript_h)
+        if hidden and hidden > 0 then
+            marker = ((M._ascii_mode or M._env_ascii or _ascii) and "v" or "↓")
+                .. " +" .. hidden
+        end
+    end
+    local last_painted = math.min(total, bottom)
+    S.visible_lo = entry_of_row(top, L.w) or 0
+    S.visible_hi = entry_of_row(last_painted, L.w) or -1
     for i = 1, L.transcript_h do
         local idx = top + i - 1
-        local text = (idx >= 1 and idx <= total) and lines[idx] or ""
+        local text = ""
+        if idx >= 1 and idx <= total then
+            text = row_text(idx, L.w)
+        end
+        if idx == last_painted and marker ~= "" then
+            -- reserve room by cutting the row, like ui.wrap=false does; on a row
+            -- too narrow for the marker plus a fragment of content, drop it
+            local room = L.w - vlen(marker) - 2
+            if room >= 8 then
+                text = trunc(text, room) .. " " .. marker
+            end
+        end
+        if idx == total and tail ~= "" then
+            text = trunc(text, L.w - 2) .. tail
+        end
         set_row(L.transcript_row + i - 1, text)
     end
 end
@@ -1132,6 +1846,13 @@ local function render_input(L)
             local prefix = (li == 1) and (cyan("›") .. " ") or "  "
             set_row(L.input_row + i - 1, prefix .. ln.text)
         end
+    end
+    -- footer: dim rule between the input block and the status line (F1b);
+    -- ASCII twin is "-".
+    if L.separator_row then
+        local ascii = M.ascii_active(S.cfg and S.cfg.ui and S.cfg.ui.ascii)
+        local sep = string.rep(ascii and "-" or "─", L.w)
+        set_row(L.separator_row, dim(sep))
     end
 end
 
@@ -1165,12 +1886,8 @@ local function ui_is_dangerous(cmd)
     return false
 end
 
-local SPINNER = { "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏" } -- §6.6
--- M8/R1: ASCII spinner for TERM=dumb / NO_COLOR
-local SPINNER_ASCII = { "|", "/", "-", "\\" }
-M.SPINNER_ASCII = SPINNER_ASCII
--- M9: hint row removed per user request (spinner with elapsed seconds still
--- shown in the status line while busy)
+-- §6.6: SPINNER / SPINNER_ASCII live in the Constants section — the
+-- transcript tail and the status line both read them.
 
 -- M9: token usage as plain text; colors kept: green <summarize_at, yellow
 -- >=summarize_at (default 70%%), red >=90%%. Clamped to 0..100.
@@ -1203,24 +1920,38 @@ local function render_status(L)
     if home ~= "" and ws:sub(1, #home) == home then
         ws = "~" .. ws:sub(#home + 1)
     end
+    -- 5b: mandatory parts in fixed order; flags only while relevant
     local parts = { S.model_name or "?", ws }
+    -- 5.4: leading confirmation field (one-shot, cleared by next keypress)
+    if S.toast then table.insert(parts, 1, S.toast) end
+    -- A: while a turn runs, lead the status line with spinner + elapsed time
+    -- (the transcript tail shows the same spinner on its placeholder row).
+    if S.busy then
+        local secs = S.busy_started_at and (os.time() - S.busy_started_at) or 0
+        table.insert(parts, 1, spinner_glyph() .. string.format(" %ds", secs))
+    end
     if S.tokens_max and S.tokens_max > 0 then
         -- T47: "4.2k/32k (13%)" — value + budget + percent
         local summarize_at = (S.cfg.context and S.cfg.context.summarize_at) or 0.7
         parts[#parts + 1] = (S.tokens_estimated and "≈" or "") ..
             M.token_usage(S.tokens_used, S.tokens_max, summarize_at)
     end
-    -- scroll indicator (design §6: `↓ новые`) — hidden lines below
-    -- when the user scrolled up
+    -- scroll indicator — hidden rows below while the user scrolled up
     if S.user_scrolled then
-        local hidden = scroll_indicator(#display_lines(), S.scroll, L.transcript_h)
+        -- O(1) after the index is warm: the status line must not rescan the
+        -- transcript every frame (tui: viewport-proportional rendering)
+        local hidden = scroll_indicator(M.transcript_height(L.w), S.scroll, L.transcript_h)
         if hidden and hidden > 0 then
-            parts[#parts + 1] = "↓ новые +" .. hidden
+            parts[#parts + 1] = ((M._ascii_mode or M._env_ascii or _ascii) and "v" or "↓") .. " +" .. hidden
         end
     end
-    if not ((S.cfg.ui and S.cfg.ui.mouse == "off") or (M._ascii_mode or M._env_ascii or _ascii)) then
-        parts[#parts + 1] = "🖱 " .. (S.mouse_mode or "auto")
+    -- 5b: mouse flag fades out ~3 s after the effective mode changes
+    local mm = S.mouse_mode or (S.cfg.ui and S.cfg.ui.mouse) or "auto"
+    if S._mouse_flag_until and os.time() < S._mouse_flag_until
+        and not (M._ascii_mode or M._env_ascii or _ascii) then
+        parts[#parts + 1] = "🖱 " .. mm
     end
+    -- 5b: kb flag only when a protocol was actually detected
     if S.kb_protocol == 1 then
         parts[#parts + 1] = "⌨ kitty"
     elseif S.kb_protocol == 2 then
@@ -1348,9 +2079,106 @@ local function redraw()
     frame_flush()
 end
 
+-- A: repaint from inside the turn. agent.turn runs synchronously inside
+-- commit_input, so the main loop's redraw() never fires while the model
+-- streams — without this the whole answer appeared at once when the turn
+-- ended. Throttled so per-token deltas don't repaint per token: a repaint
+-- happens after PAINT_MIN_DELTAS skipped deltas or PAINT_INTERVAL of CPU
+-- time, and state transitions pass force=true.
+local PAINT_INTERVAL = 0.05
+local PAINT_MIN_DELTAS = 12
+local last_paint = 0
+local skipped = 0
+local function paint(force)
+    if not S then return end
+    skipped = skipped + 1
+    local now = os.clock()
+    if not force and skipped < PAINT_MIN_DELTAS and (now - last_paint) < PAINT_INTERVAL then
+        return
+    end
+    last_paint = now
+    skipped = 0
+    S.spinner_frame = (S.spinner_frame or 0) + 1
+    redraw()
+end
+M._paint = paint
+
 -- ============================================================
 -- Key reading
 -- ============================================================
+
+-- kitty keyboard protocol (spec: "Comprehensive keyboard handling in
+-- terminals"). We push flag 1 (disambiguate escape codes) at startup and pop
+-- it on exit, so modified keys arrive as `CSI <code>; <mods> u` instead of
+-- ambiguous legacy bytes. Modifiers are a bit field plus one:
+-- shift 1, alt 2, ctrl 4, super 8 (so the encoded value is mask + 1).
+local function decode_mods(mask)
+    return {
+        shift = mask % 2 == 1,
+        alt   = math.floor(mask / 2) % 2 == 1,
+        ctrl  = math.floor(mask / 4) % 2 == 1,
+    }
+end
+
+-- xterm modifyOtherKeys uses its own encoding: 2 shift, 3 alt, 4 shift+alt,
+-- 5 ctrl, 6 shift+ctrl, 7 alt+ctrl, 8 shift+alt+ctrl (1 = no modifiers).
+local function mods_from_xterm(m)
+    local shift = m == 2 or m == 4 or m == 6 or m == 8
+    local alt   = m == 3 or m == 4 or m == 7 or m == 8
+    local ctrl  = m == 5 or m == 6 or m == 7 or m == 8
+    return { shift = shift, alt = alt, ctrl = ctrl }
+end
+
+-- One key with explicit modifiers -> the same key table read_key builds for
+-- legacy bytes, so the rest of the TUI is encoding-agnostic.
+local function decode_modified_key(code, mods)
+    if code == 27 then return { kind = "esc" } end
+    if code == 13 then
+        -- Enter stays legacy when unmodified; any modifier means the terminal
+        -- sends it here (Shift/Ctrl/Alt+Enter insert a newline).
+        if mods.shift or mods.ctrl or mods.alt then return { kind = "newline" } end
+        return { kind = "enter" }
+    end
+    if code == 9 then return { kind = "tab" } end
+    if code == 127 or code == 8 then return { kind = "backspace" } end
+    if mods.ctrl then
+        -- legacy ctrl mapping: a-z -> 1..26, space -> 0, rest masked to 0x1f
+        local c = code
+        if c >= 97 and c <= 122 then c = c - 96
+        elseif c == 32 then c = 0
+        else c = c % 32 end
+        return { kind = "ctrl", code = c, shift = mods.shift, alt = mods.alt }
+    end
+    if mods.alt and code >= 32 then return { kind = "alt", code = code } end
+    -- No modifiers: only terminals reporting every key (flag 8) send text here
+    if code >= 32 and code < 57344 then return { kind = "text", char = utf8.char(code) } end
+    return { kind = "special", name = "unknown" }
+end
+
+-- kitty CSI-u: `<code>[:shifted[:base]] [;<mods>[:event]] [;<text>] u`
+local function decode_csi_u(p)
+    local code = p:match("^(%d+)")
+    if not code then return nil end
+    local rest = p:sub(#code + 1)
+    local mods_field = rest:match("^[^;]*;([^;]*)") or ""
+    local mods = tonumber(mods_field:match("^(%d+)")) or 1
+    return decode_modified_key(tonumber(code), decode_mods(mods - 1))
+end
+
+-- xterm modifyOtherKeys (mode 2): `27 ; <xterm mods> ; <code> ~`
+local function decode_modify_other_keys(p)
+    local m, code = p:match("^27;(%d+);(%d+)$")
+    if not m then return nil end
+    return decode_modified_key(tonumber(code), mods_from_xterm(tonumber(m)))
+end
+
+-- Modifier mask from an arrow/Home/End style CSI parameter list: the standard
+-- form is `1;<mods>`, and the odd bare `5;` form old terminals sent.
+local function legacy_csi_mods(p)
+    local m = p:match("^1;(%d+)$") or p:match("^(%d+);$")
+    return m and decode_mods(tonumber(m) - 1) or nil
+end
+
 local function read_key()
     local b = tether.read_char()
     if b == nil or b == -1 then return nil end
@@ -1368,7 +2196,9 @@ local function read_key()
             local b3 = tether.read_char_nb()
             if b3 == nil then return { kind = "esc" } end
             local c3 = b3 & 0xFF
-            if (c3 >= 48 and c3 <= 57) or c3 == 59 or c3 == 60 or c3 == 62 then
+            -- digits, ';', ':', '<', '>': ':' carries kitty alternate-key
+            -- sub-fields, so it must not terminate the sequence
+            if (c3 >= 48 and c3 <= 57) or c3 == 58 or c3 == 59 or c3 == 60 or c3 == 62 then
                 params[#params + 1] = string.char(c3)
             else
                 local p = table.concat(params)
@@ -1399,23 +2229,37 @@ local function read_key()
                     end
                     return { kind = "paste", text = table.concat(buf) }
                 end
-                -- kitty keyboard protocol: CSI <codes> u (§6.7 Shift+Enter etc.)
+                -- kitty CSI-u (we push flag 1) and xterm modifyOtherKeys
+                -- (we enable mode 2): both encode one key with modifiers.
                 if c3 == 117 and p ~= "" then
-                    -- 13;2u / 13;5u → Shift+Enter / Ctrl+Enter → newline
-                    return { kind = "newline" }
+                    local kitty = decode_csi_u(p)
+                    if kitty then return kitty end
+                    return { kind = "special", name = "unknown", params = p }
                 end
                 local names = {
                     [65] = "up", [66] = "down", [67] = "right", [68] = "left",
                     [72] = "home", [70] = "end",
                 }
                 if names[c3] then
-                    return { kind = "special", name = names[c3], params = p }
+                    local mods = legacy_csi_mods(p)
+                    return { kind = "special", name = names[c3], params = p,
+                             ctrl = mods and mods.ctrl, shift = mods and mods.shift }
                 end
                 if c3 == 126 then
+                    -- modifyOtherKeys: 27;<xterm mods>;<code>~
+                    local mok = decode_modify_other_keys(p)
+                    if mok then return mok end
+                    -- `~` keys carry modifiers as `<code>;<mods>`
+                    local base, mp = p:match("^(%d+);(%d+)$")
+                    base = base or p
+                    local mods = mp and decode_mods(tonumber(mp) - 1) or nil
                     local m = ({ ["1"]="home", ["2"]="insert", ["3"]="delete",
                                  ["4"]="end", ["5"]="pgup", ["6"]="pgdn",
-                                 ["7"]="home", ["8"]="end" })[p]
-                    if m then return { kind = "special", name = m, params = p } end
+                                 ["7"]="home", ["8"]="end" })[base]
+                    if m then
+                        return { kind = "special", name = m, params = p,
+                                 ctrl = mods and mods.ctrl, shift = mods and mods.shift }
+                    end
                 end
                 -- M8/R6: F3 (CSI 1~ with modifier 1;3~ etc) — terminal sends
                 -- ESC[13~ / ESC[14~ for F3/Shift+F3 on xterm; match by params
@@ -1460,9 +2304,7 @@ local function start_new_session(banner)
     if agent and agent.clear then agent.clear() end
     -- a new session knows nothing of the old transcript — drop it too,
     -- otherwise the screen shows messages the agent never saw
-    S.transcript = {}
-    S.transcript[#S.transcript + 1] = { role = "system", text = banner or "↻ Новая сессия" }
-    bump_transcript()
+    reset_transcript({ { role = "system", text = banner or "↻ Новая сессия" } })
 end
 
 -- M9: load_log_overlay removed together with the /log command
@@ -1475,8 +2317,7 @@ local function execute_command(cmd)
     -- fall through to the warning below)
     if cmd == "clear" then
         -- §6.8: clears in-memory transcript only; disk session untouched
-        S.transcript = {}
-        bump_transcript()
+        reset_transcript({})
         return
     end
     if cmd == "compact" then
@@ -1503,6 +2344,52 @@ local function execute_command(cmd)
     end
     if cmd == "new" then
         start_new_session()
+        return
+    end
+    if cmd == "copy" then
+        -- 5.2: open the copy palette; targets are built from the transcript
+        local targets = M.copy_targets(S.transcript)
+        local items = {}
+        for _, tg in ipairs(targets) do
+            items[#items + 1] = { label = tg.name, desc = tostring(tg.bytes) .. " bytes", copy = tg }
+        end
+        S.palette_mode = "copy"
+        S.palette_active = true
+        S.palette_items = items
+        S.palette_sel = 1
+        S._in_copy_palette = true
+        return
+    end
+    if cmd == "skills" then
+        -- 6.1: open the skills palette; discovery is lazy (test seam: M._skills_stub)
+        local skills
+        if M._skills_stub then
+            skills = M._skills_stub() or {}
+        else
+            local ok, res = pcall(function()
+                local ctx = require("context")
+                return ctx.discover_skills(S.cfg, S.workspace)
+            end)
+            skills = (ok and res) or {}
+        end
+        local items = {}
+        if #skills > 0 then
+            for _, sk in ipairs(skills) do
+                items[#items + 1] = {
+                    label = sk.name or "skill",
+                    desc = sk.description or "",
+                    path = sk.path or "",
+                }
+            end
+        else
+            -- explicit empty state: Enter on this row does nothing (6.3)
+            items[#items + 1] = { label = "(нет скиллов)", desc = "", empty = true }
+        end
+        S.palette_mode = "skills"
+        S.palette_active = true
+        S.palette_items = items
+        S.palette_sel = 1
+        S._in_skills_palette = true
         return
     end
     if cmd == "model" then
@@ -1566,6 +2453,10 @@ M.transcript_entries = transcript_entries
 
 local function handle_agent_event(ev)
     if not ev or not ev.type then return end
+    -- A: remember the tail-decoration state so a transition (placeholder ->
+    -- caret, or caret -> nothing) repaints at once instead of waiting out the
+    -- delta throttle.
+    local was_waiting, was_streaming = S.waiting, S.streaming
     if ev.type == "text_delta" then
         local last = S.transcript[#S.transcript]
         if not last or last.role ~= "assistant" then
@@ -1573,7 +2464,10 @@ local function handle_agent_event(ev)
             last = S.transcript[#S.transcript]
         end
         last.text = (last.text or "") .. (ev.text or "")
-        bump_transcript()
+        S.waiting = false
+        S.streaming = true
+        touch_entry(last)
+        sync_tail()
     elseif ev.type == "reasoning_delta" then
         local last = S.transcript[#S.transcript]
         if not last or last.role ~= "thinking" then
@@ -1581,42 +2475,55 @@ local function handle_agent_event(ev)
             last = S.transcript[#S.transcript]
         end
         last.text = (last.text or "") .. (ev.text or "")
-        bump_transcript()
+        S.waiting = false
+        S.streaming = true
+        touch_entry(last)
+        sync_tail()
     elseif ev.type == "tool_call_start" then
         S.transcript[#S.transcript + 1] = {
             role = "tool", id = ev.id or tostring(#S.transcript + 1),
             started_at = os.time(), -- M8/R3: for elapsed display
             name = ev.name or "?", status = "pending", summary = "", body = "",
         }
+        S.waiting = false
+        S.streaming = false
         bump_transcript()
+        sync_tail()
     elseif ev.type == "tool_result" then
+        local target
         for i = #S.transcript, 1, -1 do
             local e = S.transcript[i]
             if e.role == "tool" and e.id == ev.id then
                 e.status = ev.error and "error" or "ok"
                 e.summary = ev.summary or ""
                 e.body = ev.body or ""
+                target = e
                 break
             end
         end
-        bump_transcript()
+        touch_entry(target)
     elseif ev.type == "error" then
         S.error_banner = ev.message or "ошибка"
     elseif ev.type == "aborted" then
+        S.waiting = false
+        S.streaming = false
         S.transcript[#S.transcript + 1] = { role = "system", text = "⏹ прервано (Ctrl+C)" }
         bump_transcript()
+        sync_tail()
     elseif ev.type == "usage" and ev.usage then
         if ev.usage.used then S.tokens_used = ev.usage.used end
         S.tokens_estimated = false
     elseif ev.type == "context_compressed" then
         S.transcript[#S.transcript + 1] = { role = "system", text = "── summary ──" }
         S.tokens_estimated = true
+        bump_transcript()
     elseif ev.type == "retry" then
         S.transcript[#S.transcript + 1] = {
             role = "system",
             text = string.format("↻ повтор %d (ждём %.1fs): %s",
                 ev.attempt or 1, ev.delay or 0.5, ev.reason or ""),
         }
+        bump_transcript()
     end
     -- Fallback: estimate tokens from the real agent history. Estimate is
     -- O(history) — refresh only on coarse events, not on every streamed delta.
@@ -1664,10 +2571,20 @@ local function handle_agent_event(ev)
             }
             S.confirmation_sel = 1
             S.busy = false
-            bump_transcript()
+            S.waiting = false
+            S.streaming = false
+            -- the menu replaces the placeholder: both are synthetic tail entries
+            sync_tail()
         end
     end
     if not S.user_scrolled then S.scroll = 0 end
+    -- A: repaint now — the main loop only redraws between keypresses, so
+    -- without this nothing the model produced would be visible mid-turn.
+    -- Deltas are throttled inside paint(); every other event repaints at once.
+    local force = ev.type ~= "text_delta" and ev.type ~= "reasoning_delta"
+        and ev.type ~= "usage"
+    if S.waiting ~= was_waiting or S.streaming ~= was_streaming then force = true end
+    paint(force)
 end
 
 local function commit_input()
@@ -1685,6 +2602,12 @@ local function commit_input()
         end
     end
     push_history(text)
+    -- Turn separators (tui: Turn separators): one dim timestamp row per new turn,
+    -- placed before the user row. It is a transcript row — it scrolls and counts
+    -- toward the height — but it never reaches the agent.
+    if not (S.cfg and S.cfg.ui and S.cfg.ui.turn_separators == false) then
+        S.transcript[#S.transcript + 1] = { role = "separator", text = os.date("%H:%M") }
+    end
     S.transcript[#S.transcript + 1] = { role = "user", text = text }
     bump_transcript()
     input_clear()
@@ -1694,10 +2617,18 @@ local function commit_input()
 
     S.busy = true
     S.busy_started_at = os.time() -- M8/R3: elapsed counter
+    -- A: turn feedback — the placeholder repaints immediately after Enter
+    S.waiting = true
+    S.streaming = false
+    sync_tail()
     agent.abort_requested = false
+    paint(true)
     local ok, err = pcall(agent.turn, S.cfg, S.api_key or "", text, handle_agent_event)
     S.busy = false
     S.busy_started_at = nil
+    S.waiting = false
+    S.streaming = false
+    sync_tail()
     agent.abort_requested = false
     if not ok and err then
         S.error_banner = tostring(err)
@@ -1720,6 +2651,8 @@ local function mouse_update_tracking()
                                        palette_active = S.palette_active })
     if want ~= S.mouse_enabled then
         S.mouse_enabled = want
+        S.mouse_mode = mode -- 5b: effective config mode, shown in the fading flag
+        S._mouse_flag_until = os.time() + 3 -- 5b: flag visible for ~3 s after change
         w(M.mouse_tracking_seqs(want))
     end
 end
@@ -1736,7 +2669,7 @@ local function handle_special(k)
         -- M8/R3: Home jumps to top of transcript (input empty);
         -- with text in input, Home moves to line start (branch below)
         S.user_scrolled = true
-        S.scroll = math.max(0, #display_lines())
+        S.scroll = math.max(0, M.transcript_height(layout().w) - 1)
     elseif k.name == "end" and S.input == "" then
         -- M8/R3: End jumps to bottom (follow mode) when input is empty
         S.scroll = 0
@@ -1783,10 +2716,10 @@ local function handle_ctrl(code)
         start_new_session()
     elseif code == 15 then
         S.expand_all = not S.expand_all
-        bump_transcript()
+        invalidate_all()
     elseif code == 20 then
         S.thinking_visible = not S.thinking_visible
-        bump_transcript()
+        invalidate_all()
     elseif code == 21 then kill_to_start()
     elseif code == 23 then kill_word_before()
     elseif code == 18 then
@@ -1829,6 +2762,23 @@ local function b64encode(s)
     return table.concat(out2)
 end
 
+-- 5.3: strip ANSI SGR sequences before copying (same pattern as vlen)
+local function strip_sgr(s)
+    if not s then return "" end
+    return (s:gsub("\27%[[0-9;?]*[a-zA-Z]", ""))
+end
+M.strip_sgr = strip_sgr
+
+-- Test seam: tests capture the copy payload via M._copy_hook instead of
+-- relying on tether.write being alive after run_ui_with restores globals.
+M._copy_hook = nil
+
+local function copy_text(text)
+    local payload = ESC .. "]52;c;" .. b64encode(strip_sgr(text)) .. string.char(7)
+    if M._copy_hook then M._copy_hook(payload) end
+    if tether and tether.write then w(payload) end
+end
+
 local function copy_last_assistant()
     local last_text = ""
     for i = #S.transcript, 1, -1 do
@@ -1838,7 +2788,76 @@ local function copy_last_assistant()
         end
     end
     if last_text == "" then return end
-    w(ESC .. "]52;c;" .. b64encode(last_text) .. string.char(7))
+    copy_text(last_text)
+end
+
+-- 5.1: copy targets from the transcript, newest-first; empty sources skipped
+local function fenced_block_of(text)
+    if not text then return "" end
+    local lines = {}
+    for line in (text .. "\n"):gmatch("([^\n]*)\n") do
+        lines[#lines + 1] = line
+    end
+    local start_i
+    for i = 1, #lines do
+        if lines[i]:match("^%s*%`%`%`%s*([%w%_]*)%s*$") then
+            start_i = i
+            break
+        end
+    end
+    if not start_i then return "" end
+    local body = {}
+    for i = start_i + 1, #lines do
+        if lines[i]:match("^%s*%`%`%`%s*$") then
+            return table.concat(body, "\n")
+        end
+        body[#body + 1] = lines[i]
+    end
+    -- unclosed fence at end of text: take what is open
+    return table.concat(body, "\n")
+end
+
+function M.copy_targets(transcript)
+    local t = transcript or {}
+    local out = {}
+    local function add(name, text)
+        if text and text ~= "" then
+            out[#out + 1] = { name = name, text = text, bytes = #text }
+        end
+    end
+    -- last answer: last assistant entry
+    for i = #t, 1, -1 do
+        if t[i].role == "assistant" and (t[i].text or "") ~= "" then
+            add("последний ответ", t[i].text)
+            break
+        end
+    end
+    -- last tool output: last tool entry with body
+    for i = #t, 1, -1 do
+        if t[i].role == "tool" then
+            local body = t[i].body or t[i].text or ""
+            if body ~= "" then add("последний вывод инструмента", body) end
+            break
+        end
+    end
+    -- last fenced block, scanned from the newest entry
+    for i = #t, 1, -1 do
+        local fb = fenced_block_of(t[i].text)
+        if fb ~= "" then add("последний код-блок", fb); break end
+    end
+    -- whole transcript: entries in display order (source text, no SGR)
+    local parts = {}
+    for _, e in ipairs(t) do
+        local txt
+        if e.role == "tool" then
+            txt = e.body or e.text or ""
+        else
+            txt = e.text or ""
+        end
+        if txt ~= "" then parts[#parts + 1] = txt end
+    end
+    add("весь транскрипт", table.concat(parts, "\n"))
+    return out
 end
 
 local function resolve_confirmation(decision)
@@ -1871,12 +2890,21 @@ local function resolve_confirmation(decision)
         if needs_resume then
             -- resume the agent loop after confirmation
             S.busy = true
+            -- A: same turn feedback as commit_input — the continued turn also
+            -- streams in from inside this key handler
+            S.waiting = true
+            S.streaming = false
+            sync_tail()
+            paint(true)
             local ok2, err2 = pcall(agent.continue, S.cfg, S.api_key or "", handle_agent_event)
             S.busy = false
+            S.waiting = false
+            S.streaming = false
             if not ok2 and err2 then S.error_banner = tostring(err2) end
         end
     end
-    bump_transcript()
+    bump_transcript() -- the decision line appended above
+    sync_tail()       -- menu gone (or the placeholder is back for the resume)
 end
 
 local function handle_confirmation_key(k)
@@ -1910,13 +2938,13 @@ local function handle_confirmation_key(k)
             local n = #((S.confirmation and S.confirmation.options) or {})
             if n > 0 then
                 S.confirmation_sel = math.max(1, S.confirmation_sel - 1)
-                bump_transcript()
+                sync_tail() -- selection lives in the menu's rows
             end
         elseif k.name == "down" then
             local n = #((S.confirmation and S.confirmation.options) or {})
             if n > 0 then
                 S.confirmation_sel = math.min(n, S.confirmation_sel + 1)
-                bump_transcript()
+                sync_tail() -- selection lives in the menu's rows
             end
         end
         return
@@ -1925,17 +2953,16 @@ local function handle_confirmation_key(k)
         -- options are rendered inside the transcript flow; match by column band
         local c = S.confirmation
         if c and c.options and #c.options > 0 then
-            local total = #display_lines()
+            local L = layout()
+            local total = ensure_index(L.w)
             -- count of transcript rows above the options block
             local above = total - #c.options
             if k.row and k.row >= above + 1 and k.row <= above + #c.options then
                 -- account for scroll offset
-                local lines = display_lines()
-                local L = layout()
                 local bottom = math.min(total, total - S.scroll)
                 local top = bottom - L.transcript_h + 1
                 local idx = k.row - top + 1
-                local text = lines[idx] or ""
+                local text = (idx >= 1 and idx <= total) and row_text(idx, L.w) or ""
                 for i, opt in ipairs(c.options) do
                     if text:find(opt:sub(1, 10), 1, true) then
                         S.confirmation_sel = i
@@ -1995,7 +3022,7 @@ local function handle_overlay_key(k)
                 agent.clear()
                 -- the picked session replaces the visible transcript;
                 -- appending would mix two conversations on one screen
-                S.transcript = {}
+                reset_transcript({})
                 local messages = session.resume(it.id)
                 if messages then
                     for _, msg in ipairs(messages) do
@@ -2052,6 +3079,9 @@ end
 local function handle_key(k)
     if not k then return end
 
+    -- 5.4: one-shot toast — cleared by any keypress, no timer
+    if S.toast then S.toast = nil end
+
     if S.overlay then handle_overlay_key(k); return end
     if S.confirmation then handle_confirmation_key(k); return end
 
@@ -2089,6 +3119,8 @@ local function handle_key(k)
 
     -- global ctrl
     if k.kind == "ctrl" then
+        -- Ctrl+Shift+C (kitty CSI-u / modifyOtherKeys) copies the last answer
+        if k.code == 3 and k.shift then copy_last_assistant(); return end
         if k.code == 17 then S.quit = true; return end         -- Ctrl+Q
         if k.code == 3 then                                     -- Ctrl+C
             if S.busy then
@@ -2119,12 +3151,13 @@ local function handle_key(k)
         return
     end
 
-    -- Ctrl+Up / Ctrl+Down — history recall. Modifier encodings: kitty/
-    -- modifyOtherKeys "5;A", X11 "1;5A", bare letter when the terminal
-    -- drops the modifier. (Ctrl+Shift+C was already caught above.)
+    -- Ctrl+Up / Ctrl+Down — history recall. read_key decodes the modifiers
+    -- (kitty `CSI 1;5A`, modifyOtherKeys, the odd bare `5;A` form); the string
+    -- heuristics stay as a fallback for terminals that drop the modifier.
+    -- (Ctrl+Shift+C was already caught above.)
     if k.kind == "special" and (k.name == "up" or k.name == "down") then
         local params = k.params or ""
-        local is_ctrl = params:match(";5%a$") or params:match("^1;5%a$")
+        local is_ctrl = k.ctrl or params:match(";5%a$") or params:match("^1;5%a$")
             or params:match("^%a$")
         if is_ctrl then
             if k.name == "up" then history_prev() else history_next() end
@@ -2134,32 +3167,153 @@ local function handle_key(k)
 
     -- palette mode
     if S.palette_active then
-        if k.kind == "enter" then
-            local it = S.palette_items[S.palette_sel]
-            if it then execute_command(it.cmd) end
-            return
-        elseif k.kind == "tab" then
-            local it = S.palette_items[S.palette_sel]
-            if it then
-                S.input = it.label .. " "
-                S.cursor = #S.input
-                palette_sync()
-            end
-            return
-        elseif k.kind == "special" then
-            if k.name == "up" then
-                S.palette_sel = math.max(1, S.palette_sel - 1)
-            elseif k.name == "down" then
-                if #S.palette_items > 0 then
-                    S.palette_sel = math.min(#S.palette_items, S.palette_sel + 1)
+        if S.palette_mode == "copy" then
+            -- 5.2/5.3: copy palette — Enter copies via OSC 52 (SGR-stripped),
+            -- Esc closes, up/down navigate; no fall-through for text keys.
+            if k.kind == "enter" then
+                local it = S.palette_items[S.palette_sel]
+                if it and it.copy then
+                    copy_text(it.copy.text)
+                    S.palette_active = false
+                    S.palette_mode = "command"
+                    S.palette_items = {}
+                    S.palette_sel = 1
+                    S._in_copy_palette = nil
+                    -- spec tui: toast carries the copied size, ASCII twin uses [ok]
+                    local sz = it.copy.bytes or #(it.copy.text or "")
+                    local mark = M.ascii_active(S.cfg and S.cfg.ui and S.cfg.ui.ascii) and "[ok]" or "✓"
+                    S.toast = mark .. " скопировано " .. tostring(sz) .. " B"
+                    paint(true)
                 end
+                return
+            elseif k.kind == "esc" then
+                S.palette_active = false
+                S.palette_mode = "command"
+                S.palette_items = {}
+                S.palette_sel = 1
+                S._in_copy_palette = nil
+                return
+            elseif k.kind == "special" then
+                local n = #S.palette_items
+                if k.name == "up" then
+                    S.palette_sel = math.max(1, S.palette_sel - 1)
+                elseif k.name == "down" and n > 0 then
+                    S.palette_sel = math.min(n, S.palette_sel + 1)
+                end
+                return
             end
             return
-        elseif k.kind == "esc" then
-            input_clear()
+        elseif S.palette_mode == "skills" then
+            -- 6.1/6.2/6.3: skills palette — Enter appends a name+path reference
+            -- (never the body); Esc closes; up/down navigate.
+            if k.kind == "enter" then
+                local it = S.palette_items[S.palette_sel]
+                if it and not it.empty then
+                    local ref = string.format("[skill: %s — SKILL.md at %s]", it.label, it.path or "")
+                    S.input = S.input .. " " .. ref
+                    S.cursor = #S.input
+                end
+                S.palette_active = false
+                S.palette_mode = "command"
+                S.palette_items = {}
+                S.palette_sel = 1
+                S._in_skills_palette = nil
+                paint(true)
+                return
+            elseif k.kind == "esc" then
+                S.palette_active = false
+                S.palette_mode = "command"
+                S.palette_items = {}
+                S.palette_sel = 1
+                S._in_skills_palette = nil
+                return
+            elseif k.kind == "special" then
+                local n = #S.palette_items
+                if k.name == "up" then
+                    S.palette_sel = math.max(1, S.palette_sel - 1)
+                elseif k.name == "down" and n > 0 then
+                    S.palette_sel = math.min(n, S.palette_sel + 1)
+                end
+                return
+            end
             return
+        elseif S.palette_mode == "path" then
+            -- 4.2/4.3: path palette — Tab cycles, Esc restores the token as
+            -- typed, Enter commits the selected path; text/backspace keep the
+            -- applied text, clear the cycle state, and fall through below.
+            if k.kind == "tab" then
+                local comp = S.completion or {}
+                local n = #S.palette_items
+                if n > 0 then
+                    S.palette_sel = (S.palette_sel % n) + 1
+                    comp.sel = S.palette_sel
+                    S.completion = comp
+                    completion_apply(S.palette_items[S.palette_sel].label)
+                end
+                return
+            elseif k.kind == "esc" then
+                completion_cancel()
+                return
+            elseif k.kind == "enter" then
+                local it = S.palette_items[S.palette_sel]
+                if it then
+                    S.input = it.label .. " "
+                    S.cursor = #S.input
+                    completion_commit()
+                end
+                return
+            elseif k.kind == "special" then
+                local n = #(S.completion and S.completion.items or S.palette_items)
+                if k.name == "up" then
+                    S.palette_sel = math.max(1, S.palette_sel - 1)
+                elseif k.name == "down" and n > 0 then
+                    S.palette_sel = math.min(n, S.palette_sel + 1)
+                end
+                if S.completion then S.completion.sel = S.palette_sel end
+                return
+            end
+            -- text/backspace in the path palette: keep the applied text,
+            -- clear the cycle state; re-run palette_sync() so the command
+            -- palette reopens if the user typed /, otherwise the palette
+            -- stays closed. No fall-through (would double-fire input_insert).
+            completion_commit()
+            palette_sync()
+            return
+        else
+            -- command palette (existing behavior, 3.3/3.4/3.5)
+            if k.kind == "enter" then
+                local it = S.palette_items[S.palette_sel]
+                if it then execute_command(it.cmd) end
+                return
+            elseif k.kind == "tab" then
+                local it = S.palette_items[S.palette_sel]
+                if it then
+                    S.input = it.label .. " "
+                    S.cursor = #S.input
+                    palette_sync()
+                end
+                return
+            elseif k.kind == "special" then
+                if k.name == "up" then
+                    S.palette_sel = math.max(1, S.palette_sel - 1)
+                elseif k.name == "down" then
+                    if #S.palette_items > 0 then
+                        S.palette_sel = math.min(#S.palette_items, S.palette_sel + 1)
+                    end
+                end
+                return
+            elseif k.kind == "esc" then
+                input_clear()
+                return
+            end
+            -- fall through for text/backspace so palette_sync runs
         end
-        -- fall through for text/backspace so palette_sync runs
+    end
+
+    -- 4.2: Tab outside an open palette runs path completion (4.3: gated)
+    if k.kind == "tab" and not S.palette_active then
+        path_complete_tab()
+        return
     end
 
     -- normal mode
@@ -2183,6 +3337,10 @@ local function handle_key(k)
     elseif k.kind == "special" then handle_special(k)
     end
 end
+
+M._handle_key = function(k) if S then handle_key(k) end end
+-- Test seam: decode one key from tether.read_char/read_char_nb (no state needed).
+M._read_key = function() return read_key() end
 
 -- ============================================================
 -- Main
@@ -2261,8 +3419,15 @@ function M.run()
         local ok, proto = pcall(tether.detect_kb_protocol)
         S.kb_protocol = (ok and type(proto) == "number") and proto or 0
     end
+    -- Enable the protocol we detected, so modified keys arrive in a form the
+    -- parser understands: kitty pushes flag 1 (disambiguate escape codes),
+    -- xterm-alikes get modifyOtherKeys=2. Both are restored on exit below.
+    -- (kitty keeps a separate flag stack per screen, so the push happens after
+    -- entering the alternate screen and the pop before leaving it.)
     if S.kb_protocol == 1 then
-        w(ESC .. "[?u")
+        w(ESC .. "[>1u")
+    elseif S.kb_protocol == 2 then
+        w(ESC .. "[>4;2m")
     end
 
     load_history()
@@ -2285,6 +3450,13 @@ function M.run()
     end
 
     if debug_log_fh then pcall(function() debug_log_fh:close() end) end
+    -- Restore the keyboard protocol while the alternate screen (and with it
+    -- kitty's own flag stack) is still current, then leave alt-screen.
+    if S.kb_protocol == 1 then
+        w(ESC .. "[<u")
+    elseif S.kb_protocol == 2 then
+        w(ESC .. "[>4;0m")
+    end
     -- M8/R9: leave alt-screen first if we entered it, then restore modes
     if S.cfg.ui and S.cfg.ui.alt_screen then
         w(ESC .. "[?1049l")

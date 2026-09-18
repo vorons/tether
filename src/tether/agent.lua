@@ -1,6 +1,19 @@
 -- tether M4: agent — LLM loop with system prompt, tool dispatch, and confirmations
 local M = {}
 
+-- fix-audit-findings 3.9: the hand-rolled JSON helpers now live once, in
+-- providers/common.lua. The C host exposes it as the `provider_common` global
+-- (loaded before every core module); the loadfile fallback keeps development
+-- runs and `lua tests/lua_tests.lua` working.
+local common = _G.provider_common
+    or (function()
+        local chunk = loadfile("src/tether/providers/common.lua")
+        return chunk and chunk()
+    end)()
+assert(common, "agent: cannot load provider_common")
+local sse_unescape = common.json_unescape
+local json_parse = common.json_decode
+
 M.history = {}
 M.pending = nil            -- confirmation queue for the current tool-call step
 M.session_approved = {}    -- "tool:path" approved for the rest of the session
@@ -22,6 +35,9 @@ When the user asks you to inspect or edit code, use these tools.
 Work in the current directory.
 Outside workspace, write/patch/run require user confirmation.
 ]==]
+
+-- Exposed so context.lua can reuse the exact built-in base prompt (single source).
+M.builtin_prompt = system_prompt
 
 function M.add_user(text)
     table.insert(M.history, { role = "user", content = text })
@@ -88,6 +104,18 @@ local function tool_summary(name, result)
     return ""
 end
 
+local TOOL_BODY_MAX = 16 * 1024
+
+-- 3.5: bound the body forwarded to the model so one large result cannot blow
+-- the context budget; the marker mirrors the AGENTS.md truncation style.
+local function truncate_body(body)
+    if type(body) ~= "string" then return nil end
+    if #body > TOOL_BODY_MAX then
+        return body:sub(1, TOOL_BODY_MAX) .. "\n…(truncated)"
+    end
+    return body
+end
+
 local function tool_body(name, result)
     if not result or result.error then return nil end
     if name == "read" then return result.content end
@@ -110,15 +138,28 @@ local function tool_body(name, result)
         return table.concat(parts, "\n")
     end
     if name == "write" then return result.path end
+    if name == "patch" then
+        -- fix-audit-findings 1.2: patch has no single body; report what applied
+        local parts = {}
+        for _, a in ipairs(result.applied or {}) do
+            parts[#parts + 1] = string.format("%s  +%d −%d", a.file or "?", a.add or 0, a.del or 0)
+        end
+        if result.files then
+            parts[#parts + 1] = string.format("%d file(s), +%d −%d",
+                result.files, result.add or 0, result.del or 0)
+        end
+        return #parts > 0 and table.concat(parts, "\n") or nil
+    end
     return nil
 end
 
 local function execute_tool(name, args, cfg)
-    if name == "read" then return tools.read(args)
+    -- 1.3: every tool receives cfg so -w/config.workspace applies uniformly
+    if name == "read" then return tools.read(args, cfg)
     elseif name == "write" then return tools.write(args, cfg)
-    elseif name == "list" then return tools.list(args)
-    elseif name == "glob" then return tools.glob(args)
-    elseif name == "grep" then return tools.grep(args)
+    elseif name == "list" then return tools.list(args, cfg)
+    elseif name == "glob" then return tools.glob(args, cfg)
+    elseif name == "grep" then return tools.grep(args, cfg)
     elseif name == "run" then return tools.run(args, cfg)
     elseif name == "patch" then return tools.patch(args.patch or args, cfg)
     else return nil, "unknown tool: " .. name
@@ -129,6 +170,32 @@ local function path_of(args)
     return args.path or args.command or args.cwd or ""
 end
 
+-- fix-audit-findings 1.2: patch arguments are the diff text, not a path;
+-- the target has to come from the file headers before the containment check.
+local function patch_target_path(args)
+    local diff = args and args.patch or nil
+    if type(diff) ~= "string" then return nil end
+    -- same normalization as tools.patch: strip one leading a//b/ component,
+    -- skip /dev/null; accept both git-style and prefix-less headers
+    local function norm(p)
+        if not p or p == "/dev/null" then return nil end
+        return p:match("^[ab]/(.+)$") or p
+    end
+    for line in diff:gmatch("[^\n]*") do
+        local plus = line:match("^%+%+%+%s+([^%s]+)")
+        if plus then
+            local t = norm(plus)
+            if t then return t end
+        end
+        local minus = line:match("^%-%-%-%s+([^%s]+)")
+        if minus then
+            local t = norm(minus)
+            if t then return t end
+        end
+    end
+    return nil
+end
+
 local function should_confirm(tool_name, args, cfg)
     if not cfg then return false end
     if cfg.allow_outside_workspace == true then return false end
@@ -136,7 +203,9 @@ local function should_confirm(tool_name, args, cfg)
         return false
     end
     if tool_name == "patch" then
-        return not tools._within(args.path and tools._resolve(args.path, cfg) or tools._workspace(cfg), cfg)
+        local target = patch_target_path(args)
+        if not target then return false end
+        return not tools._within(tools._resolve(target, cfg), cfg)
     end
     local path = args.path or args.command or ""
     if path == "" and tool_name == "run" then path = args.cwd or "" end
@@ -203,139 +272,10 @@ local function persist_auto_approve(tool_name, args, cfg)
     end
 end
 
--- Single-pass SSE-string unescape (M7/D2b): tool_call arguments arrive from
--- api.lua as raw JSON-string content ({\"path\":...}); exactly ONE unescape
--- must happen over the FULL assembled string (a chunk boundary can split an
--- escape sequence), then json_parse sees valid JSON. Single left-to-right scan:
--- sequential gsub chains corrupt \\\\n sequences by re-processing their own output.
-local function sse_unescape(s)
-    local map = { n = "\n", t = "\t", r = "\r", b = "\b", f = "\f",
-                  ['"'] = '"', ['\\'] = '\\', ['/'] = '/' }
-    local out = {}
-    local i = 1
-    while i <= #s do
-        local c = s:sub(i, i)
-        if c == "\\" and i < #s then
-            local n = s:sub(i + 1, i + 1)
-            if n == "u" then
-                local code = tonumber(s:sub(i + 2, i + 5), 16)
-                if code then
-                    out[#out + 1] = utf8 and utf8.char and utf8.char(code) or ""
-                    i = i + 6
-                else
-                    out[#out + 1] = n
-                    i = i + 2
-                end
-            else
-                out[#out + 1] = map[n] or n
-                i = i + 2
-            end
-        else
-            out[#out + 1] = c
-            i = i + 1
-        end
-    end
-    return table.concat(out)
-end
-
--- Minimal JSON parser (recursive descent, no load, no globals)
-local function json_parse(s)
-    local pos = 1
-    local function skip_ws()
-        while pos <= #s and s:sub(pos,pos):match("[%s]") do pos = pos + 1 end
-    end
-    local function parse_value()
-        skip_ws()
-        local c = s:sub(pos,pos)
-        if c == nil then return nil end
-        if c == '"' then
-            pos = pos + 1
-            local buf = {}
-            while true do
-                -- M7/D6: s:sub returns "" (not nil) past the end — an unterminated
-                -- string (truncated tool_call arguments) used to hang the parser.
-                if pos > #s then break end
-                local ch = s:sub(pos,pos)
-                if ch == '"' then pos = pos + 1; return table.concat(buf)
-                elseif ch == '\\' then
-                    local esc = s:sub(pos+1,pos+1)
-                    local m = {["n"]="\n",["t"]="\t",["r"]="\r",["b"]="\b",["f"]="\f",['"']='"',['\\']='\\',["/"]="/"}
-                    if esc == "u" then
-                        local hex = s:sub(pos+2,pos+5)
-                        local code = tonumber(hex) or 0
-                        pos = pos + 6
-                        buf[#buf+1] = utf8 and utf8.char and utf8.char(code) or ""
-                    else
-                        buf[#buf+1] = m[esc] or ""
-                        pos = pos + 2
-                    end
-                else
-                    buf[#buf+1] = ch
-                    pos = pos + 1
-                end
-            end
-            return table.concat(buf)
-        elseif c == "{" then
-            pos = pos + 1
-            local obj = {}
-            skip_ws()
-            if s:sub(pos,pos) == "}" then pos = pos + 1; return obj end
-            while true do
-                skip_ws()
-                local key
-                if s:sub(pos,pos) == '"' then
-                    key = parse_value()
-                else
-                    local ks = s:match("[%w_%-]+", pos)
-                    if not ks then break end
-                    key = ks
-                    pos = pos + #key
-                end
-                skip_ws()
-                if s:sub(pos,pos) ~= ":" then break end
-                pos = pos + 1
-                obj[key] = parse_value()
-                skip_ws()
-                local nx = s:sub(pos,pos)
-                if nx == "," then pos = pos + 1
-                elseif nx == "}" then pos = pos + 1; break
-                else break end
-            end
-            return obj
-        elseif c == "[" then
-            pos = pos + 1
-            local arr = {}
-            skip_ws()
-            if s:sub(pos,pos) == "]" then pos = pos + 1; return arr end
-            while true do
-                arr[#arr+1] = parse_value()
-                skip_ws()
-                local nx = s:sub(pos,pos)
-                if nx == "," then pos = pos + 1
-                elseif nx == "]" then pos = pos + 1; break
-                else break end
-            end
-            return arr
-        elseif s:sub(pos, pos+3) == "true" then
-            pos = pos + 4; return true
-        elseif s:sub(pos, pos+4) == "false" then
-            pos = pos + 5; return false
-        elseif s:sub(pos, pos+3) == "null" then
-            pos = pos + 4; return nil
-        else
-            local st, fin = s:find("%-?%d+%.?%d*[eE][%+%-]?%d+", pos)
-            if not st then st, fin = s:find("%-?%d+%.?%d*", pos) end
-            if st then
-                local num = s:sub(st, fin)
-                pos = fin + 1
-                return tonumber(num)
-            end
-            return nil
-        end
-    end
-    return parse_value()
-end
-
+-- Tool-call arguments arrive raw (still JSON-escaped). Exactly one unescape
+-- runs over the FULL assembled string (a chunk boundary can split an escape
+-- sequence), then the shared JSON decoder sees valid JSON. Both helpers live
+-- in providers/common.lua (fix-audit-findings 3.9).
 local function parse_args(args_str)
     if not args_str or args_str == "" then return {} end
     -- exactly one SSE-layer unescape over the full assembled string (M7/D2b)
@@ -400,7 +340,15 @@ local function run_tool_call(cfg, on_event, id, name, args)
     else
         res = { error = err or "tool failed" }
     end
-    M.add_tool_result(id, res.error and { error = res.error } or res)
+    -- fix-audit-findings 1.2: the model must see the tool's output body, not
+    -- just whatever happened to live under `content` (only `read` had one).
+    local history_result
+    if res.error then
+        history_result = { error = tostring(res.error) }
+    else
+        history_result = { content = truncate_body(tool_body(name, res)) or "" }
+    end
+    M.add_tool_result(id, history_result)
     slog(cfg, {
         ts = os.date(), type = "tool_result",
         tool_call_id = id, name = name,
@@ -521,9 +469,11 @@ local function main_loop(cfg, api_key, on_event)
                 ['function'] = { name = tc.name, arguments = tc.arguments },
             }
         end
-        M.add_assistant({ tool_calls = tc_list })
+        -- 1.2: keep any text the model emitted alongside its tool calls
+        local assistant_text = #text_acc > 0 and table.concat(text_acc) or ""
+        M.add_assistant({ tool_calls = tc_list, text = assistant_text })
         slog(cfg, { ts = os.date(), type = "message", role = "assistant",
-                    content = "", tool_calls = tc_list })
+                    content = assistant_text, tool_calls = tc_list })
 
         -- Build the queue of calls for this step
         local calls = {}
@@ -552,8 +502,19 @@ end
 
 function M.turn(cfg, api_key, user_text, on_event, skip_user)
     if not (M.history[1] and M.history[1].role == "system") then
-        local sp = config and config.get_system_prompt and config.get_system_prompt(cfg)
-        table.insert(M.history, 1, { role = "system", content = sp or system_prompt })
+        local sp = nil
+        -- Composed prompt (context-injection): base + AGENTS.md + agents files
+        -- + skills index. Falls back to the legacy config path when the
+        -- context module is unavailable (e.g. old embedded build).
+        if context and context.compose then
+            sp = context.compose(cfg, {
+                workspace = cfg.workspace,
+                agents_files = cfg._cli_agents_files,
+            })
+        elseif config and config.get_system_prompt then
+            sp = config.get_system_prompt(cfg)
+        end
+        table.insert(M.history, 1, { role = "system", content = sp or M.builtin_prompt })
     end
     if not skip_user then
         M.add_user(user_text)
@@ -619,6 +580,8 @@ function M.continue(cfg, api_key, on_event)
 end
 
 M.estimate_tokens = estimate_tokens
+M._should_confirm = should_confirm
+M._patch_target_path = patch_target_path
 M.compress_history = compress_history
 M.should_summarize = should_summarize
 M.parse_args = parse_args

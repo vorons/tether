@@ -35,13 +35,18 @@ local function default_config()
             mouse = "auto",
             thinking = "collapsed",
             ascii = "auto",
+            highlight = "auto", -- 7.x: syntax highlight in fenced code blocks ("auto"/"on"/"off")
             wrap = true,
             collapse = { read = 20, list = 30, grep = 15 },
             input_max_lines = 8,
             alt_screen = true, -- T48: fullscreen TUI; "false" keeps native scrollback
+            turn_separators = true, -- 2.x: dim dividers between user turns; set false to disable
+            path_completion = true, -- 4.3: Tab completes workspace path tokens
         },
         tools = { run_shell = { timeout = 120 } },
         system_prompt = nil,
+        skills_dirs = nil, -- nil = default discovery set (see context.lua)
+        agents_files = {}, -- explicit agents-instruction files, merged before CLI --agents-file
         log_level = "info",
     }
 end
@@ -57,7 +62,7 @@ local function deep_merge(a, b)
     return a
 end
 
-function M.load(path)
+function M.load(path, home)
     local cfg = default_config()
     -- M7/N4: loadfile returns nil+err when the file is missing — the old code
     -- called the result unconditionally and crashed (nil call) on a fresh
@@ -96,7 +101,33 @@ function M.load(path)
         cfg.model = up.model or user_tbl.model
             or def_p.model or cfg.model
     end
+    -- fix-audit-findings 2.1: merge the persisted [A] always patterns so a
+    -- permanent approval survives a restart (written by agent.persist_auto_approve).
+    local persisted = M.load_auto_approve(home or os.getenv("HOME"))
+    if type(cfg.auto_approve) ~= "table" then cfg.auto_approve = {} end
+    for _, pat in ipairs(persisted) do
+        local dup = false
+        for _, e in ipairs(cfg.auto_approve) do
+            if e == pat then dup = true break end
+        end
+        if not dup then cfg.auto_approve[#cfg.auto_approve + 1] = pat end
+    end
     return cfg
+end
+
+-- Read ~/.tether/auto_approve.lua (machine-managed side file). A missing or
+-- invalid file contributes no patterns and never fails the session.
+function M.load_auto_approve(home)
+    if not home or home == "" then return {} end
+    local chunk = loadfile(home .. "/.tether/auto_approve.lua")
+    if not chunk then return {} end
+    local ok, tbl = pcall(chunk)
+    if not ok or type(tbl) ~= "table" then return {} end
+    local out = {}
+    for _, p in ipairs(tbl) do
+        if type(p) == "string" and p ~= "" then out[#out + 1] = p end
+    end
+    return out
 end
 
 function M.api_key(cfg)

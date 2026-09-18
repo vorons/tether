@@ -53,6 +53,9 @@ local function convert_messages(messages)
             local content = m.content
             if type(content) == "table" and content.tool_calls then
                 local blocks = {}
+                if type(content.text) == "string" and content.text ~= "" then
+                    blocks[#blocks + 1] = string.format('{"type":"text","text":"%s"}', jesc(content.text))
+                end
                 for _, tc in ipairs(content.tool_calls) do
                     local raw = tc["function"] and tc["function"].arguments or ""
                     blocks[#blocks + 1] = string.format(

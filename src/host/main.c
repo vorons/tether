@@ -413,15 +413,17 @@ int main(int argc, char **argv)
 
     int rc = 0;
     struct { const char *src; const char *name; } mods[] = {
+        /* provider_common first: session/agent resolve their JSON helpers to it */
+        { provider_common_lua,    "provider_common"    },
         { session_lua, "session" },
         { ui_lua,     "ui"     },
         { config_lua, "config" },
         { tools_lua,  "tools"  },
-        { provider_common_lua,    "provider_common"    },
         { provider_openai_lua,    "provider_openai"    },
         { provider_anthropic_lua, "provider_anthropic" },
         { provider_gemini_lua,    "provider_gemini"    },
         { api_lua,    "api"    },
+        { context_lua, "context" },
         { agent_lua,  "agent"  },
         { app_lua,    "app"    },
     };

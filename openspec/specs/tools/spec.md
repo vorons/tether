@@ -117,7 +117,7 @@ true` bypasses the guard entirely.
 - **WHEN** the flag is set and write targets `/etc/hosts`
 - **THEN** the tool executes without an error result
 
-> drift: design.md §7 says "выход за корень требует
-> подтверждения" — in code the tool returns a refusal and the agent's
-> confirmation menu is what grants the one-off session/always
-> exception; the flag bypass is the only permanent route.
+> design.md §7 describes the same flow: the tool refuses on its own
+> (`... outside workspace requires confirmation`), the agent's
+> confirmation menu grants the one-off/session/always exception, and
+> `allow_outside_workspace = true` is the only permanent bypass.

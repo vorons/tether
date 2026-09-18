@@ -79,6 +79,9 @@ local function convert_contents(messages)
             local content = m.content
             if type(content) == "table" and content.tool_calls then
                 local parts = {}
+                if type(content.text) == "string" and content.text ~= "" then
+                    parts[#parts + 1] = text_part(content.text)
+                end
                 for _, tc in ipairs(content.tool_calls) do
                     local raw = tc["function"] and tc["function"].arguments or ""
                     parts[#parts + 1] = string.format(

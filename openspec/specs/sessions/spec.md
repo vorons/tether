@@ -89,6 +89,6 @@ flag when the turn was interrupted.
 - **WHEN** the user aborts the turn and quits
 - **THEN** the session_end event marks the abort in meta
 
-> drift: design.md §10 mentions `aborted` in meta but the shipped
-> code writes `session_end` with only `{workspace, model}`; the
-> abort flag is not yet persisted.
+> gap: the abort flag is not persisted — `session_end` carries only
+> `{workspace, model}`. design.md §10 documents that as the current
+> behavior.
