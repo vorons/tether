@@ -24,12 +24,39 @@ the native scrollback is kept.
 Assistant text SHALL render inline code, bold, italic, lists, and
 headings; fenced code blocks SHALL render inside a bordered frame
 using box-drawing characters (or ASCII in ascii mode). Text SHALL
-word-wrap to the terminal width when `ui.wrap` is on.
+word-wrap to the terminal width when `ui.wrap` is on: prose wraps
+on word boundaries (greedy), and fenced code blocks soft-wrap
+inside the frame with a continuation indent instead of truncating.
+No visible content SHALL be lost to truncation when `ui.wrap` is
+on. A single token longer than the available width (no spaces to
+break on) SHALL be cut hard. Wrap width SHALL be counted in
+display columns (wide East-Asian characters count as 2, ANSI
+sequences as 0). When `ui.wrap` is off, lines SHALL be truncated
+with a cut marker as before.
 
 #### Scenario: Code block framed
 - **WHEN** the assistant emits a fenced ```lua block
-- **THEN** it renders inside a box-drawing border; text inside is
-  not word-wrapped
+- **THEN** it renders inside a box-drawing border; long lines inside soft-wrap within the frame instead of truncating
+
+#### Scenario: Prose wraps on word boundaries
+- **WHEN** the assistant emits a sentence longer than the transcript width
+- **THEN** no line breaks inside a word; the break falls on a space, and every rendered line fits the width
+
+#### Scenario: Code block soft-wraps inside the frame
+- **WHEN** the assistant emits a fenced block with a line longer than the frame inner width
+- **THEN** the line renders on several framed lines with a continuation indent, the full content stays visible, and no cut marker appears
+
+#### Scenario: Wide characters count double
+- **WHEN** text contains East-Asian wide characters
+- **THEN** wrapping accounts 2 columns per such character and no line overflows the width
+
+#### Scenario: Overlong token is cut hard
+- **WHEN** a single token without spaces exceeds the available width
+- **THEN** it is cut hard at the width boundary
+
+#### Scenario: Wrap off still truncates
+- **WHEN** `ui.wrap` is off and a line exceeds the width
+- **THEN** the line renders truncated to one row with the cut marker
 
 ### Requirement: Streaming append
 Assistant text SHALL append incrementally as SSE deltas arrive;
@@ -39,6 +66,53 @@ agent is streaming.
 #### Scenario: Auto-scroll during stream
 - **WHEN** the agent is streaming and the user has not scrolled up
 - **THEN** the viewport tracks the bottom of the transcript
+
+### Requirement: Transcript restore on resume
+Resuming a session SHALL restore the visible transcript from the
+restored history, showing only user messages and assistant text
+(system prompts, tool-call scaffolding and tool results stay in
+the agent history, not on screen):
+- On `-r` startup the transcript SHALL be seeded from the restored
+  agent history followed by a resumed-session marker.
+- `/resume` SHALL replace the visible transcript with the picked
+  session (not append to it) followed by a resumed-session marker.
+
+#### Scenario: Startup resume seeds transcript
+- **WHEN** the TUI starts with restored history holding a user
+  message and an assistant reply
+- **THEN** both appear in the transcript plus a resumed marker
+
+#### Scenario: Resume picker replaces transcript
+- **WHEN** the user picks a session in `/resume` with a
+  non-empty current transcript
+- **THEN** the old entries are dropped and only the picked
+  session's messages are shown
+
+### Requirement: Session commands transcript semantics
+- `/new` SHALL drop both the agent history and the visible
+  transcript, leaving only a new-session banner.
+- `/clear` SHALL clear the transcript display only; the agent
+  keeps its history, so the next turn still sees full context.
+- `/compact` SHALL append a summary line to the transcript
+  after compressing the agent history.
+
+#### Scenario: New session starts clean
+- **WHEN** the user runs `/new` with a non-empty transcript
+- **THEN** only the new-session banner remains on screen
+
+#### Scenario: Clear keeps agent context
+- **WHEN** the user runs `/clear` and then sends a message
+- **THEN** the agent answers with full prior history while the
+  screen shows only the new exchange
+
+### Requirement: Scroll position indicator
+When the user scrolled up, the status line SHALL show how many
+transcript lines are hidden below as `↓ новые +N`; returning to
+the bottom SHALL re-enter follow mode and hide the indicator.
+
+#### Scenario: Indicator while scrolled up
+- **WHEN** the transcript is scrolled up with lines below
+- **THEN** the status line shows `↓ новые +N` with the count
 
 ### Requirement: Token usage in status line
 The status line SHALL show current token usage and a percentage of

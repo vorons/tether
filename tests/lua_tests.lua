@@ -808,6 +808,69 @@ with_modules(base_env, function(mods)
     ui._ascii_mode = nil
 end)
 
+-- M11/T54: word wrap on display width + code soft-wrap (readability)
+with_modules(base_env, function(mods)
+    local ui = mods.ui
+    ui.set_wrap(true)
+
+    -- prose breaks on spaces, never mid-word
+    local wl = ui.wrap_lines("aa bb cc dd", 5)
+    assert_eq(#wl, 2, "T54 greedy packs to two lines")
+    assert_eq(wl[1], "aa bb", "T54 first line")
+    assert_eq(wl[2], "cc dd", "T54 second line")
+
+    -- overlong token without spaces is cut hard, nothing lost
+    wl = ui.wrap_lines("abcdefghij", 4)
+    assert_eq(#wl, 3, "T54 overlong token cut")
+    assert_eq(table.concat(wl, ""), "abcdefghij", "T54 hard cut loses nothing")
+
+    -- every line fits the width; join restores the source
+    local src = "lorem ipsum dolor sit amet consectetur"
+    wl = ui.wrap_lines(src, 12)
+    for _, l in ipairs(wl) do
+        assert_true(ui.vlen(l) <= 12, "T54 width respected")
+    end
+    assert_eq(table.concat(wl, " "), src, "T54 join restores source")
+
+    -- leading indentation survives on the first line
+    wl = ui.wrap_lines("  indented line here", 12)
+    assert_eq(wl[1], "  indented", "T54 indent kept")
+
+    -- CJK counts 2 columns per character
+    wl = ui.wrap_lines("中文测试换行", 5)
+    assert_eq(#wl, 3, "T54 CJK wraps by display width")
+    for _, l in ipairs(wl) do
+        assert_true(ui.vlen(l) <= 5, "T54 CJK width respected")
+    end
+
+    -- SGR sequences are zero-width and preserved
+    wl = ui.wrap_lines("\27[36;1mhello world\27[0m", 10)
+    assert_true(ui.vlen(wl[1]) <= 10 and ui.vlen(wl[2]) <= 10, "T54 SGR zero width")
+    assert_eq((table.concat(wl, " "):gsub("\27%[[0-9;]*m", "")), "hello world", "T54 SGR content kept")
+
+    -- code block soft-wraps inside the frame: no cut marker, content kept
+    local out = ui.md_render("```lua\nlocal very_long_variable_name = some_function_call(arg1, arg2)\n```", 30)
+    assert_true(#out > 4, "T54 code block grows rows: " .. #out)
+    local joined = table.concat(out, "\n")
+    assert_true(joined:find("→", 1, true) == nil, "T54 no cut marker")
+    assert_true(joined:find("very_long_variable_name", 1, true) ~= nil, "T54 code content kept")
+    assert_true(joined:find("some_function_call", 1, true) ~= nil, "T54 code tail kept")
+    for _, l in ipairs(out) do
+        assert_true(ui.vlen(l) <= 30, "T54 frame rows fit width")
+    end
+
+    -- list continuation aligns to content start (display columns, not bytes)
+    out = ui.md_render("- lorem ipsum dolor sit amet", 20)
+    assert_eq(#out, 2, "T54 list wraps to two rows")
+    assert_eq(out[2]:sub(1, 4), "    ", "T54 continuation indent")
+
+    -- wrap=false still truncates to one line
+    ui.set_wrap(false)
+    wl = ui.wrap_lines("hello world this is long", 10)
+    assert_eq(#wl, 1, "T54 wrap=false one line")
+    ui.set_wrap(true)
+end)
+
 -- M8/T33: digit-map for confirmation menu (R3)
 with_modules(base_env, function(mods)
     local dm = mods.ui.CONFIRM_DIGITS

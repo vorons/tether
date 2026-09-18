@@ -213,26 +213,120 @@ local function usub(s, i, j)
     return s:sub(start, stop)
 end
 
+-- M11: split s into {t, w, sp} cells: an SGR sequence is one zero-width
+-- cell, any other codepoint is one cell of char_width() columns. Invalid
+-- UTF-8 bytes degrade to width-1 cells instead of raising.
+local function cells(s)
+    local out = {}
+    local i = 1
+    while i <= #s do
+        local _, finish = s:find("^\27%[[0-9;?]*[a-zA-Z]", i)
+        if finish then
+            out[#out + 1] = { t = s:sub(i, finish), w = 0, sp = false }
+            i = finish + 1
+        else
+            local b = s:byte(i)
+            local clen = 1
+            if b >= 0xF0 then clen = 4 elseif b >= 0xE0 then clen = 3
+            elseif b >= 0xC2 then clen = 2 end
+            if clen > 1 then
+                if i + clen - 1 > #s then clen = 1
+                else
+                    for k = i + 1, i + clen - 1 do
+                        local cb = s:byte(k)
+                        if cb < 0x80 or cb > 0xBF then clen = 1; break end
+                    end
+                end
+            end
+            local ch = s:sub(i, i + clen - 1)
+            local w = (clen == 1) and char_width(b) or 1
+            if clen > 1 then
+                local cp = utf8.codepoint(ch)
+                w = (cp and char_width(cp)) or 1
+            end
+            out[#out + 1] = { t = ch, w = w, sp = (ch == " ") }
+            i = i + clen
+        end
+    end
+    return out
+end
+
+-- M11: greedy word wrap of one paragraph (no newlines) to display width.
+-- Breaks on spaces; a token longer than the width is cut hard. Optional
+-- cont_prefix/cont_width restyle continuation lines (code blocks): lines
+-- after the first wrap to cont_width and carry the prefix.
+-- ponytail: single O(n) greedy pass, no hyphenation or widow control;
+-- upgrade to a real line-breaker only if typography ever matters here.
+local function wrap_words(para, width, cont_prefix, cont_width)
+    if width < 1 then width = 1 end
+    if cont_width and cont_width < 1 then cont_width = 1 end
+    local units = cells(para)
+    local lines = {}
+    local cur, curw, lastsp = {}, 0, nil
+    local first, drop_leading = true, false
+    local function lim() return (first or not cont_prefix) and width or cont_width end
+    local function emit()
+        local t = {}
+        for _, u in ipairs(cur) do t[#t + 1] = u.t end
+        local s = table.concat(t):gsub(" +\27", "\27"):gsub(" +$", "")
+        if s == "" and #lines > 0 then return end
+        if (not first) and cont_prefix then s = cont_prefix .. s end
+        lines[#lines + 1] = s
+        first = false
+    end
+    for _, u in ipairs(units) do
+        if u.sp and drop_leading and #cur == 0 then
+            -- separator consumed by a break; skip
+        else
+            local consume = false
+            if curw + u.w > lim() and #cur > 0 then
+                if u.sp then
+                    emit() -- line ends before the separator
+                    cur, curw, lastsp = {}, 0, nil
+                    consume = true
+                elseif lastsp and lastsp > 1 then
+                    local head, tail, tailw = {}, {}, 0
+                    for k = 1, lastsp - 1 do head[#head + 1] = cur[k] end
+                    for k = lastsp + 1, #cur do
+                        tail[#tail + 1] = cur[k]; tailw = tailw + cur[k].w
+                    end
+                    cur = head
+                    emit()
+                    cur, curw, lastsp = tail, tailw, nil
+                    for k = 1, #tail do
+                        if tail[k].sp then lastsp = k end
+                    end
+                else
+                    emit() -- hard cut inside an overlong token
+                    cur, curw, lastsp = {}, 0, nil
+                end
+                drop_leading = true
+            end
+            if not consume then
+                cur[#cur + 1] = u
+                curw = curw + u.w
+                if u.sp then lastsp = #cur else drop_leading = false end
+            end
+        end
+    end
+    if #cur > 0 or #lines == 0 then emit() end
+    return lines
+end
+
 local function wrap(text, width)
     if width < 1 then width = 1 end
     local out = {}
     for para in (text .. "\n"):gmatch("([^\n]*)\n") do
         if para == "" then
             out[#out + 1] = ""
+        elseif not _wrap_enabled then
+            -- M8/R2: wrap off → truncate with arrow marker
+            out[#out + 1] = (M._ascii_mode or M._env_ascii or _ascii)
+                and usub(para, 1, width - 1) .. ">"
+                or usub(para, 1, width - 1) .. "→"
         else
-            local line = para
-            while true do
-                local n = ulen(line)
-                if n <= width then out[#out + 1] = line; break end
-                if not _wrap_enabled then
-                    -- M8/R2: wrap off → truncate with arrow marker
-                    out[#out + 1] = (M._ascii_mode or M._env_ascii or _ascii)
-                        and usub(line, 1, width - 1) .. ">"
-                        or usub(line, 1, width - 1) .. "→"
-                    break
-                end
-                out[#out + 1] = usub(line, 1, width)
-                line = usub(line, width + 1)
+            for _, l in ipairs(wrap_words(para, width)) do
+                out[#out + 1] = l
             end
         end
     end
@@ -308,7 +402,6 @@ local function md_render(text, width, ansi_fn)
     local box = ascii and { tl = "+", tr = "+", bl = "+", br = "+", h = "-", v = "|" }
                             or { tl = "┌", tr = "┐", bl = "└", br = "┘", h = "─", v = "│" }
     local bullet = ascii and "-" or "•"
-    local cut = ascii and ">" or "→"
     local out = {}
     local lines = {}
     for line in (text .. "\n"):gmatch("([^\n]*)\n") do
@@ -320,19 +413,21 @@ local function md_render(text, width, ansi_fn)
         local line = lines[i]
         local fence = line:match("^%s*%`%`%`%s*(%w*)%s*$")
         if fence then
-            -- code block: framed, no wrap, truncate with cut marker
+            -- code block: framed, soft-wrapped with continuation indent
             local lang = fence ~= "" and (" " .. fence .. " ") or ""
             local inner = math.max(width - 4, 1)
             out[#out + 1] = box.tl .. box.h .. lang
                 .. string.rep(box.h, math.max(inner - ulen(lang), 1)) .. box.tr
             i = i + 1
+            -- continuation indent needs room; absurdly narrow frames fall
+            -- back to plain wrapping with no indent
+            local cpre, cw = "  ", inner - 2
+            if inner < 4 then cpre, cw = "", inner end
             while i <= #lines and not lines[i]:match("^%s*%`%`%`%s*$") do
-                local code_line = lines[i]
-                if ulen(code_line) > inner then
-                    code_line = usub(code_line, 1, inner - 1) .. cut
+                for _, seg in ipairs(wrap_words(lines[i], inner, cpre, cw)) do
+                    out[#out + 1] = box.v .. " " .. seg
+                        .. string.rep(" ", math.max(inner - vlen(seg), 0)) .. " " .. box.v
                 end
-                out[#out + 1] = box.v .. " " .. code_line
-                    .. string.rep(" ", math.max(inner - ulen(code_line), 0)) .. " " .. box.v
                 i = i + 1
             end
             out[#out + 1] = box.bl .. string.rep(box.h, inner + 2) .. box.br
@@ -347,10 +442,11 @@ local function md_render(text, width, ansi_fn)
                 local item = line:gsub("^%s*[%-%*]%s+", "", 1)
                 local body = md_strip_inline(item, ansi_fn)
                 local prefix = "  " .. bullet .. " "
-                local wrapped = wrap(body, math.max(width - #prefix, 1))
+                local prew = vlen(prefix)
+                local wrapped = wrap(body, math.max(width - prew, 1))
                 for wi, wl in ipairs(wrapped) do
                     out[#out + 1] = (wi == 1) and (prefix .. wl)
-                        or (string.rep(" ", #prefix) .. wl)
+                        or (string.rep(" ", prew) .. wl)
                 end
                 i = i + 1
             else
