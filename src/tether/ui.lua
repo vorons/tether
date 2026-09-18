@@ -445,17 +445,17 @@ local KEYMAP = {
 }
 M.KEYMAP = KEYMAP
 
--- Test seams: expose state table so tests can inject/inspect S fields.
+-- ============================================================
+-- State
+-- ============================================================
+local S
+-- Test seams: exposed AFTER `local S` so the closures bind the state
+-- upvalue (defined above it they would capture the global instead).
 -- Nil-safe: S is created by new_state() inside run(); before that the
 -- guards let callers pcall through instead of crashing module load.
 M._get_state = function() return S end
 M._set_error_banner = function(v) if S then S.error_banner = v end end
 M._set_overlay = function(ov, data) if S then S.overlay = ov; S.overlay_data = data end end
-
--- ============================================================
--- State
--- ============================================================
-local S
 local debug_log_fh = nil
 local function debug_log(msg)
     if not debug_log_fh then return end
@@ -852,9 +852,6 @@ local function render_entry(e, width)
             out[#out + 1] = "  " .. dim(l)
         end
         return out
-    elseif role == "error" then
-        return with_prefix(red("✗") .. " ", 2,
-            wrap(e.text or "", math.max(width - 2, 1)))
     elseif role == "system" then
         return { dim(e.text or "") }
     elseif role == "tool" then
@@ -886,16 +883,6 @@ local function render_entry(e, width)
                 out[#out + 1] = "  " .. l
             end
         end
-        return out
-    elseif role == "diff" then
-        local out = { dim("┌ " .. (e.path or "diff")) }
-        for _, l in ipairs(wrap(e.text or "", math.max(width - 4, 1))) do
-            local c = l:sub(1, 1)
-            if c == "+" then out[#out + 1] = green("│ " .. l)
-            elseif c == "-" then out[#out + 1] = red("│ " .. l)
-            else out[#out + 1] = dim("│ " .. l) end
-        end
-        out[#out + 1] = dim("└" .. string.rep("─", math.max(width - 2, 0)))
         return out
     end
     return {}
@@ -1127,11 +1114,12 @@ local function render_status(L)
         parts[#parts + 1] = (S.tokens_estimated and "≈" or "") ..
             M.token_usage(S.tokens_used, S.tokens_max, summarize_at)
     end
-    -- M8/R3: scroll indicator — hidden lines below when user scrolled up
+    -- scroll indicator (design §6: `↓ новые`) — hidden lines below
+    -- when the user scrolled up
     if S.user_scrolled then
         local hidden = scroll_indicator(#display_lines(), S.scroll, L.transcript_h)
         if hidden and hidden > 0 then
-            parts[#parts + 1] = "⏸ +" .. hidden
+            parts[#parts + 1] = "↓ новые +" .. hidden
         end
     end
     if not ((S.cfg.ui and S.cfg.ui.mouse == "off") or (M._ascii_mode or M._env_ascii or _ascii)) then
@@ -1374,6 +1362,9 @@ local function start_new_session(banner)
     end
     if S.cfg then S.cfg._session_id = S.session_id end
     if agent and agent.clear then agent.clear() end
+    -- a new session knows nothing of the old transcript — drop it too,
+    -- otherwise the screen shows messages the agent never saw
+    S.transcript = {}
     S.transcript[#S.transcript + 1] = { role = "system", text = banner or "↻ Новая сессия" }
     bump_transcript()
 end
@@ -1461,6 +1452,22 @@ end
 -- ============================================================
 -- Agent integration
 -- ============================================================
+-- Transcript lifecycle: agent history -> visible entries. Only user text
+-- and assistant text are shown; system prompts, tool-call scaffolding
+-- and tool results stay in the agent history, not on screen.
+local function transcript_entries(messages)
+    local out = {}
+    for _, m in ipairs(messages or {}) do
+        if m.role == "user" then
+            out[#out + 1] = { role = "user", text = tostring(m.content or "") }
+        elseif m.role == "assistant" and type(m.content) == "string" then
+            out[#out + 1] = { role = "assistant", text = m.content }
+        end
+    end
+    return out
+end
+M.transcript_entries = transcript_entries
+
 local function handle_agent_event(ev)
     if not ev or not ev.type then return end
     if ev.type == "text_delta" then
@@ -1890,6 +1897,9 @@ local function handle_overlay_key(k)
                 S.overlay = nil; S.overlay_data = nil
                 -- §6.8 /resume: actually load the picked session
                 agent.clear()
+                -- the picked session replaces the visible transcript;
+                -- appending would mix two conversations on one screen
+                S.transcript = {}
                 local messages = session.resume(it.id)
                 if messages then
                     for _, msg in ipairs(messages) do
@@ -2117,6 +2127,21 @@ function M.run()
         local ok, id = pcall(session.new_session, S.workspace, S.model_name)
         S.session_id = ok and id or "?"
         S.cfg._session_id = S.session_id
+    end
+
+    -- Resume (-r): app.lua restored the agent history, but the transcript
+    -- starts empty — seed it so the user sees what the model knows.
+    if agent and agent.get_history then
+        local okh, hist = pcall(agent.get_history)
+        if okh and hist then
+            for _, e in ipairs(transcript_entries(hist)) do
+                S.transcript[#S.transcript + 1] = e
+            end
+            if #S.transcript > 0 then
+                S.transcript[#S.transcript + 1] =
+                    { role = "system", text = "↻ сессия возобновлена" }
+            end
+        end
     end
 
     -- M8/R8: mouse tracking is emitted dynamically on state transitions

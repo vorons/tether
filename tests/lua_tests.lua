@@ -1466,6 +1466,163 @@ do
   print("T52 config providers: OK")
 end
 
+-- T53: transcript lifecycle — resume restore, /new + /resume clear
+do
+  local ui = dofile("src/tether/ui.lua")
+  -- pure helper: agent history -> transcript entries (user + text only,
+  -- never system/tool internals)
+  assert_notnil(ui.transcript_entries, "T53 transcript_entries exported")
+  local entries = ui.transcript_entries({
+    { role = "system", content = "sys prompt" },
+    { role = "user", content = "hi" },
+    { role = "assistant", content = "hello" },
+    { role = "assistant", content = { tool_calls = { { id = "c1", type = "function",
+        ["function"] = { name = "read", arguments = "{}" } } } } },
+    { role = "tool", tool_call_id = "c1", content = "out" },
+  })
+  assert_eq(#entries, 2, "T53 only user + text assistant restored")
+  assert_eq(entries[1].role, "user", "T53 restored user role")
+  assert_eq(entries[1].text, "hi", "T53 restored user text")
+  assert_eq(entries[2].text, "hello", "T53 restored assistant text")
+  print("T53 transcript_entries: OK")
+end
+
+-- T53b: harness for run()-level transcript checks (quit immediately or
+-- after scripted input). Returns the ui module and its post-run S.
+local function run_ui_with(bytes, stubs)
+  local names = { "tether", "config", "session", "agent", "api" }
+  local originals, preload = {}, {}
+  for _, n in ipairs(names) do
+    originals[n] = _G[n]; preload[n] = package.preload[n]
+  end
+  local qi = 0
+  _G.tether = {
+    write = function() end,
+    resize_requested = function() return false end,
+    get_terminal_size = function() return { width = 80, height = 24 } end,
+    getcwd = function() return "/tmp" end,
+    read_char = function()
+      qi = qi + 1
+      if qi <= #bytes then return bytes[qi] end
+      return 17
+    end,
+    read_char_nb = function()
+      qi = qi + 1
+      if qi <= #bytes then return bytes[qi] end
+      return nil
+    end,
+  }
+  _G.config = { load = function()
+      return { model = "test", workspace = "/tmp", ui = { input_max_lines = 8 } }
+    end,
+    api_key = function() return "" end }
+  _G.session = stubs.session or { new_session = function() return "sid" end }
+  _G.agent = stubs.agent or { turn = function() return true end,
+    get_history = function() return {} end }
+  _G.api = { list_models = function() return {} end }
+  package.preload.tether = function() return _G.tether end
+  package.preload.config = function() return _G.config end
+  package.preload.session = function() return _G.session end
+  package.preload.agent = function() return _G.agent end
+  package.preload.api = function() return _G.api end
+  local ui_mod
+  local ok, err = pcall(function()
+    ui_mod = assert(loadfile("src/tether/ui.lua"))()
+    ui_mod.run()
+  end)
+  local S = ui_mod and ui_mod._get_state and ui_mod._get_state()
+  for _, n in ipairs(names) do _G[n] = originals[n]; package.preload[n] = preload[n] end
+  if not ok then error("T53 harness: " .. tostring(err), 0) end
+  return ui_mod, S
+end
+
+-- T53c: -r startup seeds the transcript from restored agent history
+do
+  local _, S = run_ui_with({ 17 }, { agent = {
+    turn = function() return true end,
+    get_history = function()
+      return {
+        { role = "system", content = "sys" },
+        { role = "user", content = "old question" },
+        { role = "assistant", content = "old answer" },
+      }
+    end,
+  } })
+  local found_user, found_text = false, false
+  for _, e in ipairs(S.transcript) do
+    if e.role == "user" and e.text == "old question" then found_user = true end
+    if e.role == "assistant" and e.text == "old answer" then found_text = true end
+  end
+  assert_true(found_user, "T53c startup restores user message")
+  assert_true(found_text, "T53c startup restores assistant text")
+  print("T53c startup restore: OK")
+end
+
+-- T53d: /new clears the transcript before the session banner
+do
+  local function str_bytes(s)
+    local b = {}
+    for i = 1, #s do b[#b + 1] = s:byte(i) end
+    return b
+  end
+  local bytes = {}
+  for _, b in ipairs(str_bytes("hello")) do bytes[#bytes + 1] = b end
+  bytes[#bytes + 1] = 13
+  for _, b in ipairs(str_bytes("/new")) do bytes[#bytes + 1] = b end
+  bytes[#bytes + 1] = 13
+  bytes[#bytes + 1] = 17
+  local _, S = run_ui_with(bytes, {})
+  assert_eq(#S.transcript, 1, "T53d /new leaves only the banner")
+  assert_eq(S.transcript[1] and S.transcript[1].role, "system", "T53d banner is system")
+  print("T53d /new clears: OK")
+end
+
+-- T53e: /resume replaces the transcript instead of appending
+do
+  local function str_bytes(s)
+    local b = {}
+    for i = 1, #s do b[#b + 1] = s:byte(i) end
+    return b
+  end
+  local bytes = {}
+  for _, b in ipairs(str_bytes("hello")) do bytes[#bytes + 1] = b end
+  bytes[#bytes + 1] = 13
+  for _, b in ipairs(str_bytes("/resume")) do bytes[#bytes + 1] = b end
+  bytes[#bytes + 1] = 13
+  bytes[#bytes + 1] = 13 -- pick the first session in the overlay
+  bytes[#bytes + 1] = 17
+  local agent_calls = { clear = 0 }
+  local _, S = run_ui_with(bytes, {
+    session = {
+      new_session = function() return "sid" end,
+      session_files = function()
+        return { { id = "abc123", ts = "2026-01-01", first_line = "x" } }
+      end,
+      resume = function()
+        return {
+          { role = "user", content = "restored q" },
+          { role = "assistant", content = "restored a" },
+        }
+      end,
+    },
+    agent = {
+      turn = function() return true end,
+      get_history = function() return {} end,
+      clear = function() agent_calls.clear = agent_calls.clear + 1 end,
+      add_user = function() end,
+      add_assistant = function() end,
+      add_tool_result = function() end,
+    },
+  })
+  local texts = {}
+  for _, e in ipairs(S.transcript) do texts[#texts + 1] = (e.role or "?") .. ":" .. tostring(e.text or "") end
+  local joined = table.concat(texts, "\n")
+  assert_true(joined:find("restored q", 1, true) ~= nil, "T53e resumed user shown")
+  assert_true(joined:find("restored a", 1, true) ~= nil, "T53e resumed answer shown")
+  assert_true(joined:find("hello", 1, true) == nil, "T53e old transcript cleared")
+  print("T53e /resume replaces: OK")
+end
+
 print(string.format("PASS: %d/%d", passed, passed + failed))
 if failed > 0 then
     os.exit(1)

@@ -66,6 +66,9 @@ active provider; an unknown `provider` warns on stderr and behaves as
 
 `/clear /compact /model /resume /new /quit`
 
+- `/clear` clears the transcript display only — the agent keeps its
+  history, so the next turn still sees the full context. `/new`
+  starts a truly fresh session (history and transcript are dropped).
 - `/resume` opens a picker of the last 10 sessions for the workspace.
 - Confirmation menu for `write`/`patch`/`run` outside workspace: `[y] once`,
   `[a] session`, `[A] always` (persists to `~/.tether/auto_approve.lua`),
