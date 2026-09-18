@@ -3,3 +3,5 @@ build/
 *.o
 src/host/embed.c
 /tether
+.opencode/
+.pi/
