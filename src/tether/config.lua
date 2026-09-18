@@ -7,6 +7,22 @@ local function default_config()
         api_key_env = "OPENAI_API_KEY",
         base_url = "https://api.openai.com/v1",
         model = "gpt-4o-mini",
+        providers = {
+            openai = {
+                api_key_env = "OPENAI_API_KEY",
+                base_url = "https://api.openai.com/v1",
+            },
+            anthropic = {
+                api_key_env = "ANTHROPIC_API_KEY",
+                base_url = "https://api.anthropic.com",
+                model = "claude-sonnet-4-20250514",
+            },
+            gemini = {
+                api_key_env = "GEMINI_API_KEY",
+                base_url = "https://generativelanguage.googleapis.com",
+                model = "gemini-2.5-flash",
+            },
+        },
         workspace = nil,
         allow_outside_workspace = false,
         auto_approve = {},
@@ -22,7 +38,7 @@ local function default_config()
             wrap = true,
             collapse = { read = 20, list = 30, grep = 15 },
             input_max_lines = 8,
-            alt_screen = false, -- M8/R9: false keeps native scrollback
+            alt_screen = true, -- T48: fullscreen TUI; "false" keeps native scrollback
         },
         tools = { run_shell = { timeout = 120 } },
         system_prompt = nil,
@@ -51,9 +67,14 @@ function M.load(path)
     -- so `if ok and chunk` was never true and user configs were silently
     -- ignored (theme/alt_screen/mouse had no effect).
     local chunk, load_err = loadfile(path or os.getenv("HOME") .. "/.tether/config.lua")
+    -- providers-table resolution needs the RAW user table (not the merged
+    -- cfg): provider defaults must not clobber an explicit legacy top-level
+    -- value such as a custom OpenAI-compatible base_url.
+    local user_tbl = nil
     if chunk then
         local loaded, tbl = pcall(chunk)
         if loaded and type(tbl) == "table" then
+            user_tbl = tbl
             deep_merge(cfg, tbl)
         elseif not loaded then
             io.stderr:write("tether: config error: " .. tostring(tbl) .. "\n")
@@ -63,6 +84,17 @@ function M.load(path)
         if not load_err:find("No such file", 1, true) then
             io.stderr:write("tether: config load: " .. tostring(load_err) .. "\n")
         end
+    end
+    if user_tbl then
+        local p = cfg.provider or "openai"
+        local up = (user_tbl.providers and user_tbl.providers[p]) or {}
+        local def_p = (default_config().providers or {})[p] or {}
+        cfg.api_key_env = up.api_key_env or user_tbl.api_key_env
+            or def_p.api_key_env or cfg.api_key_env
+        cfg.base_url = up.base_url or user_tbl.base_url
+            or def_p.base_url or cfg.base_url
+        cfg.model = up.model or user_tbl.model
+            or def_p.model or cfg.model
     end
     return cfg
 end

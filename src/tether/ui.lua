@@ -422,8 +422,10 @@ local KEYMAP = {
     ["ctrl+u"]     = "kill to start",
     ["ctrl+w"]     = "kill word",
     ["ctrl+k"]     = "kill to end",
-    ["up"]         = "history prev / scroll",
-    ["down"]       = "history next / scroll",
+    ["ctrl+up"]    = "history prev",
+    ["ctrl+down"]  = "history next",
+    ["up"]         = "scroll up / cursor up",
+    ["down"]       = "scroll down / cursor down",
     ["pgup"]       = "scroll up",
     ["pgdn"]       = "scroll down",
     ["home"]       = "jump to top (input empty)",
@@ -442,6 +444,13 @@ local KEYMAP = {
     ["n"]          = "confirm deny",
 }
 M.KEYMAP = KEYMAP
+
+-- Test seams: expose state table so tests can inject/inspect S fields.
+-- Nil-safe: S is created by new_state() inside run(); before that the
+-- guards let callers pcall through instead of crashing module load.
+M._get_state = function() return S end
+M._set_error_banner = function(v) if S then S.error_banner = v end end
+M._set_overlay = function(ov, data) if S then S.overlay = ov; S.overlay_data = data end end
 
 -- ============================================================
 -- State
@@ -1080,14 +1089,29 @@ M.SPINNER_ASCII = SPINNER_ASCII
 -- M9: hint row removed per user request (spinner with elapsed seconds still
 -- shown in the status line while busy)
 
--- M9: token usage as plain text (bar removed per user request); colors kept:
--- green <summarize_at, yellow >=summarize_at (default 70%%), red >=90%%.
--- Clamped to 0..100. Exported for unit tests.
+-- M9: token usage as plain text; colors kept: green <summarize_at, yellow
+-- >=summarize_at (default 70%%), red >=90%%. Clamped to 0..100.
+-- T47: user-requested format "4.1k/32k (13%)" — used/budget/percent.
 function M.token_pct(pct, summarize_at)
     summarize_at = summarize_at or 0.7
     if pct < 0 then pct = 0 elseif pct > 1 then pct = 1 end
     local color = pct >= 0.9 and red or (pct >= summarize_at and yellow or green)
     return color(string.format("%d%%", math.floor(pct * 100)))
+end
+
+-- T47: "4.1k/32k (13%)" — used over budget (KiB-style /1024, so the default
+-- 32768 budget reads as "32k"), colored by the same thresholds.
+function M.token_usage(used, max_tokens, summarize_at)
+    if type(used) ~= "number" or used < 0 then used = 0 end
+    if type(max_tokens) ~= "number" or max_tokens <= 0 then max_tokens = 1024 end
+    local pct = math.min(used / max_tokens, 1)
+    local color = pct >= 0.9 and red or (pct >= (summarize_at or 0.7) and yellow or green)
+    local k = function(n)
+        local s = string.format("%.1fk", n / 1024)
+        return (s:gsub("%.0k$", "k"))
+    end
+    return color(string.format("%s/%s (%d%%)", k(used), k(max_tokens),
+        math.floor(pct * 100 + 0.5)))
 end
 
 local function render_status(L)
@@ -1098,11 +1122,10 @@ local function render_status(L)
     end
     local parts = { S.model_name or "?", ws }
     if S.tokens_max and S.tokens_max > 0 then
-        -- M9: plain-text token percent, colored by summarize thresholds
-        local pct = S.tokens_used / S.tokens_max
+        -- T47: "4.2k/32k (13%)" — value + budget + percent
         local summarize_at = (S.cfg.context and S.cfg.context.summarize_at) or 0.7
         parts[#parts + 1] = (S.tokens_estimated and "≈" or "") ..
-            M.token_pct(pct, summarize_at)
+            M.token_usage(S.tokens_used, S.tokens_max, summarize_at)
     end
     -- M8/R3: scroll indicator — hidden lines below when user scrolled up
     if S.user_scrolled then
@@ -1400,7 +1423,7 @@ local function execute_command(cmd)
         if not ok then models = nil end
         if not (models and #models > 0) then
             models = {}
-            for _, m in ipairs(api.list_models()) do
+            for _, m in ipairs(api.list_models(S.cfg)) do
                 models[#models + 1] = { id = m, name = m }
             end
         end
@@ -1579,13 +1602,22 @@ local function commit_input()
 end
 
 -- M8/R8: emit ?1000h/?1006h only on state transitions (not every frame)
+-- T46 regression: each fragment needs its own ESC — "[?1000h[?1006h" emitted
+-- a literal "[?1006h" into the input field when the palette opened.
+function M.mouse_tracking_seqs(enable)
+    if enable then
+        return ESC .. "[?1000h" .. ESC .. "[?1006h"
+    end
+    return ESC .. "[?1000l" .. ESC .. "[?1006l"
+end
+
 local function mouse_update_tracking()
     local mode = (S.cfg.ui and S.cfg.ui.mouse) or "auto"
     local want = M.mouse_wants(mode, { confirmation = S.confirmation ~= nil,
                                        palette_active = S.palette_active })
     if want ~= S.mouse_enabled then
         S.mouse_enabled = want
-        w(ESC .. (want and "[?1000h[?1006h" or "[?1000l[?1006l"))
+        w(M.mouse_tracking_seqs(want))
     end
 end
 
@@ -1610,20 +1642,22 @@ local function handle_special(k)
     elseif k.name == "end" then move_line_end()
     elseif k.name == "delete" then input_delete()
     elseif k.name == "up" then
-        if S.input == "" then history_prev()
-        else
-            if not move_cursor_up() then
-                S.scroll = S.scroll + 1
-                S.user_scrolled = true
-            end
+        -- Empty input: scroll the transcript, not history (history is
+        -- now Ctrl+Up / Ctrl+Down). Non-empty: move cursor or scroll at edge.
+        if S.input == "" then
+            S.scroll = S.scroll + 1
+            S.user_scrolled = true
+        elseif not move_cursor_up() then
+            S.scroll = S.scroll + 1
+            S.user_scrolled = true
         end
     elseif k.name == "down" then
-        if S.input == "" then history_next()
-        else
-            if not move_cursor_down() then
-                S.scroll = math.max(0, S.scroll - 1)
-                if S.scroll == 0 then S.user_scrolled = false end
-            end
+        if S.input == "" then
+            S.scroll = math.max(0, S.scroll - 1)
+            if S.scroll == 0 then S.user_scrolled = false end
+        elseif not move_cursor_down() then
+            S.scroll = math.max(0, S.scroll - 1)
+            if S.scroll == 0 then S.user_scrolled = false end
         end
     elseif k.name == "pgup" then
         S.scroll = S.scroll + math.max(1, math.floor(S.h / 2))
@@ -1831,6 +1865,15 @@ local function handle_overlay_key(k)
         bump_transcript()
         return
     end
+    -- Error overlay: Esc OR Enter dismisses. commit_input clears
+    -- S.error_banner, so after dismissal a new message can be sent.
+    if ov == "error" then
+        if k.kind == "enter" then
+            S.overlay = nil; S.overlay_data = nil
+            bump_transcript()
+        end
+        return
+    end
     if ov == "resume" then
         local d = S.overlay_data or {}
         if k.kind == "special" then
@@ -1970,6 +2013,19 @@ local function handle_key(k)
         return
     end
 
+    -- Ctrl+Up / Ctrl+Down — history recall. Modifier encodings: kitty/
+    -- modifyOtherKeys "5;A", X11 "1;5A", bare letter when the terminal
+    -- drops the modifier. (Ctrl+Shift+C was already caught above.)
+    if k.kind == "special" and (k.name == "up" or k.name == "down") then
+        local params = k.params or ""
+        local is_ctrl = params:match(";5%a$") or params:match("^1;5%a$")
+            or params:match("^%a$")
+        if is_ctrl then
+            if k.name == "up" then history_prev() else history_next() end
+            return
+        end
+    end
+
     -- palette mode
     if S.palette_active then
         if k.kind == "enter" then
@@ -2065,8 +2121,9 @@ function M.run()
 
     -- M8/R8: mouse tracking is emitted dynamically on state transitions
     -- (mouse_update_tracking in the main loop), not statically at startup.
-    -- M8/R9: alt-screen opt-in (cfg.ui.alt_screen, default false — native
-    -- scrollback preserved); paired leave on exit below.
+    -- T48: alt-screen on by default (fullscreen TUI; shell scrollback no
+    -- longer bleeds through on transcript scroll) — cfg.ui.alt_screen=false
+    -- opts back out; paired leave on exit below.
     if S.cfg.ui and S.cfg.ui.alt_screen then
         w(ESC .. "[?1049h")
     end

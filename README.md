@@ -27,6 +27,38 @@ The model list depends on your OpenAI-compatible provider; `/model` falls
 back to a static list — set `model = "..."` in `~/.tether/config.lua` for
 direct control.
 
+## Providers
+
+`tether` speaks three APIs through one canonical event stream
+(`src/tether/providers/`): `openai` (default, any OpenAI-compatible
+`/chat/completions` endpoint), `anthropic` (Claude Messages API) and
+`gemini` (Google `streamGenerateContent` with `generateContent`
+fallback). The agent loop, tools and confirmations are identical on
+all providers.
+
+```lua
+-- ~/.tether/config.lua
+return {
+  provider = "anthropic", -- "openai" | "anthropic" | "gemini"
+  providers = {
+    openai    = { api_key_env = "OPENAI_API_KEY" }, -- default base_url kept
+    anthropic = { api_key_env = "ANTHROPIC_API_KEY",
+                  model = "claude-sonnet-4-20250514" },
+    gemini    = { api_key_env = "GEMINI_API_KEY",
+                  model = "gemini-2.5-flash" },
+  },
+}
+```
+
+Resolution per provider: `providers.<name>.{api_key_env,base_url,model}`
+wins, otherwise the legacy top-level `api_key_env`/`base_url`/`model`
+(which stay the `openai` defaults, so custom OpenAI-compatible proxies
+keep working untouched). `--model/-m` and `/model` operate on the
+active provider; an unknown `provider` warns on stderr and behaves as
+`openai`. Keys never appear in argv: OpenAI/Anthropic go through a
+`chmod 600` header file (`x-api-key` for Anthropic), Gemini uses the
+`?key=` query convention without logging the command line.
+
 ```sh
 ```
 
@@ -43,14 +75,15 @@ direct control.
 
 - **Markdown-lite rendering** of assistant replies: code blocks in a frame,
   inline code, bold/italic, lists, headings.
-- **Token usage** in the status line as plain text, colored by threshold
-  (green → yellow at summarize threshold → red at 90%+).
+- **Token usage** in the status line as `4.1k/32k (13%)` — used over budget,
+  colored by threshold (green → yellow at summarize threshold → red at 90%+).
 - **Mouse modes** (`ui.mouse` in `~/.tether/config.lua`):
   `"auto"` (default — mouse only over menus, native text selection works),
   `"on"` (always), `"off"` (never), `"selection"` (off + manual copy).
   With mouse on, hold `Shift` while dragging to use terminal-native selection.
-- **Alt-screen** opt-in: `ui.alt_screen = true` repaints in the alternate
-  screen buffer; default `false` keeps native terminal scrollback.
+- **Alt-screen** by default (`ui.alt_screen = true`): the TUI repaints in the
+  alternate screen buffer, so shell scrollback stays intact behind it;
+  `false` opts back into in-place rendering.
 - **ASCII fallback**: on `TERM=dumb`/`NO_COLOR` all glyphs degrade to ASCII.
 
 ## Architecture

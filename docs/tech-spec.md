@@ -31,13 +31,13 @@ JSONL at `~/.tether/sessions/<id>.jsonl`. One event per line. `-r` picks latest 
 ## Key decisions
 
 - **Single binary (M6, done):** Lua modules embedded as C arrays via `tools/embed.lua` generator. No external Lua install needed; binary is standalone.
-- **OpenAI-compatible first:** Anthropic/Google adapters share the same `stream()`/`list_models()` contract.
+- **Providers (M10, done):** `api.lua` is a dispatcher over `src/tether/providers/{openai,anthropic,gemini}.lua` sharing one transport (curl pipe, header/body temp files, retry/backoff, error surfacing). Every adapter emits the same canonical events, so `agent.lua` has no provider branches. `cfg.provider` selects the adapter (`openai` default, unknown warns + falls back); per-provider `api_key_env`/`base_url`/`model` resolve via the `providers` table with legacy top-level keys as `openai` defaults.
 - **Retries:** `cfg.retries` attempts (default 3), exponential backoff (0.5/1/2s), only on 429/5xx/empty/network. Respects `Retry-After`. No retry on 4xx. Emits `retry` event.
 - **SSE pipe reading:** C `read_line` accumulates unbounded lines (no 8KB cap); empty SSE lines surface as `""` (event boundary), `nil` only at real EOF; the Lua loop skips empty lines and continues until `pipe_eof`.
 - **Confirmation policy:** `write`, `patch`, `run` outside workspace require user confirmation. `[A] always` persists to `~/.tether/config.lua` `auto_approve`.
 - **Token budget:** `context.max_tokens` (default 32768); summarize at 70% via `context.summarize_at`.
 - **Compression boundary:** retained tool results include their preceding assistant tool-call message.
-- **UI regions:** transcript (flex) / error banner / input / palette / status line. No header, no hint row (M9).
+- **UI regions:** transcript (flex) / error banner / input / palette / status line. No header, no hint row (M9). Alt-screen on by default (T48) — `cfg.ui.alt_screen=false` opts out; status line shows context usage as `4.1k/32k (13%)` (T47).
 - **Input modes:** bracketed paste (`ESC[200~…ESC[201~`); mouse SGR (`[?1006h`, wheel → transcript scroll, click → palette/confirmation select); keyboard protocol detection (`TERM_PROGRAM`/`TERM` → kitty `ESC[?u` + `Ctrl+Shift+C` copy, modifyOtherKeys/VTE/X11 → `Ctrl+J` newline fallback); `Ctrl+C` double-tap quit. OSC 52 clipboard with pbcopy/xclip/wl-copy fallback.
 - **ASCII mode:** `NO_COLOR=1` or `TERM=dumb` strips ANSI codes, replaces Unicode glyphs with ASCII equivalents.
 - **System prompt:** configurable via `config.system_prompt` (string or file path).
@@ -57,4 +57,4 @@ JSONL at `~/.tether/sessions/<id>.jsonl`. One event per line. `-r` picks latest 
 
 ## Deferred (post-MVP)
 
-Anthropic/Google adapters, PTY, background tasks, git integration, LSP, multi-session, themes, vector memory, drag selection.
+PTY, background tasks, git integration, LSP, multi-session, themes, vector memory, drag selection.

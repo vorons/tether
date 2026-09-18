@@ -871,6 +871,55 @@ do
   print("T37 mouse states: OK")
 end
 
+-- T46: mouse mode escape fragments must each start with a real ESC byte.
+-- Regression: "[?1000h[?1006h" emitted only one ESC, so the second fragment
+-- landed in the input field as literal "[?1006h" text.
+do
+  local ui = dofile("src/tether/ui.lua")
+  if not ui.mouse_tracking_seqs then
+    assert_notnil(nil, "T46 ui.mouse_tracking_seqs exported")
+  else
+  local on = ui.mouse_tracking_seqs(true)
+  assert_eq(on, "\27[?1000h\27[?1006h", "T46 enable = two ESC-prefixed CSI sequences")
+  for seq in on:gmatch("\27%[?%d+l?h?") do
+    assert_true(seq:sub(1, 2) == "\27[", "T46 fragment starts with ESC: " .. (seq:gsub("\27", "ESC")))
+  end
+  assert_eq(#on:gsub("[^\27]", ""), 2, "T46 enable contains exactly 2 ESC bytes")
+  local off = ui.mouse_tracking_seqs(false)
+  assert_eq(#off:gsub("[^\27]", ""), 2, "T46 disable contains exactly 2 ESC bytes")
+  end
+  print("T46 mouse escape fragments: OK")
+end
+
+-- T47: token usage renders as "4.1k/32k (13%)" with value + budget + percent.
+do
+  local ui = dofile("src/tether/ui.lua")
+  if not ui.token_usage then
+    assert_notnil(nil, "T47 ui.token_usage exported")
+  else
+  local strip = function(s) return (s:gsub("\27%[[0-9;]*m", "")) end
+  assert_eq(strip(ui.token_usage(4200, 32768)), "4.1k/32k (13%)", "T47 plain text usage")
+  assert_eq(strip(ui.token_usage(0, 32768)), "0k/32k (0%)", "T47 zero usage")
+  assert_eq(strip(ui.token_usage(32768, 32768)), "32k/32k (100%)", "T47 full budget")
+  assert_eq(strip(ui.token_usage(819, 32768)), "0.8k/32k (2%)", "T47 sub-k formats with decimal")
+  assert_eq(strip(ui.token_usage(-5, 32768)), "0k/32k (0%)", "T47 negative clamps to zero")
+  -- thresholds still colored: green < summarize_at, yellow >=, red >= 90%
+  assert_true(ui.token_usage(4200, 32768):find("32m", 1, true) ~= nil, "T47 green below threshold")
+  assert_true(ui.token_usage(24000, 32768):find("33;1", 1, true) ~= nil, "T47 yellow above summarize_at")
+  assert_true(ui.token_usage(31000, 32768):find("31;1", 1, true) ~= nil, "T47 red near full")
+  end
+  print("T47 token_usage: OK")
+end
+
+-- T48: alt-screen default — ui.mouse_wants stays; config default enables the
+-- alternate buffer so shell scrollback no longer shows through on scroll.
+do
+  local cfg = dofile("src/tether/config.lua")
+  local d = cfg.load("/nonexistent/tether-config.lua")
+  assert_eq(d.ui.alt_screen, true, "T48 alt_screen defaults to true (fullscreen TUI)")
+  print("T48 alt_screen default: OK")
+end
+
 -- T38: dead cfg.ui keys wired (M8 follow-up): ascii/thinking/collapse/kb_protocol
 do
   local ui = dofile("src/tether/ui.lua")
@@ -1080,6 +1129,342 @@ with_modules(base_env, function(mods)
   assert_eq(ui.vlen("abc"), 3, "T45 vlen ascii identity")
   print("T45 cursor display columns: OK")
 end)
+
+-- T49: TUI input/history/error fixes (change fix-tui-input-history-error)
+do
+  local ui = dofile("src/tether/ui.lua")
+
+  -- 5.1: keymap reflects new scroll-vs-history bindings
+  local km = ui.KEYMAP
+  assert_eq(km["ctrl+up"], "history prev", "T49 ctrl+up = history prev")
+  assert_eq(km["ctrl+down"], "history next", "T49 ctrl+down = history next")
+  assert_eq(km["up"], "scroll up / cursor up", "T49 up = scroll/cursor")
+  assert_eq(km["down"], "scroll down / cursor down", "T49 down = scroll/cursor")
+end
+
+-- T49b: Up/Down with empty input scrolls, does NOT insert history.
+do
+  local names = {"tether", "config", "session", "agent", "api"}
+  local originals, preload = {}, {}
+  for _, n in ipairs(names) do
+    originals[n] = _G[n]; preload[n] = package.preload[n]
+  end
+
+  -- Deliver a byte queue: Ctrl+Up (ESC [ 5 ; A), then plain Up (ESC [ A),
+  -- then Ctrl+Q (17) to quit. read_char_nb must feed the non-blocking path
+  -- that read_key uses for the byte after ESC.
+  local q = {}
+  local function push(...) for _, b in ipairs{...} do q[#q + 1] = b end end
+  push(27, 91, 53, 59, 65)  -- ESC [ 5 ; A  (Ctrl+Up, kitty params "5")
+  push(27, 91, 65)          -- ESC [ A      (plain Up)
+  push(17)                   -- Ctrl+Q
+  local qi = 0
+  _G.tether = {
+    write = function() end,
+    resize_requested = function() return false end,
+    get_terminal_size = function() return { width = 80, height = 24 } end,
+    getcwd = function() return "/tmp" end,
+    read_char = function()
+      qi = qi + 1
+      if qi <= #q then return q[qi] end
+      return 17
+    end,
+    read_char_nb = function()
+      qi = qi + 1
+      if qi <= #q then return q[qi] end
+      return nil
+    end,
+  }
+  _G.config = { load = function() return { model = "test", workspace = "/tmp", ui = { input_max_lines = 8 } } end,
+    api_key = function() return "" end }
+  _G.session = { new_session = function() return "sid" end }
+  _G.agent = { turn = function(_, _, _, on_ev) on_ev({ type = "text_delta", text = "ok" }); return true end }
+  _G.api = { list_models = function() return {} end }
+  package.preload.tether = function() return _G.tether end
+  package.preload.config = function() return _G.config end
+  package.preload.session = function() return _G.session end
+  package.preload.agent = function() return _G.agent end
+  package.preload.api = function() return _G.api end
+
+  local ok, err = pcall(function()
+    local ui_mod = assert(loadfile("src/tether/ui.lua"))()
+    local function upvalue(fn, want)
+      local i = 1
+      while true do
+        local name, val = debug.getupvalue(fn, i)
+        if not name then return nil end
+        if name == want then return val end
+        i = i + 1
+      end
+    end
+    ui_mod.run()
+    local S = upvalue(ui_mod.run, "S")
+    -- input must remain empty: neither scroll nor ctrl-up inserted text
+    assert_eq(S.input, "", "T49b input empty after up/ctrl-up with empty field")
+  end)
+
+  for _, n in ipairs(names) do _G[n] = originals[n]; package.preload[n] = preload[n] end
+  if not ok then error("T49b: " .. tostring(err), 0) end
+  print("T49b scroll not insert: OK")
+end
+
+-- T50: providers — anthropic/gemini mapping, dispatch fallback, config resolution
+do
+  local anthropic = assert(loadfile("src/tether/providers/anthropic.lua"))()
+  local gemini = assert(loadfile("src/tether/providers/gemini.lua"))()
+  local openai = assert(loadfile("src/tether/providers/openai.lua"))()
+
+  -- shared tool schema exists once (openai format), others convert it
+  local schema = openai.tools_schema()
+  assert_true(#schema >= 7, "T50 openai tools schema has 7 tools")
+  assert_eq(schema[1].name, "read", "T50 first tool is read")
+
+  -- auth header content per provider (never assert key values, only shape)
+  local ohl = openai.header_lines("k")
+  assert_eq(#ohl, 1, "T50 openai one header line")
+  assert_true(ohl[1]:find("Authorization: Bearer", 1, true) ~= nil, "T50 openai bearer")
+  local ahl = anthropic.header_lines("k")
+  assert_eq(#ahl, 2, "T50 anthropic two header lines")
+  assert_true(ahl[1] == "x-api-key: k", "T50 anthropic x-api-key")
+  assert_true(ahl[2]:find("anthropic-version", 1, true) ~= nil, "T50 anthropic version")
+  for _, ln in ipairs(ahl) do
+    assert_true(ln:find("Authorization", 1, true) == nil, "T50 anthropic no bearer")
+  end
+  assert_eq(#gemini.header_lines("k"), 0, "T50 gemini key travels via ?key=, not headers")
+
+  -- Anthropic build_request: system extracted, tool_use/tool_result blocks
+  local hist = {
+    { role = "system", content = "sys" },
+    { role = "user", content = "read it" },
+    { role = "assistant", content = { tool_calls = { { id = "toolu_9", type = "function",
+        ["function"] = { name = "read", arguments = '{\\"path\\":\\"f.lua\\"}' } } } } },
+    { role = "tool", tool_call_id = "toolu_9", content = "5 x" },
+  }
+  local abody = anthropic.build_request(hist, "claude-x", 1024)
+  assert_true(abody:find('"system":"sys"', 1, true) ~= nil, "T50 anthropic system field")
+  assert_true(abody:find('"type":"tool_use"', 1, true) ~= nil, "T50 anthropic tool_use block")
+  assert_true(abody:find('"type":"tool_result"', 1, true) ~= nil, "T50 anthropic tool_result block")
+  assert_true(abody:find('"input":{"path":"f.lua"}', 1, true) ~= nil, "T50 anthropic input spliced once")
+  assert_true(abody:find('"max_tokens":1024', 1, true) ~= nil, "T50 anthropic max_tokens")
+
+  -- Anthropic SSE: text + tool_use start + index delta + usage + stop
+  anthropic.reset_stream()
+  local aevs = {}
+  local function aon(ev) aevs[#aevs + 1] = ev end
+  anthropic.parse_sse_line('data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hello"}}', aon)
+  anthropic.parse_sse_line('data: {"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"toolu_1","name":"read"}}', aon)
+  anthropic.parse_sse_line('data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"{\\"path"}}', aon)
+  anthropic.parse_sse_line('data: {"type":"message_start","message":{"usage":{"input_tokens":10}}}', aon)
+  anthropic.parse_sse_line('data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":5}}', aon)
+  anthropic.parse_sse_line('data: {"type":"message_stop"}', aon)
+  local saw = {}
+  for _, ev in ipairs(aevs) do
+    saw[ev.type] = (saw[ev.type] or 0) + 1
+    if ev.type == "tool_call_delta" then
+      assert_eq(ev.id, "toolu_1", "T50 anthropic index delta resolves id")
+    end
+    if ev.type == "usage" then
+      assert_eq(ev.usage.used, 15, "T50 anthropic usage sums in+out")
+    end
+  end
+  assert_eq(saw.text_delta, 1, "T50 anthropic text_delta")
+  assert_eq(saw.tool_call_start, 1, "T50 anthropic tool_call_start")
+  assert_eq(saw.tool_call_delta, 1, "T50 anthropic tool_call_delta")
+  assert_eq(saw.done, 1, "T50 anthropic done")
+
+  -- Gemini build_request: contents + functionDeclarations + functionResponse
+  local gbody = gemini.build_request(hist, "gemini-x")
+  assert_true(gbody:find('"contents"', 1, true) ~= nil, "T50 gemini contents")
+  assert_true(gbody:find('"functionCall"', 1, true) ~= nil, "T50 gemini functionCall")
+  assert_true(gbody:find('"functionResponse"', 1, true) ~= nil, "T50 gemini functionResponse")
+  assert_true(gbody:find('"functionDeclarations"', 1, true) ~= nil, "T50 gemini declarations")
+  assert_true(gbody:find('"functionResponse":{"name":"read"', 1, true) ~= nil,
+    "T50 gemini response name recovered from tool_call id")
+  -- garbage args degrade to {} instead of breaking the envelope
+  local bad_hist = {
+    { role = "assistant", content = { tool_calls = { { id = "b1", type = "function",
+        ["function"] = { name = "read", arguments = 'not json at all' } } } } },
+  }
+  local abad = anthropic.build_request(bad_hist, "m", nil)
+  assert_true(abad:find('"input":{}', 1, true) ~= nil, "T50 anthropic garbage args -> {}")
+  local gbad = gemini.build_request(bad_hist, "m")
+  assert_true(gbad:find('"args":{}', 1, true) ~= nil, "T50 gemini garbage args -> {}")
+
+  -- Gemini SSE: text + usageMetadata, functionCall -> start + raw delta
+  local gevs = {}
+  local function gon(ev) gevs[#gevs + 1] = ev end
+  gemini.parse_sse_line('data: {"candidates":[{"content":{"parts":[{"text":"hi"}],"role":"model"}}],"usageMetadata":{"promptTokenCount":5,"candidatesTokenCount":7}}', gon)
+  gemini.parse_sse_line('data: {"candidates":[{"content":{"parts":[{"functionCall":{"name":"read","args":{"path":"a"}}}],"role":"model"}}]}', gon)
+  local gsaw = {}
+  for _, ev in ipairs(gevs) do
+    gsaw[ev.type] = (gsaw[ev.type] or 0) + 1
+    if ev.type == "usage" then assert_eq(ev.usage.used, 12, "T50 gemini usage sum") end
+  end
+  assert_eq(gsaw.text_delta, 1, "T50 gemini text_delta")
+  assert_eq(gsaw.tool_call_start, 1, "T50 gemini tool_call_start")
+  assert_eq(gsaw.tool_call_delta, 1, "T50 gemini tool_call_delta")
+  -- raw-args rule: agent parses the delta exactly once
+  with_modules(base_env, function(mods)
+    for _, ev in ipairs(gevs) do
+      if ev.type == "tool_call_delta" then
+        local parsed = mods.agent.parse_args(ev.arguments)
+        assert_eq(parsed.path, "a", "T50 gemini delta parses once in agent")
+      end
+    end
+  end)
+  print("T50 provider mapping: OK")
+end
+
+-- T51: dispatcher — unknown provider falls back, per-provider streams work
+do
+  local api = assert(loadfile("src/tether/api.lua"))()
+  assert_eq(api._provider_of({}), "openai", "T51 default provider openai")
+  assert_eq(api._provider_of({ provider = "gemini" }), "gemini", "T51 gemini selected")
+  assert_eq(api._provider_of({ provider = "azure" }), "openai", "T51 unknown falls back")
+
+  local function run_stream(script, cfg)
+    local handles = 0
+    local old = _G.tether
+    -- pipe_eof ignores its args on the C host (global EOF flag): mirror
+    -- that — EOF only when every queued line is consumed.
+    local function eof()
+      for _, q in pairs(script) do if #q > 0 then return 0 end end
+      return 1
+    end
+    _G.tether = {
+      open_pipe = function() handles = handles + 1; return handles end,
+      read_line = function(handle)
+        local q = script[handle]
+        if not q or #q == 0 then return nil end
+        return table.remove(q, 1)
+      end,
+      pipe_eof = function() return eof() end,
+      close_pipe = function() end,
+      sleep = function() end,
+    }
+    local events = {}
+    local ok = api.stream(cfg, "key", { { role = "user", content = "hi" } },
+      function(ev) events[#events + 1] = ev end)
+    _G.tether = old
+    return ok, events
+  end
+
+  -- unknown provider streams via openai path
+  local ok1, ev1 = run_stream({
+    [1] = { 'data: {"choices":[{"delta":{"content":"ok"},"finish_reason":"stop"}]}' },
+  }, { provider = "azure", base_url = "http://x", model = "m", retries = 1 })
+  assert_true(ok1, "T51 unknown provider streams")
+  local got_text = false
+  for _, ev in ipairs(ev1) do if ev.type == "text_delta" and ev.text == "ok" then got_text = true end end
+  assert_true(got_text, "T51 unknown provider yields text")
+
+  -- anthropic provider end-to-end through shared transport
+  local ok2, ev2 = run_stream({
+    [1] = {
+      'data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hey"}}',
+      'data: {"type":"message_stop"}',
+    },
+  }, { provider = "anthropic", base_url = "http://x", model = "m", retries = 1 })
+  assert_true(ok2, "T51 anthropic streams")
+  local got_a = false
+  for _, ev in ipairs(ev2) do if ev.type == "text_delta" and ev.text == "Hey" then got_a = true end end
+  assert_true(got_a, "T51 anthropic text forwarded")
+
+  -- gemini non-SSE generateContent fallback normalizes to events
+  local ok3, ev3 = run_stream({
+    [1] = { '{"candidates":[{"content":{"parts":[{"text":"yo"}],"role":"model"}}]}' },
+  }, { provider = "gemini", base_url = "http://x", model = "m", retries = 1 })
+  assert_true(ok3, "T51 gemini fallback streams")
+  local got_g = false
+  for _, ev in ipairs(ev3) do if ev.type == "text_delta" and ev.text == "yo" then got_g = true end end
+  assert_true(got_g, "T51 gemini fallback text forwarded")
+
+  -- per-provider static lists differ, missing key errors
+  local openai_p = assert(loadfile("src/tether/providers/openai.lua"))()
+  assert_true(#api.list_models({ provider = "openai" }) >= 10, "T51 openai static list")
+  assert_true(api.list_models({ provider = "anthropic" })[1]:find("claude", 1, true) ~= nil, "T51 anthropic static list")
+  assert_true(api.list_models({ provider = "gemini" })[1]:find("gemini", 1, true) ~= nil, "T51 gemini static list")
+  assert_eq(openai_p.static_models()[1], api.list_models({})[1], "T51 default list is openai")
+  local _, err = api.list_models_live({ provider = "gemini", base_url = "http://x" }, "")
+  assert_eq(err, "no api key", "T51 gemini live without key")
+
+  -- multi-event stream: empty line is a boundary, both deltas forwarded
+  local ok4, ev4 = run_stream({
+    [1] = {
+      'data: {"choices":[{"delta":{"content":"a"}}]}',
+      '',
+      'data: {"choices":[{"delta":{"content":"b"},"finish_reason":"stop"}]}',
+    },
+  }, { provider = "openai", base_url = "http://x", model = "m", retries = 1 })
+  assert_true(ok4, "T51 multi-event streams")
+  local got_a, got_b = false, false
+  for _, ev in ipairs(ev4) do
+    if ev.type == "text_delta" and ev.text == "a" then got_a = true end
+    if ev.type == "text_delta" and ev.text == "b" then got_b = true end
+  end
+  assert_true(got_a and got_b, "T51 both deltas survive empty-line boundary")
+
+  -- live list with no ids -> empty model list error
+  do
+    local old = _G.tether
+    local lines = { '{"data":[]}' }
+    _G.tether = {
+      open_pipe = function() return 1 end,
+      read_line = function()
+        if #lines == 0 then return nil end
+        return table.remove(lines, 1)
+      end,
+      pipe_eof = function() return (#lines == 0) and 1 or 0 end,
+      close_pipe = function() end,
+      sleep = function() end,
+    }
+    local res, lerr = api.list_models_live(
+      { provider = "openai", base_url = "http://x" }, "key")
+    _G.tether = old
+    assert_eq(res, nil, "T51 empty list returns nil")
+    assert_eq(lerr, "empty model list", "T51 empty list reason")
+  end
+  print("T51 dispatcher: OK")
+end
+
+-- T52: config providers table resolution
+do
+  local cfgm = dofile("src/tether/config.lua")
+  local p1 = "/tmp/tether_cfg_t52_a.lua"
+  local f = io.open(p1, "w")
+  f:write('return { provider = "anthropic", providers = { anthropic = { model = "claude-x" } } }')
+  f:close()
+  local c1 = cfgm.load(p1)
+  assert_eq(c1.provider, "anthropic", "T52 provider kept")
+  assert_eq(c1.base_url, "https://api.anthropic.com", "T52 anthropic base default")
+  assert_eq(c1.model, "claude-x", "T52 per-provider model wins")
+  assert_eq(c1.api_key_env, "ANTHROPIC_API_KEY", "T52 per-provider env")
+  os.remove(p1)
+
+  -- legacy top-level keys keep working as openai defaults (custom proxy safe)
+  local p2 = "/tmp/tether_cfg_t52_b.lua"
+  f = io.open(p2, "w")
+  f:write('return { api_key_env = "FOO_KEY", base_url = "http://proxy:8080/v1" }')
+  f:close()
+  local c2 = cfgm.load(p2)
+  assert_eq(c2.provider, "openai", "T52 default provider")
+  assert_eq(c2.api_key_env, "FOO_KEY", "T52 legacy env kept")
+  assert_eq(c2.base_url, "http://proxy:8080/v1", "T52 custom proxy kept")
+  os.remove(p2)
+
+  -- api_key reads the resolved variable: existing var yields value,
+  -- missing var yields "" (never an error)
+  local p3 = "/tmp/tether_cfg_t52_c.lua"
+  f = io.open(p3, "w")
+  f:write('return { api_key_env = "HOME" }')
+  f:close()
+  local c3 = cfgm.load(p3)
+  assert_eq(cfgm.api_key(c3), os.getenv("HOME"), "T52 key read from custom env var")
+  os.remove(p3)
+  assert_eq(cfgm.api_key({ api_key_env = "TETHER_DEFINITELY_MISSING_XYZ" }), "",
+    "T52 missing key yields empty string")
+  print("T52 config providers: OK")
+end
 
 print(string.format("PASS: %d/%d", passed, passed + failed))
 if failed > 0 then
