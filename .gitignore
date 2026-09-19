@@ -1,8 +1,30 @@
-vendor/
+# Build products
 build/
 *.o
+*.a
 src/host/embed.c
 /tether
 .opencode/
 .pi/
 .freebuff/
+
+# Vendored third-party trees. Only the sources the build consumes are tracked so
+# a fresh clone can build offline (see openspec/changes/vendor-self-contained);
+# upstream docs, test suites and alternative build systems stay out of the repo.
+# A pattern like `vendor/x/*` matches only direct children, so re-including a
+# directory (`!vendor/x/lib/`) brings the whole subtree back.
+vendor/curl/*
+!vendor/curl/COPYING
+!vendor/curl/Makefile.curl
+!vendor/curl/include/
+!vendor/curl/lib/
+vendor/mbedtls/*
+!vendor/mbedtls/LICENSE
+!vendor/mbedtls/include/
+!vendor/mbedtls/library/
+vendor/lua-5.4.6/*
+!vendor/lua-5.4.6/src/
+vendor/zlib/*
+!vendor/zlib/*.c
+!vendor/zlib/*.h
+!vendor/zlib/LICENSE

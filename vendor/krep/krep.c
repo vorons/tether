@@ -1,0 +1,5963 @@
+/* krep - A high-performance string search utility
+ *
+ * Author: Davide Santangelo
+ * Year: 2025-2026
+ *
+ */
+
+// Define _GNU_SOURCE to potentially enable MAP_POPULATE and memrchr
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE
+#endif
+
+#include "krep.h"         // Include the header file
+#include "aho_corasick.h" // Include AC header for build/free functions
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdint.h>
+#include <stdbool.h>
+#include <ctype.h>
+#include <time.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <sys/stat.h>
+#include <sys/mman.h> // Include for mmap, madvise constants
+#include <pthread.h>
+#include <inttypes.h> // For PRIu64 macro
+#include <errno.h>
+#include <limits.h>    // For SIZE_MAX, PATH_MAX
+#include <regex.h>     // For POSIX regex support
+#include <dirent.h>    // For directory operations
+#include <sys/types.h> // For mode_t, DIR*, struct dirent
+#include <getopt.h>    // For command-line parsing
+#include <stdatomic.h> // For atomic operations in multithreading
+#include <fnmatch.h>   // For gitignore pattern matching
+
+// Add forward declaration for is_repetitive_pattern here
+static bool is_repetitive_pattern(const char *pattern, size_t pattern_len);
+
+// Forward declaration for ensure_line_buffer_capacity
+static bool ensure_line_buffer_capacity(char **buffer_ptr, size_t *capacity_ptr, size_t current_pos, size_t needed);
+// Submit multiple tasks in one lock/unlock roundtrip.
+static bool thread_pool_submit_batch(thread_pool_t *pool, void *(*func)(void *), void **args, int count);
+double get_time(void);
+
+// SIMD Intrinsics Includes based on compiler flags (from Makefile)
+#if defined(__AVX512F__) && defined(__AVX512BW__)
+#include <immintrin.h> // AVX-512 intrinsics
+#define KREP_USE_AVX512 1
+#define KREP_USE_AVX2 1
+#define KREP_USE_SSE42 1
+#elif defined(__AVX2__)
+#include <immintrin.h> // AVX2 intrinsics
+#define KREP_USE_AVX512 0
+#define KREP_USE_AVX2 1
+#define KREP_USE_SSE42 1
+#else
+#define KREP_USE_AVX512 0
+#define KREP_USE_AVX2 0
+#endif
+
+#if defined(__SSE2__) && !KREP_USE_AVX2
+#include <emmintrin.h> // Bounded pair filtering only requires baseline SSE2
+#define KREP_USE_SSE42 1
+#elif !defined(KREP_USE_SSE42)
+#define KREP_USE_SSE42 0
+#endif
+
+#if defined(__ARM_NEON)
+#include <arm_neon.h> // NEON intrinsics
+#define KREP_USE_NEON 1
+#else
+#define KREP_USE_NEON 0
+#endif
+
+// Constants
+#define MAX_PATTERN_LENGTH 1024
+#define DEFAULT_THREAD_COUNT 0
+#define MIN_CHUNK_SIZE (2 * 1024 * 1024)        // Reduced for better parallelism
+#define LARGE_FILE_THRESHOLD (64 * 1024 * 1024) // 64MB threshold for advanced optimizations
+#define SINGLE_THREAD_FILE_SIZE_THRESHOLD MIN_CHUNK_SIZE
+#define ADAPTIVE_THREAD_FILE_SIZE_THRESHOLD 0
+#define VERSION "3.1.0"
+#ifndef PATH_MAX
+#define PATH_MAX 4096
+#endif
+#define BINARY_CHECK_BUFFER_SIZE 1024  // Bytes to check for binary content
+#define MAX_PATTERN_FILE_LINE_LEN 2048 // Max length for a pattern line read from file
+#define CACHE_LINE_SIZE 64             // Modern CPU cache line size
+#define PREFETCH_DISTANCE 512          // Bytes ahead to prefetch
+#define PREFETCH_DISTANCE_FAR 1024     // Double-distance prefetch for streaming access
+#define MAX_GLOB_PATTERNS 128
+
+// Compiler hints for better optimization
+#define LIKELY(x)   __builtin_expect(!!(x), 1)
+#define UNLIKELY(x) __builtin_expect(!!(x), 0)
+#define ALWAYS_INLINE __attribute__((always_inline)) inline
+#define HOT_FUNCTION __attribute__((hot))
+#define CACHE_ALIGNED __attribute__((aligned(CACHE_LINE_SIZE)))
+
+// Pair filtering supports literals up to 64 bytes on every SIMD backend.
+#if KREP_USE_AVX512 || KREP_USE_AVX2 || KREP_USE_SSE42 || KREP_USE_NEON
+const size_t SIMD_MAX_PATTERN_LEN = 64;
+#else
+const size_t SIMD_MAX_PATTERN_LEN = 0;
+#endif
+
+// Global state (Consider encapsulating if becomes too large)
+static bool color_output_enabled KREP_UNUSED = false;
+static bool only_matching = false; // -o flag
+static bool force_no_simd = false;
+static bool use_gitignore = false;         // --gitignore flag
+static const char *algo_override = NULL;   // --algo option
+static atomic_bool global_match_found_flag = false; // Used in recursive search
+static atomic_bool madvise_warning_emitted = false;   // Suppress repeated madvise warnings
+static bool show_line_numbers = false;
+static bool quiet_mode = false;
+static bool files_with_matches_mode = false;
+static bool files_without_match_mode = false;
+static bool stats_enabled = false;
+static bool include_hidden = false;
+static size_t context_before = 0;
+static size_t context_after = 0;
+static const char *include_globs[MAX_GLOB_PATTERNS];
+static size_t include_glob_count = 0;
+static const char *exclude_globs[MAX_GLOB_PATTERNS];
+static size_t exclude_glob_count = 0;
+
+typedef enum
+{
+    OUTPUT_TEXT = 0,
+    OUTPUT_JSONL = 1
+} output_mode_t;
+
+static output_mode_t output_mode = OUTPUT_TEXT;
+
+static atomic_uint_fast64_t stats_files_searched = 0;
+static atomic_uint_fast64_t stats_files_matched = 0;
+static atomic_uint_fast64_t stats_paths_skipped = 0;
+static atomic_uint_fast64_t stats_bytes_searched = 0;
+static atomic_uint_fast64_t stats_matches_found = 0;
+static double stats_start_time = 0.0;
+
+// Global lookup table for fast lowercasing
+unsigned char lower_table[256]; // Remove static
+
+// Global fast word-character classification table.
+// Bit 0: word char (alnum or '_'), Bit 1: space/newline.
+unsigned char word_char_table[256];
+
+// Initialize the lookup tables at program start
+static void __attribute__((constructor)) init_lookup_tables(void)
+{
+    for (int i = 0; i < 256; i++)
+    {
+        lower_table[i] = tolower(i);
+        unsigned char flags = 0;
+        if (isalnum(i) || i == '_')
+            flags |= 1;      // bit 0: word char
+        if (i == ' ' || i == '\t' || i == '\n' || i == '\r')
+            flags |= 2;      // bit 1: whitespace (future use)
+        word_char_table[i] = flags;
+    }
+}
+
+// --- Match Result Management ---
+
+// Initialize match result structure
+match_result_t *match_result_init(uint64_t initial_capacity)
+{
+    match_result_t *result = malloc(sizeof(match_result_t));
+    if (!result)
+    {
+        perror("malloc failed for match_result_t");
+        return NULL;
+    }
+
+    // Check for overflow cases before allocating memory for positions
+    if (initial_capacity == 0)
+    {
+        initial_capacity = 16; // Default initial size
+    }
+    else if (initial_capacity > SIZE_MAX / sizeof(match_position_t))
+    {
+        // This allocation would overflow, refuse to proceed
+        fprintf(stderr, "Error: Requested capacity too large for match_result_init\n");
+        free(result);
+        return NULL;
+    }
+
+    result->positions = malloc(initial_capacity * sizeof(match_position_t));
+    if (!result->positions)
+    {
+        perror("malloc failed for match positions array");
+        free(result);
+        return NULL;
+    }
+
+    result->count = 0;
+    result->capacity = initial_capacity;
+    return result;
+}
+
+// Add a match to the result structure, reallocating if necessary
+inline bool match_result_add(match_result_t *result, size_t start_offset, size_t end_offset)
+{
+    if (!result)
+        return false;
+
+    // Check if we need to expand the capacity
+    if (result->count >= result->capacity)
+    {
+        // Fast path for initial allocation
+        if (result->capacity == 0)
+        {
+            size_t initial_capacity = 16;
+            result->positions = malloc(initial_capacity * sizeof(match_position_t));
+            if (!result->positions)
+            {
+                perror("Error allocating initial match positions array");
+                return false;
+            }
+            result->capacity = initial_capacity;
+        }
+        else
+        {
+            // Calculate new capacity with overflow protection
+            uint64_t new_capacity;
+
+            // Check for potential overflow in capacity doubling
+            if (result->capacity > SIZE_MAX / (2 * sizeof(match_position_t)))
+            {
+                // Try to allocate maximum safe capacity if doubling would overflow
+                new_capacity = SIZE_MAX / sizeof(match_position_t);
+
+                // If we can't grow further, signal failure
+                if (new_capacity <= result->capacity)
+                {
+                    fprintf(stderr, "Error: Cannot increase result capacity further (at %" PRIu64 " matches).\n",
+                            result->capacity);
+                    return false;
+                }
+            }
+            else
+            {
+                // Normal doubling strategy for growth
+                new_capacity = result->capacity * 2;
+            }
+
+            // Perform the reallocation
+            match_position_t *new_positions = realloc(result->positions,
+                                                      new_capacity * sizeof(match_position_t));
+            if (!new_positions)
+            {
+                perror("Error reallocating match positions array");
+                // Existing array is preserved by realloc semantics
+                return false;
+            }
+
+            result->positions = new_positions;
+            result->capacity = new_capacity;
+        }
+    }
+
+    // Add the new match position
+    result->positions[result->count].start_offset = start_offset;
+    result->positions[result->count].end_offset = end_offset;
+    result->count++;
+
+    return true;
+}
+
+// Free memory associated with match result structure
+void match_result_free(match_result_t *result)
+{
+    if (!result)
+        return;
+    if (result->positions)
+        free(result->positions);
+    free(result);
+}
+
+// Merge results from a source list into a destination list
+// Assumes destination has enough capacity (caller must ensure or realloc)
+// Adjusts offsets from source based on chunk_offset
+bool match_result_merge(match_result_t *dest, const match_result_t *src, size_t chunk_offset)
+{
+    if (!dest || !src || src->count == 0)
+        return true; // Nothing to merge or invalid input
+
+    // Ensure destination has enough capacity
+    uint64_t required_capacity = dest->count + src->count;
+    if (required_capacity < dest->count)
+    { // Check for overflow
+        fprintf(stderr, "Error: Required capacity overflow during merge.\n");
+        return false;
+    }
+
+    if (required_capacity > dest->capacity)
+    {
+        // Prevent potential integer overflow during capacity calculation
+        uint64_t new_capacity = dest->capacity;
+        if (new_capacity == 0)
+            new_capacity = 16;
+        while (new_capacity < required_capacity)
+        {
+            // Check for potential overflow before doubling
+            if (new_capacity > SIZE_MAX / (2 * sizeof(match_position_t)))
+            {
+                new_capacity = required_capacity; // Try exact size
+                if (new_capacity < required_capacity)
+                { // Check again
+                    fprintf(stderr, "Error: Cannot allocate sufficient capacity for merge (overflow).\n");
+                    return false;
+                }
+                break; // Use exact required capacity
+            }
+            new_capacity *= 2;
+            // Handle case where doubling overflows but required_capacity is still reachable
+            if (new_capacity < dest->capacity)
+            {
+                new_capacity = required_capacity;
+                if (new_capacity < required_capacity)
+                {
+                    fprintf(stderr, "Error: Cannot allocate sufficient capacity for merge (overflow 2).\n");
+                    return false;
+                }
+                break;
+            }
+        }
+        // Final check if required_capacity itself is too large
+        if (new_capacity < required_capacity)
+        {
+            fprintf(stderr, "Error: Cannot allocate sufficient capacity for merge (required > new).\n");
+            return false;
+        }
+
+        match_position_t *new_positions = realloc(dest->positions, new_capacity * sizeof(match_position_t));
+        if (!new_positions)
+        {
+            perror("Error reallocating destination match positions for merge");
+            return false;
+        }
+        dest->positions = new_positions;
+        dest->capacity = new_capacity;
+    }
+
+    // Copy and adjust offsets
+    for (uint64_t i = 0; i < src->count; ++i)
+    {
+        dest->positions[dest->count].start_offset = src->positions[i].start_offset + chunk_offset;
+        dest->positions[dest->count].end_offset = src->positions[i].end_offset + chunk_offset;
+        dest->count++;
+    }
+    return true;
+}
+
+// Merge results applying a hard cap on the number of elements copied from src
+static bool match_result_merge_limited(match_result_t *dest,
+                                       const match_result_t *src,
+                                       size_t chunk_offset,
+                                       uint64_t limit)
+{
+    if (!dest || !src || src->count == 0 || limit == 0)
+        return true;
+
+    uint64_t copy_count = src->count;
+    if (limit < copy_count)
+        copy_count = limit;
+
+    if (copy_count == src->count)
+    {
+        return match_result_merge(dest, src, chunk_offset);
+    }
+
+    for (uint64_t i = 0; i < copy_count; ++i)
+    {
+        if (!match_result_add(dest,
+                              src->positions[i].start_offset + chunk_offset,
+                              src->positions[i].end_offset + chunk_offset))
+        {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+// --- Line Finding Functions ---
+
+// Find the start of the line containing the given position
+// Uses memrchr (GNU extension) if available for potential speedup, otherwise manual loop.
+size_t find_line_start(const char *text, size_t max_len, size_t pos)
+{
+    if (pos > max_len)
+        pos = max_len; // Ensure pos is within bounds
+
+    if (pos == 0)
+        return 0; // Already at the start
+
+// Check if memrchr is likely available (common on Linux/glibc)
+#if defined(_GNU_SOURCE) && !defined(__APPLE__) && !defined(_WIN32) // Crude check, refine if needed
+    // Use memrchr to find the last newline before or at pos-1
+    const char *start_ptr = text;
+    // memrchr searches backwards from text + pos - 1 for 'pos' bytes
+    size_t search_len = pos;
+    void *newline_ptr = memrchr(start_ptr, '\n', search_len);
+
+    if (newline_ptr != NULL)
+    {
+        // Found a newline, the line starts *after* it
+        return (const char *)newline_ptr - start_ptr + 1;
+    }
+    else
+    {
+        // No newline found before pos, so the line starts at the beginning of the text
+        return 0;
+    }
+#else
+    // Fallback to manual loop if memrchr is not available or not detected
+    size_t current = pos;
+    while (current > 0 && text[current - 1] != '\n')
+    {
+        current--;
+    }
+    return current;
+#endif
+}
+
+// Find the end of the line containing the given position
+size_t find_line_end(const char *text, size_t text_len, size_t pos)
+{
+    if (pos >= text_len)
+        return text_len; // Already at or past the end
+
+    const char *newline_ptr = memchr(text + pos, '\n', text_len - pos);
+    return (newline_ptr == NULL) ? text_len : (size_t)(newline_ptr - text);
+
+    // Original loop kept for reference:
+    // while (pos < text_len && text[pos] != '\n')
+    // {
+    //     pos++;
+    // }
+    // return pos; // Returns index of '\n' or text_len if no newline found
+}
+
+// Advance an offset to the first position after the next newline.
+// If no newline is found, clamp to text_len.
+static size_t advance_to_next_line_boundary(const char *text, size_t text_len, size_t offset)
+{
+    if (offset >= text_len)
+        return text_len;
+
+    const char *newline_ptr = memchr(text + offset, '\n', text_len - offset);
+    if (newline_ptr == NULL)
+        return text_len;
+
+    return (size_t)(newline_ptr - text) + 1;
+}
+
+// --- Printing Function ---
+
+// Comparison function for qsort on match_position_t by start_offset
+static int compare_match_positions(const void *a, const void *b)
+{
+    const match_position_t *pa = (const match_position_t *)a;
+    const match_position_t *pb = (const match_position_t *)b;
+    if (pa->start_offset < pb->start_offset)
+        return -1;
+    if (pa->start_offset > pb->start_offset)
+        return 1;
+    // Secondary sort by end offset if starts are equal (optional, but can be useful)
+    if (pa->end_offset < pb->end_offset)
+        return -1;
+    if (pa->end_offset > pb->end_offset)
+        return 1;
+    return 0;
+}
+
+// Helper function to safely append data to a batch buffer
+// Modifies the current write pointer and batch position pointer
+static inline void safe_append_to_batch(char **current_write_ptr_ptr, char *batch_buffer_end, size_t *batch_pos_ptr, size_t batch_buffer_size, const char *data, size_t data_len)
+{
+    char *current_write_ptr = *current_write_ptr_ptr;
+    size_t available_space = batch_buffer_end - current_write_ptr;
+
+    if (data_len <= available_space)
+    {
+        memcpy(current_write_ptr, data, data_len);
+        *current_write_ptr_ptr += data_len; // Update the caller's pointer
+    }
+    else
+    {
+        // Handle buffer overflow scenario (truncate)
+        if (available_space > 0)
+        {
+            memcpy(current_write_ptr, data, available_space);
+            *current_write_ptr_ptr += available_space; // Update the caller's pointer
+        }
+        // Mark buffer as full by setting the position to the size
+        *batch_pos_ptr = batch_buffer_size;
+    }
+}
+
+static void json_write_escaped(FILE *out, const char *data, size_t len)
+{
+    fputc('"', out);
+    for (size_t i = 0; i < len; ++i)
+    {
+        unsigned char c = (unsigned char)data[i];
+        switch (c)
+        {
+        case '"':
+            fputs("\\\"", out);
+            break;
+        case '\\':
+            fputs("\\\\", out);
+            break;
+        case '\b':
+            fputs("\\b", out);
+            break;
+        case '\f':
+            fputs("\\f", out);
+            break;
+        case '\n':
+            fputs("\\n", out);
+            break;
+        case '\r':
+            fputs("\\r", out);
+            break;
+        case '\t':
+            fputs("\\t", out);
+            break;
+        default:
+            if (c < 0x20)
+                fprintf(out, "\\u%04x", c);
+            else
+                fputc(c, out);
+            break;
+        }
+    }
+    fputc('"', out);
+}
+
+typedef struct
+{
+    size_t offset;
+    size_t line_start;
+    size_t line_number;
+} line_cursor_t;
+
+// Sorted matches and output lines only move forward. Scan each byte at most
+// once instead of recounting all preceding newlines for every output record.
+static size_t advance_line_cursor(line_cursor_t *cursor, const char *text, size_t offset)
+{
+    const char *scan = text + cursor->offset;
+    const char *end = text + offset;
+
+    while (scan < end)
+    {
+        const void *newline = memchr(scan, '\n', (size_t)(end - scan));
+        if (!newline)
+            break;
+        cursor->line_number++;
+        scan = (const char *)newline + 1;
+        cursor->line_start = (size_t)(scan - text);
+    }
+
+    cursor->offset = offset;
+    return cursor->line_number;
+}
+
+static size_t previous_line_start(const char *text, size_t line_start)
+{
+    if (line_start == 0)
+        return 0;
+
+    size_t pos = line_start - 1;
+    while (pos > 0 && text[pos - 1] != '\n')
+        pos--;
+
+    return pos;
+}
+
+static size_t context_start_for_line(const char *text, size_t line_start, size_t before)
+{
+    size_t start = line_start;
+    for (size_t i = 0; i < before && start > 0; ++i)
+        start = previous_line_start(text, start);
+    return start;
+}
+
+static size_t context_end_for_line(const char *text, size_t text_len, size_t line_end, size_t after)
+{
+    size_t end = line_end;
+    for (size_t i = 0; i < after && end < text_len; ++i)
+    {
+        size_t next_line_start = (end < text_len && text[end] == '\n') ? end + 1 : end;
+        if (next_line_start >= text_len)
+            break;
+        end = find_line_end(text, text_len, next_line_start);
+    }
+    return end;
+}
+
+static void print_text_prefix(const char *filename, size_t line_number, bool is_context)
+{
+    const char separator = is_context ? '-' : ':';
+
+    if (filename)
+    {
+        if (color_output_enabled)
+        {
+            fputs(KREP_COLOR_FILENAME, stdout);
+            fputs(filename, stdout);
+            fputs(KREP_COLOR_RESET, stdout);
+            fputs(KREP_COLOR_SEPARATOR, stdout);
+            fputc(separator, stdout);
+            fputs(KREP_COLOR_RESET, stdout);
+        }
+        else
+        {
+            fputs(filename, stdout);
+            fputc(separator, stdout);
+        }
+    }
+
+    if (show_line_numbers || context_before > 0 || context_after > 0)
+    {
+        if (color_output_enabled)
+            fputs(KREP_COLOR_LINE_NUMBER, stdout);
+        printf("%zu", line_number);
+        if (color_output_enabled)
+        {
+            fputs(KREP_COLOR_RESET, stdout);
+            fputs(KREP_COLOR_SEPARATOR, stdout);
+            fputc(separator, stdout);
+            fputs(KREP_COLOR_RESET, stdout);
+            fputs(KREP_COLOR_TEXT, stdout);
+        }
+        else
+        {
+            fputc(separator, stdout);
+        }
+    }
+    else if (color_output_enabled)
+    {
+        fputs(KREP_COLOR_TEXT, stdout);
+    }
+}
+
+static void print_text_line_with_matches(const char *filename,
+                                         const char *text,
+                                         size_t line_start,
+                                         size_t line_end,
+                                         size_t line_number,
+                                         const match_position_t *matches,
+                                         size_t match_count,
+                                         bool is_context)
+{
+    print_text_prefix(filename, line_number, is_context);
+
+    if (is_context || match_count == 0)
+    {
+        fwrite(text + line_start, 1, line_end - line_start, stdout);
+        if (color_output_enabled)
+            fputs(KREP_COLOR_RESET, stdout);
+        fputc('\n', stdout);
+        return;
+    }
+
+    size_t current = line_start;
+    for (size_t i = 0; i < match_count; ++i)
+    {
+        size_t start = matches[i].start_offset;
+        size_t end = matches[i].end_offset;
+
+        if (start < current)
+            start = current;
+        if (start < line_start)
+            start = line_start;
+        if (end > line_end)
+            end = line_end;
+        if (start >= end)
+            continue;
+
+        if (start > current)
+            fwrite(text + current, 1, start - current, stdout);
+
+        if (color_output_enabled)
+            fputs(KREP_COLOR_MATCH, stdout);
+        fwrite(text + start, 1, end - start, stdout);
+        if (color_output_enabled)
+            fputs(KREP_COLOR_TEXT, stdout);
+
+        current = end;
+    }
+
+    if (current < line_end)
+        fwrite(text + current, 1, line_end - current, stdout);
+
+    if (color_output_enabled)
+        fputs(KREP_COLOR_RESET, stdout);
+    fputc('\n', stdout);
+}
+
+static void print_json_count_result(const char *filename, uint64_t count)
+{
+    fputs("{\"type\":\"count\"", stdout);
+    if (filename)
+    {
+        fputs(",\"path\":", stdout);
+        json_write_escaped(stdout, filename, strlen(filename));
+    }
+    printf(",\"count\":%" PRIu64 "}\n", count);
+}
+
+static void print_count_result(const char *filename, uint64_t count)
+{
+    if (quiet_mode || files_with_matches_mode || files_without_match_mode)
+        return;
+
+    if (output_mode == OUTPUT_JSONL)
+    {
+        print_json_count_result(filename, count);
+    }
+    else if (filename)
+    {
+        printf("%s:%" PRIu64 "\n", filename, count);
+    }
+    else
+    {
+        printf("%" PRIu64 "\n", count);
+    }
+}
+
+static void print_file_list_result(const char *filename, int result_code)
+{
+    if (quiet_mode || !filename || strcmp(filename, "-") == 0)
+        return;
+
+    if ((files_with_matches_mode && result_code == 0) ||
+        (files_without_match_mode && result_code == 1))
+    {
+        if (output_mode == OUTPUT_JSONL)
+        {
+            fputs("{\"type\":\"path\",\"path\":", stdout);
+            json_write_escaped(stdout, filename, strlen(filename));
+            printf(",\"matched\":%s}\n", result_code == 0 ? "true" : "false");
+        }
+        else
+        {
+            puts(filename);
+        }
+    }
+}
+
+static void record_search_stats(size_t bytes, uint64_t matches, int result_code)
+{
+    if (!stats_enabled)
+        return;
+
+    atomic_fetch_add_explicit(&stats_files_searched, 1, memory_order_relaxed);
+    atomic_fetch_add_explicit(&stats_bytes_searched, (uint64_t)bytes, memory_order_relaxed);
+    atomic_fetch_add_explicit(&stats_matches_found, matches, memory_order_relaxed);
+    if (result_code == 0)
+        atomic_fetch_add_explicit(&stats_files_matched, 1, memory_order_relaxed);
+}
+
+static void KREP_UNUSED print_stats_summary(int exit_code)
+{
+    if (!stats_enabled)
+        return;
+
+    double elapsed = get_time() - stats_start_time;
+    uint64_t files = atomic_load_explicit(&stats_files_searched, memory_order_relaxed);
+    uint64_t matched = atomic_load_explicit(&stats_files_matched, memory_order_relaxed);
+    uint64_t skipped = atomic_load_explicit(&stats_paths_skipped, memory_order_relaxed);
+    uint64_t bytes = atomic_load_explicit(&stats_bytes_searched, memory_order_relaxed);
+    uint64_t matches = atomic_load_explicit(&stats_matches_found, memory_order_relaxed);
+
+    fprintf(stderr,
+            "krep stats: files=%" PRIu64 " matched=%" PRIu64 " skipped=%" PRIu64
+            " bytes=%" PRIu64 " matches=%" PRIu64 " time=%.6fs exit=%d\n",
+            files, matched, skipped, bytes, matches, elapsed, exit_code);
+}
+
+typedef struct
+{
+    size_t start;
+    size_t end;
+    size_t line_number;
+    uint64_t first_match_index;
+    uint64_t match_count;
+} printable_line_t;
+
+static bool add_printable_line(printable_line_t **lines,
+                               size_t *count,
+                               size_t *capacity,
+                               printable_line_t line)
+{
+    if (*count >= *capacity)
+    {
+        size_t new_capacity = (*capacity == 0) ? 64 : (*capacity * 2);
+        printable_line_t *new_lines = realloc(*lines, new_capacity * sizeof(printable_line_t));
+        if (!new_lines)
+            return false;
+        *lines = new_lines;
+        *capacity = new_capacity;
+    }
+
+    (*lines)[(*count)++] = line;
+    return true;
+}
+
+static printable_line_t *build_printable_lines(const char *text,
+                                               size_t text_len,
+                                               const match_result_t *result,
+                                               size_t max_count,
+                                               size_t *line_count_out)
+{
+    printable_line_t *lines = NULL;
+    size_t count = 0;
+    size_t capacity = 0;
+    size_t last_line_start = SIZE_MAX;
+    line_cursor_t cursor = {.line_number = 1};
+
+    for (uint64_t i = 0; i < result->count; ++i)
+    {
+        size_t match_start = result->positions[i].start_offset;
+        if (match_start >= text_len)
+            continue;
+
+        advance_line_cursor(&cursor, text, match_start);
+        size_t line_start = cursor.line_start;
+        if (line_start == last_line_start && count > 0)
+        {
+            lines[count - 1].match_count++;
+            continue;
+        }
+
+        if (max_count != SIZE_MAX && count >= max_count)
+            break;
+
+        printable_line_t line = {
+            .start = line_start,
+            .end = find_line_end(text, text_len, match_start),
+            .line_number = cursor.line_number,
+            .first_match_index = i,
+            .match_count = 1};
+
+        if (!add_printable_line(&lines, &count, &capacity, line))
+        {
+            free(lines);
+            *line_count_out = 0;
+            return NULL;
+        }
+        last_line_start = line_start;
+    }
+
+    *line_count_out = count;
+    return lines;
+}
+
+static size_t copy_line_matches(const match_result_t *result,
+                                const printable_line_t *line,
+                                match_position_t *out,
+                                size_t out_capacity)
+{
+    size_t copied = 0;
+    uint64_t end_index = line->first_match_index + line->match_count;
+    for (uint64_t i = line->first_match_index; i < end_index && copied < out_capacity; ++i)
+    {
+        out[copied++] = result->positions[i];
+    }
+    return copied;
+}
+
+static size_t print_contextual_matching_items(const char *filename,
+                                              const char *text,
+                                              size_t text_len,
+                                              const match_result_t *result,
+                                              const search_params_t *params)
+{
+    size_t printable_count = 0;
+    printable_line_t *lines = build_printable_lines(text, text_len, result, params->max_count, &printable_count);
+    if (!lines || printable_count == 0)
+    {
+        free(lines);
+        return 0;
+    }
+
+    size_t items_printed = 0;
+    size_t last_output_next_start = 0;
+    bool emitted_any_line = false;
+    size_t next_match_line = 0;
+    line_cursor_t cursor = {.line_number = 1};
+    match_position_t line_matches[2048];
+
+    for (size_t i = 0; i < printable_count;)
+    {
+        if (lines[i].start < last_output_next_start)
+        {
+            i++;
+            continue;
+        }
+
+        size_t block_start = context_start_for_line(text, lines[i].start, context_before);
+        size_t block_end = context_end_for_line(text, text_len, lines[i].end, context_after);
+
+        if (block_start < last_output_next_start)
+            block_start = last_output_next_start;
+
+        if ((context_before > 0 || context_after > 0) && emitted_any_line && block_start > last_output_next_start)
+        {
+            puts("--");
+        }
+
+        size_t line_start = block_start;
+        while (line_start < text_len && line_start <= block_end)
+        {
+            size_t line_end = find_line_end(text, text_len, line_start);
+            while (next_match_line < printable_count && lines[next_match_line].start < line_start)
+                next_match_line++;
+
+            bool is_match_line = (next_match_line < printable_count && lines[next_match_line].start == line_start);
+            size_t match_count = 0;
+            if (is_match_line)
+            {
+                match_count = copy_line_matches(result, &lines[next_match_line], line_matches,
+                                                sizeof(line_matches) / sizeof(line_matches[0]));
+                items_printed++;
+                next_match_line++;
+            }
+
+            print_text_line_with_matches(filename,
+                                         text,
+                                         line_start,
+                                         line_end,
+                                         advance_line_cursor(&cursor, text, line_start),
+                                         line_matches,
+                                         match_count,
+                                         !is_match_line);
+            emitted_any_line = true;
+
+            if (line_end >= text_len)
+            {
+                last_output_next_start = text_len;
+                break;
+            }
+            line_start = line_end + 1;
+            last_output_next_start = line_start;
+        }
+
+        while (i < printable_count && lines[i].start < last_output_next_start)
+            i++;
+    }
+
+    free(lines);
+    return items_printed;
+}
+
+static size_t print_json_matching_items(const char *filename,
+                                        const char *text,
+                                        size_t text_len,
+                                        const match_result_t *result,
+                                        const search_params_t *params)
+{
+    if (only_matching)
+    {
+        size_t items_printed = 0;
+        line_cursor_t cursor = {.line_number = 1};
+        for (uint64_t i = 0; i < result->count; ++i)
+        {
+            if (params->max_count != SIZE_MAX && items_printed >= params->max_count)
+                break;
+
+            size_t start = result->positions[i].start_offset;
+            size_t end = result->positions[i].end_offset;
+            if (start >= text_len || start > end)
+                continue;
+            if (end > text_len)
+                end = text_len;
+
+            advance_line_cursor(&cursor, text, start);
+            size_t line_start = cursor.line_start;
+            fputs("{\"type\":\"match\"", stdout);
+            if (filename)
+            {
+                fputs(",\"path\":", stdout);
+                json_write_escaped(stdout, filename, strlen(filename));
+            }
+            printf(",\"line_number\":%zu,\"byte_start\":%zu,\"byte_end\":%zu,\"column_start\":%zu,\"column_end\":%zu,\"match\":",
+                   cursor.line_number,
+                   start,
+                   end,
+                   start - line_start + 1,
+                   end - line_start + 1);
+            json_write_escaped(stdout, text + start, end - start);
+            fputs("}\n", stdout);
+            items_printed++;
+        }
+        return items_printed;
+    }
+
+    size_t printable_count = 0;
+    printable_line_t *lines = build_printable_lines(text, text_len, result, params->max_count, &printable_count);
+    if (!lines)
+        return 0;
+
+    for (size_t i = 0; i < printable_count; ++i)
+    {
+        fputs("{\"type\":\"line\"", stdout);
+        if (filename)
+        {
+            fputs(",\"path\":", stdout);
+            json_write_escaped(stdout, filename, strlen(filename));
+        }
+        printf(",\"line_number\":%zu,\"byte_start\":%zu,\"byte_end\":%zu,\"text\":",
+               lines[i].line_number,
+               lines[i].start,
+               lines[i].end);
+        json_write_escaped(stdout, text + lines[i].start, lines[i].end - lines[i].start);
+        fputs(",\"matches\":[", stdout);
+
+        uint64_t end_index = lines[i].first_match_index + lines[i].match_count;
+        for (uint64_t j = lines[i].first_match_index; j < end_index; ++j)
+        {
+            size_t start = result->positions[j].start_offset;
+            size_t end = result->positions[j].end_offset;
+            if (end > lines[i].end)
+                end = lines[i].end;
+            if (start < lines[i].start || start >= end)
+                continue;
+            if (j > lines[i].first_match_index)
+                fputc(',', stdout);
+            printf("{\"column_start\":%zu,\"column_end\":%zu,\"byte_start\":%zu,\"byte_end\":%zu}",
+                   start - lines[i].start + 1,
+                   end - lines[i].start + 1,
+                   start,
+                   end);
+        }
+        fputs("]}\n", stdout);
+    }
+
+    free(lines);
+    return printable_count;
+}
+
+static inline bool checked_add_size(size_t *value, size_t addend)
+{
+    if (*value > SIZE_MAX - addend)
+        return false;
+    *value += addend;
+    return true;
+}
+
+size_t print_matching_items(const char *filename, const char *text, size_t text_len, const match_result_t *result, const search_params_t *params)
+{
+    // Basic validation: No results, no text, or zero matches means nothing to print.
+    if (!result || !text || result->count == 0)
+        return 0;
+
+    if (quiet_mode || files_with_matches_mode || files_without_match_mode)
+        return 0;
+
+    if (output_mode == OUTPUT_JSONL)
+        return print_json_matching_items(filename, text, text_len, result, params);
+
+    if (!only_matching && (show_line_numbers || context_before > 0 || context_after > 0))
+        return print_contextual_matching_items(filename, text, text_len, result, params);
+
+    size_t items_printed_count = 0;
+    size_t max_count = params->max_count; // Get max_count from params
+
+    // Get global configuration values
+    extern bool only_matching;        // External variable declared in krep.h
+    extern bool color_output_enabled; // External variable declared in krep.h
+
+// --- Setup enhanced buffering ---
+// Use a larger stdout buffer than default to reduce syscalls
+#define STDOUT_BUFFER_SIZE (8 * 1024 * 1024) // 8MB stdout buffer
+    static char stdout_buf[STDOUT_BUFFER_SIZE];
+    static bool stdout_buffer_initialized = false;
+    if (!stdout_buffer_initialized)
+    {
+        setvbuf(stdout, stdout_buf, _IOFBF, STDOUT_BUFFER_SIZE);
+        stdout_buffer_initialized = true;
+    }
+
+// --- Preallocate reusable line buffer for formatting ---
+#define LINE_BUFFER_INITIAL_SIZE (512 * 1024) // Start with 512KB
+    char *line_buffer = malloc(LINE_BUFFER_INITIAL_SIZE);
+    if (!line_buffer)
+    {
+        perror("malloc failed for line buffer");
+        return 0;
+    }
+    size_t line_buffer_capacity = LINE_BUFFER_INITIAL_SIZE;
+
+// --- Preallocate match position storage ---
+#define MAX_MATCHES_PER_LINE 2048 // Doubled from original to handle more dense matches
+    static match_position_t line_match_positions[MAX_MATCHES_PER_LINE];
+
+    // --- Precompute constant string lengths ---
+    // Cache color codes and their lengths for better performance
+    const char *color_filename = KREP_COLOR_FILENAME;
+    const char *color_reset = KREP_COLOR_RESET;
+    const char *color_separator = KREP_COLOR_SEPARATOR;
+    const char *color_line_number = KREP_COLOR_LINE_NUMBER;
+    const char *color_text = KREP_COLOR_TEXT;
+    const char *color_match = KREP_COLOR_MATCH;
+
+    // Precompute lengths to avoid repeated strlen calls
+    size_t len_color_reset = color_output_enabled ? strlen(color_reset) : 0;
+    size_t len_color_line_number = color_output_enabled ? strlen(color_line_number) : 0;
+    size_t len_color_text = color_output_enabled ? strlen(color_text) : 0;
+    size_t len_color_match = color_output_enabled ? strlen(color_match) : 0;
+
+    // ========================================================================
+    // --- Mode: Only Matching Parts (-o) ---
+    // ========================================================================
+    if (only_matching)
+    {
+// Use a larger batch buffer for aggregating output before system calls
+#define O_BATCH_BUFFER_SIZE (8 * 1024 * 1024) // 8MB batch buffer (doubled from original)
+        static char o_batch_buffer[O_BATCH_BUFFER_SIZE];
+        size_t o_batch_pos = 0; // Current position in the batch buffer
+
+        // --- Fast line number tracking ---
+        // Precompute newline positions for faster line number calculation
+        size_t *newline_positions = NULL;
+        size_t num_newlines = 0;
+        size_t newline_capacity = 0;
+
+        // Only precompute newline positions if we have more than a threshold number of matches
+        if (result->count > 10)
+        {
+            // Count newlines first to allocate properly
+            for (size_t i = 0; i < text_len; i++)
+            {
+                if (text[i] == '\n')
+                    num_newlines++;
+            }
+
+            // This cache is optional: use the existing incremental fallback
+            // when its size cannot be represented.
+            if (num_newlines <= (SIZE_MAX / sizeof(*newline_positions)) - 1)
+            {
+                newline_capacity = num_newlines + 1; // +1 for the implicit newline at the end
+                newline_positions = malloc(newline_capacity * sizeof(*newline_positions));
+
+                // Populate the array if allocation succeeded
+                if (newline_positions)
+                {
+                    size_t idx = 0;
+                    for (size_t i = 0; i < text_len; i++)
+                    {
+                        if (text[i] == '\n')
+                        {
+                            newline_positions[idx++] = i;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Precompute the filename prefix string (including colors if enabled)
+        char filename_prefix[PATH_MAX + 64] = ""; // Extra space for colors/separator
+        size_t filename_prefix_len = 0;
+        if (filename)
+        {
+            if (color_output_enabled)
+            {
+                filename_prefix_len = snprintf(filename_prefix, sizeof(filename_prefix), "%s%s%s%s:",
+                                               color_filename, filename, color_reset, color_separator);
+            }
+            else
+            {
+                filename_prefix_len = snprintf(filename_prefix, sizeof(filename_prefix), "%s:", filename);
+            }
+
+            // Safety check on filename_prefix length
+            if (filename_prefix_len <= 0 || filename_prefix_len >= sizeof(filename_prefix))
+            {
+                filename_prefix_len = (sizeof(filename_prefix) > 1) ? sizeof(filename_prefix) - 1 : 0;
+                if (filename_prefix_len > 0)
+                {
+                    filename_prefix[filename_prefix_len] = '\0';
+                }
+                else
+                {
+                    filename_prefix_len = 0;
+                }
+            }
+        }
+
+        // --- Process matches in batches for better performance ---
+        size_t current_line_number = 1;
+        size_t last_scanned_offset = 0;
+        size_t last_newline_idx = 0;
+
+        // Pre-allocate a static buffer for line numbers to avoid repeated format calls
+        char lineno_buffer[32]; // Large enough for any reasonable line number
+
+        // Iterate through all matches in order
+        for (uint64_t i = 0; i < result->count; i++)
+        {
+            // Check max_count limit before processing each match
+            if (max_count != SIZE_MAX && items_printed_count >= max_count)
+            {
+                break; // Stop processing if limit is reached
+            }
+
+            size_t start = result->positions[i].start_offset;
+            size_t end = result->positions[i].end_offset;
+
+            // Validation and bounds checking
+            if (start >= text_len || start > end)
+            {
+                continue; // Skip invalid match
+            }
+            if (end > text_len)
+            {
+                end = text_len; // Clamp end offset
+            }
+            size_t len = end - start;
+
+            // --- Optimized Line Number Calculation ---
+            // Faster line number calculation using precomputed newline positions when available
+            if (newline_positions && num_newlines > 0)
+            {
+                // Binary search to find the position in the newlines array
+                size_t left = 0;
+                size_t right = num_newlines - 1;
+
+                // Find the first newline position greater than start
+                while (left <= right)
+                {
+                    size_t mid = left + (right - left) / 2;
+                    if (newline_positions[mid] < start)
+                    {
+                        left = mid + 1;
+                    }
+                    else
+                    {
+                        if (mid == 0 || newline_positions[mid - 1] < start)
+                        {
+                            last_newline_idx = mid;
+                            break;
+                        }
+                        right = mid - 1;
+                    }
+                }
+
+                // Line number is the index of the first newline after start, plus 1
+                // (or the count of newlines before start, plus 1)
+                if (last_newline_idx > 0 && newline_positions[last_newline_idx - 1] >= start)
+                {
+                    last_newline_idx--;
+                }
+                current_line_number = last_newline_idx + 1;
+            }
+            else
+            {
+                // Fallback: Count newlines in the segment from last position to current match
+                if (start > last_scanned_offset)
+                {
+                    const char *scan_ptr = text + last_scanned_offset;
+                    const char *end_scan_ptr = text + start;
+
+                    // Fast newline counting with memchr
+                    while (scan_ptr < end_scan_ptr)
+                    {
+                        const void *newline_found = memchr(scan_ptr, '\n', end_scan_ptr - scan_ptr);
+                        if (newline_found)
+                        {
+                            current_line_number++;
+                            scan_ptr = (const char *)newline_found + 1;
+                        }
+                        else
+                        {
+                            break;
+                        }
+                    }
+                }
+            }
+            last_scanned_offset = start; // Update for next iteration
+
+            // Format line number into a temporary buffer
+            int lineno_len = snprintf(lineno_buffer, sizeof(lineno_buffer), "%zu:", current_line_number);
+            if (lineno_len <= 0 || (size_t)lineno_len >= sizeof(lineno_buffer))
+            {
+                strcpy(lineno_buffer, "ERR:");
+                lineno_len = 4;
+            }
+
+            // Calculate the total size required in the batch buffer for this entry
+            // Note: This is an estimate; actual size might differ slightly if newlines are replaced.
+            size_t required_estimate = filename_prefix_len + lineno_len + len + 1; // +1 for newline
+            if (color_output_enabled)
+            {
+                required_estimate += len_color_line_number + len_color_match + (len_color_reset * 2);
+            }
+
+            // Flush the batch buffer to stdout if the new entry won't fit (use estimate)
+            if (o_batch_pos + required_estimate > O_BATCH_BUFFER_SIZE)
+            {
+                if (fwrite(o_batch_buffer, 1, o_batch_pos, stdout) != o_batch_pos)
+                {
+                    perror("Error writing batch buffer to stdout (-o mode)");
+                    // Consider how to handle write errors; maybe break or return error count?
+                    break;
+                }
+                o_batch_pos = 0; // Reset batch buffer position
+            }
+
+            // --- Efficient append to batch buffer using direct pointer manipulation ---
+            char *current_write_ptr = o_batch_buffer + o_batch_pos;
+            char *batch_buffer_end = o_batch_buffer + O_BATCH_BUFFER_SIZE; // Boundary check
+
+            // 1. Copy filename prefix (if any)
+            if (filename_prefix_len > 0)
+            {
+                safe_append_to_batch(&current_write_ptr, batch_buffer_end, &o_batch_pos, O_BATCH_BUFFER_SIZE, filename_prefix, filename_prefix_len);
+            }
+
+            // 2. Copy line number
+            if (color_output_enabled)
+            {
+                safe_append_to_batch(&current_write_ptr, batch_buffer_end, &o_batch_pos, O_BATCH_BUFFER_SIZE, color_line_number, len_color_line_number);
+            }
+            safe_append_to_batch(&current_write_ptr, batch_buffer_end, &o_batch_pos, O_BATCH_BUFFER_SIZE, lineno_buffer, lineno_len);
+            if (color_output_enabled)
+            {
+                safe_append_to_batch(&current_write_ptr, batch_buffer_end, &o_batch_pos, O_BATCH_BUFFER_SIZE, color_reset, len_color_reset);
+            }
+
+            // 3. Start color for match (if enabled)
+            if (color_output_enabled)
+            {
+                safe_append_to_batch(&current_write_ptr, batch_buffer_end, &o_batch_pos, O_BATCH_BUFFER_SIZE, color_match, len_color_match);
+            }
+
+            // 4. Copy the matched text, replacing internal newlines
+            const char *match_ptr = text + start;
+            for (size_t k = 0; k < len; ++k)
+            {
+                char current_char = match_ptr[k];
+                if (current_char == '\n')
+                {
+                    safe_append_to_batch(&current_write_ptr, batch_buffer_end, &o_batch_pos, O_BATCH_BUFFER_SIZE, " ", 1);
+                }
+                else
+                {
+                    safe_append_to_batch(&current_write_ptr, batch_buffer_end, &o_batch_pos, O_BATCH_BUFFER_SIZE, &current_char, 1);
+                }
+                // Check if buffer became full during character copy
+                if (o_batch_pos == O_BATCH_BUFFER_SIZE)
+                {
+                    break; // Stop copying this match if buffer full
+                }
+            }
+
+            // Check again if buffer became full during the loop
+            if (o_batch_pos == O_BATCH_BUFFER_SIZE)
+            {
+                // Flush here if needed, or let the outer loop handle it
+                continue; // Skip rest of processing for this match
+            }
+
+            // 5. End color for match (if enabled)
+            if (color_output_enabled)
+            {
+                safe_append_to_batch(&current_write_ptr, batch_buffer_end, &o_batch_pos, O_BATCH_BUFFER_SIZE, color_reset, len_color_reset);
+            }
+
+            // 6. Add newline (only if buffer not already full)
+            if (o_batch_pos < O_BATCH_BUFFER_SIZE)
+            {
+                safe_append_to_batch(&current_write_ptr, batch_buffer_end, &o_batch_pos, O_BATCH_BUFFER_SIZE, "\n", 1);
+            }
+
+            // Update batch buffer position based on the actual data written
+            if (o_batch_pos != O_BATCH_BUFFER_SIZE)
+            {
+                o_batch_pos = current_write_ptr - o_batch_buffer;
+            }
+            items_printed_count++;
+        }
+
+        // Flush any remaining content in the batch buffer
+        if (o_batch_pos > 0)
+        {
+            fwrite(o_batch_buffer, 1, o_batch_pos, stdout);
+        }
+
+        // Free resources
+        if (newline_positions)
+        {
+            free(newline_positions);
+        }
+    }
+    // ========================================================================
+    // --- Mode: Full Lines (Default) ---
+    // ========================================================================
+    else
+    {
+        size_t last_printed_line_start = SIZE_MAX; // Track the start offset of the last line printed
+
+        // Precompute the filename prefix string (including colors if enabled)
+        char filename_prefix[PATH_MAX + 64] = ""; // Extra space for colors/separator
+        size_t filename_prefix_len = 0;
+        if (filename)
+        {
+            if (color_output_enabled)
+            {
+                // Full line starts with filename, separator, then text color
+                filename_prefix_len = snprintf(filename_prefix, sizeof(filename_prefix), "%s%s%s%s:%s",
+                                               color_filename, filename, color_reset, color_separator, color_text);
+            }
+            else
+            {
+                filename_prefix_len = snprintf(filename_prefix, sizeof(filename_prefix), "%s:", filename);
+            }
+
+            // Safety check on filename_prefix length
+            if (filename_prefix_len <= 0 || filename_prefix_len >= sizeof(filename_prefix))
+            {
+                filename_prefix_len = (sizeof(filename_prefix) > 1) ? sizeof(filename_prefix) - 1 : 0;
+                if (filename_prefix_len > 0)
+                {
+                    filename_prefix[filename_prefix_len] = '\0';
+                }
+                else
+                {
+                    filename_prefix_len = 0;
+                }
+            }
+        }
+
+// --- Create a line batch buffer for full line mode ---
+// This buffer aggregates multiple formatted lines before writing to stdout
+#define LINE_BATCH_BUFFER_SIZE (8 * 1024 * 1024) // 8MB for batch output
+        static char line_batch_buffer[LINE_BATCH_BUFFER_SIZE];
+        size_t line_batch_pos = 0;
+
+        // Iterate through matches, processing line by line
+        uint64_t i = 0;
+        while (i < result->count)
+        {
+            // Check max_count limit before processing each line
+            if (max_count != SIZE_MAX && items_printed_count >= max_count)
+            {
+                break; // Stop processing if limit is reached
+            }
+
+            size_t first_match_start_on_line = result->positions[i].start_offset;
+
+            // Basic validation for the starting match offset
+            if (first_match_start_on_line >= text_len)
+            {
+                i++; // Skip invalid starting match
+                continue;
+            }
+
+            // Find the start of the line containing this match (optimization: use memrchr if available)
+            size_t line_start = find_line_start(text, text_len, first_match_start_on_line); // Use text instead of text_start
+
+            // Check if this line has already been printed in a previous iteration
+            if (line_start == last_printed_line_start)
+            {
+                // Efficiently skip all subsequent matches that start on this *same* line
+                // Find the end of the current line first
+                size_t current_line_end = find_line_end(text, text_len, line_start); // Use text instead of text_start
+                uint64_t i_before = i;
+                while (i < result->count && result->positions[i].start_offset < current_line_end)
+                {
+                    i++;
+                }
+
+                // A zero-length match can start exactly at current_line_end. In that case,
+                // the loop above consumes nothing and the outer loop would spin forever.
+                if (i == i_before)
+                    i++;
+
+                continue; // Move to the next potential new line
+            }
+
+            // Found a new line to process. Find its end boundary.
+            size_t line_end = find_line_end(text, text_len, line_start); // Use text instead of text_start
+
+            // --- Collect all matches that fall within this line ---
+            size_t line_match_count = 0;
+            uint64_t line_match_scan_idx = i; // Start scanning from the current match index
+
+            while (line_match_scan_idx < result->count)
+            {
+                size_t k_start = result->positions[line_match_scan_idx].start_offset;
+
+                // If the match starts at or after the end of the current line, we're done collecting for this line.
+                if (k_start >= line_end)
+                {
+                    break;
+                }
+
+                // Only consider matches that start *on* this line
+                if (k_start >= line_start)
+                {
+                    // Ensure we don't overflow the preallocated line_match_positions buffer
+                    if (line_match_count < MAX_MATCHES_PER_LINE)
+                    {
+                        size_t k_end = result->positions[line_match_scan_idx].end_offset;
+                        // Clamp match end to text length for safety
+                        if (k_end > text_len)
+                            k_end = text_len;
+
+                        // Store the match relative to the start of the text
+                        line_match_positions[line_match_count].start_offset = k_start;
+                        line_match_positions[line_match_count].end_offset = k_end;
+                        line_match_count++;
+                    }
+                    else
+                    {
+                        // Log warning if too many matches on one line
+                        fprintf(stderr, "Warning: Exceeded MAX_MATCHES_PER_LINE (%d) on line starting at offset %zu in %s\n",
+                                MAX_MATCHES_PER_LINE, line_start, filename ? filename : "<stdin>");
+                        // Stop collecting matches for this line, but process the ones found so far
+                        break;
+                    }
+                }
+
+                line_match_scan_idx++; // Move to the next potential match
+            }
+
+            // --- Pre-calculate required buffer size for the line ---
+            size_t max_required_size = filename_prefix_len;
+            size_t simulated_current_pos = line_start;
+            bool size_overflow = !checked_add_size(&max_required_size, 1);
+            if (color_output_enabled && filename_prefix_len == 0)
+                size_overflow |= !checked_add_size(&max_required_size, len_color_text);
+
+            for (size_t k = 0; k < line_match_count && !size_overflow; ++k)
+            {
+                size_t k_start = line_match_positions[k].start_offset;
+                size_t k_end = line_match_positions[k].end_offset;
+                if (k_start < line_start)
+                    k_start = line_start;
+                if (k_end > line_end)
+                    k_end = line_end;
+                if (k_start >= k_end)
+                    continue;
+                if (k_start > simulated_current_pos)
+                    size_overflow |= !checked_add_size(&max_required_size,
+                                                       k_start - simulated_current_pos);
+                if (color_output_enabled)
+                    size_overflow |= !checked_add_size(&max_required_size, len_color_match);
+                size_overflow |= !checked_add_size(&max_required_size, k_end - k_start);
+                if (color_output_enabled)
+                    size_overflow |= !checked_add_size(&max_required_size, len_color_text);
+                simulated_current_pos = k_end;
+            }
+            if (!size_overflow && simulated_current_pos < line_end)
+                size_overflow |= !checked_add_size(&max_required_size,
+                                                   line_end - simulated_current_pos);
+            if (!size_overflow && color_output_enabled)
+                size_overflow |= !checked_add_size(&max_required_size, len_color_reset);
+            if (size_overflow)
+            {
+                fprintf(stderr, "Error: Formatted line is too large to represent.\n");
+                i = line_match_scan_idx;
+                continue;
+            }
+
+            // --- Ensure line buffer capacity once ---
+            if (!ensure_line_buffer_capacity((char **)&line_buffer, &line_buffer_capacity, 0, max_required_size))
+            {
+                // Handle error: cannot allocate enough buffer space for the line
+                fprintf(stderr, "Error: Failed to ensure sufficient buffer capacity (%zu bytes) for line starting at offset %zu in %s\n",
+                        max_required_size, line_start, filename ? filename : "<stdin>");
+                // Skip processing this line and advance past its matches
+                i = line_match_scan_idx;
+                continue;
+            }
+
+            // --- Format the current line with highlighting ---
+            size_t buffer_pos = 0;                 // Current position in line_buffer
+            char *current_write_ptr = line_buffer; // Use a direct pointer
+
+            // Add filename prefix if applicable
+            if (filename_prefix_len > 0)
+            {
+                memcpy(current_write_ptr, filename_prefix, filename_prefix_len);
+                current_write_ptr += filename_prefix_len;
+            }
+            else if (color_output_enabled)
+            {
+                // If no filename, but color is on, start the line with the default text color
+                memcpy(current_write_ptr, color_text, len_color_text);
+                current_write_ptr += len_color_text;
+            }
+
+            // Iterate through the line, copying text segments and highlighted matches
+            size_t current_pos_on_line = line_start; // Track position within the original text
+            for (size_t k = 0; k < line_match_count; ++k)
+            {
+                size_t k_start = line_match_positions[k].start_offset;
+                size_t k_end = line_match_positions[k].end_offset;
+
+                // Clamp match boundaries strictly to the current line's boundaries
+                if (k_start < line_start)
+                    k_start = line_start;
+                if (k_end > line_end)
+                    k_end = line_end;
+                if (k_start >= k_end)
+                    continue; // Skip zero-length or invalid matches
+
+                // 1. Copy text segment BEFORE the current match
+                if (k_start > current_pos_on_line)
+                {
+                    size_t len_before = k_start - current_pos_on_line;
+                    memcpy(current_write_ptr, text + current_pos_on_line, len_before);
+                    current_write_ptr += len_before;
+                }
+
+                // 2. Copy the highlighted MATCH segment
+                size_t match_len = k_end - k_start;
+                if (color_output_enabled)
+                {
+                    memcpy(current_write_ptr, color_match, len_color_match);
+                    current_write_ptr += len_color_match;
+                }
+                memcpy(current_write_ptr, text + k_start, match_len);
+                current_write_ptr += match_len;
+                if (color_output_enabled)
+                {
+                    memcpy(current_write_ptr, color_text, len_color_text); // Switch back to text color after match
+                    current_write_ptr += len_color_text;
+                }
+
+                // Update the position marker within the original text line
+                current_pos_on_line = k_end;
+            }
+
+            // 3. Copy any remaining text AFTER the last match until the line end
+            if (current_pos_on_line < line_end)
+            {
+                size_t len_after = line_end - current_pos_on_line;
+                memcpy(current_write_ptr, text + current_pos_on_line, len_after);
+                current_write_ptr += len_after;
+            }
+
+            // 4. Add final color reset and newline character
+            if (color_output_enabled)
+            {
+                memcpy(current_write_ptr, color_reset, len_color_reset);
+                current_write_ptr += len_color_reset;
+            }
+            *current_write_ptr = '\n';
+            current_write_ptr++;
+
+            // Calculate final buffer position based on pointer arithmetic
+            buffer_pos = current_write_ptr - line_buffer;
+
+            // --- Efficient batch output handling ---
+            // Check if the newly formatted line fits in the batch buffer
+            if (line_batch_pos + buffer_pos > LINE_BATCH_BUFFER_SIZE)
+            {
+                // Flush the current batch buffer before adding the new line
+                if (fwrite(line_batch_buffer, 1, line_batch_pos, stdout) != line_batch_pos)
+                {
+                    perror("Error writing line batch buffer to stdout");
+                    // Consider how to handle this error; maybe stop processing?
+                }
+                line_batch_pos = 0; // Reset batch buffer position
+            }
+
+            // Copy formatted line to batch buffer (only if it fits after potential flush)
+            // This check prevents buffer overflow if a single line exceeds LINE_BATCH_BUFFER_SIZE
+            if (buffer_pos <= LINE_BATCH_BUFFER_SIZE)
+            {
+                memcpy(line_batch_buffer + line_batch_pos, line_buffer, buffer_pos);
+                line_batch_pos += buffer_pos;
+            }
+            else
+            {
+                // If a single line is too large, write it directly (or handle error)
+                fprintf(stderr, "Warning: Single line exceeds batch buffer size (%zu > %d). Writing directly.\n",
+                        buffer_pos, LINE_BATCH_BUFFER_SIZE);
+                if (fwrite(line_buffer, 1, buffer_pos, stdout) != buffer_pos)
+                {
+                    perror("Error writing oversized line directly to stdout");
+                }
+            }
+
+            // Update tracking variables
+            items_printed_count++;                // Increment after successfully printing/batching a line
+            last_printed_line_start = line_start; // Mark this line as printed
+
+            // Advance the main loop index 'i' past all matches processed for this line
+            i = line_match_scan_idx;
+            continue; // Continue to the next potential line
+        }
+
+        // Flush any remaining content in the line batch buffer
+        if (line_batch_pos > 0)
+        {
+            if (fwrite(line_batch_buffer, 1, line_batch_pos, stdout) != line_batch_pos)
+            {
+                perror("Error writing final line batch buffer to stdout");
+            }
+        }
+    }
+
+    // --- Cleanup ---
+    fflush(stdout);
+    free(line_buffer);
+
+    return items_printed_count;
+}
+
+// --- Utility Functions ---
+
+// Helper function to ensure a buffer has enough capacity, reallocating if needed.
+// Returns true on success, false on allocation failure.
+static bool ensure_line_buffer_capacity(char **buffer_ptr, size_t *capacity_ptr, size_t current_pos, size_t needed)
+{
+    if (current_pos + needed > *capacity_ptr)
+    {
+        size_t new_capacity = *capacity_ptr;
+        if (new_capacity == 0)
+        {
+            new_capacity = 1024; // Start with a reasonable size
+        }
+        // Double the capacity until it's large enough
+        while (new_capacity < current_pos + needed)
+        {
+            // Check for potential overflow before doubling
+            if (new_capacity > SIZE_MAX / 2)
+            {
+                // If doubling would overflow, try setting to the exact needed size + some buffer
+                // This is a last resort and might still fail if needed is too large
+                new_capacity = current_pos + needed + 1024;
+                if (new_capacity < current_pos + needed)
+                { // Check overflow again
+                    fprintf(stderr, "Error: Cannot allocate required buffer capacity (overflow).\n");
+                    return false;
+                }
+                break; // Exit loop after setting to required size
+            }
+            new_capacity *= 2;
+        }
+
+        char *new_buffer = realloc(*buffer_ptr, new_capacity);
+        if (!new_buffer)
+        {
+            perror("realloc failed for buffer");
+            return false;
+        }
+        *buffer_ptr = new_buffer;
+        *capacity_ptr = new_capacity;
+    }
+    return true;
+}
+
+// Get monotonic time
+double get_time(void)
+{
+    struct timespec ts;
+    if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0)
+    {
+        perror("Cannot get monotonic time");
+        return 0.0;
+    }
+    return (double)ts.tv_sec + (double)ts.tv_nsec / 1e9;
+}
+
+// Print usage information
+void print_usage(const char *program_name)
+{
+    bool style = isatty(STDOUT_FILENO);
+    const char *title = style ? KREP_COLOR_HELP_TITLE : "";
+    const char *section = style ? KREP_COLOR_HELP_SECTION : "";
+    const char *option = style ? KREP_COLOR_HELP_OPTION : "";
+    const char *muted = style ? KREP_COLOR_HELP_MUTED : "";
+    const char *reset = style ? KREP_COLOR_RESET : "";
+
+    printf("%skrep v%s%s\n", title, VERSION, reset);
+    printf("%sFast search with polished terminal output.%s\n\n", muted, reset);
+
+    printf("%sUsage%s\n", section, reset);
+    printf("  %s [OPTIONS] PATTERN [FILE | DIRECTORY]\n", program_name);
+    printf("  %s [OPTIONS] -e PATTERN [-e PATTERN...] [FILE | DIRECTORY]\n", program_name);
+    printf("  %s [OPTIONS] -f FILE [FILE | DIRECTORY]\n", program_name);
+    printf("  %s [OPTIONS] -s PATTERN STRING_TO_SEARCH\n", program_name);
+    printf("  %s [OPTIONS] PATTERN < FILE\n", program_name);
+    printf("  cat FILE | %s [OPTIONS] PATTERN\n\n", program_name);
+
+    printf("%sSearch%s\n", section, reset);
+    printf("  %s-i%s             Perform case-insensitive matching.\n", option, reset);
+    printf("  %s-e PATTERN%s     Specify pattern. Reusable for multiple patterns.\n", option, reset);
+    printf("  %s-f FILE%s        Read patterns from FILE (use '-' for stdin).\n", option, reset);
+    printf("  %s-E%s             Use POSIX Extended Regular Expressions.\n", option, reset);
+    printf("  %s-F%s             Use fixed strings (default unless -E).\n", option, reset);
+    printf("  %s-w%s             Match whole words only.\n\n", option, reset);
+
+    printf("%sScope & Performance%s\n", section, reset);
+    printf("  %s-r%s             Search directories recursively.\n", option, reset);
+    printf("  %s--glob=GLOB%s    Include only files matching GLOB (repeatable).\n", option, reset);
+    printf("  %s--exclude=GLOB%s Exclude paths matching GLOB (repeatable).\n", option, reset);
+    printf("  %s--hidden%s       Include hidden files and directories.\n", option, reset);
+    printf("  %s--gitignore%s    Respect .gitignore when used with -r.\n", option, reset);
+    printf("  %s--algo=ALGO%s    Force algorithm: auto (default), bm, kmp, bndm, two.\n", option, reset);
+    printf("  %s-t NUM%s         Set thread count (default: auto).\n", option, reset);
+    printf("  %s--no-simd%s      Disable SIMD acceleration.\n\n", option, reset);
+
+    printf("%sOutput & UX%s\n", section, reset);
+    printf("  %s-n%s             Show line numbers.\n", option, reset);
+    printf("  %s-A NUM%s         Show NUM lines after each matching line.\n", option, reset);
+    printf("  %s-B NUM%s         Show NUM lines before each matching line.\n", option, reset);
+    printf("  %s-C NUM%s         Show NUM lines of surrounding context.\n", option, reset);
+    printf("  %s-o%s             Print only matching parts, one per line.\n", option, reset);
+    printf("  %s-c%s             Print only match counts.\n", option, reset);
+    printf("  %s-l%s             Print files with matches.\n", option, reset);
+    printf("  %s-L%s             Print files without matches.\n", option, reset);
+    printf("  %s-q%s             Quiet mode; only set exit status.\n", option, reset);
+    printf("  %s--json%s         Emit JSON Lines for matches/counts/paths.\n", option, reset);
+    printf("  %s--stats%s        Print a compact search summary to stderr.\n", option, reset);
+    printf("  %s-m NUM%s         Stop after NUM matching lines per file.\n", option, reset);
+    printf("  %s-s%s             Search in STRING_TO_SEARCH.\n", option, reset);
+    printf("  %s--color[=WHEN]%s Color mode: always, never, auto (default).\n", option, reset);
+    printf("  %s-v%s             Show version information.\n", option, reset);
+    printf("  %s-h, --help%s     Show this help page.\n\n", option, reset);
+
+    printf("%sExit Status%s\n", section, reset);
+    printf("  0  match found\n");
+    printf("  1  no match found\n");
+    printf("  2  error\n\n");
+
+    printf("%sExamples%s\n", section, reset);
+    printf("  %s \"search term\" input.log\n", program_name);
+    printf("  %s -i -c ERROR large_log.txt\n", program_name);
+    printf("  %s -t 8 -o '[0-9]+' data.log | sort | uniq -c\n", program_name);
+    printf("  %s -E \"^[Ee]rror: .*failed\" system.log\n", program_name);
+    printf("  %s -r \"MyClass\" /path/to/project\n", program_name);
+    printf("  %s -r --gitignore --glob='*.c' \"TODO\" .\n", program_name);
+    printf("  %s --json -n \"panic\" app.log\n", program_name);
+    printf("  %s -e Error -e Warning app.log\n", program_name);
+    printf("  echo 'pattern' | %s -f - target.txt\n", program_name);
+}
+
+// Helper for case-insensitive comparison using the lookup table
+inline bool memory_equals_case_insensitive(const unsigned char *s1, const unsigned char *s2, size_t n)
+{
+    for (size_t i = 0; i < n; ++i)
+    {
+        if (lower_table[s1[i]] != lower_table[s2[i]])
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+// --- Boyer-Moore-Horspool Algorithm with Turbo Shift ---
+
+// Prepare the bad character table for BMH
+void prepare_bad_char_table(const unsigned char *pattern, size_t pattern_len, int *bad_char_table, bool case_sensitive)
+{
+    // Initialize all shifts to pattern length
+    for (int i = 0; i < 256; i++)
+    {
+        bad_char_table[i] = (int)pattern_len;
+    }
+    // Calculate shifts for characters actually in the pattern (excluding the last character)
+    // The shift is the distance from the end of the pattern.
+    for (size_t i = 0; i < pattern_len - 1; i++)
+    {
+        unsigned char c = pattern[i];
+        int shift = (int)(pattern_len - 1 - i);
+        if (!case_sensitive)
+        {
+            unsigned char lc = lower_table[c];
+            // Set the minimum shift for this character (rightmost occurrence determines shift)
+            if (shift < bad_char_table[lc])
+            {
+                bad_char_table[lc] = shift;
+            }
+            // Also set for the uppercase equivalent if different
+            unsigned char uc = toupper(c); // Use standard toupper for the other case
+            if (uc != lc)
+            {
+                if (shift < bad_char_table[uc])
+                {
+                    bad_char_table[uc] = shift;
+                }
+            }
+        }
+        else
+        {
+            // Set the minimum shift
+            if (shift < bad_char_table[c])
+            {
+                bad_char_table[c] = shift;
+            }
+        }
+    }
+}
+
+
+
+// Adds positions to 'result' if params->track_positions is true.
+// Enhanced with prefetching for better cache performance
+HOT_FUNCTION
+uint64_t boyer_moore_search(const search_params_t *params,
+                            const char *text_start,
+                            size_t text_len,
+                            match_result_t *result) // For position tracking (can be NULL)
+{
+    // --- Add max_count == 0 check ---
+    if (UNLIKELY(params->max_count == 0 && (params->count_lines_mode || params->track_positions)))
+        return 0;
+    // --- End add ---
+
+    const unsigned char *utext_start = (const unsigned char *)text_start;
+    const unsigned char *search_pattern = (const unsigned char *)params->pattern;
+    size_t pattern_len = params->pattern_len;
+    bool case_sensitive = params->case_sensitive;
+    bool count_lines_mode = params->count_lines_mode;
+    bool track_positions = params->track_positions;
+    size_t max_count = params->max_count;
+
+    if (UNLIKELY(pattern_len == 0 || text_len < pattern_len))
+        return 0;
+
+    // Prepare bad character table
+    int bad_char_table[256];
+    prepare_bad_char_table(search_pattern, pattern_len, bad_char_table, case_sensitive);
+
+    uint64_t current_count = 0;
+    size_t last_counted_line_start = SIZE_MAX;
+    size_t i = 0;
+    size_t search_limit = text_len - pattern_len + 1;
+
+    // Hoist pattern's last char once
+    unsigned char pc_last = search_pattern[pattern_len - 1];
+    unsigned char pc_last_lower = case_sensitive ? pc_last : lower_table[pc_last];
+
+    while (i < search_limit)
+    {
+        // Prefetch ahead for better cache utilization
+        if (LIKELY(i + PREFETCH_DISTANCE < text_len))
+            __builtin_prefetch(utext_start + i + PREFETCH_DISTANCE, 0, 0);
+
+        unsigned char tc_last = utext_start[i + pattern_len - 1];
+        unsigned char tc_last_cmp = case_sensitive ? tc_last : lower_table[tc_last];
+
+        bool last_char_match = (tc_last_cmp == pc_last_lower);
+
+        if (last_char_match)
+        {
+            bool full_match = true;
+            if (pattern_len > 1)
+            {
+                if (case_sensitive)
+                {
+                    full_match = (memcmp(utext_start + i, search_pattern, pattern_len - 1) == 0);
+                }
+                else
+                {
+                    full_match = memory_equals_case_insensitive(utext_start + i, search_pattern, pattern_len - 1);
+                }
+            }
+
+            if (full_match)
+            {
+                // Whole word check
+                if (params->whole_word && !is_whole_word_match(text_start, text_len, i, i + pattern_len))
+                {
+                    unsigned char bad = tc_last;
+                    int shift_val = bad_char_table[bad];
+                    i += shift_val;
+                    continue;
+                }
+                bool count_incremented_this_match = false;
+                if (count_lines_mode)
+                {
+                    size_t line_start = find_line_start(text_start, text_len, i);
+                    if (line_start != last_counted_line_start)
+                    {
+                        current_count++;
+                        last_counted_line_start = line_start;
+                        count_incremented_this_match = true;
+
+                        if (current_count >= max_count)
+                            break;
+
+                        // Optimization: skip to the next line for -c mode
+                        size_t line_end = find_line_end(text_start, text_len, line_start);
+                        size_t next_line_start = (line_end < text_len) ? line_end + 1 : text_len;
+                        if (next_line_start > i)
+                        {
+                            i = next_line_start;
+                            continue;
+                        }
+                    }
+                }
+                else
+                {
+                    current_count++;
+                    count_incremented_this_match = true;
+                    if (track_positions && result && current_count <= max_count)
+                    {
+                        if (!match_result_add(result, i, i + pattern_len))
+                        {
+                            // Warning: allocation failed, ignore location
+                        }
+                    }
+                }
+
+                if (count_incremented_this_match && current_count >= max_count)
+                    break;
+
+                unsigned char bad = tc_last;
+                int shift_val = bad_char_table[bad];
+                if (only_matching && !params->count_lines_mode)
+                    i += pattern_len;
+                else
+                    i += shift_val;
+                continue;
+            }
+        }
+
+        unsigned char bad = tc_last;
+        int shift_val = bad_char_table[bad];
+        i += shift_val;
+    }
+
+    return current_count;
+}
+
+// --- Regex Search ---
+
+uint64_t regex_search(const search_params_t *params,
+                      const char *text_start,
+                      size_t text_len,
+                      match_result_t *result)
+{
+    // 1) If limit is zero, no matches.
+    if (params->max_count == 0 && (params->count_lines_mode || params->track_positions)) // Check both modes
+        return 0;
+
+    // Must have a compiled regex.
+    if (!params->compiled_regex)
+        return 0;
+
+    // Special‐case empty haystack: allow zero‐length match like ^$
+    if (text_len == 0)
+    {
+        regmatch_t m;
+        if (regexec(params->compiled_regex, "", 1, &m, 0) == 0)
+        {
+            // count‐lines vs track_positions
+            if (params->count_lines_mode)
+                return 1;
+            if (params->track_positions && result)
+                match_result_add(result, 0, 0);
+            return 1;
+        }
+        return 0;
+    }
+
+    const regex_t *regex = params->compiled_regex;
+    regmatch_t pmatch[1];
+    int base_eflags = REG_STARTEND | REG_NEWLINE | (params->case_sensitive ? 0 : REG_ICASE); // REG_NEWLINE is already part of base_eflags through compilation flags
+    const char *cur = text_start;
+    size_t rem = text_len;
+    size_t last_line = SIZE_MAX;
+    uint64_t count = 0;
+    size_t max_count = params->max_count; // Get max_count
+
+    while (rem > 0 || (rem == 0 && cur == text_start)) // Allow one check for empty string match
+    {
+        // Ensure we don't search past the end if rem becomes 0 mid-loop
+        pmatch[0].rm_so = 0;
+        pmatch[0].rm_eo = rem; // Search up to the remaining length
+        // REG_NOTBOL is set if we are not at the absolute start of the original text
+        bool at_line_start = (cur == text_start) || (cur > text_start && cur[-1] == '\n');
+        int eflags = base_eflags | (at_line_start ? 0 : REG_NOTBOL);
+
+        int rc = regexec(regex, cur, 1, pmatch, eflags);
+
+        if (rc != 0)
+        {
+            if (rc == REG_NOMATCH)
+            {
+                break; // No more matches found
+            }
+            else
+            {
+                // Handle regex execution error
+                char ebuf[256];
+                regerror(rc, regex, ebuf, sizeof(ebuf));
+                fprintf(stderr, "krep: Regex execution error: %s\n", ebuf);
+                // Consider returning an error indicator or specific count
+                return count; // Return count found so far on error
+            }
+        }
+
+        // Check for -1 offsets which indicate failure (shouldn't happen if rc == 0)
+        if (pmatch[0].rm_so == -1 || pmatch[0].rm_eo == -1)
+        {
+            fprintf(stderr, "krep: Warning: regexec returned success but invalid offsets.\n");
+            break; // Treat as no match / error
+        }
+
+        size_t so = pmatch[0].rm_so; // Offset relative to 'cur'
+        size_t eo = pmatch[0].rm_eo; // Offset relative to 'cur'
+
+        // Ensure eo >= so (sanity check)
+        if (eo < so)
+        {
+            fprintf(stderr, "krep: Warning: regexec returned eo < so.\n");
+            // Advance past this point to avoid infinite loop
+            const char *next_cur = cur + so + 1;
+            if (next_cur > text_start + text_len)
+            {
+                cur = text_start + text_len;
+            }
+            else
+            {
+                cur = next_cur;
+            }
+            rem = (text_start + text_len) - cur;
+            continue;
+        }
+
+        size_t start = (cur - text_start) + so; // Absolute start offset
+        size_t end = (cur - text_start) + eo;   // Absolute end offset
+
+        // Whole word check
+        if (params->whole_word && !is_whole_word_match(text_start, text_len, start, end))
+        {
+            // If whole word check fails, we need to advance past the start of this failed match
+            // Advance 'cur' by the start offset of the failed match within 'cur' + 1
+            const char *next_cur = cur + so + 1;
+            if (next_cur > text_start + text_len)
+            {
+                cur = text_start + text_len;
+            }
+            else
+            {
+                cur = next_cur;
+            }
+            rem = (text_start + text_len) - cur;
+            continue;
+        }
+
+        if (params->count_lines_mode)
+        {
+            size_t line_start_offset = find_line_start(text_start, text_len, start);
+            if (line_start_offset != last_line)
+            {
+                count++;
+                last_line = line_start_offset;
+
+                if (count >= max_count)
+                    break;
+
+                // Optimization: skip to the next line for -c mode
+                size_t line_end = find_line_end(text_start, text_len, line_start_offset);
+                size_t next_line_start = (line_end < text_len) ? line_end + 1 : text_len;
+                cur = text_start + next_line_start;
+                rem = (text_start + text_len) - cur;
+                continue;
+            }
+        }
+        else
+        {
+            count++;
+            if (params->track_positions && result)
+            {
+                match_result_add(result, start, end);
+            }
+        }
+
+        // Check max_count limit
+        if (count >= max_count)
+            break;
+
+        // Advance cur to continue searching from the end of the current match.
+        // If the match was zero-length, advance by one character from the start of the match
+        // to prevent infinite loops and ensure progress.
+        size_t advance_by_in_slice = eo; // End offset of match within the current slice `cur`
+        if (so == eo)
+        {                                 // Zero-length match
+            advance_by_in_slice = so + 1; // Advance by 1 from the start of the zero-length match
+        }
+
+        // Ensure that cur always advances if a match is found and we are not at the end of text.
+        // This is particularly important if advance_by_in_slice could somehow be 0 when so != eo (should not happen).
+        // The (so == eo) case already ensures advance_by_in_slice is at least so + 1.
+        // If so < eo, then advance_by_in_slice = eo > so, so cur will advance.
+
+        const char *next_search_start = cur + advance_by_in_slice;
+
+        if (next_search_start > text_start + text_len)
+        {
+            cur = text_start + text_len; // Move to the very end
+        }
+        else if (next_search_start <= cur && text_len > 0 && (cur < text_start + text_len))
+        {
+            // This case should ideally not be hit if so <= eo and zero-length matches advance by at least 1.
+            // Force advancement by at least one character from current `cur` if stuck.
+            // This might happen if `so` and `eo` are both 0 and `cur` is not advanced.
+            // The `so + 1` for zero-length matches should prevent this.
+            // As a safeguard:
+            cur = cur + 1;
+        }
+        else
+        {
+            cur = next_search_start;
+        }
+
+        if (cur > text_start + text_len)
+        { // Should be caught by prior check, but defensive
+            cur = text_start + text_len;
+        }
+        rem = (text_start + text_len) - cur;
+
+    } // end while
+
+    return count;
+}
+
+// ============================================================
+// Shift-Or / BNDM Algorithm (Bit-parallel string matching)
+//
+// For patterns 1–8 bytes this uses a single 64-bit word (BNDM).
+// For patterns 9–64 bytes it falls back to the Two-Way algorithm
+// since multi-word bit-parallel on general-purpose CPUs has too
+// much overhead.
+//
+// Reference: "A new approach to text searching" by
+//   Baeza-Yates & Gonnet (CACM 1992); BNDM variant by
+//   Navarro & Raffinot (ACM Computing Surveys 2002).
+// ============================================================
+
+// For patterns <=8 bytes on 64-bit: single-word BNDM.
+static HOT_FUNCTION uint64_t
+shift_or_search_small(const search_params_t *params,
+                      const char *text_start,
+                      size_t text_len,
+                      match_result_t *result)
+{
+    const unsigned char *pattern = (const unsigned char *)params->pattern;
+    const size_t m = params->pattern_len;
+    const bool case_sensitive = params->case_sensitive;
+    const bool count_lines_mode = params->count_lines_mode;
+    const bool track_positions = params->track_positions;
+    const size_t max_count = params->max_count;
+
+    // Precompute 256-entry mask: mask[c] has bit i set iff pattern[m-1-i] == c
+    uint64_t mask[256] = {0};
+    for (size_t j = 0; j < m; j++) {
+        unsigned char ch = pattern[m - 1 - j];
+        mask[ch] |= ((uint64_t)1) << j;
+        if (!case_sensitive) {
+            mask[lower_table[ch]] |= ((uint64_t)1) << j;
+            // Also set the other case if applicable
+            unsigned char up = toupper(ch);
+            if (up != ch)
+                mask[up] |= ((uint64_t)1) << j;
+        }
+    }
+    // For case-insensitive, ensure all variants are covered
+    if (!case_sensitive) {
+        for (size_t j = 0; j < m; j++) {
+            unsigned char ch = pattern[m - 1 - j];
+            unsigned char lo = lower_table[ch];
+            if (lo != ch)
+                mask[lo] |= ((uint64_t)1) << j;
+        }
+    }
+
+    const uint64_t match_mask = ((uint64_t)1) << (m - 1);
+    const unsigned char *text = (const unsigned char *)text_start;
+    size_t last_counted_line_start = SIZE_MAX;
+    uint64_t current_count = 0;
+    size_t pos = 0;
+
+    while (pos + m <= text_len) {
+        // Prefetch ahead
+        if (LIKELY(pos + PREFETCH_DISTANCE < text_len))
+            __builtin_prefetch(text + pos + PREFETCH_DISTANCE, 0, 0);
+
+        size_t j = m;
+        size_t last = m;
+        uint64_t state = ~(uint64_t)0;
+
+        // Backward scan within the window
+        while (state != 0) {
+            j--;
+            unsigned char ch = text[pos + j];
+            state &= mask[ch];
+            if ((state & match_mask) != 0) {
+                // Possible match ending at the right edge
+                if (j > 0) {
+                    last = j;  // Remember the last matching prefix position
+                } else {
+                    // Confirmed match
+                    size_t match_start = pos;
+
+                    // Whole word check
+                    if (params->whole_word &&
+                        !is_whole_word_match(text_start, text_len,
+                                            match_start, match_start + m)) {
+                        break; // out of state loop
+                    }
+
+                    if (count_lines_mode) {
+                        size_t line_start = find_line_start(text_start, text_len, match_start);
+                        if (line_start != last_counted_line_start) {
+                            if (++current_count >= max_count)
+                                return current_count;
+                            last_counted_line_start = line_start;
+                            // Skip to end of this line
+                            size_t line_end = find_line_end(text_start, text_len, line_start);
+                            pos = (line_end < text_len) ? line_end + 1 : text_len;
+                            goto next_window;
+                        }
+                    } else {
+                        if (++current_count >= max_count) {
+                            if (track_positions && result)
+                                match_result_add(result, match_start, match_start + m);
+                            return current_count;
+                        }
+                        if (track_positions && result)
+                            match_result_add(result, match_start, match_start + m);
+                    }
+                    // For non-overlapping matches, advance past this one
+                    pos += (only_matching ? m : 1);
+                    goto next_window;
+                }
+            }
+            state <<= 1;
+        }
+
+        // No match in this window; skip by `last` (BNDM skip)
+        pos += last;
+    next_window:;
+    }
+
+    return current_count;
+}
+
+// Public entry point: dispatches to the right implementation.
+uint64_t shift_or_search(const search_params_t *params,
+                         const char *text_start,
+                         size_t text_len,
+                         match_result_t *result)
+{
+    if (UNLIKELY(params->max_count == 0 && (params->count_lines_mode || params->track_positions)))
+        return 0;
+    if (UNLIKELY(params->pattern_len == 0 || text_len < params->pattern_len))
+        return 0;
+
+    // Use single-word BNDM for patterns 1–8 bytes
+    if (params->pattern_len <= 8) {
+        return shift_or_search_small(params, text_start, text_len, result);
+    }
+    // For longer patterns, fall back to Boyer-Moore which
+    // handles bad-character shifts better with a 256-entry table.
+    return boyer_moore_search(params, text_start, text_len, result);
+}
+
+// ============================================================
+// Two-Way String Matching Algorithm
+//
+// Crochemore & Perrin (1991).  This is the algorithm used by
+// glibc's memmem/strstr.  It offers O(n+m) worst-case time
+// while still performing very well on average.
+//
+// The key idea is to factor the pattern into two parts (l, r)
+// around a "critical position" such that every occurrence of
+// the pattern must align with the period.  We then search
+// forward for the right part, then verify the left part.
+// ============================================================
+
+// Compute the maximal suffix for Two-Way factorization.
+// Returns the critical position |p|.
+static size_t two_way_maximal_suffix(const unsigned char *needle, size_t n,
+                                     bool case_sensitive,
+                                     size_t *period_out)
+{
+    size_t i, j, k, p;
+    unsigned char a, b;
+
+    // "Tuned" comparison: case-insensitive uses lower_table.
+    #define TW_CMP(a, b) (case_sensitive ? ((a) == (b)) : (lower_table[(a)] == lower_table[(b)]))
+
+    i = 0; j = 1; k = 1; p = 1;
+    while (j + k < n) {
+        a = needle[j + k];
+        b = needle[i + k];
+        if (TW_CMP(a, b)) {
+            if (k == p) {
+                j += p;
+                k = 1;
+            } else {
+                ++k;
+            }
+        } else if (a > b) {
+            j += k;
+            k = 1;
+            p = j - i;
+        } else {
+            i = j;
+            j++;
+            k = 1;
+            p = 1;
+        }
+    }
+    *period_out = p;
+    return i;
+}
+
+// Compute the critical factorization and period for Two-Way.
+// Stores the split point in *split and the period in *period.
+static void two_way_factorization(const unsigned char *needle, size_t n,
+                                  bool case_sensitive,
+                                  size_t *split, size_t *period)
+{
+    // Compute maximal suffix for the regular order and the reversed order.
+    // Take the larger suffix, which gives better factorisation.
+    size_t p1, p2;
+    size_t s1 = two_way_maximal_suffix(needle, n, case_sensitive, &p1);
+
+    // Reverse byte order for the second maximal suffix computation.
+    unsigned char rev[MAX_PATTERN_LENGTH];
+    for (size_t i = 0; i < n; i++)
+        rev[i] = needle[n - 1 - i];
+    size_t s2 = two_way_maximal_suffix(rev, n, case_sensitive, &p2);
+    // Convert reversed position back
+    s2 = (n - 1 - s2) - (p2 - 1);
+
+    if (s1 >= s2) {
+        *split = s1;
+        *period = p1;
+    } else {
+        *split = s2;
+        *period = p2;
+    }
+}
+
+HOT_FUNCTION
+uint64_t two_way_search(const search_params_t *params,
+                        const char *text_start,
+                        size_t text_len,
+                        match_result_t *result)
+{
+    if (UNLIKELY(params->max_count == 0 && (params->count_lines_mode || params->track_positions)))
+        return 0;
+
+    const unsigned char *needle = (const unsigned char *)params->pattern;
+    const size_t m = params->pattern_len;
+    const bool case_sensitive = params->case_sensitive;
+    const bool count_lines_mode = params->count_lines_mode;
+    const bool track_positions = params->track_positions;
+    const size_t max_count = params->max_count;
+
+    if (UNLIKELY(m == 0 || text_len < m))
+        return 0;
+
+    // For single-char patterns, memchr is faster
+    if (m == 1)
+        return memchr_search(params, text_start, text_len, result);
+
+    // Compute critical factorization
+    size_t split, period;
+    two_way_factorization(needle, m, case_sensitive, &split, &period);
+    size_t right_len = m - split;
+
+    const unsigned char *haystack = (const unsigned char *)text_start;
+    size_t last_counted_line_start = SIZE_MAX;
+    uint64_t current_count = 0;
+
+    // Macros for character comparison (hoisted for speed).
+    // memcmp-based comparison for the left part is usually well-optimised.
+    #define TW_EQ(a, b, n) \
+        (case_sensitive ? (memcmp((a), (b), (n)) == 0) \
+                        : memory_equals_case_insensitive((const unsigned char *)(a), (const unsigned char *)(b), (n)))
+
+    size_t pos = 0;
+    size_t mem_len = text_len - m + 1;
+
+    if (split == 0) {
+        // Degenerate case: right part is entire pattern.
+        // Fall back to straightforward search with period skip.
+        while (pos < mem_len) {
+            if (LIKELY(pos + PREFETCH_DISTANCE < text_len))
+                __builtin_prefetch(haystack + pos + PREFETCH_DISTANCE, 0, 0);
+
+            if (TW_EQ(haystack + pos, needle, m)) {
+                size_t match_start = pos;
+
+                if (!params->whole_word ||
+                    is_whole_word_match(text_start, text_len, match_start, match_start + m)) {
+
+                    if (count_lines_mode) {
+                        size_t line_start = find_line_start(text_start, text_len, match_start);
+                        if (line_start != last_counted_line_start) {
+                            if (++current_count >= max_count) return current_count;
+                            last_counted_line_start = line_start;
+                            size_t line_end = find_line_end(text_start, text_len, line_start);
+                            pos = (line_end < text_len) ? line_end + 1 : text_len;
+                            continue;
+                        }
+                    } else {
+                        if (++current_count >= max_count) {
+                            if (track_positions && result)
+                                match_result_add(result, match_start, match_start + m);
+                            return current_count;
+                        }
+                        if (track_positions && result)
+                            match_result_add(result, match_start, match_start + m);
+                    }
+                }
+                pos += (only_matching ? m : 1);
+            } else {
+                pos++;
+            }
+        }
+        return current_count;
+    }
+
+    // Main Two-Way loop: search for the right part (suffix),
+    // then verify the left part (prefix).
+    while (pos <= text_len - m) {
+        if (LIKELY(pos + PREFETCH_DISTANCE < text_len))
+            __builtin_prefetch(haystack + pos + PREFETCH_DISTANCE, 0, 0);
+
+        // Scan for the right part
+        size_t k = split;
+        // Check if right part matches at (pos + k)
+        if (TW_EQ(haystack + pos + k, needle + k, right_len)) {
+            // Right part matched; now verify the left part
+            if (TW_EQ(haystack + pos, needle, k)) {
+                // Full match verified
+                size_t match_start = pos;
+
+                if (!params->whole_word ||
+                    is_whole_word_match(text_start, text_len, match_start, match_start + m)) {
+
+                    if (count_lines_mode) {
+                        size_t line_start = find_line_start(text_start, text_len, match_start);
+                        if (line_start != last_counted_line_start) {
+                            if (++current_count >= max_count) return current_count;
+                            last_counted_line_start = line_start;
+                            size_t line_end = find_line_end(text_start, text_len, line_start);
+                            pos = (line_end < text_len) ? line_end + 1 : text_len;
+                            continue;
+                        }
+                    } else {
+                        if (++current_count >= max_count) {
+                            if (track_positions && result)
+                                match_result_add(result, match_start, match_start + m);
+                            return current_count;
+                        }
+                        if (track_positions && result)
+                            match_result_add(result, match_start, match_start + m);
+                    }
+                }
+                pos += (only_matching ? m : period);
+            } else {
+                pos++;
+            }
+        } else {
+            pos++;
+        }
+    }
+
+    return current_count;
+}
+
+// --- Knuth-Morris-Pratt (KMP) Algorithm ---
+
+// Compute the Longest Proper Prefix which is also Suffix (LPS) array
+// lps[i] = length of the longest proper prefix of pattern[0..i] which is also a suffix of pattern[0..i]
+static void compute_lps_array(const unsigned char *pattern, size_t pattern_len, int *lps, bool case_sensitive)
+{
+    size_t length = 0; // length of the previous longest prefix suffix
+    lps[0] = 0;        // lps[0] is always 0
+    size_t i = 1;
+
+    // Calculate lps[i] for i = 1 to pattern_len-1
+    while (i < pattern_len)
+    {
+        // Compare pattern[i] with the character after the current prefix suffix (pattern[length])
+        unsigned char char_i = case_sensitive ? pattern[i] : lower_table[pattern[i]];
+        unsigned char char_len = case_sensitive ? pattern[length] : lower_table[pattern[length]];
+
+        if (char_i == char_len)
+        {
+            // Match: extend the current prefix suffix length
+            length++;
+            lps[i] = length;
+            i++;
+        }
+        else
+        {
+            // Mismatch
+            if (length != 0)
+            {
+                // Fall back using the LPS value of the previous character in the prefix suffix
+                // This allows us to reuse the previously computed information.
+                length = lps[length - 1];
+                // Do not increment i here, retry comparison with the new 'length'
+            }
+            else
+            {
+                // If length is 0, there's no prefix suffix ending here
+                lps[i] = 0;
+                i++; // Move to the next character
+            }
+        }
+    }
+}
+
+// KMP search function (Corrected advancement for overlaps)
+// Returns line count (-c) or match count (other modes).
+// Adds positions to 'result' if params->track_positions is true.
+uint64_t kmp_search(const search_params_t *params,
+                    const char *text_start,
+                    size_t text_len,
+                    match_result_t *result) // For position tracking (can be NULL)
+{
+    // --- Add max_count == 0 check ---
+    if (params->max_count == 0)
+        return 0;
+    // --- End add ---
+
+    uint64_t current_count = 0; // Use local counter for limit check
+    const unsigned char *search_pattern = (const unsigned char *)params->pattern;
+    size_t pattern_len = params->pattern_len;
+    bool case_sensitive = params->case_sensitive;
+    bool count_lines_mode = params->count_lines_mode;
+    bool track_positions = params->track_positions;
+    size_t max_count = params->max_count; // Get max_count
+
+    if (pattern_len == 0 || text_len < pattern_len)
+        return 0;
+
+    // Precompute LPS array
+    int *lps = malloc(pattern_len * sizeof(int));
+    if (!lps)
+    {
+        perror("malloc failed for KMP LPS array");
+        return 0; // Indicate error or handle differently
+    }
+    compute_lps_array(search_pattern, pattern_len, lps, case_sensitive);
+
+    size_t i = 0; // index for text_start[]
+    size_t j = 0; // index for search_pattern[]
+    const unsigned char *utext_start = (const unsigned char *)text_start;
+    size_t last_counted_line_start = SIZE_MAX; // For -c mode tracking
+
+    while (i < text_len)
+    {
+        // Compare current characters (case-sensitive or insensitive)
+        unsigned char char_text = case_sensitive ? utext_start[i] : lower_table[utext_start[i]];
+        unsigned char char_patt = case_sensitive ? search_pattern[j] : lower_table[search_pattern[j]];
+
+        if (char_patt == char_text)
+        {
+            // Match: advance both text and pattern indices
+            i++;
+            j++;
+        }
+
+        // If pattern index 'j' reaches pattern_len, a full match is found
+        if (j == pattern_len)
+        {
+            // Match found ending at index i-1, starting at i - j
+            size_t match_start_index = i - j;
+
+            // --- Match Found ---
+            // Whole word check
+            if (params->whole_word && !is_whole_word_match(text_start, text_len, match_start_index, match_start_index + pattern_len))
+            {
+                j = 0;
+                continue;
+            }
+
+            if (count_lines_mode) // -c mode
+            {
+                size_t line_start = find_line_start(text_start, text_len, match_start_index);
+                if (line_start != last_counted_line_start)
+                {
+                    // --- Check max_count BEFORE incrementing ---
+                    if (max_count != SIZE_MAX && current_count >= max_count)
+                    {
+                        break; // Limit reached
+                    }
+                    // --- End check ---
+
+                    current_count++; // Increment line count
+                    last_counted_line_start = line_start;
+
+                    // Skip to end of current line (optimization for -c mode)
+                    size_t line_end = find_line_end(text_start, text_len, line_start);
+                    i = (line_end < text_len) ? line_end + 1 : text_len;
+                    j = 0;    // Reset pattern index
+                    continue; // Continue outer loop from the potentially advanced 'i'
+                }
+                // If match is on an already counted line, just update j and continue
+                j = 0;
+            }
+            else // Not -c mode (default, -o, or -co)
+            {
+                // --- Check max_count BEFORE incrementing ---
+                if (max_count != SIZE_MAX && current_count >= max_count)
+                {
+                    if (track_positions && result) // Add final match
+                    {
+                        match_result_add(result, match_start_index, match_start_index + pattern_len);
+                    }
+                    break; // Limit reached
+                }
+                // --- End check ---
+
+                current_count++; // Increment match count
+
+                if (track_positions && result) // If tracking positions (default or -o)
+                {
+                    // Add the match position without deduplication
+                    if (!match_result_add(result, match_start_index, match_start_index + pattern_len))
+                    {
+                        fprintf(stderr, "Warning: Failed to add match position (KMP).\n");
+                    }
+                }
+
+                // For pattern "11", we need to be more selective - advance by exactly the pattern
+                // length to match ripgrep's behavior (prevents finding "11" in "1111" at positions 0-1, 1-2, 2-3)
+                // The key insight is that for -o mode, we need non-overlapping matches
+                i = match_start_index + pattern_len; // This is the critical line - always advance by full pattern length
+                j = 0;                               // Reset pattern index
+            }
+        }
+        // Mismatch after j matches (or j == 0)
+        else if (i < text_len && char_patt != char_text)
+        {
+            // If mismatch occurred after some initial match (j > 0),
+            // use the LPS array to shift the pattern appropriately.
+            // We don't need to compare characters pattern[0..lps[j-1]-1] again,
+            // as they will match anyway. Don't advance 'i'.
+            if (j != 0)
+            {
+                j = lps[j - 1];
+            }
+            else
+            {
+                // If mismatch occurred at the first character (j == 0),
+                // simply advance the text index 'i'.
+                i++;
+            }
+        }
+    } // end while
+
+    free(lps);            // Free the LPS array
+    return current_count; // Return line count or match count
+}
+
+// --- Search Orchestration ---
+
+search_func_t select_search_algorithm(const search_params_t *params)
+{
+    // Use regex search if requested
+    if (params->use_regex)
+    {
+        return regex_search;
+    }
+
+    // Use Aho-Corasick for multiple literal patterns
+    if (params->num_patterns > 1 && !params->use_regex)
+    {
+        return aho_corasick_search;
+    }
+
+    // Check for user-specified algorithm override (--algo)
+    if (algo_override != NULL && strcmp(algo_override, "auto") != 0)
+    {
+        if (strcmp(algo_override, "bm") == 0)
+            return boyer_moore_search;
+        else if (strcmp(algo_override, "kmp") == 0)
+            return kmp_search;
+        else if (strcmp(algo_override, "bndm") == 0)
+            return shift_or_search;
+        else if (strcmp(algo_override, "two") == 0)
+            return two_way_search;
+        // Unknown algo name falls through to auto selection
+    }
+
+    // --- Single Literal Pattern ---
+
+    // Check if SIMD can be used:
+    bool can_use_simd = !force_no_simd && SIMD_MAX_PATTERN_LEN > 0 && params->pattern_len <= SIMD_MAX_PATTERN_LEN;
+
+    // 1) Single character: ultra-fast memchr approach
+    if (params->pattern_len == 1)
+    {
+        return memchr_search;
+    }
+
+    // Pair filtering amortizes verification across a full vector of starts.
+    if (can_use_simd && params->case_sensitive && params->pattern_len >= 2)
+    {
+#if KREP_USE_AVX512
+        return simd_avx512_search;
+#elif KREP_USE_AVX2
+        return simd_avx2_search;
+#elif KREP_USE_SSE42
+        return simd_sse42_search;
+#elif KREP_USE_NEON
+        return neon_search;
+#endif
+    }
+
+    // Scalar and case-insensitive short-pattern paths.
+    if (params->pattern_len >= 2 && params->pattern_len <= 8)
+    {
+        if (params->pattern_len <= 3 && (params->count_lines_mode || !params->case_sensitive))
+            return memchr_short_search;
+        return shift_or_search;
+    }
+
+    // 4) Two-Way algorithm for the general scalar fallback.
+    //    It provides O(n+m) worst-case performance vs BMH's O(n*m),
+    //    and matches or exceeds BMH on modern CPUs for most workloads.
+    //    Fall back to BMH only when pattern is very repetitive and
+    //    Two-Way's period-based skip might be suboptimal.
+    if (is_repetitive_pattern(params->pattern, params->pattern_len) &&
+        params->pattern_len < 12)
+    {
+        return kmp_search;
+    }
+
+    // Default: Two-Way offers excellent average & worst-case performance.
+    return two_way_search;
+}
+
+// Helper function to detect repetitive patterns where KMP might perform better
+static bool is_repetitive_pattern(const char *pattern, size_t pattern_len)
+{
+    if (pattern_len < 3)
+        return false;
+
+    // Look for repeating characters or short sequences
+    size_t repeats = 0;
+    char prev = pattern[0];
+
+    for (size_t i = 1; i < pattern_len; i++)
+    {
+        if (pattern[i] == prev)
+        {
+            repeats++;
+            if (repeats >= pattern_len / 2)
+                return true;
+        }
+        else
+        {
+            repeats = 0;
+            prev = pattern[i];
+        }
+    }
+
+    // Check for short repeating sequences (ab, aba, abab, etc.)
+    for (size_t seq_len = 2; seq_len <= pattern_len / 2; seq_len++)
+    {
+        bool is_repetitive = true;
+        for (size_t i = seq_len; i < pattern_len; i++)
+        {
+            if (pattern[i] != pattern[i % seq_len])
+            {
+                is_repetitive = false;
+                break;
+            }
+        }
+        if (is_repetitive)
+            return true;
+    }
+
+    return false;
+}
+
+// --- Threading Logic ---
+
+// Function executed by each search thread (handles single or multiple patterns)
+void *search_chunk_thread(void *arg)
+{
+    thread_data_t *data = (thread_data_t *)arg;
+    match_result_t *local_result = NULL; // Local results if tracking positions
+    uint64_t count_result = 0;           // Line or match count
+
+    // Allocate local result storage if tracking positions
+    if (data->params->track_positions)
+    {
+        // Estimate initial capacity based on chunk length
+        uint64_t initial_cap = (data->chunk_len / 1000 > 100) ? data->chunk_len / 1000 : 100;
+        local_result = match_result_init(initial_cap);
+        if (!local_result)
+        {
+            fprintf(stderr, "krep: Thread %d: Failed to allocate local match results.\n", data->thread_id);
+            data->error_flag = true;
+            return NULL; // Signal error
+        }
+        data->local_result = local_result; // Store pointer for the main thread
+    }
+
+    // Select and run the search algorithm on the assigned chunk
+    // Pass local_result (can be NULL if not tracking positions)
+    // For multiple patterns, select_search_algorithm should return aho_corasick_search
+    search_func_t search_algo = data->search_algo;
+    if (!search_algo)
+    {
+        search_algo = select_search_algorithm(data->params);
+        data->search_algo = search_algo;
+    }
+
+    count_result = search_algo(data->params,
+                               data->chunk_start,
+                               data->chunk_len,
+                               local_result); // Pass NULL if track_positions is false
+
+    // Store the count (lines or matches) found by this thread
+    data->count_result = count_result;
+
+    return NULL; // Success
+}
+
+// --- Public API Implementations ---
+
+// Add get_algorithm_name implementation here before search_string function
+const char *get_algorithm_name(search_func_t func)
+{
+    if (func == boyer_moore_search)
+        return "Boyer-Moore-Horspool";
+    else if (func == kmp_search)
+        return "Knuth-Morris-Pratt";
+    else if (func == regex_search)
+        return "Regex";
+    else if (func == aho_corasick_search)
+        return "Aho-Corasick";
+    else if (func == memchr_search)
+        return "memchr";
+    else if (func == memchr_short_search)
+        return "memchr-short";
+    else if (func == shift_or_search)
+        return "Shift-Or";
+    else if (func == two_way_search)
+        return "Two-Way";
+#if KREP_USE_SSE42
+    else if (func == simd_sse42_search)
+        return "SSE2 pair filter";
+#endif
+#if KREP_USE_AVX2
+    else if (func == simd_avx2_search)
+        return "AVX2";
+#endif
+#if KREP_USE_AVX512
+    else if (func == simd_avx512_search)
+        return "AVX-512";
+#endif
+#if KREP_USE_NEON
+    else if (func == neon_search)
+        return "NEON";
+#endif
+    else
+        return "Unknown";
+}
+
+// Search a string (remains single-threaded)
+int search_string(const search_params_t *params, const char *text)
+{
+    // Initialize resources to NULL/0 for safe cleanup
+    size_t text_len = 0;
+    uint64_t final_count = 0;
+    match_result_t *matches = NULL;
+    int result_code = 1; // Default: no match
+    regex_t compiled_regex_local;
+    char *combined_regex_pattern = NULL;
+    bool regex_compiled = false;
+    search_params_t current_params = *params; // Make a mutable copy
+    ac_trie_t *local_ac_trie = NULL;          // Pointer for locally built trie
+
+    if ((quiet_mode || files_with_matches_mode || files_without_match_mode) && current_params.max_count > 1)
+        current_params.max_count = 1;
+
+    // --- Validation ---
+    if (current_params.num_patterns == 0)
+    {
+        fprintf(stderr, "Error: No pattern specified.\n");
+        return 2;
+    }
+
+    if (!text)
+    {
+        fprintf(stderr, "Error: NULL text in search_string.\n");
+        return 2;
+    }
+
+    text_len = strlen(text);
+
+    // Validate pattern length for literal search
+    if (!current_params.use_regex)
+    {
+        for (size_t i = 0; i < current_params.num_patterns; ++i)
+        {
+            // Allow single empty pattern
+            if (current_params.pattern_lens[i] == 0)
+            {
+                if (current_params.num_patterns > 1)
+                {
+                    fprintf(stderr, "Error: Empty pattern provided for literal search with multiple patterns.\n");
+                    return 2;
+                }
+                // Single empty pattern is OK, Aho-Corasick handles this
+            }
+            else if (current_params.pattern_lens[i] > MAX_PATTERN_LENGTH)
+            {
+                fprintf(stderr, "Error: Pattern '%s' too long (max %d).\n",
+                        current_params.patterns[i], MAX_PATTERN_LENGTH);
+                return 2;
+            }
+        }
+    }
+
+    if (current_params.max_count == 0)
+    {
+        if (current_params.count_lines_mode || current_params.count_matches_mode)
+            print_count_result(NULL, 0);
+        record_search_stats(text_len, 0, 1);
+        return 1;
+    }
+
+    // --- Resource Allocation ---
+
+    // Allocate results structure if tracking positions
+    if (current_params.track_positions)
+    {
+        // Start with a reasonable capacity based on text length
+        uint64_t initial_capacity = text_len > 10000 ? 1000 : 16;
+        matches = match_result_init(initial_capacity);
+        if (!matches)
+        {
+            fprintf(stderr, "Error: Cannot allocate memory for match results.\n");
+            return 2;
+        }
+    }
+
+    // --- Build Aho-Corasick Trie (if needed) ---
+    bool needs_ac_trie = (params->num_patterns > 1 && !params->use_regex);
+    if (needs_ac_trie)
+    {
+        local_ac_trie = ac_trie_build(&current_params);
+        if (!local_ac_trie)
+        {
+            fprintf(stderr, "krep: Error building Aho-Corasick trie.\n");
+            result_code = 2;
+            goto cleanup; // Use goto for consistent cleanup
+        }
+        current_params.ac_trie = local_ac_trie; // Assign to the mutable params copy
+    }
+
+    // Compile regex if needed
+    if (current_params.use_regex)
+    {
+        const char *regex_to_compile = NULL;
+
+        // Handle multiple patterns (combine with OR)
+        if (current_params.num_patterns > 1)
+        {
+            // Calculate required buffer size
+            size_t total_len = 0;
+            for (size_t i = 0; i < current_params.num_patterns; ++i)
+            {
+                // Add 6 for wrapping with (\b...\b)
+                total_len += current_params.pattern_lens[i] + (current_params.whole_word ? 6 : 2) + 1; // () or (\b...\b) + |
+            }
+
+            // Allocate and build combined pattern
+            combined_regex_pattern = malloc(total_len + 1);
+            if (!combined_regex_pattern)
+            {
+                fprintf(stderr, "krep: Failed to allocate memory for combined regex.\n");
+                goto cleanup;
+            }
+
+            // Construct the combined pattern string
+            char *ptr = combined_regex_pattern;
+            for (size_t i = 0; i < current_params.num_patterns; ++i)
+            {
+                if (current_params.whole_word)
+                    ptr += sprintf(ptr, "(\\b%s\\b)", current_params.patterns[i]);
+                else
+                    ptr += sprintf(ptr, "(%s)", current_params.patterns[i]);
+                if (i < current_params.num_patterns - 1)
+                {
+                    ptr += sprintf(ptr, "|");
+                }
+            }
+            *ptr = '\0';
+            regex_to_compile = combined_regex_pattern;
+        }
+        else if (current_params.num_patterns == 1)
+        {
+            if (current_params.whole_word)
+            {
+                size_t len = strlen(current_params.patterns[0]);
+                char *tmp = malloc(len + 7); // (\b) + pattern + (\b) + null
+                if (!tmp)
+                {
+                    fprintf(stderr, "krep: Failed to allocate memory for regex pattern.\n");
+                    return 2;
+                }
+                sprintf(tmp, "\\b%s\\b", current_params.patterns[0]);
+                regex_to_compile = tmp;
+                free(combined_regex_pattern); // In case it was set
+                combined_regex_pattern = tmp; // So it gets freed later
+            }
+            else
+            {
+                regex_to_compile = current_params.patterns[0];
+            }
+        }
+        else
+        {
+            // No patterns - shouldn't reach here due to earlier check
+            goto cleanup;
+        }
+
+        // Compile the regex
+        int rflags = REG_EXTENDED | REG_NEWLINE | (current_params.case_sensitive ? 0 : REG_ICASE);
+        int ret = regcomp(&compiled_regex_local, regex_to_compile, rflags);
+
+        if (ret != 0)
+        {
+            char ebuf[256];
+            regerror(ret, &compiled_regex_local, ebuf, sizeof(ebuf));
+            fprintf(stderr, "krep: Regex compilation error: %s\n", ebuf);
+            goto cleanup;
+        }
+
+        regex_compiled = true;
+        current_params.compiled_regex = &compiled_regex_local;
+    }
+
+    // --- Execute Search ---
+
+    // Select and run the appropriate search algorithm
+    search_func_t search_algo = select_search_algorithm(&current_params);
+
+    // Perform search and collect results
+    final_count = search_algo(&current_params, text, text_len, matches);
+
+    // Determine final result based on matches found
+    bool match_found = false;
+    size_t max_count = current_params.max_count; // Get max_count
+
+    // Adjust final_count based on max_count if necessary
+    if (max_count != SIZE_MAX && final_count > max_count)
+    {
+        final_count = max_count;
+    }
+    // Adjust matches->count if tracking positions
+    if (matches && max_count != SIZE_MAX && matches->count > max_count)
+    {
+        matches->count = max_count;
+    }
+
+    if (current_params.count_lines_mode || current_params.count_matches_mode || !current_params.track_positions)
+    {
+        match_found = (final_count > 0);
+    }
+    else
+    {
+        match_found = (matches && matches->count > 0);
+        if (match_found)
+        {
+            final_count = matches->count;
+        }
+    }
+
+    result_code = match_found ? 0 : 1;
+
+    // --- Print Results ---
+
+    if (current_params.count_lines_mode || current_params.count_matches_mode)
+    {
+        print_count_result(NULL, final_count);
+    }
+    else
+    {
+        // Print matches/lines if found
+        if (result_code == 0 && matches)
+        {
+            // Aho-Corasick emits by end offset, which can differ from start order.
+            if (current_params.num_patterns > 1 && matches->count > 1)
+                qsort(matches->positions, matches->count, sizeof(match_position_t), compare_match_positions);
+            print_matching_items(NULL, text, text_len, matches, &current_params); // Pass params
+        }
+        // Handle case where match was found but no positions recorded (e.g., empty regex match)
+        else if (result_code == 0 && (!matches || matches->count == 0) &&
+                 !quiet_mode && !files_with_matches_mode && !files_without_match_mode)
+        {
+            if (output_mode == OUTPUT_JSONL)
+            {
+                fputs("{\"type\":\"line\",\"line_number\":1,\"byte_start\":0,\"byte_end\":0,\"text\":\"\",\"matches\":[]}\n", stdout);
+            }
+            else if (only_matching)
+            {
+                // Print empty match for -o (consistent with grep)
+                puts("");
+            }
+            else
+            {
+                // Print the whole (empty) line
+                puts("");
+            }
+        }
+    }
+
+    record_search_stats(text_len, final_count, result_code);
+
+cleanup:
+    // --- Cleanup ---
+    if (regex_compiled)
+    {
+        regfree(&compiled_regex_local);
+    }
+    free(combined_regex_pattern);
+    match_result_free(matches);
+    // Free the Aho-Corasick trie if it was built locally
+    if (local_ac_trie)
+    {
+        ac_trie_free(local_ac_trie);
+    }
+
+    return result_code;
+}
+
+// Global thread pool
+static thread_pool_t *global_thread_pool = NULL;
+
+// Initialize the global thread pool with auto-detected core count
+static void init_global_thread_pool(int requested_thread_count)
+{
+    if (global_thread_pool == NULL)
+    {
+        global_thread_pool = thread_pool_init(requested_thread_count);
+        if (!global_thread_pool)
+        {
+            fprintf(stderr, "Failed to initialize thread pool. Using single-threaded mode.\n");
+        }
+    }
+}
+
+// Clean up the global thread pool
+static void KREP_UNUSED cleanup_global_thread_pool()
+{
+    if (global_thread_pool)
+    {
+        thread_pool_destroy(global_thread_pool);
+        global_thread_pool = NULL;
+    }
+}
+
+int search_file(const search_params_t *params, const char *filename, int requested_thread_count)
+{
+    search_params_t current_params = *params;
+    const bool existence_only = quiet_mode || files_with_matches_mode || files_without_match_mode;
+    if (existence_only && current_params.max_count > 1)
+        current_params.max_count = 1;
+    ac_trie_t *local_ac_trie = NULL; // Pointer for locally built trie
+
+    int result_code = 1;                         // Default: no match found
+    int fd = -1;                                 // File descriptor
+    struct stat file_stat;                       // File stats
+    size_t file_size = 0;                        // File size
+    char *file_data = MAP_FAILED;                // Mapped file data
+    bool data_is_malloced = false;               // Flag to indicate if file_data was malloced
+    match_result_t *global_matches = NULL;       // Global result collection
+    pthread_t *threads = NULL;                   // Thread handles
+    thread_data_t *thread_args = NULL;           // Thread arguments
+    void **pool_task_args = NULL;                // Arguments for thread-pool batch submission
+    regex_t compiled_regex_local;                // For local regex compilation
+    char *combined_regex_pattern = NULL;         // For combined regex patterns
+    int actual_thread_count = 0;                 // Number of threads to actually use
+    uint64_t final_count = 0;                    // Total count of lines or matches
+    size_t max_count = current_params.max_count; // Get max_count
+    bool use_thread_pool = false;                // True if this file search uses the global thread pool
+    bool run_single_thread_inline = false;       // True if we run one chunk directly in current thread
+
+    // Validate patterns for literal search (not for regex)
+    if (!current_params.use_regex)
+    {
+        for (size_t i = 0; i < current_params.num_patterns; ++i)
+        {
+            // Check for empty pattern - only allowed if there's a single pattern
+            if (current_params.pattern_lens[i] == 0)
+            {
+                if (current_params.num_patterns > 1)
+                {
+                    fprintf(stderr, "krep: %s: Error: Empty pattern provided for literal search with multiple patterns.\n", filename);
+                    return 2;
+                }
+                // Single empty pattern is allowed, continue to next pattern
+                continue;
+            }
+
+            // Check for pattern length limit
+            if (current_params.pattern_lens[i] > MAX_PATTERN_LENGTH)
+            {
+                fprintf(stderr, "krep: %s: Error: Pattern '%s' too long (max %d).\n",
+                        filename, current_params.patterns[i], MAX_PATTERN_LENGTH);
+                return 2;
+            }
+        }
+    }
+
+    // Input from stdin
+    if (strcmp(filename, "-") == 0)
+    {
+        // Read from stdin into a dynamically growing buffer
+        size_t buffer_size = 4 * 1024 * 1024; // Start with 4MB
+        size_t used_size = 0;
+        char *buffer = malloc(buffer_size);
+        if (!buffer)
+        {
+            fprintf(stderr, "krep: Memory allocation failed for stdin buffer\n");
+            return 2;
+        }
+
+        // Read stdin in chunks
+        size_t read_chunk_size = 65536; // 64KB chunks
+        size_t bytes_read;
+        while ((bytes_read = fread(buffer + used_size, 1, read_chunk_size, stdin)) > 0)
+        {
+            used_size += bytes_read;
+            // Expand buffer if needed
+            if (used_size + read_chunk_size > buffer_size)
+            {
+                buffer_size *= 2;
+                char *new_buffer = realloc(buffer, buffer_size);
+                if (!new_buffer)
+                {
+                    fprintf(stderr, "krep: Memory reallocation failed for stdin buffer\n");
+                    free(buffer);
+                    return 2;
+                }
+                buffer = new_buffer;
+            }
+        }
+        if (ferror(stdin))
+        {
+            fprintf(stderr, "krep: Error reading from stdin: %s\n", strerror(errno));
+            free(buffer);
+            return 2;
+        }
+
+        // Null-terminate the buffer for search_string
+        // Realloc to exact size + 1 for null terminator
+        char *final_buffer = realloc(buffer, used_size + 1);
+        if (!final_buffer)
+        {
+            fprintf(stderr, "krep: Memory reallocation failed for final stdin buffer\n");
+            free(buffer);
+            return 2;
+        }
+        buffer = final_buffer;
+        buffer[used_size] = '\0';
+
+        // Need to build AC trie here too if needed for stdin search
+        bool needs_ac_trie_stdin = (current_params.num_patterns > 1 && !current_params.use_regex);
+        if (needs_ac_trie_stdin)
+        {
+            local_ac_trie = ac_trie_build(&current_params);
+            if (!local_ac_trie)
+            {
+                fprintf(stderr, "krep: Error building Aho-Corasick trie for stdin.\n");
+                free(buffer);
+                return 2;
+            }
+            current_params.ac_trie = local_ac_trie;
+        }
+
+        // Search the buffer using search_string logic (single-threaded for stdin)
+        // search_string will now use the pre-built trie if current_params.ac_trie is set
+        result_code = search_string(&current_params, buffer);
+
+        // Cleanup for stdin
+        free(buffer);
+        if (local_ac_trie)
+        { // Free trie built for stdin
+            ac_trie_free(local_ac_trie);
+        }
+        return result_code;
+    }
+
+    // --- Regular File Handling ---
+    fd = open(filename, O_RDONLY | O_CLOEXEC);
+    if (fd == -1)
+    {
+        fprintf(stderr, "krep: %s: %s\n", filename, strerror(errno));
+        return 2;
+    }
+    if (fstat(fd, &file_stat) == -1)
+    {
+        fprintf(stderr, "krep: %s: %s\n", filename, strerror(errno));
+        close(fd);
+        return 2;
+    }
+    if (file_stat.st_size < 0 || (uintmax_t)file_stat.st_size >= (uintmax_t)SIZE_MAX)
+    {
+        fprintf(stderr, "krep: %s: file is too large to process safely\n", filename);
+        close(fd);
+        return 2;
+    }
+    file_size = (size_t)file_stat.st_size;
+
+    if (current_params.max_count == 0)
+    {
+        close(fd);
+        if (current_params.count_lines_mode || current_params.count_matches_mode)
+            print_count_result(filename, 0);
+        print_file_list_result(filename, 1);
+        record_search_stats(0, 0, 1);
+        return 1;
+    }
+
+    // --- Handle Empty File ---
+    if (file_size == 0)
+    {
+        close(fd);
+        bool empty_match = false;
+        bool needs_ac_trie_empty = (current_params.num_patterns > 1 && !current_params.use_regex);
+
+        // Temporarily build trie just to check root outputs for empty pattern
+        if (needs_ac_trie_empty)
+        {
+            ac_trie_t *temp_trie = ac_trie_build(&current_params);
+            if (ac_trie_root_has_outputs(temp_trie))
+            {
+                empty_match = true;
+            }
+            if (temp_trie)
+                ac_trie_free(temp_trie);
+        }
+        // Check regex empty match
+        else if (current_params.use_regex)
+        {
+            // Compile regex temporarily to check for empty match
+            regex_t temp_regex;
+            const char *regex_to_compile = NULL;
+            char *temp_combined_pattern = NULL;
+            if (current_params.num_patterns > 1)
+            {
+                size_t total_len = 0;
+                for (size_t i = 0; i < current_params.num_patterns; ++i)
+                    total_len += current_params.pattern_lens[i] + 3;
+                temp_combined_pattern = malloc(total_len + 1); // +1 for null
+                if (temp_combined_pattern)
+                {
+                    char *ptr = temp_combined_pattern;
+                    for (size_t i = 0; i < current_params.num_patterns; ++i)
+                    {
+                        ptr += sprintf(ptr, "(%s)", current_params.patterns[i]);
+                        if (i < current_params.num_patterns - 1)
+                            ptr += sprintf(ptr, "|");
+                    }
+                    *ptr = '\0'; // Null terminate
+                    regex_to_compile = temp_combined_pattern;
+                } // else: proceed with first pattern, might be inaccurate but avoids error
+            }
+            else if (current_params.num_patterns == 1)
+            {
+                regex_to_compile = current_params.patterns[0];
+            }
+            else
+            { // No patterns
+                free(temp_combined_pattern);
+                return 1;
+            }
+
+            int rflags = REG_EXTENDED | REG_NEWLINE | (current_params.case_sensitive ? 0 : REG_ICASE);
+            if (regcomp(&temp_regex, regex_to_compile, rflags) == 0)
+            {
+                regmatch_t m;
+                if (regexec(&temp_regex, "", 1, &m, 0) == 0 && m.rm_so == 0 && m.rm_eo == 0)
+                {
+                    empty_match = true;
+                }
+                regfree(&temp_regex);
+            }
+            free(temp_combined_pattern);
+        }
+        // Check single literal empty pattern
+        else if (current_params.num_patterns == 1 && current_params.pattern_lens[0] == 0)
+        {
+            empty_match = true;
+        }
+
+        if (empty_match)
+        {
+            result_code = 0;
+            uint64_t empty_count = 1;
+            if (current_params.count_lines_mode || current_params.count_matches_mode)
+            {
+                print_count_result(filename, empty_count);
+            }
+            else if (files_with_matches_mode || files_without_match_mode)
+            {
+                print_file_list_result(filename, result_code);
+            }
+            else if (quiet_mode)
+            {
+                // Nothing to print.
+            }
+            else if (output_mode == OUTPUT_JSONL)
+            {
+                fputs("{\"type\":\"line\",\"path\":", stdout);
+                json_write_escaped(stdout, filename, strlen(filename));
+                fputs(",\"line_number\":1,\"byte_start\":0,\"byte_end\":0,\"text\":\"\",\"matches\":[]}\n", stdout);
+            }
+            else if (only_matching)
+            {                               // -o (global flag)
+                printf("%s::\n", filename); // Print filename:: for empty match
+            }
+            else
+            {                              // default
+                printf("%s:\n", filename); // Print filename: followed by empty line
+            }
+            atomic_store(&global_match_found_flag, true); // Signal match found for -r
+            record_search_stats(file_size, empty_count, result_code);
+            return 0;                                     // Match found
+        }
+        else
+        {
+            result_code = 1;
+            if (current_params.count_lines_mode || current_params.count_matches_mode)
+                print_count_result(filename, 0);
+            else if (files_with_matches_mode || files_without_match_mode)
+                print_file_list_result(filename, result_code);
+            record_search_stats(file_size, 0, result_code);
+            return 1;                       // No match
+        }
+    }
+
+    // Check if pattern is longer than file (only for single literal search)
+    if (!current_params.use_regex && current_params.num_patterns == 1 && current_params.pattern_lens[0] > file_size)
+    {
+        close(fd);
+        if (current_params.count_lines_mode || current_params.count_matches_mode)
+            print_count_result(filename, 0);
+        else if (files_with_matches_mode || files_without_match_mode)
+            print_file_list_result(filename, 1);
+        record_search_stats(file_size, 0, 1);
+        return 1; // No match possible
+    }
+
+    // --- Build Aho-Corasick Trie (if needed, once for the file) ---
+    bool needs_ac_trie_file = (current_params.num_patterns > 1 && !current_params.use_regex);
+    if (needs_ac_trie_file)
+    {
+        local_ac_trie = ac_trie_build(&current_params);
+        if (!local_ac_trie)
+        {
+            fprintf(stderr, "krep: Error building Aho-Corasick trie for %s.\n", filename);
+            result_code = 2;
+            goto cleanup_file;
+        }
+        current_params.ac_trie = local_ac_trie; // Assign to the mutable params copy
+    }
+
+    // --- Compile Regex (if needed, once for the file) ---
+    if (current_params.use_regex)
+    {
+        const char *regex_to_compile = NULL;
+        if (current_params.num_patterns > 1)
+        {
+            // Combine multiple regex patterns with '|'
+            size_t total_len = 0;
+            for (size_t i = 0; i < current_params.num_patterns; ++i)
+            {
+                // Add 6 for wrapping with (\b...\b)
+                total_len += current_params.pattern_lens[i] + (current_params.whole_word ? 6 : 2) + 1; // () or (\b...\b) + |
+            }
+            combined_regex_pattern = malloc(total_len + 1); // +1 for null terminator
+            if (!combined_regex_pattern)
+            {
+                fprintf(stderr, "krep: %s: Failed to allocate memory for combined regex.\n", filename);
+                close(fd);
+                return 2;
+            }
+            char *ptr = combined_regex_pattern;
+            for (size_t i = 0; i < current_params.num_patterns; ++i)
+            {
+                if (current_params.whole_word)
+                    ptr += sprintf(ptr, "(\\b%s\\b)", current_params.patterns[i]);
+                else
+                    ptr += sprintf(ptr, "(%s)", current_params.patterns[i]);
+                if (i < current_params.num_patterns - 1)
+                {
+                    ptr += sprintf(ptr, "|");
+                }
+            }
+            *ptr = '\0'; // Null terminate
+            regex_to_compile = combined_regex_pattern;
+        }
+        else if (current_params.num_patterns == 1)
+        {
+            if (current_params.whole_word)
+            {
+                size_t len = strlen(current_params.patterns[0]);
+                char *tmp = malloc(len + 7); // (\b) + pattern + (\b) + null
+                if (!tmp)
+                {
+                    fprintf(stderr, "krep: Failed to allocate memory for regex pattern.\n");
+                    close(fd);
+                    return 2;
+                }
+                sprintf(tmp, "\\b%s\\b", current_params.patterns[0]);
+                regex_to_compile = tmp;
+                free(combined_regex_pattern); // In case it was set
+                combined_regex_pattern = tmp; // So it gets freed later
+            }
+            else
+            {
+                regex_to_compile = current_params.patterns[0]; // Ensure correct pattern is used
+            }
+        }
+        else
+        { // Should not happen due to earlier check
+            close(fd);
+            return 1;
+        }
+
+        int rflags = REG_EXTENDED | REG_NEWLINE | (current_params.case_sensitive ? 0 : REG_ICASE);
+        int ret = regcomp(&compiled_regex_local, regex_to_compile, rflags);
+        if (ret != 0)
+        {
+            char ebuf[256];
+            regerror(ret, &compiled_regex_local, ebuf, sizeof(ebuf));
+            fprintf(stderr, "krep: Regex compilation error for %s: %s\n", filename, ebuf);
+            close(fd);
+            free(combined_regex_pattern);
+            return 2;
+        }
+        // Modify the mutable copy of params
+        search_params_t mutable_params = current_params;
+        mutable_params.compiled_regex = &compiled_regex_local;
+        current_params = mutable_params; // Update current_params to use for threads
+        // Ensure local_ac_trie is NULL if regex is used
+        if (local_ac_trie)
+        {
+            ac_trie_free(local_ac_trie);
+            local_ac_trie = NULL;
+            current_params.ac_trie = NULL;
+        }
+    }
+
+#if defined(POSIX_FADV_SEQUENTIAL) && !defined(__APPLE__)
+    // Hint the kernel about sequential access to encourage readahead
+    (void)posix_fadvise(fd, 0, 0, POSIX_FADV_SEQUENTIAL);
+#endif
+
+    // --- Memory Map or Read File ---
+    // Optimization: For small files, use read() to avoid mmap overhead and page faults.
+    // For regex searches, always use malloc+read to ensure null-termination,
+    // because regexec with REG_STARTEND may read beyond the specified rm_eo boundary.
+    if (file_size < 65536 || current_params.use_regex) // 64KB threshold or regex mode
+    {
+        file_data = malloc(file_size + 1); // +1 for safety/null-term if needed
+        if (!file_data)
+        {
+            fprintf(stderr, "krep: %s: malloc failed: %s\n", filename, strerror(errno));
+            close(fd);
+            if (current_params.use_regex && current_params.compiled_regex == &compiled_regex_local)
+                regfree(&compiled_regex_local);
+            free(combined_regex_pattern);
+            result_code = 2;
+            goto cleanup_file;
+        }
+        
+        ssize_t bytes_read = 0;
+        size_t total_read = 0;
+        while (total_read < file_size)
+        {
+            bytes_read = read(fd, file_data + total_read, file_size - total_read);
+            if (bytes_read < 0)
+            {
+                if (errno == EINTR) continue;
+                fprintf(stderr, "krep: %s: read failed: %s\n", filename, strerror(errno));
+                free(file_data);
+                close(fd);
+                if (current_params.use_regex && current_params.compiled_regex == &compiled_regex_local)
+                    regfree(&compiled_regex_local);
+                free(combined_regex_pattern);
+                result_code = 2;
+                goto cleanup_file;
+            }
+            if (bytes_read == 0) break; // Unexpected EOF
+            total_read += bytes_read;
+        }
+        file_data[file_size] = '\0'; // Null terminate for safety
+        data_is_malloced = true;
+    }
+    else
+    {
+        // Use mmap for larger files
+        int mmap_base_flags = MAP_PRIVATE;
+        file_data = MAP_FAILED; // Initialize file_data
+
+#ifdef MAP_POPULATE
+        // Try with MAP_POPULATE first
+        int mmap_flags_populate = mmap_base_flags | (existence_only ? 0 : MAP_POPULATE);
+        file_data = mmap(NULL, file_size, PROT_READ, mmap_flags_populate, fd, 0);
+
+        // If MAP_POPULATE failed, try without it
+        if (file_data == MAP_FAILED && errno == ENOTSUP) // Check if MAP_POPULATE is specifically not supported
+        {
+            // fprintf(stderr, "krep: %s: mmap with MAP_POPULATE not supported, retrying without...\n", filename);
+            file_data = mmap(NULL, file_size, PROT_READ, mmap_base_flags, fd, 0);
+        }
+        else if (file_data == MAP_FAILED)
+        {
+            fprintf(stderr, "krep: %s: mmap with MAP_POPULATE failed (%s), retrying without...\n", filename, strerror(errno));
+            file_data = mmap(NULL, file_size, PROT_READ, mmap_base_flags, fd, 0);
+        }
+#else
+        // MAP_POPULATE not defined, just call mmap without it
+        file_data = mmap(NULL, file_size, PROT_READ, mmap_base_flags, fd, 0);
+#endif
+
+        // Check if mmap failed even after potential fallback
+        if (file_data == MAP_FAILED)
+        {
+            fprintf(stderr, "krep: %s: mmap: %s\n", filename, strerror(errno));
+            close(fd);
+            if (current_params.use_regex && current_params.compiled_regex == &compiled_regex_local)
+                regfree(&compiled_regex_local);
+            free(combined_regex_pattern);
+            // No need to free global_matches, threads, thread_args here, handled by goto cleanup_file
+            result_code = 2;
+            goto cleanup_file; // Use goto to ensure proper cleanup
+        }
+
+        // Advise the kernel about expected access pattern
+        int madvise_ret = madvise(file_data, file_size,
+                                 existence_only ? MADV_NORMAL : MADV_SEQUENTIAL | MADV_WILLNEED);
+        if (madvise_ret != 0)
+        {
+            int madvise_err = errno;
+            if (!atomic_exchange(&madvise_warning_emitted, true))
+            {
+                fprintf(stderr, "krep: %s: Warning: madvise failed: %s (future warnings suppressed)\n",
+                        filename, strerror(madvise_err));
+            }
+            // Continue execution since this is just an optimization
+        }
+
+        // Request transparent huge pages for large files on Linux
+        // (MADV_HUGEPAGE is Linux-only, harmless if unsupported)
+#ifdef MADV_HUGEPAGE
+        if (file_size >= LARGE_FILE_THRESHOLD)
+        {
+            madvise(file_data, file_size, MADV_HUGEPAGE);
+        }
+#endif
+    }
+
+    close(fd); // Close file descriptor after mmap
+    fd = -1;
+
+    // --- Determine Thread Count and Chunking ---
+    if (requested_thread_count == 0)
+    {
+        long cores = sysconf(_SC_NPROCESSORS_ONLN);
+        actual_thread_count = (cores > 0) ? (int)cores : 1;
+    }
+    else
+    {
+        actual_thread_count = requested_thread_count;
+    }
+    int max_threads_by_size = (file_size > 0) ? (int)((file_size + MIN_CHUNK_SIZE - 1) / MIN_CHUNK_SIZE) : 1;
+    if (actual_thread_count > max_threads_by_size && max_threads_by_size > 0)
+    {
+        actual_thread_count = max_threads_by_size;
+    }
+    if (actual_thread_count <= 0)
+        actual_thread_count = 1;
+    // Existence checks finish at the first match without starting other workers.
+    if (existence_only)
+        actual_thread_count = 1;
+    // Word boundaries and non-overlapping output need complete lines. A literal
+    // containing a newline cannot use those boundaries, so keep it in one chunk.
+    if (!current_params.use_regex && (current_params.whole_word || only_matching))
+    {
+        for (size_t i = 0; i < current_params.num_patterns; ++i)
+            if (memchr(current_params.patterns[i], '\n', current_params.pattern_lens[i]))
+                actual_thread_count = 1;
+    }
+
+    // Determine how many threads to use based on file size and available cores
+    int available_cores = requested_thread_count > 0 ? requested_thread_count : sysconf(_SC_NPROCESSORS_ONLN);
+    if (available_cores <= 0)
+        available_cores = 1;
+
+    // Calculate optimal number of threads: min(cores, max(1, file_size/(4MB)))
+    // This scales threads with file size, but caps at CPU core count.
+    int optimal_threads = 1;
+    if (file_size > 0)
+    {
+        size_t chunk_threshold = 4 * 1024 * 1024; // 4MB per thread minimum
+        optimal_threads = (int)(file_size / chunk_threshold);
+        if (optimal_threads > available_cores)
+            optimal_threads = available_cores;
+        if (optimal_threads < 1)
+            optimal_threads = 1;
+    }
+
+    // Avoid thread and queue overhead when there is only one chunk.
+    run_single_thread_inline = (actual_thread_count == 1);
+    if (!run_single_thread_inline)
+    {
+        init_global_thread_pool(optimal_threads);
+        use_thread_pool = (global_thread_pool != NULL);
+    }
+
+    // --- Initialize Threading Resources ---
+    thread_args = calloc((size_t)actual_thread_count, sizeof(thread_data_t));
+    if (!thread_args)
+    {
+        perror("krep: Cannot allocate thread arguments");
+        result_code = 2;
+        goto cleanup_file;
+    }
+
+    if (use_thread_pool)
+    {
+        pool_task_args = malloc((size_t)actual_thread_count * sizeof(void *));
+        if (!pool_task_args)
+        {
+            perror("krep: Cannot allocate thread-pool task arguments");
+            result_code = 2;
+            goto cleanup_file;
+        }
+    }
+    else if (!run_single_thread_inline)
+    {
+        threads = calloc((size_t)actual_thread_count, sizeof(pthread_t));
+        if (!threads)
+        {
+            perror("krep: Cannot allocate pthread handles");
+            result_code = 2;
+            goto cleanup_file;
+        }
+    }
+
+    // Allocate global results structure if tracking positions
+    if (current_params.track_positions)
+    {
+        uint64_t initial_cap = (file_size / 1000 > 1000) ? file_size / 1000 : 1000;
+        global_matches = match_result_init(initial_cap);
+        if (!global_matches)
+        {
+            fprintf(stderr, "krep: Error: Cannot allocate global match results for %s.\n", filename);
+            result_code = 2;
+            goto cleanup_file;
+        }
+    }
+
+    // --- Launch Threads ---
+    size_t chunk_size_calc = (file_size + actual_thread_count - 1) / actual_thread_count;
+    if (chunk_size_calc == 0 && file_size > 0)
+        chunk_size_calc = file_size;
+    // Ensure minimum chunk size
+    if (chunk_size_calc < MIN_CHUNK_SIZE && file_size > MIN_CHUNK_SIZE)
+    {
+        chunk_size_calc = MIN_CHUNK_SIZE;
+        // Recalculate thread count based on adjusted chunk size
+        actual_thread_count = (file_size + chunk_size_calc - 1) / chunk_size_calc;
+        if (actual_thread_count <= 0)
+            actual_thread_count = 1;
+        // Reallocate thread resources if count changed significantly (optional, could just use max)
+        // For simplicity, we assume initial allocation was sufficient or handle errors later.
+    }
+
+    const bool line_aligned_chunks = current_params.count_lines_mode ||
+                                     current_params.whole_word || only_matching;
+    size_t current_pos = 0;
+    int chunks_launched = 0;
+    const int planned_thread_count = actual_thread_count;
+
+    // Calculate max pattern length for overlap (only for literal search)
+    size_t max_literal_pattern_len = 0;
+    if (!current_params.use_regex)
+    {
+        for (size_t i = 0; i < current_params.num_patterns; ++i)
+        {
+            if (current_params.pattern_lens[i] > max_literal_pattern_len)
+            {
+                max_literal_pattern_len = current_params.pattern_lens[i];
+            }
+        }
+    }
+
+    // Preselect search algorithm once to avoid redundant decisions inside each worker
+    search_func_t preselected_algo = select_search_algorithm(&current_params);
+
+    for (int i = 0; i < planned_thread_count; ++i)
+    {
+        if (current_pos >= file_size)
+        {
+            break;
+        }
+
+        size_t chunk_start = current_pos;
+        size_t this_chunk_len = (chunk_start + chunk_size_calc > file_size) ? (file_size - chunk_start) : chunk_size_calc;
+        if (this_chunk_len == 0)
+            break;
+
+        size_t effective_chunk_len = 0;
+        if (line_aligned_chunks)
+        {
+            // Keep matching lines, word boundaries and non-overlapping -o
+            // matches owned by a single worker.
+            size_t chunk_end = chunk_start + this_chunk_len;
+            if (chunk_end > file_size)
+                chunk_end = file_size;
+
+            if (chunk_end < file_size && i < planned_thread_count - 1)
+            {
+                chunk_end = advance_to_next_line_boundary(file_data, file_size, chunk_end);
+            }
+
+            if (chunk_end < chunk_start)
+                chunk_end = file_size;
+
+            effective_chunk_len = chunk_end - chunk_start;
+            current_pos = chunk_end;
+        }
+        else
+        {
+            // Overlap needed for literal patterns. Regex handled differently (often
+            // needs no overlap or different logic).
+            size_t overlap = (!current_params.use_regex && max_literal_pattern_len > 0 && i < planned_thread_count - 1) ? max_literal_pattern_len - 1 : 0;
+            effective_chunk_len = (chunk_start + this_chunk_len + overlap > file_size) ? (file_size - chunk_start) : (this_chunk_len + overlap);
+            current_pos = chunk_start + this_chunk_len; // Advance by non-overlapped length
+        }
+
+        // Ensure chunk length isn't zero if there's still data
+        if (effective_chunk_len == 0 && chunk_start < file_size)
+        {
+            effective_chunk_len = file_size - chunk_start;
+            current_pos = file_size;
+        }
+
+        if (effective_chunk_len == 0)
+            continue;
+
+        thread_data_t *slot = &thread_args[chunks_launched];
+        slot->thread_id = chunks_launched;
+        slot->params = &current_params; // Pass params containing the pre-built trie
+        slot->chunk_start = file_data + chunk_start;
+        slot->search_algo = preselected_algo;
+        slot->chunk_len = effective_chunk_len;
+        slot->local_result = NULL;
+        slot->count_result = 0;
+        slot->error_flag = false;
+
+        if (run_single_thread_inline)
+        {
+            search_chunk_thread(slot);
+        }
+        else if (use_thread_pool)
+        {
+            pool_task_args[chunks_launched] = slot;
+        }
+        else
+        {
+            int rc = pthread_create(&threads[chunks_launched], NULL, search_chunk_thread, slot);
+            if (rc)
+            {
+                fprintf(stderr, "krep: Error creating thread %d: %s\n", chunks_launched, strerror(rc));
+                threads[chunks_launched] = 0; // Mark as not created
+                slot->error_flag = true;
+            }
+        }
+        chunks_launched++;
+    }
+
+    actual_thread_count = chunks_launched;
+
+    // Submit all tasks at once to reduce queue contention, then wait for completion.
+    if (use_thread_pool && actual_thread_count > 0)
+    {
+        if (!thread_pool_submit_batch(global_thread_pool, search_chunk_thread, pool_task_args, actual_thread_count))
+        {
+            // Fallback to individual submissions if batch allocation fails.
+            for (int i = 0; i < actual_thread_count; ++i)
+            {
+                if (!thread_pool_submit(global_thread_pool, search_chunk_thread, &thread_args[i]))
+                {
+                    fprintf(stderr, "krep: Failed to submit task for thread %d\n", i);
+                    thread_args[i].error_flag = true;
+                }
+            }
+        }
+
+        thread_pool_wait_all(global_thread_pool);
+    }
+
+    // --- Wait for Threads and Aggregate Results ---
+    bool merge_error = false;
+    for (int i = 0; i < actual_thread_count; ++i)
+    {
+        // Skip the pthread_join logic if using thread pool (tasks are already complete)
+        // Only try to join if not using thread pool and thread was actually created
+        if (!use_thread_pool && !run_single_thread_inline && threads && threads[i] != 0)
+        {
+            int rc = pthread_join(threads[i], NULL);
+            if (rc)
+            {
+                fprintf(stderr, "krep: Error joining thread %d: %s\n", i, strerror(rc));
+                result_code = 2;
+            }
+        }
+
+        if (thread_args[i].error_flag)
+        {
+            result_code = 2;
+        }
+
+        // Always process results from thread_args, regardless of how the thread was executed
+        if (result_code != 2 && !merge_error)
+        {
+            // Sum counts from disjoint chunks. In -c mode chunks are line-aligned,
+            // so each matching line belongs to exactly one worker.
+            uint64_t thread_count = thread_args[i].count_result;
+            if (max_count != SIZE_MAX)
+            {
+                uint64_t remaining_limit = (final_count >= max_count) ? 0 : max_count - final_count;
+                if (thread_count > remaining_limit)
+                {
+                    thread_count = remaining_limit; // Cap thread count contribution
+                }
+            }
+            final_count += thread_count;
+
+            // Merge position results if tracking, respecting max_count
+            if (current_params.track_positions && global_matches && thread_args[i].local_result)
+            {
+                bool merge_ok = true;
+                if (max_count == SIZE_MAX)
+                {
+                    size_t chunk_offset = (size_t)(thread_args[i].chunk_start - file_data);
+                    merge_ok = match_result_merge(global_matches, thread_args[i].local_result, chunk_offset);
+                }
+                else if (global_matches->count < max_count)
+                {
+                    size_t chunk_offset = (size_t)(thread_args[i].chunk_start - file_data);
+                    uint64_t remaining_limit = max_count - global_matches->count;
+                    merge_ok = match_result_merge_limited(global_matches,
+                                                          thread_args[i].local_result,
+                                                          chunk_offset,
+                                                          remaining_limit);
+                }
+
+                if (!merge_ok)
+                {
+                    fprintf(stderr, "krep: %s: Failed to merge match result from thread %d.\n", filename, i);
+                    merge_error = true;
+                }
+
+                match_result_free(thread_args[i].local_result); // Free local result after merging/skip
+                thread_args[i].local_result = NULL;
+            }
+            else if (thread_args[i].local_result)
+            {
+                match_result_free(thread_args[i].local_result);
+                thread_args[i].local_result = NULL;
+            }
+
+            if (merge_error)
+            {
+                result_code = 2;
+                // Continue cleanup but don't process further results
+            }
+        }
+    }
+
+    // --- Final Processing and Output ---
+    if (result_code != 2)
+    {
+        // Determine final result code based on aggregated count/matches
+        result_code = (final_count > 0) ? 0 : 1;
+        if (result_code == 0)
+            atomic_store(&global_match_found_flag, true); // Signal match found for -r
+
+        if (files_with_matches_mode || files_without_match_mode)
+        {
+            print_file_list_result(filename, result_code);
+        }
+        else if (current_params.count_lines_mode || current_params.count_matches_mode)
+        {
+            print_count_result(filename, final_count);
+        }
+        else if (result_code == 0 && global_matches)
+        {
+            if (global_matches->count > 1)
+            {
+                qsort(global_matches->positions, global_matches->count, sizeof(match_position_t), compare_match_positions);
+            }
+
+            // Print matching lines/parts, respecting max_count via print_matching_items
+            print_matching_items(filename, file_data, file_size, global_matches, &current_params); // Pass params
+        }
+        // Handle case where match was found but no positions recorded (e.g., empty regex match)
+        else if (result_code == 0 && (!global_matches || global_matches->count == 0) && !quiet_mode)
+        {
+            if (output_mode == OUTPUT_JSONL)
+            {
+                fputs("{\"type\":\"line\",\"path\":", stdout);
+                json_write_escaped(stdout, filename, strlen(filename));
+                fputs(",\"line_number\":1,\"byte_start\":0,\"byte_end\":0,\"text\":\"\",\"matches\":[]}\n", stdout);
+            }
+            else if (only_matching)
+            {
+                printf("%s:1:\n", filename); // Line number 1, empty match
+            }
+            else
+            {
+                printf("%s:\n", filename); // Empty line
+            }
+        }
+
+        record_search_stats(file_size, final_count, result_code);
+    }
+
+cleanup_file:
+    // --- Cleanup Resources ---
+    if (file_data != MAP_FAILED) {
+        if (data_is_malloced)
+            free(file_data);
+        else
+            munmap(file_data, file_size);
+    }
+    if (current_params.use_regex && current_params.compiled_regex == &compiled_regex_local)
+        regfree(&compiled_regex_local);
+    free(combined_regex_pattern);
+    match_result_free(global_matches);
+    free(threads);
+    free(thread_args);
+    free(pool_task_args);
+    if (fd != -1)
+        close(fd);
+    // Free the Aho-Corasick trie if it was built for this file
+    if (local_ac_trie)
+    {
+        ac_trie_free(local_ac_trie);
+    }
+
+    return result_code;
+}
+
+// --- Recursive Directory Search ---
+
+// Check if a directory name should be skipped
+static bool should_skip_directory(const char *dirname)
+{
+    // Skip hidden directories starting with '.' (in addition to "." and "..")
+    if (!include_hidden && dirname[0] == '.' && strcmp(dirname, ".") != 0 && strcmp(dirname, "..") != 0)
+    {
+        return true;
+    }
+    // Check against the predefined list of directories to skip
+    for (size_t i = 0; i < num_skip_directories; ++i)
+    {
+        if (strcmp(dirname, skip_directories[i]) == 0)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Check if a file extension should be skipped
+static bool should_skip_extension(const char *filename)
+{
+    // Find the last dot in the filename
+    const char *dot = strrchr(filename, '.');
+
+    // If no dot, or dot is at the beginning (hidden file), or dot is the last character,
+    // it's not an extension we check here.
+    if (!dot || dot == filename || *(dot + 1) == '\0')
+    {
+        return false; // Not an extension we care about
+    }
+
+    // Check for minified assets (e.g. app.min.js, style.min.css)
+    const char *min_ext = strstr(filename, ".min.");
+    if (min_ext != NULL)
+    {
+        return true; // Skip minified files
+    }
+
+    // Check against the predefined list
+    for (size_t i = 0; i < num_skip_extensions; ++i)
+    {
+        if (strcasecmp(dot, skip_extensions[i]) == 0)
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+// Check if a file appears to be binary
+static bool is_binary_file(const char *filepath)
+{
+    // Open file and check for binary content
+    FILE *f = fopen(filepath, "rb");
+    if (!f)
+    {
+        return false; // Treat fopen error as non-binary (might be permission issue)
+    }
+
+    char buffer[BINARY_CHECK_BUFFER_SIZE];
+    // Read a chunk from the beginning of the file
+    size_t bytes_read = fread(buffer, 1, sizeof(buffer), f);
+    fclose(f);
+
+    if (bytes_read == 0)
+        return false; // Empty file is not binary
+
+    // Check if a null byte exists within the read buffer
+    return memchr(buffer, '\0', bytes_read) != NULL;
+}
+
+static bool glob_matches_path(const char *pattern, const char *path, const char *name)
+{
+    if (!pattern || !path || !name)
+        return false;
+
+    if (fnmatch(pattern, name, 0) == 0)
+        return true;
+
+    if (fnmatch(pattern, path, 0) == 0)
+        return true;
+
+    return false;
+}
+
+static bool glob_list_matches(const char **patterns, size_t count, const char *path, const char *name)
+{
+    for (size_t i = 0; i < count; ++i)
+    {
+        if (glob_matches_path(patterns[i], path, name))
+            return true;
+    }
+    return false;
+}
+
+static bool path_is_excluded_by_cli(const char *path, const char *name)
+{
+    return glob_list_matches(exclude_globs, exclude_glob_count, path, name);
+}
+
+static bool file_is_included_by_cli(const char *path, const char *name)
+{
+    if (include_glob_count == 0)
+        return true;
+    return glob_list_matches(include_globs, include_glob_count, path, name);
+}
+
+static void note_skipped_path(void)
+{
+    if (stats_enabled)
+        atomic_fetch_add_explicit(&stats_paths_skipped, 1, memory_order_relaxed);
+}
+
+// --- Gitignore Support ---
+
+// Structure to hold a single gitignore pattern
+typedef struct
+{
+    char *pattern;
+    bool negated;
+    bool dir_only;
+} gitignore_pattern_t;
+
+// Structure to hold all patterns from a .gitignore file, with parent chain
+typedef struct gitignore
+{
+    gitignore_pattern_t *entries;
+    size_t count;
+    size_t capacity;
+    struct gitignore *parent; // Parent directory's gitignore context
+} gitignore_t;
+
+// Create a new gitignore context with optional parent
+static gitignore_t *gitignore_new(gitignore_t *parent)
+{
+    gitignore_t *gi = calloc(1, sizeof(gitignore_t));
+    if (!gi)
+        return NULL;
+    gi->parent = parent;
+    gi->capacity = 16;
+    gi->entries = malloc(gi->capacity * sizeof(gitignore_pattern_t));
+    if (!gi->entries)
+    {
+        free(gi);
+        return NULL;
+    }
+    return gi;
+}
+
+// Add a pattern line from .gitignore to the context
+static void gitignore_add_pattern(gitignore_t *gi, const char *line)
+{
+    // Skip leading whitespace
+    while (*line == ' ' || *line == '\t')
+        line++;
+
+    // Skip empty lines and comments
+    if (*line == '\0' || *line == '#')
+        return;
+
+    bool negated = false;
+    if (*line == '!')
+    {
+        negated = true;
+        line++;
+    }
+
+    // Remove trailing whitespace
+    size_t len = strlen(line);
+    while (len > 0 && (line[len - 1] == ' ' || line[len - 1] == '\t' ||
+                       line[len - 1] == '\r' || line[len - 1] == '\n'))
+        len--;
+    if (len == 0)
+        return;
+
+    // Check for directory-only pattern (trailing /)
+    bool dir_only = false;
+    if (line[len - 1] == '/')
+    {
+        dir_only = true;
+        len--;
+        if (len == 0)
+            return;
+    }
+
+    // Grow array if needed
+    if (gi->count >= gi->capacity)
+    {
+        if (gi->capacity > SIZE_MAX / 2)
+            return;
+        size_t new_capacity = gi->capacity * 2;
+        if (new_capacity > SIZE_MAX / sizeof(*gi->entries))
+            return;
+        gitignore_pattern_t *new_entries = realloc(gi->entries,
+                                                   new_capacity * sizeof(*gi->entries));
+        if (!new_entries)
+            return; // Skip on allocation failure
+        gi->entries = new_entries;
+        gi->capacity = new_capacity;
+    }
+
+    // Remove leading slash (anchored to directory root)
+    if (len > 0 && line[0] == '/')
+    {
+        line++;
+        len--;
+    }
+
+    gi->entries[gi->count].pattern = strndup(line, len);
+    gi->entries[gi->count].negated = negated;
+    gi->entries[gi->count].dir_only = dir_only;
+    gi->count++;
+}
+
+// Load .gitignore from a directory; returns new context or NULL if no file found
+static gitignore_t *gitignore_load(const char *dir, gitignore_t *parent)
+{
+    char path[PATH_MAX];
+    int n = snprintf(path, sizeof(path), "%s/.gitignore", dir);
+    if (n < 0 || (size_t)n >= sizeof(path))
+        return NULL;
+
+    FILE *f = fopen(path, "r");
+    if (!f)
+        return NULL; // No .gitignore in this directory
+
+    gitignore_t *gi = gitignore_new(parent);
+    if (!gi)
+    {
+        fclose(f);
+        return NULL;
+    }
+
+    char line[4096];
+    while (fgets(line, sizeof(line), f))
+    {
+        size_t llen = strlen(line);
+        while (llen > 0 && (line[llen - 1] == '\n' || line[llen - 1] == '\r'))
+            line[--llen] = '\0';
+        gitignore_add_pattern(gi, line);
+    }
+
+    fclose(f);
+    return gi;
+}
+
+// Check if a name matches gitignore patterns (walks parent chain)
+static bool gitignore_is_ignored(const gitignore_t *gi, const char *name, bool is_dir)
+{
+    if (!gi)
+        return false;
+
+    // Check parent patterns first (less specific)
+    bool ignored = gitignore_is_ignored(gi->parent, name, is_dir);
+
+    // Then check current level patterns (can override parent)
+    for (size_t i = 0; i < gi->count; i++)
+    {
+        if (gi->entries[i].dir_only && !is_dir)
+            continue;
+
+        // Match against basename using fnmatch (no FNM_PATHNAME for simple patterns)
+        if (fnmatch(gi->entries[i].pattern, name, 0) == 0)
+        {
+            ignored = !gi->entries[i].negated;
+        }
+    }
+
+    return ignored;
+}
+
+// Free a gitignore context (does NOT free parent - managed by caller)
+static void gitignore_free(gitignore_t *gi)
+{
+    if (!gi)
+        return;
+    for (size_t i = 0; i < gi->count; i++)
+    {
+        free(gi->entries[i].pattern);
+    }
+    free(gi->entries);
+    free(gi);
+}
+
+// Internal recursive directory search with gitignore support
+static int search_directory_recursive_impl(const char *base_dir, const search_params_t *params,
+                                           int thread_count, gitignore_t *parent_gi)
+{
+    // Try opening the directory
+    DIR *dir = opendir(base_dir);
+    if (!dir)
+    {
+        // Better error handling: print more informative message for common errors
+        if (errno == EACCES)
+        {
+            fprintf(stderr, "krep: %s: Permission denied\n", base_dir);
+        }
+        else if (errno != ENOENT)
+        { // Still silent for not found
+            fprintf(stderr, "krep: %s: %s\n", base_dir, strerror(errno));
+        }
+        // Return 0 errors for permission/not found, 1 otherwise
+        return (errno == EACCES || errno == ENOENT) ? 0 : 1;
+    }
+
+    // Load .gitignore for this directory if feature is enabled
+    gitignore_t *local_gi = NULL;
+    gitignore_t *effective_gi = parent_gi;
+    if (use_gitignore)
+    {
+        local_gi = gitignore_load(base_dir, parent_gi);
+        if (local_gi)
+            effective_gi = local_gi;
+    }
+
+    struct dirent *entry;       // Structure to hold directory entry info
+    int total_errors = 0;       // Accumulator for errors during recursion
+    char path_buffer[PATH_MAX]; // Buffer to construct full paths
+
+    // Read directory entries one by one
+    while ((!quiet_mode || !atomic_load(&global_match_found_flag)) &&
+           (entry = readdir(dir)) != NULL)
+    {
+        // Skip "." and ".." entries
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
+        {
+            continue;
+        }
+
+        // Construct the full path for the entry - more robust path joining
+        int path_len;
+        if (base_dir[strlen(base_dir) - 1] == '/')
+        {
+            path_len = snprintf(path_buffer, sizeof(path_buffer), "%s%s", base_dir, entry->d_name);
+        }
+        else
+        {
+            path_len = snprintf(path_buffer, sizeof(path_buffer), "%s/%s", base_dir, entry->d_name);
+        }
+
+        // Check for path construction errors (e.g., path too long)
+        if (path_len < 0 || (size_t)path_len >= sizeof(path_buffer))
+        {
+            fprintf(stderr, "krep: Error constructing path for %s/%s (too long?)\n", base_dir, entry->d_name);
+            total_errors++;
+            continue;
+        }
+
+        struct stat entry_stat; // Structure to hold file status info
+        // Use lstat to get info about the entry itself (doesn't follow symlinks)
+        if (lstat(path_buffer, &entry_stat) == -1)
+        {
+            // Ignore "No such file or directory" errors (e.g., broken symlink), report others
+            if (errno != ENOENT)
+            {
+                fprintf(stderr, "krep: %s: %s\n", path_buffer, strerror(errno));
+                total_errors++;
+            }
+            continue;
+        }
+
+        // If the entry is a directory:
+        if (S_ISDIR(entry_stat.st_mode))
+        {
+            // Check if this directory should be skipped
+            if (should_skip_directory(entry->d_name))
+            {
+                note_skipped_path();
+                continue; // Skip this directory
+            }
+            if (path_is_excluded_by_cli(path_buffer, entry->d_name))
+            {
+                note_skipped_path();
+                continue; // Skip this directory
+            }
+            // Check gitignore patterns
+            if (effective_gi && gitignore_is_ignored(effective_gi, entry->d_name, true))
+            {
+                note_skipped_path();
+                continue; // Skip this directory per .gitignore
+            }
+            // Otherwise, recurse into the subdirectory
+            total_errors += search_directory_recursive_impl(path_buffer, params, thread_count, effective_gi);
+        }
+        // If the entry is a regular file:
+        else if (S_ISREG(entry_stat.st_mode))
+        {
+            if (!include_hidden && entry->d_name[0] == '.')
+            {
+                note_skipped_path();
+                continue;
+            }
+            if (path_is_excluded_by_cli(path_buffer, entry->d_name))
+            {
+                note_skipped_path();
+                continue;
+            }
+            if (!file_is_included_by_cli(path_buffer, entry->d_name))
+            {
+                note_skipped_path();
+                continue;
+            }
+            // Check if the file should be skipped based on extension
+            if (include_glob_count == 0 && should_skip_extension(entry->d_name))
+            {
+                note_skipped_path();
+                continue; // Skip this file
+            }
+            // Check gitignore patterns
+            if (effective_gi && gitignore_is_ignored(effective_gi, entry->d_name, false))
+            {
+                note_skipped_path();
+                continue; // Skip this file per .gitignore
+            }
+
+            // Don't check binary files too aggressively as it might miss valid text files
+            // Only check files larger than a certain threshold
+            if (include_glob_count == 0 && entry_stat.st_size > 1024 * 1024 && is_binary_file(path_buffer))
+            {
+                note_skipped_path();
+                continue; // Skip this file - it's binary and large
+            }
+
+            // Otherwise, search the file using search_file (which handles parallelism)
+            int file_result = search_file(params, path_buffer, thread_count);
+            // If search_file returns 2, it indicates an error
+            if (file_result == 2)
+            {
+                total_errors++;
+            }
+            // Note: global_match_found_flag is set within search_file if matches are found
+        }
+        // Ignore other file types (symlinks are not followed by lstat, sockets, pipes, etc.)
+    }
+
+    closedir(dir);                          // Close the directory stream
+    if (local_gi)
+        gitignore_free(local_gi);           // Free this level's gitignore (not parent)
+    return total_errors;                    // Return the total count of errors encountered
+}
+
+// Recursive directory search function (public API)
+// Note: Directory traversal itself remains serial. Parallelism happens within search_file.
+int search_directory_recursive(const char *base_dir, const search_params_t *params, int thread_count)
+{
+    return search_directory_recursive_impl(base_dir, params, thread_count, NULL);
+}
+
+// --- Main Entry Point ---
+
+// Exclude main if TESTING is defined (for linking with test harness)
+#if !defined(TESTING)
+int main(int argc, char *argv[])
+{
+    // --- Argument Parsing State ---
+    search_params_t params = {0}; // Initialize search parameters
+    params.case_sensitive = true; // Default
+    params.num_patterns = 0;
+    params.use_regex = false; // Default to literal search
+
+    // Temporary storage for multiple patterns from -e
+    char *pattern_args[MAX_PATTERN_LENGTH]; // Store pointers to patterns from argv
+    size_t pattern_lens[MAX_PATTERN_LENGTH];
+    size_t num_patterns_found = 0;
+
+    // Add an array to track which patterns were dynamically allocated and need to be freed
+    bool pattern_needs_free[MAX_PATTERN_LENGTH] = {false};
+
+    char *target_arg = NULL;                 // The file, directory, or string to search
+    bool count_only_flag = false;            // Flag for -c
+    bool string_mode = false;                // Flag for -s (search string instead of file)
+    bool recursive_mode = false;             // Flag for -r (recursive directory search)
+    int thread_count = DEFAULT_THREAD_COUNT; // Thread count (0 = auto)
+    const char *color_when = "auto";         // Color output control ('auto', 'always', 'never')
+
+    // --- getopt_long Setup ---
+    struct option long_options[] = {
+        {"color", optional_argument, 0, 258},     // --color[=WHEN]
+        {"no-simd", no_argument, 0, 'S'},         // --no-simd
+        {"help", no_argument, 0, 'h'},            // --help
+        {"version", no_argument, 0, 'v'},         // --version
+        {"fixed-strings", no_argument, 0, 'F'},   // --fixed-strings, same as default
+        {"regexp", required_argument, 0, 'e'},    // Treat -e as --regexp for consistency
+        {"max-count", required_argument, 0, 'm'}, // --max-count=NUM option
+        {"line-number", no_argument, 0, 'n'},     // --line-number
+        {"after-context", required_argument, 0, 'A'},
+        {"before-context", required_argument, 0, 'B'},
+        {"context", required_argument, 0, 'C'},
+        {"quiet", no_argument, 0, 'q'},
+        {"files-with-matches", no_argument, 0, 'l'},
+        {"files-without-match", no_argument, 0, 'L'},
+        {"gitignore", no_argument, 0, 256},       // --gitignore
+        {"algo", required_argument, 0, 257},      // --algo=ALGO
+        {"json", no_argument, 0, 259},
+        {"jsonl", no_argument, 0, 259},
+        {"stats", no_argument, 0, 260},
+        {"glob", required_argument, 0, 261},
+        {"exclude", required_argument, 0, 262},
+        {"hidden", no_argument, 0, 263},
+        {0, 0, 0, 0}                              // Terminator
+    };
+    int option_index = 0;
+    int opt;
+
+    // Initialize max_count to SIZE_MAX (no limit)
+    params.max_count = SIZE_MAX;
+
+    // --- Parse Command Line Options ---
+    while ((opt = getopt_long(argc, argv, "+e:f:icm:oEFrt:s:vhwnqA:B:C:lL", long_options, &option_index)) != -1)
+    {
+        switch (opt)
+        {
+        case 'i': // Case-insensitive
+            params.case_sensitive = false;
+            break;
+        case 'c': // Count lines
+            count_only_flag = true;
+            break;
+        case 'o': // Only matching parts
+            only_matching = true;
+            break;
+        case 'n': // Show line numbers
+            show_line_numbers = true;
+            break;
+        case 'q': // Quiet
+            quiet_mode = true;
+            break;
+        case 'l': // Files with matches
+            files_with_matches_mode = true;
+            break;
+        case 'L': // Files without matches
+            files_without_match_mode = true;
+            break;
+        case 'A': // After context
+        case 'B': // Before context
+        case 'C': // Symmetric context
+        {
+            char *endptr = NULL;
+            errno = 0;
+            long val = strtol(optarg, &endptr, 10);
+            if (errno != 0 || optarg == endptr || *endptr != '\0' || val < 0)
+            {
+                fprintf(stderr, "krep: Error: Invalid context value '%s'\n", optarg);
+                return 2;
+            }
+            if (opt == 'A')
+                context_after = (size_t)val;
+            else if (opt == 'B')
+                context_before = (size_t)val;
+            else
+            {
+                context_before = (size_t)val;
+                context_after = (size_t)val;
+            }
+            break;
+        }
+        case 'm': // Max count
+        {
+            char *endptr = NULL;
+            errno = 0;
+            long val = strtol(optarg, &endptr, 10);
+            if (errno != 0 || optarg == endptr || *endptr != '\0' || val < 0)
+            {
+                fprintf(stderr, "krep: Warning: Invalid number for max-count '%s'\n", optarg);
+            }
+            else
+            {
+                // Cast to size_t (always less than SIZE_MAX since we've verified val >= 0)
+                params.max_count = (size_t)val;
+            }
+        }
+        break;
+        case 'E': // Use Extended Regex
+            params.use_regex = true;
+            break;
+        case 'F': // Fixed strings (explicitly, same as default)
+            params.use_regex = false;
+            break;
+        case 'r': // Recursive search
+            recursive_mode = true;
+            break;
+        case 't': // Set thread count
+        {
+            char *endptr = NULL;
+            errno = 0;
+            long val = strtol(optarg, &endptr, 10);
+            if (errno != 0 || optarg == endptr || *endptr != '\0' || val <= 0 || val > INT_MAX)
+            {
+                fprintf(stderr, "krep: Warning: Invalid thread count '%s', using default.\n", optarg);
+                thread_count = DEFAULT_THREAD_COUNT;
+            }
+            else
+            {
+                thread_count = (int)val;
+            }
+        }
+        break;
+        case 's': // Search string mode
+            string_mode = true;
+            // optarg is the PATTERN for string mode.
+            // Add it to the list of patterns.
+            if (num_patterns_found < MAX_PATTERN_LENGTH)
+            {
+                pattern_args[num_patterns_found] = optarg;
+                pattern_lens[num_patterns_found] = strlen(optarg);
+                pattern_needs_free[num_patterns_found] = false; // Pattern is from argv, no free needed by this array
+                num_patterns_found++;
+            }
+            else
+            {
+                fprintf(stderr, "krep: Error: Too many patterns specified.\n");
+                for (size_t i = 0; i < num_patterns_found; ++i)
+                {
+                    if (pattern_needs_free[i])
+                        free(pattern_args[i]);
+                }
+                return 2;
+            }
+            // STRING_TO_SEARCH (target_arg) will be the next non-option argument.
+            break;
+        case 'f': // Read patterns from file (or stdin if "-")
+        {
+            FILE *pattern_file;
+            bool is_stdin_pattern = (strcmp(optarg, "-") == 0);
+
+            if (is_stdin_pattern)
+            {
+                pattern_file = stdin;
+            }
+            else
+            {
+                pattern_file = fopen(optarg, "r");
+                if (!pattern_file)
+                {
+                    fprintf(stderr, "krep: Error: Cannot open pattern file: %s\n", optarg);
+                    return 2;
+                }
+            }
+
+            char line[MAX_PATTERN_LENGTH];
+            while (fgets(line, sizeof(line), pattern_file) && num_patterns_found < MAX_PATTERN_LENGTH)
+            {
+                // Remove trailing newline if present
+                size_t len = strlen(line);
+                if (len > 0 && line[len - 1] == '\n')
+                    line[len - 1] = '\0';
+
+                // Skip empty lines
+                if (strlen(line) == 0)
+                    continue;
+
+                // Allocate storage for the pattern
+                pattern_args[num_patterns_found] = strdup(line);
+                if (!pattern_args[num_patterns_found])
+                {
+                    perror("krep: Error: Memory allocation failed for pattern");
+                    if (!is_stdin_pattern)
+                        fclose(pattern_file);
+                    return 2;
+                }
+                pattern_lens[num_patterns_found] = strlen(pattern_args[num_patterns_found]);
+                // Mark this pattern as needing to be freed
+                pattern_needs_free[num_patterns_found] = true;
+                num_patterns_found++;
+            }
+            if (!is_stdin_pattern)
+                fclose(pattern_file);
+
+            if (num_patterns_found == 0)
+            {
+                fprintf(stderr, "krep: Error: No patterns found in %s\n",
+                        is_stdin_pattern ? "stdin" : optarg);
+                return 2;
+            }
+            break;
+        }
+
+        case 'v': // Version
+            printf("krep v%s\n", VERSION);
+#if KREP_USE_AVX512
+            printf("SIMD: Compiled with AVX-512 support.\n");
+#elif KREP_USE_AVX2
+            printf("SIMD: Compiled with AVX2 support.\n");
+#elif KREP_USE_SSE42
+            printf("SIMD: Compiled with SSE2 support.\n");
+#elif KREP_USE_NEON
+            printf("SIMD: Compiled with NEON support.\n");
+#else
+            printf("SIMD: Compiled without specific SIMD support.\n");
+#endif
+            printf("Max SIMD Pattern Length: %zu bytes\n", SIMD_MAX_PATTERN_LEN);
+            return 0;
+        case 'h': // Help
+            print_usage(argv[0]);
+            return 0;
+        case 'e': // Specify pattern via option
+            if (num_patterns_found < MAX_PATTERN_LENGTH)
+            {
+                pattern_args[num_patterns_found] = optarg;
+                pattern_lens[num_patterns_found] = strlen(optarg);
+                // These patterns come from argv, no need to free
+                pattern_needs_free[num_patterns_found] = false;
+                num_patterns_found++;
+            }
+            else
+            {
+                fprintf(stderr, "krep: Error: Too many patterns specified (max %d)\n", MAX_PATTERN_LENGTH);
+                return 2;
+            }
+            break;
+
+        case 258: // --color option
+            if (optarg == NULL || strcmp(optarg, "auto") == 0)
+                color_when = "auto";
+            else if (strcmp(optarg, "always") == 0)
+                color_when = "always";
+            else if (strcmp(optarg, "never") == 0)
+                color_when = "never";
+            else
+            {
+                fprintf(stderr, "krep: Error: Invalid argument for --color: %s\n", optarg);
+                print_usage(argv[0]);
+                return 2;
+            }
+            break;
+        case 'S': // --no-simd option
+            force_no_simd = true;
+            break;
+        case 'w': // Whole word
+            params.whole_word = true;
+            break;
+        case 256: // --gitignore
+            use_gitignore = true;
+            break;
+        case 257: // --algo
+            if (strcmp(optarg, "auto") == 0 || strcmp(optarg, "bm") == 0 ||
+                strcmp(optarg, "kmp") == 0 || strcmp(optarg, "bndm") == 0 ||
+                strcmp(optarg, "two") == 0)
+            {
+                algo_override = optarg;
+            }
+            else
+            {
+                fprintf(stderr, "krep: Error: Unknown algorithm '%s'. Valid options: auto, bm, kmp, bndm, two\n", optarg);
+                return 2;
+            }
+            break;
+        case 259: // --json / --jsonl
+            output_mode = OUTPUT_JSONL;
+            color_when = "never";
+            break;
+        case 260: // --stats
+            stats_enabled = true;
+            break;
+        case 261: // --glob
+            if (include_glob_count >= MAX_GLOB_PATTERNS)
+            {
+                fprintf(stderr, "krep: Error: Too many --glob patterns (max %d)\n", MAX_GLOB_PATTERNS);
+                return 2;
+            }
+            include_globs[include_glob_count++] = optarg;
+            break;
+        case 262: // --exclude
+            if (exclude_glob_count >= MAX_GLOB_PATTERNS)
+            {
+                fprintf(stderr, "krep: Error: Too many --exclude patterns (max %d)\n", MAX_GLOB_PATTERNS);
+                return 2;
+            }
+            exclude_globs[exclude_glob_count++] = optarg;
+            break;
+        case 263: // --hidden
+            include_hidden = true;
+            break;
+        case '?': // Unknown option or missing argument from getopt
+        default:  // Should not happen
+            print_usage(argv[0]);
+            return 2;
+        }
+    }
+
+    // --- Finalize Parameter Setup ---
+
+    // Determine color output setting
+    if (output_mode == OUTPUT_JSONL)
+        color_output_enabled = false;
+    else if (strcmp(color_when, "always") == 0)
+        color_output_enabled = true;
+    else if (strcmp(color_when, "never") == 0)
+        color_output_enabled = false;
+    else                                              // "auto" (default)
+        color_output_enabled = isatty(STDOUT_FILENO); // Enable only if stdout is a TTY
+
+    // Get pattern argument(s)
+    if (num_patterns_found == 0)
+    {                      // No patterns from -e, -f, or -s
+        if (optind < argc) // A non-option argument exists, this is the PATTERN
+        {
+            pattern_args[0] = argv[optind];
+            pattern_lens[0] = strlen(pattern_args[0]);
+            pattern_needs_free[0] = false; // Pattern is from argv
+            num_patterns_found = 1;
+            optind++;
+        }
+        else // No pattern argument provided at all
+        {
+            fprintf(stderr, "krep: Error: PATTERN argument missing.\n");
+            print_usage(argv[0]);
+            return 2;
+        }
+    }
+
+    // Assign patterns to params struct
+    params.patterns = (const char **)pattern_args; // Cast is safe as we won't modify argv content
+    params.pattern_lens = pattern_lens;
+    params.num_patterns = num_patterns_found;
+    // For single pattern case, also set the legacy fields for compatibility
+    if (num_patterns_found == 1)
+    {
+        params.pattern = params.patterns[0];
+        params.pattern_len = params.pattern_lens[0];
+    }
+
+    // Get target argument (file, directory, or string to search)
+    if (string_mode)
+    {
+        // In string mode, the next non-option argument is STRING_TO_SEARCH
+        if (optind < argc)
+        {
+            target_arg = argv[optind];
+            optind++;
+        }
+        else
+        {
+            // No non-option argument left for STRING_TO_SEARCH
+            fprintf(stderr, "krep: Error: STRING_TO_SEARCH argument missing for -s.\n");
+            for (size_t i = 0; i < num_patterns_found; ++i)
+            {
+                if (pattern_needs_free[i])
+                    free(pattern_args[i]);
+            }
+            print_usage(argv[0]);
+            return 2;
+        }
+    }
+    else
+    {
+        // Not string mode, target is FILE/DIRECTORY or stdin
+        if (optind < argc)
+        { // A non-option argument exists for file/directory
+            target_arg = argv[optind];
+            optind++;
+        }
+        else
+        {
+            // No file/directory specified.
+            // If a pattern was given and stdin is not a tty, input will be from stdin.
+            // target_arg remains NULL for stdin.
+            // If stdin is a tty, it's an error because no file/pipe is provided.
+            if (num_patterns_found > 0 && isatty(STDIN_FILENO) && !recursive_mode)
+            {
+                fprintf(stderr, "krep: Error: Target file/directory missing and no input from pipe/redirect.\n");
+                for (size_t i = 0; i < num_patterns_found; ++i)
+                {
+                    if (pattern_needs_free[i])
+                        free(pattern_args[i]);
+                }
+                print_usage(argv[0]);
+                return 2;
+            }
+            // If num_patterns_found == 0, error was already caught.
+            // If !isatty(STDIN_FILENO), target_arg is NULL (stdin).
+        }
+    }
+
+    // Check for extra arguments
+    if (optind < argc)
+    {
+        fprintf(stderr, "krep: Error: Extra arguments provided ('%s'...). \n", argv[optind]);
+        print_usage(argv[0]);
+        return 2;
+    }
+
+    // Validate incompatible options
+    if (string_mode && recursive_mode)
+    {
+        fprintf(stderr, "krep: Error: Options -s (search string) and -r (recursive) cannot be used together.\n");
+        print_usage(argv[0]);
+        return 2;
+    }
+
+    if (files_with_matches_mode && files_without_match_mode)
+    {
+        fprintf(stderr, "krep: Error: --files-with-matches and --files-without-match cannot be used together.\n");
+        return 2;
+    }
+
+    if (recursive_mode && target_arg == NULL)
+    {
+        target_arg = ".";
+    }
+
+    // Set final counting/tracking modes in params
+    params.count_lines_mode = count_only_flag && !only_matching;  // -c only
+    params.count_matches_mode = count_only_flag && only_matching; // -co (internal concept, currently unused externally)
+    // Track positions unless only counting lines (-c without -o)
+    params.track_positions = !(count_only_flag && !only_matching);
+
+    if (quiet_mode || files_with_matches_mode || files_without_match_mode)
+    {
+        params.count_lines_mode = false;
+        params.count_matches_mode = false;
+        params.track_positions = false;
+    }
+
+    if (stats_enabled)
+    {
+        stats_start_time = get_time();
+    }
+
+    // If counting (-c) or printing only matches (-o), disable summary
+
+    // --- Execute Search ---
+    int exit_code = 1; // Default exit code: 1 (no match found)
+
+    if (string_mode)
+    {
+        // Search the provided string argument
+        exit_code = search_string(&params, target_arg);
+    }
+    else if (recursive_mode)
+    {
+        // Search recursively starting from the target directory
+        struct stat target_stat;
+        if (stat(target_arg, &target_stat) == -1)
+        {
+            fprintf(stderr, "krep: %s: %s\n", target_arg, strerror(errno));
+            return 2; // Target does not exist or other stat error
+        }
+        if (!S_ISDIR(target_stat.st_mode))
+        {
+            fprintf(stderr, "krep: %s: Is not a directory (required for -r)\n", target_arg);
+            return 2;
+        }
+        atomic_store(&global_match_found_flag, false); // Reset global flag
+        int errors = search_directory_recursive(target_arg, &params, thread_count);
+        if (errors > 0)
+        {
+            fprintf(stderr, "krep: Encountered %d errors during recursive search.\n", errors);
+            exit_code = 2; // Exit code 2 if errors occurred
+        }
+        else
+        {
+            exit_code = atomic_load(&global_match_found_flag) ? 0 : 1; // 0 if matches found, 1 otherwise
+        }
+    }
+    else
+    { // Single target (file or stdin)
+        // If target_arg is NULL, it means stdin - set to "-" for consistency
+        if (target_arg == NULL)
+            target_arg = "-";
+
+        // search_file handles stdin internally if target_arg is "-"
+        struct stat target_stat;
+        // If not stdin, check if it's a directory without -r
+        if (strcmp(target_arg, "-") != 0 && stat(target_arg, &target_stat) == 0 && S_ISDIR(target_stat.st_mode))
+        {
+            fprintf(stderr, "krep: %s: Is a directory (use -r to search directories)\n", target_arg);
+            return 2;
+        }
+        // Call search_file (handles stdin via target_arg == "-")
+        exit_code = search_file(&params, target_arg, thread_count);
+    }
+
+    // Clean up thread pool before exiting
+    cleanup_global_thread_pool();
+
+    // Cleanup before exit - free any memory allocated for patterns read from file
+    if (num_patterns_found > 0)
+    {
+        for (size_t i = 0; i < num_patterns_found; i++)
+        {
+            if (pattern_needs_free[i] && pattern_args[i])
+            {
+                free(pattern_args[i]);
+            }
+        }
+    }
+
+    print_stats_summary(exit_code);
+
+    // Return the final exit code (0=match, 1=no match, 2=error)
+    return exit_code;
+}
+#endif // !defined(TESTING)
+
+// Add near the other search functions
+uint64_t memchr_search(const search_params_t *params,
+                       const char *text_start,
+                       size_t text_len,
+                       match_result_t *result)
+{
+    // --- Add max_count == 0 check ---
+    if (params->max_count == 0)
+        return 0;
+    // --- End add ---
+
+    uint64_t current_count = 0;             // Use local counter for limit check
+    const char target = params->pattern[0]; // Single byte pattern
+    const unsigned char target_uc = (unsigned char)target;
+    const char target_case = params->case_sensitive ? 0 : (islower(target_uc) ? toupper(target_uc) : tolower(target_uc));
+    bool count_lines_mode = params->count_lines_mode;
+    bool track_positions = params->track_positions;
+    size_t max_count = params->max_count; // Get max_count
+
+// Special batched buffer for matches to reduce malloc overhead
+#define MEMCHR_BUFFER_SIZE 4096
+    match_position_t local_buffer[MEMCHR_BUFFER_SIZE];
+    size_t buffer_count = 0;
+
+    size_t last_counted_line_start = SIZE_MAX;
+    size_t pos = 0;
+
+    // Fast byte-by-byte scan
+    while (pos < text_len)
+    {
+        const char *found;
+
+        // Use platform-optimized memchr for the original case
+        found = memchr(text_start + pos, target, text_len - pos);
+
+        // Handle case-insensitive search: consider both cases and pick the earliest
+        if (!params->case_sensitive && target_case != target)
+        {
+            const char *found_case = memchr(text_start + pos, target_case, text_len - pos);
+            if (!found || (found_case && found_case < found))
+            {
+                found = found_case;
+            }
+        }
+
+        if (!found)
+            break;
+
+        // Calculate absolute position
+        size_t match_pos = found - text_start;
+
+        // Match found at match_pos
+        // Whole word check
+        if (params->whole_word && !is_whole_word_match(text_start, text_len, match_pos, match_pos + 1))
+        {
+            pos = match_pos + 1;
+            continue;
+        }
+
+        if (count_lines_mode)
+        {
+            size_t line_start = find_line_start(text_start, text_len, match_pos);
+            if (line_start != last_counted_line_start)
+            {
+                // --- Check max_count BEFORE incrementing ---
+                if (max_count != SIZE_MAX && current_count >= max_count)
+                {
+                    break; // Limit reached
+                }
+                // --- End check ---
+
+                current_count++; // Increment line count
+                last_counted_line_start = line_start;
+
+                // Optimize: skip to end of line
+                size_t line_end = find_line_end(text_start, text_len, line_start);
+                pos = (line_end < text_len) ? line_end + 1 : text_len;
+            }
+            else
+            {
+                pos = match_pos + 1;
+            }
+        }
+        else
+        {
+            // --- Check max_count BEFORE incrementing ---
+            if (max_count != SIZE_MAX && current_count >= max_count)
+            {
+                if (track_positions && result) // Add final match to buffer/result
+                {
+                    if (buffer_count < MEMCHR_BUFFER_SIZE)
+                    {
+                        local_buffer[buffer_count].start_offset = match_pos;
+                        local_buffer[buffer_count].end_offset = match_pos + 1;
+                        buffer_count++;
+                    }
+                    else if (!match_result_add(result, match_pos, match_pos + 1))
+                    {
+                        fprintf(stderr, "Warning: Failed to add SSE4.2 match position.\n");
+                    }
+                }
+                break; // Limit reached
+            }
+            // --- End check ---
+
+            current_count++; // Increment match count
+
+            if (track_positions && result)
+            {
+                if (buffer_count < MEMCHR_BUFFER_SIZE)
+                {
+                    // Store in local buffer
+                    local_buffer[buffer_count].start_offset = match_pos;
+                    local_buffer[buffer_count].end_offset = match_pos + 1;
+                    buffer_count++;
+                }
+                else
+                {
+                    // Flush buffer to result
+                    for (size_t i = 0; i < buffer_count; i++)
+                    {
+                        match_result_add(result, local_buffer[i].start_offset,
+                                         local_buffer[i].end_offset);
+                    }
+                    buffer_count = 0;
+                    // Add current match to buffer
+                    local_buffer[buffer_count].start_offset = match_pos;
+                    local_buffer[buffer_count].end_offset = match_pos + 1;
+                    buffer_count++;
+                }
+            }
+            pos = match_pos + 1;
+        }
+    }
+
+    // Flush any remaining buffer entries
+    if (track_positions && result && buffer_count > 0)
+    {
+        // Respect max_count when flushing remaining buffer
+        uint64_t already_added = result->count;
+        uint64_t can_add_more = (max_count == SIZE_MAX) ? buffer_count : ((already_added >= max_count) ? 0 : max_count - already_added);
+        size_t flush_limit = (buffer_count < can_add_more) ? buffer_count : can_add_more;
+
+        for (size_t i = 0; i < flush_limit; i++)
+        {
+            match_result_add(result, local_buffer[i].start_offset,
+                             local_buffer[i].end_offset);
+        }
+    }
+
+    return current_count; // Return line count or match count
+}
+
+// --- Thread Pool Implementation ---
+
+// Worker thread function that processes tasks from the queue
+static void *thread_pool_worker(void *arg)
+{
+    thread_pool_t *pool = (thread_pool_t *)arg;
+    task_t *task;
+
+    while (true)
+    {
+        // Lock the queue mutex to safely access the task queue
+        pthread_mutex_lock(&pool->queue_mutex);
+
+        // Wait for a task or shutdown signal
+        while (pool->task_queue == NULL && !atomic_load(&pool->shutdown))
+        {
+            pthread_cond_wait(&pool->queue_cond, &pool->queue_mutex);
+        }
+
+        // Check if we should shutdown
+        if (atomic_load(&pool->shutdown) && pool->task_queue == NULL)
+        {
+            pthread_mutex_unlock(&pool->queue_mutex);
+            break;
+        }
+
+        // Get a task from the queue
+        task = pool->task_queue;
+        pool->task_queue = task->next;
+        if (pool->task_queue == NULL)
+        {
+            pool->task_queue_tail = NULL;
+        }
+
+        // Increment the working threads counter
+        pool->working_threads++;
+
+        // Unlock the queue to allow other threads to get tasks
+        pthread_mutex_unlock(&pool->queue_mutex);
+
+        // Execute the task
+        if (task != NULL)
+        {
+            task->func(task->arg);
+            free(task);
+        }
+
+        // Mark thread as no longer working and signal if all work is done
+        pthread_mutex_lock(&pool->queue_mutex);
+        pool->working_threads--;
+        if (pool->working_threads == 0 && pool->task_queue == NULL)
+        {
+            pthread_cond_signal(&pool->complete_cond);
+        }
+        pthread_mutex_unlock(&pool->queue_mutex);
+    }
+
+    return NULL;
+}
+
+// Initialize a thread pool with the specified number of worker threads
+thread_pool_t *thread_pool_init(int num_threads)
+{
+    if (num_threads <= 0)
+    {
+        // Auto-detect core count if not specified
+        num_threads = sysconf(_SC_NPROCESSORS_ONLN);
+        if (num_threads <= 0)
+        {
+            num_threads = 4; // Fallback to a reasonable default
+        }
+        // Use slightly fewer threads than cores to leave headroom
+        if (num_threads > 2)
+            num_threads = num_threads - 1;
+    }
+
+    thread_pool_t *pool = malloc(sizeof(thread_pool_t));
+    if (!pool)
+    {
+        return NULL;
+    }
+
+    // Initialize pool structure
+    pool->threads = malloc(num_threads * sizeof(pthread_t));
+    if (!pool->threads)
+    {
+        free(pool);
+        return NULL;
+    }
+
+    pool->num_threads = num_threads;
+    pool->task_queue = NULL;
+    pool->task_queue_tail = NULL;
+    pool->working_threads = 0;
+    atomic_init(&pool->shutdown, false);
+
+    // Initialize mutex with PTHREAD_MUTEX_ADAPTIVE_NP for better spin behavior
+    pthread_mutexattr_t mutex_attr;
+    pthread_mutexattr_init(&mutex_attr);
+#ifdef PTHREAD_MUTEX_ADAPTIVE_NP
+    pthread_mutexattr_settype(&mutex_attr, PTHREAD_MUTEX_ADAPTIVE_NP);
+#endif
+    if (pthread_mutex_init(&pool->queue_mutex, &mutex_attr) != 0)
+    {
+        pthread_mutexattr_destroy(&mutex_attr);
+        free(pool->threads);
+        free(pool);
+        return NULL;
+    }
+    pthread_mutexattr_destroy(&mutex_attr);
+
+    if (pthread_cond_init(&pool->queue_cond, NULL) != 0)
+    {
+        pthread_mutex_destroy(&pool->queue_mutex);
+        free(pool->threads);
+        free(pool);
+        return NULL;
+    }
+
+    if (pthread_cond_init(&pool->complete_cond, NULL) != 0)
+    {
+        pthread_cond_destroy(&pool->queue_cond);
+        pthread_mutex_destroy(&pool->queue_mutex);
+        free(pool->threads);
+        free(pool);
+        return NULL;
+    }
+
+    // Set thread attributes for better performance
+    pthread_attr_t thread_attr;
+    pthread_attr_init(&thread_attr);
+    
+    // Set a reasonable stack size (256KB should be enough for search operations)
+    pthread_attr_setstacksize(&thread_attr, 256 * 1024);
+
+    // Create worker threads
+    for (int i = 0; i < num_threads; i++)
+    {
+        if (pthread_create(&pool->threads[i], &thread_attr, thread_pool_worker, pool) != 0)
+        {
+            // Handle failure - stop and clean up
+            atomic_store(&pool->shutdown, true);
+            pthread_cond_broadcast(&pool->queue_cond);
+
+            // Wait for any started threads and clean up
+            for (int j = 0; j < i; j++)
+            {
+                pthread_join(pool->threads[j], NULL);
+            }
+
+            pthread_attr_destroy(&thread_attr);
+            pthread_cond_destroy(&pool->complete_cond);
+            pthread_cond_destroy(&pool->queue_cond);
+            pthread_mutex_destroy(&pool->queue_mutex);
+            free(pool->threads);
+            free(pool);
+            return NULL;
+        }
+    }
+    
+    pthread_attr_destroy(&thread_attr);
+
+    return pool;
+}
+
+// Submit a task to the thread pool
+bool thread_pool_submit(thread_pool_t *pool, void *(*func)(void *), void *arg)
+{
+    if (UNLIKELY(!pool || !func || atomic_load(&pool->shutdown)))
+    {
+        return false;
+    }
+
+    // Create a new task
+    task_t *task = malloc(sizeof(task_t));
+    if (!task)
+    {
+        return false;
+    }
+
+    task->func = func;
+    task->arg = arg;
+    task->next = NULL;
+
+    // Add task to queue
+    pthread_mutex_lock(&pool->queue_mutex);
+
+    if (pool->task_queue == NULL)
+    {
+        // Queue was empty
+        pool->task_queue = task;
+        pool->task_queue_tail = task;
+    }
+    else
+    {
+        // Append to end of queue
+        pool->task_queue_tail->next = task;
+        pool->task_queue_tail = task;
+    }
+
+    // Signal that work is available
+    pthread_cond_signal(&pool->queue_cond);
+    pthread_mutex_unlock(&pool->queue_mutex);
+
+    return true;
+}
+
+// Submit multiple tasks at once for better efficiency
+static bool thread_pool_submit_batch(thread_pool_t *pool, void *(*func)(void *), void **args, int count)
+{
+    if (UNLIKELY(!pool || !func || !args || count <= 0 || atomic_load(&pool->shutdown)))
+    {
+        return false;
+    }
+
+    // Build a temporary linked list of heap-allocated tasks.
+    // Each worker frees its own task node after execution.
+    task_t *head = NULL;
+    task_t *tail = NULL;
+    for (int i = 0; i < count; i++)
+    {
+        task_t *task = malloc(sizeof(task_t));
+        if (!task)
+        {
+            while (head)
+            {
+                task_t *next = head->next;
+                free(head);
+                head = next;
+            }
+            return false;
+        }
+
+        task->func = func;
+        task->arg = args[i];
+        task->next = NULL;
+
+        if (!head)
+        {
+            head = task;
+            tail = task;
+        }
+        else
+        {
+            tail->next = task;
+            tail = task;
+        }
+    }
+
+    // Add all tasks to queue at once
+    pthread_mutex_lock(&pool->queue_mutex);
+
+    if (pool->task_queue == NULL)
+    {
+        pool->task_queue = head;
+    }
+    else
+    {
+        pool->task_queue_tail->next = head;
+    }
+    pool->task_queue_tail = tail;
+
+    // Broadcast to wake all waiting threads
+    pthread_cond_broadcast(&pool->queue_cond);
+    pthread_mutex_unlock(&pool->queue_mutex);
+
+    return true;
+}
+
+// Wait for all tasks to complete
+void thread_pool_wait_all(thread_pool_t *pool)
+{
+    if (!pool)
+    {
+        return;
+    }
+
+    pthread_mutex_lock(&pool->queue_mutex);
+
+    // Wait until the task queue is empty and all threads are idle
+    while (pool->task_queue != NULL || pool->working_threads > 0)
+    {
+        pthread_cond_wait(&pool->complete_cond, &pool->queue_mutex);
+    }
+
+    pthread_mutex_unlock(&pool->queue_mutex);
+}
+
+// Destroy the thread pool
+void thread_pool_destroy(thread_pool_t *pool)
+{
+    if (!pool)
+    {
+        return;
+    }
+
+    // Set the shutdown flag to true
+    atomic_store(&pool->shutdown, true);
+
+    // Wake up all worker threads
+    pthread_mutex_lock(&pool->queue_mutex);
+    pthread_cond_broadcast(&pool->queue_cond);
+    pthread_mutex_unlock(&pool->queue_mutex);
+
+    // Wait for all threads to finish
+    for (int i = 0; i < pool->num_threads; i++)
+    {
+        pthread_join(pool->threads[i], NULL);
+    }
+
+    // Clean up any remaining tasks (should be none if wait_all was called)
+    task_t *task = pool->task_queue;
+    while (task != NULL)
+    {
+        task_t *next = task->next;
+        free(task);
+        task = next;
+    }
+
+    // Clean up resources
+    pthread_cond_destroy(&pool->complete_cond);
+    pthread_cond_destroy(&pool->queue_cond);
+    pthread_mutex_destroy(&pool->queue_mutex);
+    free(pool->threads);
+    free(pool);
+}
+
+// --- memchr-based search for short patterns (2-3 chars) ---
+uint64_t memchr_short_search(const search_params_t *params,
+                             const char *text_start,
+                             size_t text_len,
+                             match_result_t *result)
+{
+    if (params->max_count == 0 && (params->count_lines_mode || params->track_positions))
+        return 0;
+
+    uint64_t current_count = 0;
+    size_t pattern_len = params->pattern_len;
+    const unsigned char *search_pattern = (const unsigned char *)params->pattern;
+    bool case_sensitive = params->case_sensitive;
+    bool count_lines_mode = params->count_lines_mode;
+    bool track_positions = params->track_positions;
+    size_t max_count = params->max_count;
+
+    if (pattern_len < 2 || pattern_len > 3 || text_len < pattern_len)
+        return 0;
+
+    const char *current_pos = text_start;
+    size_t remaining_len = text_len;
+    size_t last_counted_line_start = SIZE_MAX;
+    unsigned char first_char = search_pattern[0];
+    unsigned char first_char_lower = case_sensitive ? 0 : lower_table[first_char];
+
+    while (remaining_len >= pattern_len)
+    {
+        const char *potential_match = NULL;
+        if (case_sensitive)
+        {
+            potential_match = memchr(current_pos, first_char, remaining_len - pattern_len + 1);
+        }
+        else
+        {
+            const unsigned char *scan = (const unsigned char *)current_pos;
+            for (size_t k = 0; k <= remaining_len - pattern_len; ++k)
+            {
+                if (lower_table[scan[k]] == first_char_lower)
+                {
+                    potential_match = (const char *)(scan + k);
+                    break;
+                }
+            }
+        }
+
+        if (potential_match == NULL)
+        {
+            break;
+        }
+
+        bool full_match = false;
+        if (case_sensitive)
+        {
+            if (memcmp(potential_match + 1, search_pattern + 1, pattern_len - 1) == 0)
+            {
+                full_match = true;
+            }
+        }
+        else
+        {
+            if (memory_equals_case_insensitive((const unsigned char *)potential_match + 1, search_pattern + 1, pattern_len - 1))
+            {
+                full_match = true;
+            }
+        }
+
+        if (full_match)
+        {
+            size_t match_start_offset = potential_match - text_start;
+            // Whole word check
+            if (params->whole_word && !is_whole_word_match(text_start, text_len, match_start_offset, match_start_offset + pattern_len))
+            {
+                remaining_len -= (potential_match - current_pos) + 1;
+                current_pos = potential_match + 1;
+                continue;
+            }
+
+            bool count_incremented_this_match = false;
+
+            if (count_lines_mode)
+            {
+                size_t line_start = find_line_start(text_start, text_len, match_start_offset);
+                if (line_start != last_counted_line_start)
+                {
+                    current_count++;
+                    last_counted_line_start = line_start;
+                    count_incremented_this_match = true;
+
+                    if (current_count >= max_count)
+                        break;
+
+                    // Optimization: skip to the next line for -c mode
+                    size_t line_end = find_line_end(text_start, text_len, line_start);
+                    size_t next_line_start = (line_end < text_len) ? line_end + 1 : text_len;
+                    if (next_line_start > (size_t)(current_pos - text_start))
+                    {
+                        current_pos = text_start + next_line_start;
+                        remaining_len = text_len - next_line_start;
+                        continue;
+                    }
+                }
+            }
+            else
+            {
+                current_count++;
+                count_incremented_this_match = true;
+                if (track_positions && result)
+                {
+                    if (current_count <= max_count)
+                    {
+                        if (!match_result_add(result, match_start_offset, match_start_offset + pattern_len))
+                        {
+                            fprintf(stderr, "Warning: Failed to add short match position.\n");
+                        }
+                    }
+                }
+            }
+
+            if (count_incremented_this_match && current_count >= max_count)
+            {
+                break;
+            }
+        }
+
+        size_t advance = (potential_match - current_pos) + (only_matching ? pattern_len : 1);
+        if (advance > remaining_len)
+            break;
+        current_pos += advance;
+        remaining_len -= advance;
+    }
+
+    return current_count;
+}
+
+#if KREP_USE_NEON || KREP_USE_SSE42 || KREP_USE_AVX2 || KREP_USE_AVX512
+// Compare two pattern bytes across a vector of candidate start positions.
+// Only candidates passing both filters reach memcmp. Every vector load and
+// verification is bounded by the number of complete patterns still available.
+static HOT_FUNCTION uint64_t simd_literal_search(const search_params_t *params,
+                                                 const char *text, size_t text_len,
+                                                 match_result_t *result)
+{
+    const size_t length = params->pattern_len;
+    if (params->max_count == 0 || length == 0 || text_len < length)
+        return 0;
+    if (!params->case_sensitive)
+        return boyer_moore_search(params, text, text_len, result);
+
+    const char *pattern = params->pattern;
+    size_t probe = length - 1;
+    // Prefer a different byte when the first and last bytes are identical.
+    while (probe > 1 && pattern[probe] == pattern[0])
+        --probe;
+    const size_t limit = text_len - length + 1;
+    size_t pos = 0;
+    uint64_t count = 0;
+
+#if KREP_USE_AVX512
+    const size_t width = 64;
+    const __m512i first = _mm512_set1_epi8(pattern[0]);
+    const __m512i second = _mm512_set1_epi8(pattern[probe]);
+#elif KREP_USE_AVX2
+    const size_t width = 32;
+    const __m256i first = _mm256_set1_epi8(pattern[0]);
+    const __m256i second = _mm256_set1_epi8(pattern[probe]);
+#elif KREP_USE_SSE42
+    const size_t width = 16;
+    const __m128i first = _mm_set1_epi8(pattern[0]);
+    const __m128i second = _mm_set1_epi8(pattern[probe]);
+#else
+    const size_t width = 16;
+    const uint8x16_t first = vdupq_n_u8((uint8_t)pattern[0]);
+    const uint8x16_t second = vdupq_n_u8((uint8_t)pattern[probe]);
+    const uint8_t bit_weights[16] = {1, 2, 4, 8, 16, 32, 64, 128,
+                                    1, 2, 4, 8, 16, 32, 64, 128};
+    const uint8x16_t weights = vld1q_u8(bit_weights);
+#endif
+
+    while (pos < limit && limit - pos >= width)
+    {
+        const size_t base = pos;
+        uint64_t mask;
+#if KREP_USE_AVX512
+        mask = _mm512_cmpeq_epi8_mask(_mm512_loadu_si512(text + base), first) &
+               _mm512_cmpeq_epi8_mask(_mm512_loadu_si512(text + base + probe), second);
+#elif KREP_USE_AVX2
+        const __m256i a = _mm256_cmpeq_epi8(_mm256_loadu_si256((const __m256i *)(text + base)), first);
+        const __m256i b = _mm256_cmpeq_epi8(_mm256_loadu_si256((const __m256i *)(text + base + probe)), second);
+        mask = (uint32_t)_mm256_movemask_epi8(_mm256_and_si256(a, b));
+#elif KREP_USE_SSE42
+        const __m128i a = _mm_cmpeq_epi8(_mm_loadu_si128((const __m128i *)(text + base)), first);
+        const __m128i b = _mm_cmpeq_epi8(_mm_loadu_si128((const __m128i *)(text + base + probe)), second);
+        mask = (unsigned)_mm_movemask_epi8(_mm_and_si128(a, b));
+#else
+        const uint8x16_t a = vceqq_u8(vld1q_u8((const uint8_t *)(text + base)), first);
+        const uint8x16_t b = vceqq_u8(vld1q_u8((const uint8_t *)(text + base + probe)), second);
+        const uint8x16_t candidates = vandq_u8(vandq_u8(a, b), weights);
+        const uint64x2_t sums = vpaddlq_u32(vpaddlq_u16(vpaddlq_u8(candidates)));
+        mask = vgetq_lane_u64(sums, 0) | (vgetq_lane_u64(sums, 1) << 8);
+#endif
+        while (mask)
+        {
+            const size_t offset = base + (size_t)__builtin_ctzll(mask);
+            mask &= mask - 1;
+            if (offset < pos || memcmp(text + offset, pattern, length) != 0)
+                continue;
+            if (params->whole_word && !is_whole_word_match(text, text_len, offset, offset + length))
+                continue;
+
+            ++count;
+            if (!params->count_lines_mode && params->track_positions && result)
+                match_result_add(result, offset, offset + length);
+            if (count >= params->max_count)
+                return count;
+            if (params->count_lines_mode)
+            {
+                // No backward line scan: all earlier matching lines were skipped.
+                pos = advance_to_next_line_boundary(text, text_len, offset);
+                goto next_vector;
+            }
+            pos = offset + (only_matching ? length : 1);
+        }
+        if (pos < base + width)
+            pos = base + width;
+    next_vector:;
+    }
+
+    // Keep the original buffer for the tail so whole-word checks can inspect
+    // the preceding byte, and count mode cannot count the same line twice.
+    while (pos < limit)
+    {
+        if (text[pos] == pattern[0] && text[pos + probe] == pattern[probe] &&
+            memcmp(text + pos, pattern, length) == 0 &&
+            (!params->whole_word || is_whole_word_match(text, text_len, pos, pos + length)))
+        {
+            ++count;
+            if (!params->count_lines_mode && params->track_positions && result)
+                match_result_add(result, pos, pos + length);
+            if (count >= params->max_count)
+                break;
+            if (params->count_lines_mode)
+                pos = advance_to_next_line_boundary(text, text_len, pos);
+            else
+                pos += only_matching ? length : 1;
+        }
+        else
+            ++pos;
+    }
+    return count;
+}
+#endif
+
+// Retain the algorithm entry points for library callers and tests. The build
+// selects the widest enabled vector implementation above.
+#if KREP_USE_NEON
+uint64_t neon_search(const search_params_t *p, const char *t, size_t n, match_result_t *r)
+{
+    return simd_literal_search(p, t, n, r);
+}
+#endif
+#if KREP_USE_SSE42
+uint64_t simd_sse42_search(const search_params_t *p, const char *t, size_t n, match_result_t *r)
+{
+    return simd_literal_search(p, t, n, r);
+}
+#endif
+#if KREP_USE_AVX2
+uint64_t simd_avx2_search(const search_params_t *p, const char *t, size_t n, match_result_t *r)
+{
+    return simd_literal_search(p, t, n, r);
+}
+#endif
+#if KREP_USE_AVX512
+uint64_t simd_avx512_search(const search_params_t *p, const char *t, size_t n, match_result_t *r)
+{
+    return simd_literal_search(p, t, n, r);
+}
+#endif
+
+// ---------------------------------------------------------------------------
+// Library configuration API (used by embedding hosts, e.g. tether)
+// ---------------------------------------------------------------------------
+
+/**
+ * Configure krep's global search options before calling search_directory_recursive
+ * or search_file. All options default to false/0; call this once at startup
+ * and again before each search if you need to change settings.
+ *
+ * @param gitignore      Respect .gitignore when recursing into directories
+ * @param line_numbers   Emit "file:lineno:line" instead of "file:line"
+ * @param include_glob   Optional fnmatch glob for files to include (NULL = all)
+ */
+void krep_set_options(bool gitignore, bool line_numbers, const char *include_glob)
+{
+    use_gitignore = gitignore;
+    show_line_numbers = line_numbers;
+    if (include_glob && include_glob[0] != '\0')
+    {
+        include_globs[0] = include_glob;
+        include_glob_count = 1;
+    }
+    else
+    {
+        include_glob_count = 0;
+    }
+}
