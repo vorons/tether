@@ -8,8 +8,9 @@ Two layers, one binary:
 C host (src/host)          Lua core (src/tether)
 ─────────────────          ────────────────────
 termios / raw mode         app, ui, agent, api
-fork/exec/pipe (spawn)     tools, session, config
-curl subprocess (SSE)      markdown-lite, overlays
+shell exec (tether.exec)   tools, session, config
+fs primitives, krep search markdown-lite, overlays
+HTTP(S) in-process         (vendored libcurl + mbedTLS)
 Lua embed (static arrays)
 ```
 
@@ -18,7 +19,7 @@ C host exposes a narrow syscall API to Lua. All agent logic is Lua.
 ## Data flow
 
 **Chat stream:**
-`agent` builds request → `api.stream` → C host runs `curl` subprocess → SSE parsed → canonical events (`text_delta`, `reasoning_delta`, `tool_call_*`, `usage`, `done`, `error`, `retry`, `context_compressed`) → `ui` renders transcript.
+`agent` builds request → `api.stream` → C host performs the request in-process (vendored libcurl + mbedTLS, no subprocess) → SSE parsed → canonical events (`text_delta`, `reasoning_delta`, `tool_call_*`, `usage`, `done`, `error`, `retry`, `context_compressed`) → `ui` renders transcript.
 
 **Print mode:** `--print/-p [prompt]` → non-interactive single `agent.turn` → final assistant text to stdout, trace to stderr → exit 0 (ok) / 1 (error or empty). No confirmation prompts in print mode.
 
@@ -30,10 +31,12 @@ JSONL at `~/.tether/sessions/<id>.jsonl`. One event per line. `-r` picks latest 
 
 ## Key decisions
 
-- **Single binary (M6, done):** Lua modules embedded as C arrays via `tools/embed.lua` generator. No external Lua install needed; binary is standalone.
-- **Providers (M10, done):** `api.lua` is a dispatcher over `src/tether/providers/{openai,anthropic,gemini}.lua` sharing one transport (curl pipe, header/body temp files, retry/backoff, error surfacing). Every adapter emits the same canonical events, so `agent.lua` has no provider branches. `cfg.provider` selects the adapter (`openai` default, unknown warns + falls back); per-provider `api_key_env`/`base_url`/`model` resolve via the `providers` table with legacy top-level keys as `openai` defaults.
+- **Single binary (M6, done):** Lua modules embedded as C arrays via `tools/embed.lua` generator. No external Lua install needed; binary is standalone. The build also vendors krep (grep), libcurl + mbedTLS + zlib (HTTPS) and links them statically, so `ldd ./tether` shows only `libc` and `libm` — no `curl`, `rg`, `grep`, `ls`, `find`, `chmod` or `mkdir` binary is required at runtime. (`tools.run` still uses `/bin/sh -c`; that is a deliberate feature, not an accidental dependency.)
+- **Providers (M10, done):** `api.lua` is a dispatcher over `src/tether/providers/{openai,anthropic,gemini}.lua` sharing one in-process transport (`tether.http_stream`/`tether.http_get` over vendored libcurl + mbedTLS, header/body temp files, retry/backoff, error surfacing). Every adapter emits the same canonical events, so `agent.lua` has no provider branches. `cfg.provider` selects the adapter (`openai` default, unknown warns + falls back); per-provider `api_key_env`/`base_url`/`model` resolve via the `providers` table with legacy top-level keys as `openai` defaults.
 - **Retries:** `cfg.retries` attempts (default 3), exponential backoff (0.5/1/2s), only on 429/5xx/empty/network. Respects `Retry-After`. No retry on 4xx. Emits `retry` event.
-- **SSE pipe reading:** C `read_line` accumulates unbounded lines (no 8KB cap); empty SSE lines surface as `""` (event boundary), `nil` only at real EOF; the Lua loop skips empty lines and continues until `pipe_eof`.
+- **SSE streaming:** C `http_stream` reads the body with a libcurl write callback and invokes the Lua `on_line` callback once per line; empty SSE lines surface as `""` (event boundary). The callback is invoked until transfer end, and a trailing line without a newline is still delivered.
+- **Filesystem primitives:** `tether.mkdirp`, `tether.fchmod`, `tether.readdir`, `tether.stat` are the only mechanism the application uses to create directories, change permissions, list directories or read metadata — no `mkdir -p`/`ls`/`find`/`chmod` shell-outs remain.
+- **grep backend:** `tools.grep` runs the vendored krep engine in-process (POSIX ERE, honors `.gitignore` by default, supports `glob`/`ignore_case`/`max_results`). Records are `{path, line, column, text}` with `column` always 1, because krep's printed form carries no column.
 - **Confirmation policy:** `write`, `patch`, `run` outside workspace require user confirmation (the patch target is read from the diff headers). `[A] always` persists anchored patterns to `~/.tether/auto_approve.lua`, which `config.load` reads back on the next start.
 - **Token budget:** `context.max_tokens` (default 32768); summarize at 70% via `context.summarize_at`.
 - **Compression boundary:** retained tool results include their preceding assistant tool-call message.

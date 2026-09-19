@@ -8,11 +8,6 @@
 
 local M = {}
 
--- 3.8: shell-quote a path for the tether.exec `ls` invocation
-local function shq(s)
-    return "'" .. tostring(s):gsub("'", "'\\''") .. "'"
-end
-
 local AGENTS_CAP_BYTES = 16 * 1024
 
 local BUILTIN_PROMPT = [==[
@@ -47,22 +42,17 @@ local function exists(path)
     return false
 end
 
--- List immediate subdirectories of `dir` via `ls -1A` through a temp file
--- (tether.exec discards stdout, so the listing is captured through a redirect).
--- Returns a sorted list, or nil when the directory does not exist.
+-- List immediate subdirectories of `dir` that hold a SKILL.md, using the
+-- in-process `tether.readdir` primitive (fix: no `ls -1A` shell-out).
+-- Returns a sorted list, or nil when the directory cannot be listed.
 local function ls_subdirs(dir)
-    if not tether or not tether.exec then return nil end
-    local tmp = os.tmpname()
-    tether.exec("ls -1A " .. shq(dir) .. " > " .. shq(tmp) .. " 2>/dev/null")
-    local data = read_file(tmp)
-    os.remove(tmp)
-    if not data then return nil end
+    if not tether or not tether.readdir then return nil end
+    local names = tether.readdir(dir)
+    if not names then return nil end
     local entries = {}
-    for name in data:gmatch("[^\n]+") do
-        name = name:gsub("\r$", "")
-        if name ~= "" and name ~= "." and name ~= ".." and name:find("/") == nil then
-            local sub = dir .. "/" .. name
-            local probe = io.open(sub .. "/SKILL.md", "r")
+    for _, name in ipairs(names) do
+        if name ~= "." and name ~= ".." and name:find("/") == nil then
+            local probe = io.open(dir .. "/" .. name .. "/SKILL.md", "r")
             if probe then
                 probe:close()
                 entries[#entries + 1] = name

@@ -49,15 +49,36 @@ events as tool-role messages with the summary as content.
 - **THEN** the rebuilt sequence places each assistant-with-tool_calls
   message before its tool results (API-legal ordering)
 
+### Requirement: Portable session listing
+
+Listing session files for resume SHALL rely only on POSIX-standard
+facilities available on every supported platform (Linux and macOS), and
+SHALL NOT depend on GNU-only `find` extensions. On a platform without
+those extensions the picker data and `latest(workspace)` SHALL still
+return the matching sessions.
+
+#### Scenario: GNU find extensions unavailable
+- **WHEN** the host `find` does not support `-printf` (e.g. BSD/macOS)
+- **THEN** `session_files` and `latest` still return sessions for the workspace, ordered by mtime descending
+
+#### Scenario: Resume works on the same platform
+- **WHEN** the user passes `-r` on a platform without GNU `find -printf`
+- **THEN** the latest matching session is found and its messages restored
+
 ### Requirement: Session picker data
-`session_files(workspace)` SHALL return, per matching session,
-`{id, mtime, ts, first_line}` where first_line is the first
-user `message` content (the picker preview). The picker SHALL be
-limited to the 100 most recent files.
+`session_files(workspace)` SHALL return, per matching session, `{id, mtime, ts, first_line}` where `first_line` is the first user `message` content (the picker preview) and `mtime` is the recency rank (1 = newest). The listing SHALL enumerate the `*.jsonl` files under the session directory and order them by modification time descending, with ties broken by id for determinism, and SHALL be limited to the 100 most recent files. The listing SHALL be obtained through the in-process `tether.readdir` and `tether.stat` primitives — no `find`, `ls -1t` or `head` shell pipeline.
 
 #### Scenario: Picker preview
 - **WHEN** a session's first user message is "fix the login bug"
 - **THEN** the picker row shows that text as the preview
+
+#### Scenario: Listing is ordered by mtime
+- **WHEN** the session directory holds more sessions than the picker cap
+- **THEN** only the 100 most recent are returned, ordered newest first with `mtime` as the 1-based rank
+
+#### Scenario: No shell pipeline
+- **WHEN** the listing runs
+- **THEN** it spawns no `find`/`ls`/`head` process and reads the directory through `tether.readdir` and `tether.stat`
 
 ### Requirement: Resume round-trip exits the API contract
 A resumed conversation SHALL be accepted by the OpenAI-compatible

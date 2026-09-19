@@ -834,7 +834,7 @@ end
 local function init_debug_log()
     if S and S.debug and debug_log_fh == nil then
         local dir = (os.getenv("HOME") or "/tmp") .. "/.tether/log"
-        pcall(function() os.execute("mkdir -p " .. dir) end)
+        pcall(function() tether.mkdirp(dir) end)
         local ok, fh = pcall(io.open, dir .. "/tether.log", "a")
         if ok and fh then debug_log_fh = fh end
     end

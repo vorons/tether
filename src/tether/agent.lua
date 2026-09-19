@@ -242,7 +242,7 @@ end
 local function persist_auto_approve(tool_name, args, cfg)
     local home = os.getenv("HOME") or ""
     local path = home .. "/.tether/auto_approve.lua"
-    local dir_ok = os.execute("mkdir -p " .. home .. "/.tether") == 0
+    local dir_ok = tether.mkdirp(home .. "/.tether") ~= nil
     if not dir_ok then return end
     local pattern = "^" .. tool_name .. ":" .. path_of(args):gsub("([%^%$%(%)%%%.%[%]%*%+%-%?])", "%%%1") .. "$"
     local f = io.open(path, "r")

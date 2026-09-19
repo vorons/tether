@@ -4,7 +4,7 @@
 
 ## 1. Цели
 
-Терминальный кодинг-агент с интерактивным TUI, аналог Claude Code и Codex, реализованный на Lua. Один бинарник без внешних runtime-зависимостей, кроме `libc` и (в HTTPS-режиме) системного `curl`. Работа в workspace, инструменты чтения/записи/поиска/shell/patch, стриминг ответа модели, подтверждения опасных действий, возобновляемые сессии.
+Терминальный кодинг-агент с интерактивным TUI, аналог Claude Code и Codex, реализованный на Lua. Один бинарник без внешних runtime-зависимостей, кроме `libc` и `libm`. Работа в workspace, инструменты чтения/записи/поиска/shell/patch, стриминг ответа модели, подтверждения опасных действий, возобновляемые сессии.
 
 ## 2. Не-цели MVP
 
@@ -25,11 +25,11 @@ Linux x86_64, macOS arm64/x86_64. Терминалы: xterm-256color, tmux, kitt
 ```
 ┌─────────────────────────────────────────────────────────┐
 │  C-хост (src/host)                                      │
-│  main · term (raw mode, ANSI) · spawn (fork/exec/pipe)  │
-│  http (curl subprocess + SSE reader)                    │
+│  main · term · shell exec (tether.exec)                 │
+│  fs primitives · http (vendored libcurl + mbedTLS)      │
 │  embed (C-массивы Lua-модулей)                          │
 ├─────────────────────────────────────────────────────────┤
-│  vendored: Lua 5.4.6 (luasystem/terminal.lua не нужны)  │
+│  vendored: Lua 5.4.6 · krep · libcurl · mbedTLS · zlib  │
 ├─────────────────────────────────────────────────────────┤
 │  Lua-ядро (src/tether)                                  │
 │  app · ui · agent · api · providers · tools · session   │
@@ -37,7 +37,7 @@ Linux x86_64, macOS arm64/x86_64. Терминалы: xterm-256color, tmux, kitt
 └─────────────────────────────────────────────────────────┘
 ```
 
-C-хост даёт Lua узкий syscall-API: raw mode, `ioctl(TIOCGWINSZ)`, `fork/exec/waitpid/pipe`, чтение pipe, `realpath`, запуск `curl`, детект keyboard protocol. Вся логика — на Lua.
+C-хост даёт Lua узкий syscall-API: raw mode, `ioctl(TIOCGWINSZ)`, `realpath`, `tether.exec` (единственный шелл-примитив, `/bin/sh -c`), файловые примитивы (`mkdirp`/`fchmod`/`readdir`/`stat`), поиск (krep), HTTP(S) in-process (vendored libcurl + mbedTLS), детект keyboard protocol. Вся логика — на Lua.
 
 ## 5. Компоненты
 
@@ -417,9 +417,9 @@ ASCII включается по окружению: `NO_COLOR=1` или `TERM=du
 |---|---|---|
 | `read` | `path, offset?, limit?` | 1 MiB максимум; бинарные (NUL в первых 8 KiB) отклоняются; до 200 000 строк; `offset` = 1, `limit` = 10000; строки вывода — `lineno<TAB>content` |
 | `write` | `path, content` | Атомарно: временный файл рядом + `rename`; возвращает `{bytes, path}`; подтверждение вне workspace |
-| `list` | `path?` | Сортированный список каталога (`ls -1A`), по умолчанию корень workspace; возвращает `{entries, count}` |
+| `list` | `path?` | Сортированный список каталога (in-process `tether.readdir`), по умолчанию корень workspace; возвращает `{entries, count}` |
 | `glob` | `pattern, path?` | `*`, `**`, `?`, `[abc]`, `[!abc]`; матч по относительному пути или basename; сортировка; лимит 500 |
-| `grep` | `pattern, path?, glob?, ignore_case?, max_results?` | Предпочитает `rg`, при пустом результате — `grep -R`, затем Lua-fallback; формат `{path, line, column, text}`; `max_results` = 100 |
+| `grep` | `pattern, path?, glob?, ignore_case?, max_results?` | Vendor'd `krep` in-process (POSIX ERE; учитывает `.gitignore`, `glob`, `ignore_case`); формат `{path, line, column, text}`, `column` всегда 1; `max_results` = 100 |
 | `run` | `command, cwd?, timeout?` | `cd <cwd> && timeout <s> env TETHER_WORKSPACE=<cwd> sh -c <cmd>`; timeout 120 с; вывод во временный файл, возвращает `{output, exit_code, elapsed_ms}` |
 | `patch` | `patch` | Unified diff, путь из `b/` при наличии, хунки применяются от последнего к первому; при расхождении — `patch conflict in <file> — перечитайте файл`, файл не меняется |
 
@@ -466,7 +466,7 @@ ASCII включается по окружению: `NO_COLOR=1` или `TERM=du
 
 ## 9. Потоки данных
 
-**Стриминг чата.** `agent` формирует запрос → `api.stream` → C-хост запускает `curl` и парсит SSE → канонические события → `ui` обновляет транскрипт.
+**Стриминг чата.** `agent` формирует запрос → `api.stream` → C-хост выполняет запрос in-process (vendored libcurl + mbedTLS, без субпроцесса) и отдаёт тело построчно в Lua через `on_line` → `api.lua` парсит SSE → канонические события → `ui` обновляет транскрипт.
 
 **Tool-call.** LLM возвращает `tool_call` → агент проверяет политику (workspace/подтверждение) → `tools.*` выполняет → результат как `tool_result` → следующий запрос LLM.
 
@@ -574,12 +574,19 @@ tether/
 ```
 
 `make`: 1) сборка объектных файлов vendored-Lua 5.4.6 (без `luasystem`);
-2) генерация `src/host/embed.c` из всех `.lua` ядра (`tools/embed.lua`);
-3) линковка `tether` со статическим Lua и libc. Цель — один бинарник без
-внешнего Lua-рантайма и luarocks. `embed.c` перегенерируется при изменении
-любого `.lua` или самого генератора.
+2) сборка вендорных `krep`, `libmbedtls`, `libz` и `libcurl` в `build/`;
+3) генерация `src/host/embed.c` из всех `.lua` ядра (`tools/embed.lua`);
+4) линковка `tether` со статическими Lua/krep/libcurl/mbedTLS/zlib. Цель —
+один бинарник без внешнего Lua-рантайма, luarocks и внешних CLI (только
+`libc` + `libm`; см. `ldd ./tether`). `embed.c` перегенерируется при изменении
+любого `.lua` или самого генератора. Исходники вендоров лежат в `vendor/`;
+ничего не докачивается во время сборки.
 
-**Транспорт HTTPS.** C-хост запускает системный `curl` как subprocess, читает SSE из pipe. Если `curl` не найден: при `base_url` на localhost — автоматический HTTP-fallback, иначе — понятная ошибка с инструкцией.
+**Транспорт HTTPS.** C-хост выполняет запросы in-process через вендорный
+libcurl + mbedTLS (потоковая передача тела через write-callback в Lua
+`on_line`). Внешний `curl` не нужен; TLS-проверка идёт по системному CA-bundle
+(`/etc/ssl/certs/ca-certificates.crt` и аналоги), при его отсутствии запрос
+завершается понятной ошибкой.
 
 ## 12. Этапы
 
@@ -602,12 +609,12 @@ tether/
 
 | Риск | Митигация |
 |---|---|
-| Нет `curl` и HTTPS-эндпоинт | ошибка с инструкцией; HTTP-fallback для localhost |
+| Нет системного CA-bundle для HTTPS | понятная ошибка до начала стрима (`no system CA bundle found`) |
 | Терминал не различает Shift+Enter | chain: kitty → modifyOtherKeys → `Ctrl+J` |
 | Нет точного токенизатора | `usage` из API или `ceil(chars/4)`; хранить оба |
 | Суммаризация искажает контекст | summary как системное сообщение + полный JSONL на диске |
 | Различия SSE у провайдеров | канонические события + per-provider модуль |
-| Медленный Lua-grep | приоритет `rg`/`grep`, Lua — fallback |
+| Медленный поиск по большому дереву | vendor'd `krep` (SIMD-ускоренный, с Aho-Corasick), in-process |
 | Кириллица и широкие символы ломают выравнивание | ширина считается в колонках (`wcwidth`), курсор и переносы по display-width |
 | Долгая сессия тормозит перерисовку | виртуализация транскрипта и кэш перенесённых строк (§6.15) |
 | Поведение мыши в tmux | документируем `set -g mouse on`; `Shift+мышь` для выделения |
@@ -656,12 +663,12 @@ tether -v, --version         версия
 `name`/`description` (name fallback = имя каталога). В промпт попадает только
 индекс; тело `SKILL.md` читается агентом через `read`.
 
-Перечисление подкаталогов — `ls -1A` через `tether.exec` (у embedded-хоста
-нет `io.popen`); список читается из временного файла перенаправления.
+Перечисление подкаталогов — `tether.readdir` (у embedded-хоста нет `io.popen`);
+никаких шелл-вызовов `ls`/`find` больше нет.
 
 ## 16. Тесты
 
-`make test` состоит из четырёх ступеней и падает на любой из них:
+`make test` состоит из пяти ступеней и падает на любой из них:
 
 1. `luac -p` по всем модулям `src/tether/*.lua` (включая `providers/` и `context`).
 2. `tests/lua_tests.lua` — юнит-тесты чистых модулей (JSON, glob, патч, config,
@@ -671,7 +678,12 @@ tether -v, --version         версия
    skills (изолированный `HOME`/workspace через `mktemp`).
 4. `tests/context_e2e.sh` — снимает system message через локальный HTTP-stub и
    сравнивает с эталоном; `tests/host_smoke.sh` — smoke C-хоста (raw mode
-   включается/выключается, pipe/EOF, spawn).
+   включается/выключается, EOF-путь, обработка SIGINT).
+5. `tests/host_primitives_test.c` — C-тест хоста: подключает `src/host/main.c`
+   с переименованным `main` и проверяет `mkdirp`/`fchmod`/`readdir`/`stat`,
+   движок krep (gitignore, glob-фильтр, `max_results`), HTTP-транспорт на
+   локальном сервере и отказ TLS-проверки на самоподписанном сертификате
+   (`openssl s_server`, проверка пропускается, если нет CLI `openssl`).
 
 Внешних фреймворков нет; симлинк `tether` перед запуском собирается целью `test`.
 

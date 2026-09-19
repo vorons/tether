@@ -178,11 +178,11 @@ UI keys live under `ui = { ... }` in `~/.tether/config.lua`:
 
 ## Architecture
 
-- **C host** (`src/host/main.c`): embeds Lua 5.4.6, exports narrow syscall API (`tether.exec`, `tether.open_pipe`, `tether.read_line`, `tether.close_pipe`, `tether.pipe_eof`, `tether.getcwd`, `tether.realpath`, `tether.get_terminal_size`, `tether.is_tty`, `tether.write`, `tether.read_char`, `tether.sleep`)
+- **C host** (`src/host/main.c`): embeds Lua 5.4.6, exports narrow syscall API — `tether.exec` (the only shell primitive, used by the `run` tool), `tether.getcwd`, `tether.realpath`, `tether.get_terminal_size`, `tether.is_tty`, `tether.write`, `tether.read_char`, `tether.sleep`, the filesystem primitives `tether.mkdirp`/`tether.fchmod`/`tether.readdir`/`tether.stat`, the krep grep backend `tether.krep_search`, and the in-process HTTP client `tether.http_stream`/`tether.http_get`. The binary is self-contained: `ldd ./tether` shows only `libc` and `libm`
 - **Lua modules** (`src/tether/`): loaded as globals via `lua_setglobal`
   - `config` — configuration loading, validation
   - `tools` — file I/O: `read`, `list`, `glob`, `grep`, `write`, `patch`, `run`
-  - `api` — SSE streaming to LLM via C host pipes
+  - `api` — SSE streaming to LLM via the in-process HTTPS transport
   - `agent` — tool dispatch loop, conversation history
   - `session` — JSONL journal, auto-save, resume by workspace
   - `ui` — TUI rendering, input handling, confirmation/diff overlays
@@ -190,10 +190,10 @@ UI keys live under `ui = { ... }` in `~/.tether/config.lua`:
 
 ## Key Design Decisions
 
-- **SSE via pipes**: `api.lua` uses `tether.open_pipe` → `tether.read_line` for non-blocking streaming
+- **In-process HTTPS**: `api.lua` uses `tether.http_stream` (per-line callback) and `tether.http_get`, backed by vendored libcurl + mbedTLS + zlib — no `curl` subprocess, no external CLI tools (grep runs the vendored krep engine)
 - **Lua-only logic**: All agent logic lives in Lua; C host has zero AI knowledge
 - **No `load`**: all JSON parsing is hand-rolled recursive descent or gmatch patterns (see `docs/decisions/2026-09-17-lua-json-parser.md`)
-- **Secrets**: the API key is passed to curl via a private header file (`chmod 600`), never in argv
+- **Secrets**: the API key is passed to the HTTP client via a private header file (`tether.fchmod` 600), never in argv or in the environment
 - **Shell injection**: `tools.run` uses `env TETHER_WORKSPACE=<dir> sh -c` with `timeout`
 
 ## Testing

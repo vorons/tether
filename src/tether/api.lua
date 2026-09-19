@@ -1,6 +1,6 @@
 -- tether api — provider dispatcher + shared transport.
 -- Per-provider request/SSE logic lives in src/tether/providers/*; this
--- module owns what is identical for all providers: the curl pipe loop,
+-- module owns what is identical for all providers: the in-process HTTP loop,
 -- auth/body temp files, retry/backoff policy, and error surfacing.
 -- agent.lua sees only canonical events and never branches on provider.
 local M = {}
@@ -92,19 +92,24 @@ local function extract_retry_after(body)
     return nil
 end
 
+-- 0600 expressed as an integer mode for tether.fchmod (Lua has no octal
+-- literals, so the digits are parsed as base 8).
+local HEADER_FILE_MODE = tonumber("600", 8)
+
 -- Audit #6: provider credentials must not appear in argv (visible in ps).
 -- Header-based auth (OpenAI Bearer, Anthropic x-api-key) goes through a
 -- private temp file; the header file and request body file are removed
--- right after curl exits.
+-- right after the request completes.
 local function header_file(lines)
     local path = ("/tmp/tether_h_%d_%d"):format(os.time(), math.random(100000, 999999))
     -- 3.5: create the file, lock it down, then write the key — no window in
-    -- which the secret is world-readable, and no key is written if chmod fails.
+    -- which the secret is world-readable, and no key is written if the
+    -- permission change fails.
     local f = io.open(path, "w")
     if not f then return nil end
     f:close()
-    local ok = os.execute("chmod 600 " .. path)
-    if ok ~= true and ok ~= 0 then
+    -- 1.7: in-process fchmod via the C host, not `chmod 600` through the shell.
+    if not tether.fchmod(path, HEADER_FILE_MODE) then
         os.remove(path)
         return nil
     end
@@ -146,19 +151,19 @@ local function http_request(cfg, api_key, messages, on_event, attempt)
     bf:write(req)
     bf:close()
 
-    local cmd = string.format(
-        "curl -s -N -X POST '%s' -H @%s -H 'Content-Type: application/json' --data-binary @%s 2>/dev/null",
-        url, hfile, bfile)
-
     if P.reset_stream then P.reset_stream() end
-    local handle = tether.open_pipe(cmd)
+
+    -- 4.1: in-process transport (vendor'd libcurl + mbedTLS). Passing the auth
+    -- and body temp files as "@path" entries keeps both out of any argv.
     local ok = true
     local got_data = false
+    local parse_failed = false
     local buf = {}
-    if handle and handle ~= 0 then
-        while true do
-            local line = tether.read_line(handle)
-            if not line then break end
+    local stream_ok, serr = tether.http_stream("POST", url,
+        { "@" .. hfile, "Content-Type: application/json" },
+        "@" .. bfile,
+        function(line)
+            if parse_failed then return true end -- drain, stop parsing
             -- SSE framing: an empty line is an EVENT BOUNDARY, not EOF.
             -- Breaking on "" used to drop everything after the first event
             -- separator (multi-event streams lost deltas).
@@ -167,27 +172,26 @@ local function http_request(cfg, api_key, messages, on_event, attempt)
                 got_data = true
                 local ok2, err = pcall(P.parse_sse_line, line, on_event)
                 if not ok2 then
-                    on_event({ type = "error", message = "SSE parse: " .. tostring(err) })
+                    parse_failed = true
                     ok = false
-                    break
+                    on_event({ type = "error", message = "SSE parse: " .. tostring(err) })
                 end
             end
-            if tether.pipe_eof(handle) == 1 or tether.pipe_eof() == 1 then break end
-        end
-        tether.close_pipe(handle)
-    else
-        ok = false
-    end
+            return true
+        end,
+        { timeout_s = 10, idle_timeout_s = 60 })
 
     os.remove(hfile)
     os.remove(bfile)
 
-    if not handle or handle == 0 then
+    -- A transport that never delivered (connect/TLS failure) occupies the same
+    -- slot as the old "pipe never started" branch: retry, then surface it.
+    if not stream_ok then
         if attempt < max_retries then
-            pcall(tether.sleep, backoffs[attempt])
+            pcall(tether.sleep, backoffs[math.min(attempt, #backoffs)])
             return http_request(cfg, api_key, messages, on_event, attempt + 1)
         end
-        on_event({ type = "error", message = "curl failed to start" })
+        on_event({ type = "error", message = "request failed: " .. tostring(serr) })
         return false
     end
 
@@ -254,22 +258,10 @@ function M.list_models_live(cfg, api_key)
     local url = P.models_url(cfg, api_key)
     local hfile = header_file(P.models_headers(api_key))
     if not hfile then return nil, "cannot write header file" end
-    local cmd = string.format("curl -s -X GET '%s' -H @%s", url, hfile)
-    local handle = tether.open_pipe(cmd)
-    if not handle or handle == 0 then
-        os.remove(hfile)
-        return nil, "curl failed"
-    end
-    local buf = {}
-    while true do
-        local line = tether.read_line(handle)
-        if not line or line == "" then break end
-        buf[#buf + 1] = line
-        if tether.pipe_eof() == 1 then break end
-    end
-    tether.close_pipe(handle)
+    -- 4.2: in-process GET; the return format (list | nil, reason) is unchanged.
+    local body, err = tether.http_get(url, { "@" .. hfile }, 30)
     os.remove(hfile)
-    local body = table.concat(buf)
+    if not body then return nil, err end
     -- minimal JSON: extract model ids via the provider's own parser
     local result = P.models_parse(body)
     return #result > 0 and result or nil, #result > 0 and nil or "empty model list"

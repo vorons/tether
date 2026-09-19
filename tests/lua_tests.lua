@@ -30,6 +30,57 @@ local function assert_notnil(v, msg)
     end
 end
 
+-- The shipped binary gets mkdirp/fchmod/readdir/stat from the C host
+-- (src/host/main.c). The plain Lua test runtime has no C host, so these
+-- stand-ins mirror the C contract and are merged into every `_G.tether`
+-- mock below via host_mock{...}: names sorted without `.`/`..`, stat returns
+-- {mtime, size, is_dir}, and failures return nil.
+local host_fs = {}
+do
+    local function shq(s) return "'" .. tostring(s):gsub("'", "'\\''") .. "'" end
+    function host_fs.mkdirp(path)
+        local ok = os.execute("mkdir -p " .. shq(path))
+        if ok == true or ok == 0 then return true end
+        return nil, "mkdir failed"
+    end
+    function host_fs.fchmod(path, mode)
+        local ok = os.execute("chmod " .. string.format("%o", mode) .. " " .. shq(path))
+        if ok == true or ok == 0 then return true end
+        return nil, "chmod failed"
+    end
+    function host_fs.readdir(path)
+        local f = io.popen("ls -1A " .. shq(path) .. " 2>/dev/null")
+        if not f then return nil, "readdir failed" end
+        local out = f:read("*a")
+        f:close()
+        local names = {}
+        for name in out:gmatch("[^\n]+") do names[#names + 1] = name end
+        table.sort(names)
+        return names
+    end
+    function host_fs.stat(path)
+        local f = io.popen("stat -c '%Y %s %F' " .. shq(path) .. " 2>/dev/null")
+        if not f then return nil end
+        local out = f:read("*a")
+        f:close()
+        local mtime, size, kind = out:match("(%d+) (%d+) (.+)")
+        if not mtime then return nil end
+        return { mtime = tonumber(mtime), size =tonumber(size),
+                 is_dir = kind:find("directory") ~= nil }
+    end
+end
+
+-- Build a `_G.tether` mock: declared members win, the fs primitives are
+-- filled in from host_fs so tests only declare what they care about.
+local function host_mock(fields)
+    fields = fields or {}
+    fields.mkdirp = fields.mkdirp or host_fs.mkdirp
+    fields.fchmod = fields.fchmod or host_fs.fchmod
+    fields.readdir = fields.readdir or host_fs.readdir
+    fields.stat = fields.stat or host_fs.stat
+    return fields
+end
+
 -- Test json_encode/session.lua
 do
     local function json_encode(obj)
@@ -164,7 +215,7 @@ do
     local names = {"tether", "config", "session", "agent", "api"}
     local originals = {}
     for _, name in ipairs(names) do originals[name] = _G[name] end
-    _G.tether = { write = function() end, getcwd = function() return "/tmp" end,
+    _G.tether = host_mock{ write = function() end, getcwd = function() return "/tmp" end,
                    read_char = function() return nil end, read_char_nb = function() return nil end,
                    resize_requested = function() return false end,
                    get_terminal_size = function() return { width = 80, height = 24 } end }
@@ -295,7 +346,7 @@ do
     -- Simulate: read_char returns 17 (Ctrl+Q) to exit the loop after init
     local char_calls = 0
     local seq = { "h", "i", 13, 17 }
-    _G.tether = {
+    _G.tether = host_mock{
         write = function(s) end,
         resize_requested = function() return false end,
         get_terminal_size = function() return { width = 80, height = 24 } end,
@@ -356,32 +407,26 @@ do
     if not ok then error(err, 0) end
 end
 
--- T15: API retry logic — mock a pipe that returns a 429 body on attempt 1,
--- then a successful SSE stream on attempt 2. Also test exhaustion -> error.
+-- T15: API retry logic — mock a transport that returns a 429 body on
+-- attempt 1, then a successful SSE stream on attempt 2. Also test
+-- exhaustion -> error.
 do
-    -- Each open_pipe returns a unique handle index into a per-handle script.
-    -- script[handle] = array of lines to return; empty array = empty body.
+    -- Each http_stream call plays back the script entry for that attempt:
+    -- script[attempt] = array of body lines; an absent entry is an empty body.
     local api_mod = assert(loadfile("src/tether/api.lua"))()
 
     local function run_stream(script, cfg)
-        local handles = 0
+        local requests = 0
         local _G_old_tether = _G.tether
-        _G.tether = {
-            open_pipe = function()
-                handles = handles + 1
-                return handles
+        _G.tether = host_mock{
+            http_stream = function(_, _, _, _, on_line)
+                requests = requests + 1
+                for _, line in ipairs(script[requests] or {}) do
+                    on_line(line)
+                end
+                return true
             end,
-            read_line = function(handle)
-                local q = script[handle]
-                if not q then return nil end
-                if #q == 0 then return nil end
-                return table.remove(q, 1)
-            end,
-            pipe_eof = function(handle)
-                local q = script[handle] or {}
-                return (#q == 0) and 1 or 0
-            end,
-            close_pipe = function() end,
+            http_get = function() return nil, "not used" end,
             sleep = function() end,
         }
         local events = {}
@@ -389,28 +434,28 @@ do
         local ok = api_mod.stream(cfg or { base_url = "http://x", model = "m", retries = 3 },
             "key", { { role = "user", content = "hi" } }, on_event)
         _G.tether = _G_old_tether
-        return ok, events, handles
+        return ok, events, requests
     end
 
     -- Case 1: attempt 1 -> 429 body, attempt 2 -> SSE success
-    local ok1, ev1, handles1 = run_stream({
+    local ok1, ev1, requests1 = run_stream({
         [1] = { '{"error":{"status":429,"code":"rate_limit"}}' },
         [2] = { 'data: {"choices":[{"delta":{"content":"ok"},"finish_reason":"stop"}]}' },
     })
     assert_true(ok1, "T15 success after retry")
-    assert_eq(handles1, 2, "T15 two pipe opens")
+    assert_eq(requests1, 2, "T15 two requests")
     local saw_retry = false
     for _, ev in ipairs(ev1) do if ev.type == "retry" then saw_retry = true end end
     assert_true(saw_retry, "T15 retry event emitted")
 
     -- Case 2: all attempts return 429 -> fail with error after exhaustion
-    local ok2, ev2, handles2 = run_stream({
+    local ok2, ev2, requests2 = run_stream({
         [1] = { '{"error":{"status":429}}' },
         [2] = { '{"error":{"status":429}}' },
         [3] = { '{"error":{"status":429}}' },
     }, { base_url = "http://x", model = "m", retries = 3 })
     assert_false(ok2, "T15 fail after max retries")
-    assert_eq(handles2, 3, "T15 three pipe opens")
+    assert_eq(requests2, 3, "T15 three requests")
     local saw_error = false
     for _, ev in ipairs(ev2) do if ev.type == "error" then saw_error = true end end
     assert_true(saw_error, "T15 error on exhaustion")
@@ -487,12 +532,13 @@ local function with_modules(env_fn, fn)
 end
 
 local function base_env()
-    _G.tether = {
+    _G.tether = host_mock{
         getcwd = function() return "/tmp/ws" end,
         realpath = function(p) return p end,
         exec = function() return true, 0 end,
         write = function() end, sleep = function() end,
-        open_pipe = function() return 0 end,
+        http_stream = function() return true end,
+        http_get = function() return "", nil end,
         get_terminal_size = function() return { width = 80, height = 24 } end,
         read_char = function() return nil end,
         read_char_nb = function() return nil end,
@@ -635,18 +681,12 @@ end)
 -- M7/T28: non-SSE error body -> error event (D5b)
 with_modules(base_env, function(mods)
     local old = _G.tether
-    _G.__body_read = nil
-    _G.tether = {
-        open_pipe = function() return 1 end,
-        read_line = function()
-            if not _G.__body_read then
-                _G.__body_read = true
-                return '{"error":{"message":"Invalid API key","status":401}}'
-            end
-            return nil
+    _G.tether = host_mock{
+        http_stream = function(_, _, _, _, on_line)
+            on_line('{"error":{"message":"Invalid API key","status":401}}')
+            return true
         end,
-        pipe_eof = function() return 1 end,
-        close_pipe = function() end,
+        http_get = function() return nil, "not used" end,
         sleep = function() end,
     }
     local events = {}
@@ -1230,7 +1270,7 @@ do
   push(27, 91, 65)          -- ESC [ A      (plain Up)
   push(17)                   -- Ctrl+Q
   local qi = 0
-  _G.tether = {
+  _G.tether = host_mock{
     write = function() end,
     resize_requested = function() return false end,
     get_terminal_size = function() return { width = 80, height = 24 } end,
@@ -1394,23 +1434,15 @@ do
   assert_eq(api._provider_of({ provider = "azure" }), "openai", "T51 unknown falls back")
 
   local function run_stream(script, cfg)
-    local handles = 0
     local old = _G.tether
-    -- pipe_eof ignores its args on the C host (global EOF flag): mirror
-    -- that — EOF only when every queued line is consumed.
-    local function eof()
-      for _, q in pairs(script) do if #q > 0 then return 0 end end
-      return 1
-    end
-    _G.tether = {
-      open_pipe = function() handles = handles + 1; return handles end,
-      read_line = function(handle)
-        local q = script[handle]
-        if not q or #q == 0 then return nil end
-        return table.remove(q, 1)
+    local requests = 0
+    _G.tether = host_mock{
+      http_stream = function(_, _, _, _, on_line)
+        requests = requests + 1
+        for _, line in ipairs(script[requests] or {}) do on_line(line) end
+        return true
       end,
-      pipe_eof = function() return eof() end,
-      close_pipe = function() end,
+      http_get = function() return nil, "not used" end,
       sleep = function() end,
     }
     local events = {}
@@ -1478,15 +1510,9 @@ do
   -- live list with no ids -> empty model list error
   do
     local old = _G.tether
-    local lines = { '{"data":[]}' }
-    _G.tether = {
-      open_pipe = function() return 1 end,
-      read_line = function()
-        if #lines == 0 then return nil end
-        return table.remove(lines, 1)
-      end,
-      pipe_eof = function() return (#lines == 0) and 1 or 0 end,
-      close_pipe = function() end,
+    _G.tether = host_mock{
+      http_get = function() return '{"data":[]}', nil end,
+      http_stream = function() return true end,
       sleep = function() end,
     }
     local res, lerr = api.list_models_live(
@@ -1571,7 +1597,7 @@ local function run_ui_with(bytes, stubs, sink, paintC)
     originals[n] = _G[n]; preload[n] = package.preload[n]
   end
   local qi = 0
-  _G.tether = {
+  _G.tether = host_mock{
     -- T54/T6+: capture frames so a test can assert on what reached the screen
     write = function(s) if sink then sink[#sink + 1] = s end end,
     resize_requested = function() return false end,
@@ -1767,7 +1793,7 @@ do
       end
       return false, 1
     end
-    _G.tether = { exec = exec_stub }
+    _G.tether = host_mock{ exec = exec_stub }
     ctx = assert(loadfile("src/tether/context.lua"))()
     _G.context = ctx
   end
@@ -2361,7 +2387,7 @@ end
 -- 200 cap, absolute and .. refusal, dotfile visibility.
 do
   local orig_tether = _G.tether
-  _G.tether = {
+  _G.tether = host_mock{
     getcwd = function() return "/tmp" end,
     realpath = function(p) return p end,
   }
@@ -3081,7 +3107,7 @@ do
 
   -- decoder in isolation, through the read_key test seam
   local qi, queue = 0, {}
-  _G.tether = {
+  _G.tether = host_mock{
     read_char = function()
       qi = qi + 1
       if qi <= #queue then return queue[qi] end
@@ -3178,7 +3204,7 @@ do
   local names = {"tether", "config", "session", "api", "agent", "context", "tools"}
   local orig = {}
   for _, n in ipairs(names) do orig[n] = _G[n] end
-  _G.tether = { exec = function() return true, 0 end, realpath = function(p) return p end,
+  _G.tether = host_mock{ exec = function() return true, 0 end, realpath = function(p) return p end,
                 getcwd = function() return "/ws" end, sleep = function() end }
   local calls = 0
   _G.tools = {
@@ -3219,7 +3245,7 @@ do
   local ws = "/tmp/tether_t101_ws"
   os.execute("rm -rf " .. ws .. " && mkdir -p " .. ws)
   local f = assert(io.open(ws .. "/a.txt", "w")); f:write("hello-ws"); f:close()
-  _G.tether = { getcwd = function() return "/tmp" end,
+  _G.tether = host_mock{ getcwd = function() return "/tmp" end,
                 realpath = function(p) return (p:gsub("/+$", "")) end }
   local tools = assert(loadfile("src/tether/tools.lua"))()
   local r, err = tools.read({ path = "a.txt" }, { workspace = ws })
@@ -3239,7 +3265,7 @@ do
   for _, n in ipairs(names) do orig[n] = _G[n] end
   local log = {}
   _G.arg = { "--print", "hello" }
-  _G.tether = { getcwd = function() return "/ws" end, realpath = function(p) return p end,
+  _G.tether = host_mock{ getcwd = function() return "/ws" end, realpath = function(p) return p end,
                 is_tty = function() return false end }
   _G.config = { load = function() return { context = {} } end, api_key = function() return "k" end }
   _G.session = { new_session = function() return "id" end, append = function() end }
@@ -3287,7 +3313,7 @@ do
     while p:find("/[^/]+/%.%./") do p = p:gsub("/[^/]+/%.%./", "/") end
     return p
   end
-  _G.tether = { getcwd = function() return "/ws" end, realpath = norm }
+  _G.tether = host_mock{ getcwd = function() return "/ws" end, realpath = norm }
   _G.tools = {
     _resolve = norm,
     _within = function(p) return p == "/ws" or p:sub(1, 4) == "/ws/" end,
@@ -3325,7 +3351,7 @@ do
   local g = assert(io.open(ws .. "/sub/inner.lua", "w")); g:write("x"); g:close()
   -- realpath stub with C semantics: a trailing slash only resolves for a dir
   local dirs = {}; dirs[ws] = true; dirs[ws .. "/sub"] = true
-  _G.tether = { getcwd = function() return "/tmp" end,
+  _G.tether = host_mock{ getcwd = function() return "/tmp" end,
     realpath = function(p)
       local n = (p:gsub("/+$", ""))
       if p:sub(-1) == "/" and not dirs[n] then return nil end
@@ -3348,6 +3374,8 @@ end
 
 -- T106 (3.1): portable session listing works without GNU `find -printf`.
 do
+  local orig = _G.tether
+  _G.tether = host_mock{}
   local session = assert(loadfile("src/tether/session.lua"))()
   local dir = "/tmp/tether_t106_sessions"
   os.execute("rm -rf " .. dir .. " && mkdir -p " .. dir)
@@ -3367,6 +3395,7 @@ do
   local src = assert(io.open("src/tether/session.lua")):read("*a")
   assert_true(src:find("%-printf", 1, true) == nil, "T106 no GNU find -printf")
   session._session_dir = nil
+  _G.tether = orig
   os.execute("rm -rf " .. dir)
   print("T106 portable session listing: OK")
 end
@@ -3408,38 +3437,66 @@ do
   print("T108 openai error message: OK")
 end
 
--- T109 (3.5): the auth header temp file is mode 600 before the key is written.
+-- T109 (3.5): the auth header temp file is created with mode 0600 before the
+-- key is written, and a failed fchmod aborts the request instead of writing the
+-- secret into a world-readable file.
 do
+  local orig = _G.tether
+  local seen = {}
+  _G.tether = host_mock{
+    fchmod = function(path, mode)
+      seen[#seen + 1] = { path = path, mode = mode }
+      return true
+    end,
+  }
   local api = assert(loadfile("src/tether/api.lua"))()
   local path = api._header_file({ "Authorization: Bearer secret" })
   assert_notnil(path, "T109 header file created")
-  local mode = io.popen("stat -c '%a' '" .. path .. "' 2>/dev/null"):read("*a") or ""
-  if mode:match("%d") then
-    assert_eq((mode:gsub("%s", "")), "600", "T109 header file mode 600")
-  end
+  assert_eq(#seen, 1, "T109 mode applied before the key is written")
+  assert_eq(seen[1].mode, tonumber("600", 8), "T109 mode 0600 requested")
+  assert_eq(seen[1].path, path, "T109 mode applied to the header file")
   local h = assert(io.open(path))
   local content = h:read("*a")
   h:close()
   assert_true(content:find("secret", 1, true) ~= nil, "T109 key written")
   os.remove(path)
+
+  _G.tether = host_mock{ fchmod = function() return nil, "not permitted" end }
+  local api2 = assert(loadfile("src/tether/api.lua"))()
+  assert_eq(api2._header_file({ "Authorization: Bearer secret" }), nil,
+    "T109 no header file when fchmod fails")
+  _G.tether = orig
   print("T109 header file permissions: OK")
 end
 
 -- T110 (3.7): a string/float timeout from the model is coerced, not fatal.
+-- `run` is the only caller of tether.exec, and it must hand the command over as
+-- `/bin/sh -c` under `timeout` (host spec: Process and pipe API).
 do
   local orig = _G.tether
   local ws = "/tmp/tether_t110_ws"
   os.execute("rm -rf " .. ws .. " && mkdir -p " .. ws)
-  _G.tether = { getcwd = function() return "/tmp" end,
+  local seen_cmd
+  _G.tether = host_mock{ getcwd = function() return "/tmp" end,
                 realpath = function(p) return (p:gsub("/+$", "")) end,
+                -- mirrors the C contract: (ok, exit_code) where ok is true only
+                -- for exit code 0 (src/host/main.c l_exec)
                 exec = function(cmd)
-                  local ok = os.execute(cmd)
-                  return ok == true, (ok == true and 0 or 1)
+                  seen_cmd = cmd
+                  local ok, how, code = os.execute(cmd)
+                  if ok then return true, 0 end
+                  if how == "exit" then return false, code end
+                  return false, 1
                 end }
   local tools = assert(loadfile("src/tether/tools.lua"))()
   local r = tools.run({ command = "echo hi", timeout = "1" }, { workspace = ws })
   assert_true(r ~= nil and type(r.exit_code) == "number", "T110 string timeout coerced")
   assert_true((r.output or ""):find("hi", 1, true) ~= nil, "T110 command ran")
+  assert_true(seen_cmd ~= nil and seen_cmd:find("sh -c", 1, true) ~= nil,
+    "T110 run goes through /bin/sh -c")
+  assert_true(seen_cmd:find("timeout", 1, true) ~= nil, "T110 run is timeout-wrapped")
+  local r2 = tools.run({ command = "exit 3", timeout = "1" }, { workspace = ws })
+  assert_eq(r2.exit_code, 3, "T110 non-zero exit code propagated")
   _G.tether = orig
   os.execute("rm -rf " .. ws)
   print("T110 run timeout coercion: OK")
@@ -3462,7 +3519,7 @@ do
   local ws = "/tmp/tether_t112_ws"
   os.execute("rm -rf " .. ws .. " && mkdir -p " .. ws)
   local f = assert(io.open(ws .. "/a.txt", "w")); f:write("one\ntwo\n"); f:close()
-  _G.tether = { getcwd = function() return "/tmp" end,
+  _G.tether = host_mock{ getcwd = function() return "/tmp" end,
                 realpath = function(p) return (p:gsub("/+$", "")) end }
   local tools = assert(loadfile("src/tether/tools.lua"))()
   local function read(p)
@@ -3488,6 +3545,140 @@ do
   _G.tether = orig
   os.execute("rm -rf " .. ws)
   print("T112 patch applies: OK")
+end
+
+-- T113 (1.4/1.5/2.2): `list`, `glob` and `grep` run on the in-process
+-- primitives (readdir/stat/krep_search) with their documented record shapes:
+-- workspace-relative paths, glob's recursive walk plus 500-file cap and `**`
+-- depth, and grep's {path, line, column, text} with column always 1.
+do
+  local orig = _G.tether
+  local ws = "/tmp/tether_t113_ws"
+  local last_krep = {}
+
+  local dirs = {
+    [ws] = { "a.txt", "big", "sub" },
+    [ws .. "/sub"] = { "b.lua", "deep" },
+    [ws .. "/sub/deep"] = { "c.lua" },
+    [ws .. "/big"] = {},
+  }
+  for i = 1, 600 do dirs[ws .. "/big"][i] = ("f%03d.txt"):format(i) end
+
+  _G.tether = host_mock{
+    getcwd = function() return ws end,
+    realpath = function(p) return (p:gsub("/+$", "")) end,
+    readdir = function(p)
+      local d = dirs[p]
+      if not d then return nil, "no such directory" end
+      local out = {}
+      for i, n in ipairs(d) do out[i] = n end
+      table.sort(out)
+      return out
+    end,
+    stat = function(p)
+      if dirs[p] then return { mtime = 1, size = 0, is_dir = true } end
+      if p:match("%.[a-z]+$") then return { mtime = 1, size = 3, is_dir = false } end
+      return nil, "no such file"
+    end,
+    krep_search = function(base, pattern, glob, ignore_case, gitignore, max)
+      last_krep = { base = base, pattern = pattern, glob = glob,
+                    ignore_case = ignore_case, gitignore = gitignore, max = max }
+      -- the C host returns krep's printed records as {path, line, column, text}
+      return {
+        { path = ws .. "/a.txt", line = 1, column = 1, text = "needle one" },
+        { path = ws .. "/sub/b.lua", line = 7, column = 1, text = "needle two" },
+      }
+    end,
+  }
+  local tools = assert(loadfile("src/tether/tools.lua"))()
+  local cfg = { workspace = ws }
+
+  -- list: sorted root entries with a count; a sub-directory path is accepted
+  local l = tools.list({}, cfg)
+  assert_eq(l.count, 3, "T113 list counts the workspace root")
+  assert_eq(l.entries[1], "a.txt", "T113 list entries are sorted")
+  assert_eq(l.entries[3], "sub", "T113 list covers the whole root")
+  local l2 = tools.list({ path = "sub" }, cfg)
+  assert_eq(l2.count, 2, "T113 list accepts a sub-directory")
+  assert_eq(l2.entries[1], "b.lua", "T113 sub-directory entries sorted")
+
+  -- glob: recursive walk, relative sorted paths, `**` crosses directories
+  local g = tools.glob({ pattern = "**/*.lua" }, cfg)
+  assert_eq(g.count, 2, "T113 glob ** finds nested .lua files")
+  assert_eq(g.files[1], "sub/b.lua", "T113 glob returns workspace-relative paths")
+  assert_eq(g.files[2], "sub/deep/c.lua", "T113 glob descends into sub-tree")
+  local g2 = tools.glob({ pattern = "*.txt" }, cfg)
+  assert_eq(g2.files[1], "a.txt", "T113 glob matches the basename")
+  local g3 = tools.glob({ path = "big", pattern = "*.txt" }, cfg)
+  assert_eq(g3.count, 500, "T113 glob caps 600 matches at 500")
+
+  -- grep: one in-process krep_search call, records kept workspace-relative
+  local r = tools.grep({ pattern = "needle", max_results = 5 }, cfg)
+  assert_eq(r.count, 2, "T113 grep returns the krep records")
+  assert_eq(r.matches[1].path, "a.txt", "T113 grep path is workspace-relative")
+  assert_eq(r.matches[1].line, 1, "T113 grep carries the line number")
+  assert_eq(r.matches[1].column, 1, "T113 grep column is 1 (krep prints none)")
+  assert_eq(r.matches[1].text, "needle one", "T113 grep carries the line text")
+  assert_eq(r.matches[2].path, "sub/b.lua", "T113 grep keeps nested paths")
+  assert_eq(last_krep.pattern, "needle", "T113 pattern reaches krep")
+  assert_eq(last_krep.max, 5, "T113 max_results reaches krep")
+  assert_eq(last_krep.base, ws, "T113 search base is the workspace")
+  assert_true(last_krep.gitignore == true, "T113 .gitignore honored by default")
+  tools.grep({ pattern = "x", ignore_case = true, glob = "*.py" }, cfg)
+  assert_true(last_krep.ignore_case == true, "T113 ignore_case reaches krep")
+  assert_eq(last_krep.glob, "*.py", "T113 glob filter reaches krep")
+  _G.tether = orig
+  print("T113 list/glob/grep on in-process primitives: OK")
+end
+
+-- T114 (1.6): session listing enumerates *.jsonl through tether.readdir, orders
+-- by mtime descending and keeps only the 100 most recent files, exposing the
+-- recency rank as `mtime`.
+do
+  local orig = _G.tether
+  local ws = "/tmp/tether_t114_ws"
+  local dir = "/tmp/tether_t114_sessions"
+  os.execute("rm -rf " .. dir .. " && mkdir -p " .. dir)
+  local names, mtimes = {}, {}
+  for i = 1, 105 do
+    local id = ("s%03d"):format(i)
+    local name = id .. ".jsonl"
+    names[#names + 1] = name
+    mtimes[name] = i -- s105 is the newest
+    local f = assert(io.open(dir .. "/" .. name, "w"))
+    f:write('{"ts":"2026-01-01T00:00:00","type":"session_start",'
+            .. '"meta":{"workspace":"' .. ws .. '","model":"m"}}\n')
+    f:write('{"ts":"2026-01-01T00:00:01","type":"message","role":"user",'
+            .. '"content":"hi"}\n')
+    f:close()
+  end
+  _G.tether = host_mock{
+    readdir = function(p)
+      if p ~= dir then return nil, "no such directory" end
+      local out = {}
+      for i, n in ipairs(names) do out[i] = n end
+      table.sort(out)
+      return out
+    end,
+    stat = function(p)
+      local name = p:match("([^/]+)$")
+      if p:sub(1, #dir) ~= dir or mtimes[name] == nil then return nil, "missing" end
+      return { mtime = mtimes[name], size = 1, is_dir = false }
+    end,
+  }
+  local session = assert(loadfile("src/tether/session.lua"))()
+  session._session_dir = dir
+  local files = session.session_files(ws)
+  assert_eq(#files, 100, "T114 listing keeps the 100 most recent")
+  assert_eq(files[1].id, "s105", "T114 newest session first")
+  assert_eq(files[1].mtime, 1, "T114 mtime is the recency rank")
+  assert_eq(files[2].id, "s104", "T114 ordered by mtime descending")
+  assert_eq(files[100].id, "s006", "T114 the oldest fall off the cap")
+  assert_eq(files[1].first_line, "hi", "T114 first user message is the preview")
+  session._session_dir = nil
+  _G.tether = orig
+  os.execute("rm -rf " .. dir)
+  print("T114 session listing order/cap: OK")
 end
 
 if failed > 0 then

@@ -13,8 +13,66 @@ LUA_SRCS = lapi.c lauxlib.c lbaselib.c lcode.c lcorolib.c lctype.c \
 
 LUA_OBJS = $(LUA_SRCS:%.c=$(LUA_DIR)/%.o)
 
-tether: $(LUA_OBJS) src/host/main.c $(EMBED_OUT)
-	$(CC) $(CFLAGS) -I$(LUA_DIR) -o $@ src/host/main.c $(LUA_OBJS) -lm
+# Vendor'd krep engine (grep backend). -DTESTING drops krep's own main().
+KREP_DIR = vendor/krep
+KREP_OBJS = build/krep.o build/aho_corasick.o
+HOST_TEST = build/host_primitives_test
+
+# Vendor'd static deps for the in-process HTTPS transport. The archives are
+# assembled into build/ (gitignored); nothing is downloaded at build time.
+VENDOR_ARCHIVES = build/libcurl_vend.a build/libmbedtls_vend.a build/libz_vend.a
+
+MBEDTLS_DIR = vendor/mbedtls
+MBEDTLS_SRCS = $(wildcard $(MBEDTLS_DIR)/library/*.c)
+MBEDTLS_OBJS = $(patsubst $(MBEDTLS_DIR)/library/%.c,build/mbedtls/%.o,$(MBEDTLS_SRCS))
+
+ZLIB_DIR = vendor/zlib
+ZLIB_SRCS = $(wildcard $(ZLIB_DIR)/*.c)
+ZLIB_OBJS = $(patsubst $(ZLIB_DIR)/%.c,build/zlib/%.o,$(ZLIB_SRCS))
+
+# Vendored code is compiled warning-free-by-default: -w keeps the project's
+# -Werror from turning upstream warnings into build failures.
+build/mbedtls/%.o: $(MBEDTLS_DIR)/library/%.c
+	@mkdir -p build/mbedtls
+	$(CC) -std=c11 -O2 -w -I$(MBEDTLS_DIR)/include -c $< -o $@
+
+build/libmbedtls_vend.a: $(MBEDTLS_OBJS)
+	@mkdir -p build
+	ar rcs $@ $(MBEDTLS_OBJS)
+
+# zlib only pulls in <unistd.h> (lseek) when HAVE_UNISTD_H is defined, which
+# is what its own ./configure normally does; -std=gnu11 keeps the rest of the
+# glibc declarations visible on modern GCC.
+build/zlib/%.o: $(ZLIB_DIR)/%.c
+	@mkdir -p build/zlib
+	$(CC) -std=gnu11 -O2 -w -DHAVE_UNISTD_H=1 -I$(ZLIB_DIR) -c $< -o $@
+
+build/libz_vend.a: $(ZLIB_OBJS)
+	@mkdir -p build
+	ar rcs $@ $(ZLIB_OBJS)
+
+# curl's sources, its hand-crafted config and the vendor makefile are all real
+# prerequisites: without them make would treat an existing archive as current.
+CURL_SRCS = $(wildcard vendor/curl/lib/*.c vendor/curl/lib/*/*.c)
+
+build/libcurl_vend.a: $(CURL_SRCS) vendor/curl/Makefile.curl vendor/curl/lib/curl_config.h
+	@mkdir -p build
+	$(MAKE) -C vendor/curl -f Makefile.curl \
+		OBJDIR=$(CURDIR)/build/curl-obj \
+		ARCHIVE=$(CURDIR)/build/libcurl_vend.a
+
+tether: $(LUA_OBJS) src/host/main.c $(EMBED_OUT) $(KREP_OBJS) $(VENDOR_ARCHIVES)
+	$(CC) $(CFLAGS) -I$(LUA_DIR) -I$(KREP_DIR) -Ivendor/curl/include \
+		-o $@ src/host/main.c $(LUA_OBJS) $(KREP_OBJS) $(VENDOR_ARCHIVES) \
+		-lpthread -lm
+
+build/krep.o: $(KREP_DIR)/krep.c
+	@mkdir -p build
+	$(CC) $(CFLAGS) -DTESTING -I$(KREP_DIR) -c $< -o $@
+
+build/aho_corasick.o: $(KREP_DIR)/aho_corasick.c
+	@mkdir -p build
+	$(CC) $(CFLAGS) -DTESTING -I$(KREP_DIR) -c $< -o $@
 
 $(LUA_DIR)/%.o: $(LUA_DIR)/%.c
 	$(CC) $(CFLAGS) -I$(LUA_DIR) -DLUA_USE_POSIX -c $< -o $@
@@ -56,10 +114,16 @@ test: tether
 		if [ $$rc -ne 0 ]; then exit $$rc; fi
 	sh tests/context_e2e.sh "$(CURDIR)/tether"
 	sh tests/host_smoke.sh
+	@mkdir -p build
+	$(CC) $(CFLAGS) -I$(LUA_DIR) -I$(KREP_DIR) -Ivendor/curl/include \
+		-o $(HOST_TEST) tests/host_primitives_test.c \
+		$(LUA_OBJS) $(KREP_OBJS) $(VENDOR_ARCHIVES) -lpthread -lm
+	./$(HOST_TEST)
 
 clean:
 	rm -f tether
 	rm -f $(LUA_OBJS)
 	rm -f $(EMBED_OUT)
+	rm -rf build
 
 .PHONY: test clean

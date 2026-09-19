@@ -39,14 +39,24 @@ EOF, and the byte value otherwise. The interactive loop SHALL treat
 
 ### Requirement: Path and terminal API
 
-The host SHALL expose `tether.realpath`, `tether.getcwd`,
-`tether.get_terminal_size` (rows, cols via ioctl), `tether.is_tty()`
-(is-interactive), and `tether.write`.
+The host SHALL expose `tether.realpath`, `tether.getcwd`, `tether.get_terminal_size` (rows, cols via ioctl), `tether.is_tty()` (is-interactive), `tether.write`, and the file-system primitives `tether.mkdirp`, `tether.fchmod`, `tether.readdir` and `tether.stat`. `tether.readdir` SHALL return entry names with `.`/`..` removed; `tether.stat` SHALL report `{mtime, size, is_dir}` with lstat semantics.
 
 #### Scenario: Non-tty detection
 - **WHEN** stdout is piped
 - **THEN** `tether.is_tty()` is false and TUI init is skipped in
   print mode
+
+#### Scenario: tether.mkdirp creates nested directories
+- **WHEN** the application calls `tether.mkdirp("/a/b/c")` where `/a/b` does not exist
+- **THEN** all intermediate directories are created and the call returns `true`
+
+#### Scenario: tether.readdir lists a directory
+- **WHEN** the application calls `tether.readdir("/some/dir")`
+- **THEN** the call returns a table of entry names (no `.` or `..`)
+
+#### Scenario: tether.stat returns file metadata
+- **WHEN** the application calls `tether.stat("/some/file")`
+- **THEN** the call returns `{mtime = <unix seconds>, size = <bytes>, is_dir = <bool>}`
 
 ### Requirement: Embed tool contract
 

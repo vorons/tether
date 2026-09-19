@@ -95,21 +95,20 @@ local function stub_tether()
     return tether_stub
 end
 
--- Load context.lua with a fake `tether` global so ls_subdirs works without the C host.
+-- Load context.lua with a fake `tether` global so skill discovery works
+-- without the C host. ls_subdirs uses tether.readdir (src/host/main.c), so the
+-- stub stands in with `ls -1A` over io.popen, which the test runtime has.
 local function load_context()
-    -- Provide a tether stub whose exec(cmd) runs the command for real via
-    -- io.popen (available in the plain test runtime) so the `> tmp` redirect
-    -- works exactly as the C host would.
     _G.tether = {}
-    function _G.tether.exec(cmd)
-        local f = io.popen("sh -c " .. string.format("%q", cmd))
+    function _G.tether.readdir(path)
+        local f = io.popen("ls -1A '" .. tostring(path):gsub("'", "'\\''") .. "' 2>/dev/null")
+        if not f then return nil end
         local out = f:read("*a")
-        local ok = f:close()
-        -- `ok` is true when the shell exited 0
-        if type(ok) == "boolean" and ok then
-            return true, 0
-        end
-        return false, 1
+        f:close()
+        local names = {}
+        for name in out:gmatch("[^\n]+") do names[#names + 1] = name end
+        table.sort(names)
+        return names
     end
     local chunk = assert(loadfile("src/tether/context.lua"))
     return chunk()

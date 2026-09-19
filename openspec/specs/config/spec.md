@@ -29,20 +29,6 @@ A fresh install (no `~/.tether/config.lua`) SHALL run with defaults: provider op
 - **WHEN** the user sets only `ui.turn_separators = false`
 - **THEN** that key is overridden and `ui.highlight` and `ui.path_completion` keep their defaults
 
-
-User config SHALL be deep-merged over defaults: tables merge
-recursively, scalars override. A config file that fails to load or
-return a table SHALL print `tether: config error: ...` to stderr and
-fall back to defaults without crashing.
-
-#### Scenario: Partial ui override
-- **WHEN** the user sets only `ui.theme = "mono"`
-- **THEN** all other ui keys keep their defaults
-
-#### Scenario: Broken file
-- **WHEN** config.lua has a syntax error
-- **THEN** a stderr warning is printed and defaults are used
-
 ### Requirement: Deep merge load
 User config SHALL be deep-merged over defaults: tables merge
 recursively, scalars override. A config file that fails to load or
@@ -88,11 +74,21 @@ The API key SHALL be resolved for the active provider: `cfg.providers[cfg.provid
 `~/.tether/auto_approve.lua` as a Lua table of anchored
 `^tool:path$` patterns with a dated comment header. The file SHALL
 be deduplicated (same pattern not appended twice) and SHALL be
-merged into `cfg.auto_approve` on next load.
+merged into `cfg.auto_approve` on next load. Loading SHALL tolerate a
+missing or unreadable file by contributing no patterns and SHALL NOT
+fail the session.
 
 #### Scenario: Second always is a no-op
 - **WHEN** the same key is chosen always twice
 - **THEN** the file contains the pattern once
+
+#### Scenario: Persisted patterns load on next start
+- **WHEN** `~/.tether/auto_approve.lua` holds `^run:/tmp/x$` and a new process loads the config
+- **THEN** `cfg.auto_approve` contains that pattern and a later `run` with cwd `/tmp/x` skips confirmation
+
+#### Scenario: Missing persistence file
+- **WHEN** `~/.tether/auto_approve.lua` does not exist
+- **THEN** loading succeeds with `cfg.auto_approve = {}`
 
 ### Requirement: Workspace defaults to cwd
 When neither `-w` nor `config.workspace` is set, the workspace SHALL

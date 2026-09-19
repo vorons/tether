@@ -94,19 +94,11 @@ local function is_dir(path)
 end
 
 local function dir_entries(path)
-    local entries = {}
-    local ok, dir = pcall(function()
-        local f = io.popen("ls -1A " .. sq(path) .. " 2>/dev/null")
-        local result = f:read("*a")
-        f:close()
-        return result
-    end)
-    if not ok then return entries end
-    for entry in dir:gmatch("[^\n]+") do
-        entries[#entries + 1] = entry
-    end
-    table.sort(entries)
-    return entries
+    -- 1.4: in-process listing via the C host; readdir already returns the
+    -- entry names sorted and without `.`/`..` (no `ls -1A` shell-out).
+    local names = tether.readdir(path)
+    if not names then return {} end
+    return names
 end
 
 function M.list(args, cfg)
@@ -205,14 +197,22 @@ function M.glob(args, cfg)
     local base = args.path and resolve(args.path, cfg) or current_workspace(cfg)
     local pattern = args.pattern or ""
     local all_files = {}
-    local ok = pcall(function()
-        local f = io.popen("find " .. sq(base) .. " -type f 2>/dev/null")
-        local r = f:read("*a")
-        f:close()
-        for file in r:gmatch("[^\n]+") do
-            all_files[#all_files + 1] = file
+    -- 1.5: recursive in-process walk (no `find` shell-out). tether.stat is
+    -- lstat-based, matching `find -type f`: symlinks are not followed.
+    local function walk(dir)
+        local names = tether.readdir(dir)
+        if not names then return end
+        for _, name in ipairs(names) do
+            local full = dir .. "/" .. name
+            local st = tether.stat(full)
+            if st and st.is_dir then
+                walk(full)
+            elseif st then
+                all_files[#all_files + 1] = full
+            end
         end
-    end)
+    end
+    local ok = pcall(walk, base)
     if not ok then return { files = {}, count = 0 } end
     -- strip base prefix for matching
     local prefix = base
@@ -236,44 +236,24 @@ end
 function M.grep(args, cfg)
     local base = args.path and resolve(args.path, cfg) or current_workspace(cfg)
     local max = args.max_results or 100
-    local ic = args.ignore_case and "-i " or ""
     local pattern = args.pattern or ""
-    local glob_flag = ""
-    if args.glob then
-        glob_flag = "--glob " .. sq(args.glob) .. " "
-    end
 
-    local data = ""
-    local ok = pcall(function()
-        -- design §7: prefer rg, then grep -R, then (omitted) Lua fallback
-        local f = io.popen("rg -n --no-heading " .. glob_flag .. ic .. sq(pattern) .. " " .. sq(base) .. " 2>/dev/null | head -" .. max)
-        data = f:read("*a")
-        f:close()
-    end)
-    if not ok or data == "" then
-        ok = pcall(function()
-            local f = io.popen("grep -rn" .. ic .. " " .. sq(pattern) .. " " .. sq(base) .. " 2>/dev/null | head -" .. max)
-            data = f:read("*a")
-            f:close()
-        end)
-    end
+    -- 2.2: one in-process krep invocation replaces the rg -> grep shell
+    -- fallback. krep honors .gitignore/.ignore and the optional glob filter on
+    -- its own; records come back as {path, line, column, text} (column is 1
+    -- because krep's printed form carries no column).
+    local records = tether.krep_search(base, pattern, args.glob,
+        args.ignore_case == true, true, max)
+    if not records then return { matches = {}, count = 0 } end
 
     local matches = {}
-    for line in data:gmatch("[^\n]+") do
-        -- design §7 format: {path, line, column, text}
-        local p, num, col, text = line:match("^(.-):(%d+):(%d+):(.*)$")
-        if not p then
-            p, num, text = line:match("^(.-):(%d+):(.*)$")
-            col = "1"
-        end
-        if p and num then
-            matches[#matches + 1] = {
-                path = to_rel(p, cfg),
-                line = tonumber(num),
-                column = tonumber(col) or 1,
-                text = text,
-            }
-        end
+    for _, rec in ipairs(records) do
+        matches[#matches + 1] = {
+            path = to_rel(rec.path, cfg),
+            line = rec.line,
+            column = rec.column or 1,
+            text = rec.text,
+        }
     end
     return { matches = matches, count = #matches }
 end

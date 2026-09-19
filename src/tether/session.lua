@@ -53,7 +53,8 @@ local function session_dir()
 end
 
 local function ensure_dir()
-    os.execute("mkdir -p " .. session_dir())
+    -- 1.3: in-process mkdir -p via the C host (no shell invocation).
+    tether.mkdirp(session_dir())
 end
 
 local function uuid()
@@ -100,49 +101,52 @@ end
 local function list_session_files(workspace)
     ensure_dir()
     local files = {}
-    local function run(cmd)
-        local ok, res = pcall(function()
-            local f = io.popen(cmd)
-            local r = f:read("*a")
-            f:close()
-            return r
-        end)
-        return ok and res or nil
-    end
-    -- 3.1: portable listing — GNU `find -printf` is Linux-only; `ls -1t`
-    -- orders by mtime and exists on BSD/macOS too.
-    local data = run("find " .. session_dir() .. " -name '*.jsonl' -type f -exec ls -1t {} + 2>/dev/null | head -100")
-    if not data or data == "" then
-        data = run("ls -1t " .. session_dir() .. "/*.jsonl 2>/dev/null | head -100")
-    end
-    if not data then return files end
-    local rank = 0
-    for fname in data:gmatch("[^\n]+") do
-        if fname ~= "" and fname:match("%.jsonl$") then
-            rank = rank + 1
-            local id = fname:match("([^/]+)%.jsonl$")
-            local events = read_events(id)
-            -- meta.workspace: check session_start (first) and session_end (last)
-            local ws = nil
-            local first = events[1]
-            if first and first.meta and first.meta.workspace then ws = first.meta.workspace end
-            local last = events[#events]
-            if last and last.meta and last.meta.workspace then ws = last.meta.workspace end
-            if ws == workspace then
-                local first_line = ""
-                for _, ev in ipairs(events) do
-                    if ev.type == "message" and ev.role == "user" and ev.content then
-                        first_line = ev.content
-                        break
-                    end
-                end
-                files[#files + 1] = {
-                    id = id,
-                    mtime = rank,
-                    first_line = first_line,
-                    ts = first and first.ts or "",
-                }
+    -- 1.6: in-process listing — enumerate *.jsonl in the session directory and
+    -- order by mtime (newest first) via tether.readdir + tether.stat; there is
+    -- no `find`/`ls -1t`/`head` pipeline anymore.
+    local names = tether.readdir(session_dir())
+    if not names then return files end
+    local candidates = {}
+    for _, name in ipairs(names) do
+        local id = name:match("^(.-)%.jsonl$")
+        if id then
+            local st = tether.stat(session_dir() .. "/" .. name)
+            if st and not st.is_dir then
+                candidates[#candidates + 1] = { id = id, mtime = st.mtime }
             end
+        end
+    end
+    table.sort(candidates, function(a, b)
+        if a.mtime == b.mtime then return a.id < b.id end -- deterministic ties
+        return a.mtime > b.mtime
+    end)
+    -- the previous pipeline was piped through `head -100`
+    for i = #candidates, 101, -1 do candidates[i] = nil end
+    local rank = 0
+    for _, cand in ipairs(candidates) do
+        rank = rank + 1
+        local id = cand.id
+        local events = read_events(id)
+        -- meta.workspace: check session_start (first) and session_end (last)
+        local ws = nil
+        local first = events[1]
+        if first and first.meta and first.meta.workspace then ws = first.meta.workspace end
+        local last = events[#events]
+        if last and last.meta and last.meta.workspace then ws = last.meta.workspace end
+        if ws == workspace then
+            local first_line = ""
+            for _, ev in ipairs(events) do
+                if ev.type == "message" and ev.role == "user" and ev.content then
+                    first_line = ev.content
+                    break
+                end
+            end
+            files[#files + 1] = {
+                id = id,
+                mtime = rank,
+                first_line = first_line,
+                ts = first and first.ts or "",
+            }
         end
     end
     return files
