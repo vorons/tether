@@ -14,6 +14,17 @@ assert(common, "agent: cannot load provider_common")
 local sse_unescape = common.json_unescape
 local json_parse = common.json_decode
 
+-- pretty-transcript-rendering: the diff engine is a global in the built
+-- binary and a loadfile fallback for development/plain-lua test runs.
+local diff_mod = _G.diff
+    or (function()
+        local chunk = loadfile("src/tether/diff.lua")
+        return chunk and chunk()
+    end)()
+
+-- Bound on a projection's read of the previous content (same bound `read` uses).
+local PREVIEW_READ_MAX = 1024 * 1024
+
 M.history = {}
 M.pending = nil            -- confirmation queue for the current tool-call step
 M.session_approved = {}    -- "tool:path" approved for the rest of the session
@@ -196,6 +207,58 @@ local function patch_target_path(args)
     return nil
 end
 
+-- pretty-transcript-rendering 2.2: a read-only projection of what a write or
+-- patch will change. Resolved through the tools helpers, inside the workspace,
+-- bounded (1 MiB), never written, never journalled. Any failure returns nil so
+-- the call itself proceeds unchanged.
+local function projection_for(tool_name, args, cfg)
+    if not (diff_mod and tools) then return nil end
+    args = args or {}
+    if tool_name == "write" then
+        local target = args.path
+        if type(target) ~= "string" or target == "" then return nil end
+        local abs = tools._resolve(target, cfg)
+        if not tools._within(abs, cfg) then return nil end
+        local st = tether.stat and tether.stat(abs) or nil
+        if st and st.is_dir then return nil end
+        if st and st.size and st.size > PREVIEW_READ_MAX then return nil end
+        local rel = tools._to_rel(abs, cfg)
+        local prior, is_new = "", false
+        if st then
+            local f = io.open(abs, "rb")
+            if not f then return nil end
+            local data = f:read(PREVIEW_READ_MAX + 1) or ""
+            f:close()
+            if #data > PREVIEW_READ_MAX then return nil end
+            prior = data
+        else
+            is_new = true
+        end
+        local old_label = is_new and "/dev/null" or ("a/" .. rel)
+        local new_label = "b/" .. rel
+        local text, counts = diff_mod.unified(prior, args.content or "", old_label, new_label)
+        return { path = rel, kind = is_new and "new" or "overwrite",
+                 diff = text, add = counts.add, del = counts.del,
+                 before = prior, is_new = is_new }
+    elseif tool_name == "patch" then
+        local diffstr = args.patch
+        if type(diffstr) ~= "string" or diffstr == "" then return nil end
+        local target = patch_target_path(args)
+        if not target then return nil end
+        local abs = tools._resolve(target, cfg)
+        if not tools._within(abs, cfg) then return nil end
+        local add, del = 0, 0
+        for line in diffstr:gmatch("[^\n]*") do
+            local p = line:sub(1, 1)
+            if p == "+" and line:sub(1, 3) ~= "+++" then add = add + 1
+            elseif p == "-" and line:sub(1, 3) ~= "---" then del = del + 1 end
+        end
+        return { path = tools._to_rel(abs, cfg), kind = "patch",
+                 diff = diffstr, add = add, del = del }
+    end
+    return nil
+end
+
 local function should_confirm(tool_name, args, cfg)
     if not cfg then return false end
     if cfg.allow_outside_workspace == true then return false end
@@ -332,7 +395,10 @@ local function compress_history(history)
 end
 
 -- Run one tool call: execute, log, report to UI. Returns result table or {error=...}.
-local function run_tool_call(cfg, on_event, id, name, args)
+-- `projection` is the read-only change projection computed at call start (nil
+-- when none could be computed); it supplies the previous content for the
+-- applied diff without a second file read.
+local function run_tool_call(cfg, on_event, id, name, args, projection)
     local result, err = execute_tool(name, args, cfg)
     local res
     if result then
@@ -340,26 +406,45 @@ local function run_tool_call(cfg, on_event, id, name, args)
     else
         res = { error = err or "tool failed" }
     end
+    -- pretty-transcript-rendering 2.3/2.4: write and patch report their change
+    -- as the applied unified diff (the same text the UI expands), with a
+    -- `+N −M` summary; when no projection was available the existing body and
+    -- summary are kept so a failure never claims counts it does not have.
+    local body, summary
+    if res.error then
+        body = tostring(res.error)
+        summary = nil
+    elseif name == "write" and projection then
+        body = projection.diff
+        local word = projection.is_new and "создан" or "перезаписан"
+        summary = string.format("+%d −%d %s", projection.add, projection.del, word)
+    elseif name == "patch" and projection then
+        body = projection.diff
+        summary = tool_summary(name, res)
+    else
+        body = tool_body(name, res)
+        summary = tool_summary(name, res)
+    end
     -- fix-audit-findings 1.2: the model must see the tool's output body, not
     -- just whatever happened to live under `content` (only `read` had one).
     local history_result
     if res.error then
         history_result = { error = tostring(res.error) }
     else
-        history_result = { content = truncate_body(tool_body(name, res)) or "" }
+        history_result = { content = truncate_body(body) or "" }
     end
     M.add_tool_result(id, history_result)
     slog(cfg, {
         ts = os.date(), type = "tool_result",
         tool_call_id = id, name = name,
-        result = res.error and { error = res.error } or { summary = tool_summary(name, res) },
+        result = res.error and { error = res.error } or { summary = summary },
     })
     if on_event then
         on_event({
             type = "tool_result", id = id, name = name,
             error = res.error or nil,
-            summary = res.error and ("✗ " .. tostring(res.error)) or tool_summary(name, res),
-            body = res.error and tostring(res.error) or tool_body(name, res),
+            summary = res.error and ("✗ " .. tostring(res.error)) or summary,
+            body = res.error and tostring(res.error) or body,
         })
     end
     return res
@@ -380,7 +465,7 @@ local function drive_pending(cfg, on_event)
         elseif not should_confirm(call.name, call.args, cfg)
             or check_auto_approve(call.name, call.args, cfg)
             or is_session_approved(call.name, call.args) then
-            run_tool_call(cfg, on_event, call.id, call.name, call.args)
+            run_tool_call(cfg, on_event, call.id, call.name, call.args, call.projection)
             call.done = true
             p.idx = p.idx + 1
         elseif call.confirm_emitted then
@@ -480,9 +565,14 @@ local function main_loop(cfg, api_key, on_event)
         for _, id in ipairs(ordered) do
             local tc = tool_calls[id]
             local args = parse_args(tc.arguments)
-            calls[#calls + 1] = { id = tc.id, name = tc.name, args = args, arguments_str = tc.arguments }
+            -- 2.1/2.2: carry the parsed args on the event and, for write/patch,
+            -- a read-only projection of the change the call is about to make.
+            local projection = projection_for(tc.name, args, cfg)
+            calls[#calls + 1] = { id = tc.id, name = tc.name, args = args,
+                                  arguments_str = tc.arguments, projection = projection }
             if on_event then
-                on_event({ type = "tool_call_start", id = tc.id, name = tc.name })
+                on_event({ type = "tool_call_start", id = tc.id, name = tc.name,
+                           args = args, projection = projection })
             end
             slog(cfg, { ts = os.date(), type = "tool_call",
                         tool_call_id = tc.id, name = tc.name, args = args })
@@ -536,7 +626,7 @@ function M.confirm(id, decision, cfg, on_event)
                 if decision == "always" then
                     persist_auto_approve(call.name, call.args, cfg)
                 end
-                run_tool_call(cfg, on_event, call.id, call.name, call.args)
+                run_tool_call(cfg, on_event, call.id, call.name, call.args, call.projection)
             elseif decision == "cancel" then
                 -- deny this call; the remaining ones are denied in the loop below
                 M.add_tool_result(call.id, { error = "cancelled by user" })
@@ -582,6 +672,7 @@ end
 M.estimate_tokens = estimate_tokens
 M._should_confirm = should_confirm
 M._patch_target_path = patch_target_path
+M._projection_for = projection_for
 M.compress_history = compress_history
 M.should_summarize = should_summarize
 M.parse_args = parse_args

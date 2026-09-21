@@ -349,7 +349,7 @@ do
     _G.tether = host_mock{
         write = function(s) end,
         resize_requested = function() return false end,
-        get_terminal_size = function() return { width = 80, height = 24 } end,
+        get_terminal_size = function() return (stubs and stubs.size) or { width = 80, height = 24 } end,
         getcwd = function() return "/tmp" end,
         read_char = function()
             char_calls = char_calls + 1
@@ -507,12 +507,14 @@ end
 
 -- M7 helpers: module loader with _G stubs + restore
 local function with_modules(env_fn, fn)
-    local names = {"tether", "config", "session", "agent", "api", "tools", "ui"}
+    local names = {"tether", "config", "session", "agent", "api", "tools", "ui", "diff"}
     local originals = {}
     for _, name in ipairs(names) do originals[name] = _G[name] end
     env_fn()
     local mods = {}
     local ok, err = pcall(function()
+        mods.diff = assert(loadfile("src/tether/diff.lua"))()
+        _G.diff = mods.diff
         mods.tools = assert(loadfile("src/tether/tools.lua"))()
         _G.tools = mods.tools
         mods.api = assert(loadfile("src/tether/api.lua"))()
@@ -539,7 +541,7 @@ local function base_env()
         write = function() end, sleep = function() end,
         http_stream = function() return true end,
         http_get = function() return "", nil end,
-        get_terminal_size = function() return { width = 80, height = 24 } end,
+        get_terminal_size = function() return (stubs and stubs.size) or { width = 80, height = 24 } end,
         read_char = function() return nil end,
         read_char_nb = function() return nil end,
         resize_requested = function() return false end,
@@ -723,7 +725,7 @@ with_modules(base_env, function(mods)
     mods.ui._ascii_mode = true -- test seam (env is not ASCII in CI)
     assert_notnil(mods.ui.to_ascii, "T30 ui.to_ascii exported")
     local glyph_cases = {
-        { "●", "*" }, { "⚙", "[t]" }, { "›", ">" }, { "✗", "x" }, { "✻", "*" },
+        { "●", "*" }, { "⚙", "[t]" }, { "›", ">" }, { "✗", "[x]" }, { "✓", "[ok]" }, { "✻", "*" },
         { "↻", "[r]" }, { "⏹", "[x]" }, { "⚠", "!" }, { "▸", ">" }, { "▾", "v" },
         { "┌", "+" }, { "┐", "+" }, { "└", "+" }, { "┘", "+" }, { "─", "-" },
         { "│", "|" }, { "•", "-" }, { "…", "..." }, { "▓", "#" }, { "░", "-" },
@@ -1101,7 +1103,8 @@ do
     assert(m.cmd ~= "help" and m.cmd ~= "status" and m.cmd ~= "log",
            "T39 /" .. tostring(m.cmd) .. " must be removed")
   end
-  assert(#(ui.SLASH_COMMANDS or {}) == 8, "T39 eight slash commands remain")
+  -- unified-slash-palette: /skills is gone — skills are entries of this list
+  assert(#(ui.SLASH_COMMANDS or {}) == 7, "T39 seven slash commands remain")
   print("T39 M9 cleanups: OK")
 end
 
@@ -1273,7 +1276,7 @@ do
   _G.tether = host_mock{
     write = function() end,
     resize_requested = function() return false end,
-    get_terminal_size = function() return { width = 80, height = 24 } end,
+    get_terminal_size = function() return (stubs and stubs.size) or { width = 80, height = 24 } end,
     getcwd = function() return "/tmp" end,
     read_char = function()
       qi = qi + 1
@@ -1591,8 +1594,14 @@ end
 -- for asserting on side effects that arent in the painted frame (e.g. repaint
 -- count). Callers that need to assert later must provide a closure synchronously.
 local function run_ui_with(bytes, stubs, sink, paintC)
-  local names = { "tether", "config", "session", "agent", "api", "tools" }
+  local names = { "tether", "config", "session", "agent", "api", "tools", "diff" }
   local originals, preload = {}, {}
+  if not (stubs and stubs.diff) then
+    local okd, dmod = pcall(loadfile, "src/tether/diff.lua")
+    _G.diff = (okd and dmod and dmod()) or _G.diff
+  else
+    _G.diff = stubs.diff
+  end
   for _, n in ipairs(names) do
     originals[n] = _G[n]; preload[n] = package.preload[n]
   end
@@ -1601,7 +1610,7 @@ local function run_ui_with(bytes, stubs, sink, paintC)
     -- T54/T6+: capture frames so a test can assert on what reached the screen
     write = function(s) if sink then sink[#sink + 1] = s end end,
     resize_requested = function() return false end,
-    get_terminal_size = function() return { width = 80, height = 24 } end,
+    get_terminal_size = function() return (stubs and stubs.size) or { width = 80, height = 24 } end,
     getcwd = function() return "/tmp" end,
     read_char = function()
       qi = qi + 1
@@ -2178,20 +2187,26 @@ do
 end
 
 -- T69: 3.2 — palette_sync uses fuzzy ranking: empty filter lists all in
--- declaration order; no-match gives zero items.
+-- declaration order; no-match gives zero items. Discovery is stubbed so the
+-- entry count is deterministic (unified-slash-palette: skills are entries).
 do
-  local str_bytes = function(s) local b = {} for i = 1, #s do b[#b + 1] = s:byte(i) end return b end
+  local agent_stub = { turn = function() return true end, get_history = function() return {} end }
+  local function open_palette(text)
+    local uimod = run_ui_with({ 17 }, { agent = agent_stub })
+    uimod._skills_stub = function() return {} end
+    for i = 1, #text do
+      uimod._handle_key({ kind = "text", char = text:sub(i, i) })
+    end
+    return uimod, uimod._get_state()
+  end
+
   -- type "/" to open palette with empty filter
-  local b1 = str_bytes("/"); b1[#b1 + 1] = 17
-  local uimod1, S1 = run_ui_with(b1,
-    { agent = { turn = function() return true end, get_history = function() return {} end } })
-  assert_eq(#S1.palette_items, 8, "T69 empty filter: all 8 commands listed")
+  local _, S1 = open_palette("/")
+  assert_eq(#S1.palette_items, 7, "T69 empty filter: all 7 commands listed")
   assert_eq(S1.palette_items[1].cmd, "clear", "T69 first = /clear")
 
   -- type "/z" — no match
-  local b2 = str_bytes("/z"); b2[#b2 + 1] = 17
-  local _, S2 = run_ui_with(b2,
-    { agent = { turn = function() return true end, get_history = function() return {} end } })
+  local _, S2 = open_palette("/z")
   assert_eq(#S2.palette_items, 0, "T69 no-match: zero items")
 
   print("T69 3.2 palette_sync fuzzy: OK")
@@ -2338,11 +2353,13 @@ end
 -- T71: 3.4 — palette row rendering: description present, accent on selected,
 -- truncation on narrow terminal.
 do
-  local str_bytes = function(s) local b = {} for i = 1, #s do b[#b + 1] = s:byte(i) end return b end
-  local b = str_bytes("/"); b[#b + 1] = 17
-  local uimod, S = run_ui_with(b, { agent = { turn = function() return true end, get_history = function() return {} end } })
+  local uimod, _ = run_ui_with({ 17 },
+    { agent = { turn = function() return true end, get_history = function() return {} end } })
+  uimod._skills_stub = function() return {} end
+  uimod._handle_key({ kind = "text", char = "/" })
+  local S = uimod._get_state()
   assert_true(S.palette_active, "T71 palette active after typing /")
-  assert_eq(#S.palette_items, 8, "T71 eight commands listed")
+  assert_eq(#S.palette_items, 7, "T71 seven commands listed")
   assert_true(S.palette_items[1].desc ~= "", "T71 first item has a description")
   assert_true(S.palette_items[1].label ~= "", "T71 first item has a label")
   -- narrow terminal: rows truncate, never overflow past L.w
@@ -2410,6 +2427,26 @@ do
   -- empty prefix under /tmp returns a list of entries
   local r4 = tools.path_complete("", cfg)
   assert_true(#r4.candidates > 0, "T73 empty prefix under /tmp lists entries")
+
+  -- a directory-prefixed token keeps its directory in the candidate, because
+  -- completing replaces the whole token (spec tui: Path completion — the token
+  -- becomes `src/tether/agent.lua`)
+  local ws2 = "/tmp/t73completion"
+  os.execute("rm -rf " .. ws2 .. " && mkdir -p " .. ws2 .. "/src/tether")
+  local fh = io.open(ws2 .. "/src/tether/agent.lua", "w")
+  fh:write("-- x\n")
+  fh:close()
+  local r5 = tools.path_complete("src/tether/ag", { workspace = ws2 })
+  assert_eq(#r5.candidates, 1, "T73 dir-prefixed token: one candidate")
+  assert_eq(r5.candidates[1], "src/tether/agent.lua", "T73 candidate keeps the directory")
+  local r6 = tools.path_complete("src/tether/", { workspace = ws2 })
+  assert_eq(#r6.candidates, 1, "T73 trailing-slash token: one candidate")
+  assert_eq(r6.candidates[1], "src/tether/agent.lua",
+    "T73 trailing-slash candidate keeps the directory")
+  local r7 = tools.path_complete("tether/ag", { workspace = ws2 })
+  assert_eq(#r7.candidates, 0, "T73 a missing directory yields no candidate")
+  os.execute("rm -rf " .. ws2)
+
   _G.tether = orig_tether
   print("T73 4.1 tools.path_complete: OK")
 end
@@ -2462,9 +2499,10 @@ do
 
   -- Run the harness with the given bytes (characters + Ctrl+Q to exit),
   -- then inject the stub. The Tab keypresses in `bytes` are processed by
-  -- the real handle_key during run() — at that point M._tools_stub is nil
-  -- and require("tools") fails, so path_complete_tab is a no-op and the
-  -- command-palette branch handles Tab (existing 3.3 behavior).
+  -- the real handle_key during run() — at that point M._tools_stub is nil and
+  -- neither the `tools` global nor require("tools") resolves in the harness,
+  -- so path_complete_tab is a no-op and the command-palette branch handles
+  -- Tab (existing 3.3 behavior).
   local function run_and_state(bytes, pc)
     local ui_mod = assert((function()
       local m, _ = run_ui_with(bytes, cfg_stubs(pc))
@@ -2492,6 +2530,29 @@ do
     assert_eq(S.palette_active, true, "T74 multi: palette active")
     assert_eq(#S.palette_items, 2, "T74 multi: two candidates listed")
     assert_eq(S.input, "file1.txt", "T74 multi: first candidate applied")
+    assert_eq(S.cursor, #S.input, "T74 multi: cursor sits after the applied candidate")
+  end
+
+  -- 1.1: with text after the token the cursor stops before it, not at the end
+  do
+    local ui_mod, S = run_and_state({ 102, 105, 61, 17 }, true) -- "fi="
+    S.cursor = 2 -- the cursor sits inside the token, so "=" is the tail
+    ui_mod._path_complete_tab()
+    S = ui_mod._get_state()
+    assert_eq(S.input, "file1.txt=", "T74 tail: only the token was replaced")
+    assert_eq(S.cursor, 9, "T74 tail: cursor stops before the text after the token")
+  end
+
+  -- 1.4: a unique candidate completes the token in place — the text after the
+  -- token survives (the one-shot branch used to drop it and lose typed text).
+  do
+    local ui_mod, S = run_and_state({ 102, 105, 108, 101, 49, 61, 17 }, true) -- "file1="
+    S.cursor = 5 -- the cursor sits after "file1", so "=" is the tail
+    ui_mod._path_complete_tab()
+    S = ui_mod._get_state()
+    assert_eq(S.input, "file1.txt=", "T74 unique-tail: text after the token survives")
+    assert_eq(S.cursor, 9, "T74 unique-tail: cursor stops before the text after the token")
+    assert_eq(S.palette_active, false, "T74 unique-tail: unique candidate opens no palette")
   end
 
   -- 4.2c: Tab cycles to second candidate (via handle_key, not path_complete_tab
@@ -2503,6 +2564,7 @@ do
     S = ui_mod._get_state()
     assert_eq(S.input, "file2.txt", "T74 cycle: second Tab wraps to file2.txt")
     assert_eq(S.palette_active, true, "T74 cycle: palette still open")
+    assert_eq(S.cursor, #S.input, "T74 cycle: cursor follows the cycled candidate")
   end
 
   -- 4.2d: Esc restores the token as typed.
@@ -2513,6 +2575,7 @@ do
     ui_mod._handle_key({ kind = "esc" })       -- cancel, input="fi"
     S = ui_mod._get_state()
     assert_eq(S.input, "fi", "T74 Esc: token restored to typed value")
+    assert_eq(S.cursor, #S.input, "T74 Esc: cursor sits after the restored token")
     assert_eq(S.palette_active, false, "T74 Esc: palette closed")
     assert_eq(S.palette_mode, "command", "T74 Esc: mode reset to 'command'")
   end
@@ -2780,91 +2843,193 @@ do
   print("T78 5.4 toast confirmation: OK")
 end
 
--- T79: 6.1 — /skills opens the skills palette via stubbed discovery.
--- Two skills → two rows; zero skills → single (нет скиллов) empty row.
--- (skills commands open no overlay, so the command palette Enter fires them)
+-- T79 (unified-slash-palette 1.2/1.3/1.4): skills are entries of the one
+-- palette — listed after the commands, found by name, resolved once per open,
+-- dropped when a name collides with a command, and degrading to commands only
+-- when discovery fails. Discovery is stubbed so the list is deterministic.
 do
+  local agent_stub = { turn = function() return true end, get_history = function() return {} end }
+  local function boot(stub)
+    local uimod = run_ui_with({ 17 }, { agent = agent_stub })
+    uimod._skills_stub = stub
+    return uimod
+  end
+  local function type_text(uimod, text)
+    for i = 1, #text do
+      uimod._handle_key({ kind = "text", char = text:sub(i, i) })
+    end
+  end
+  local two_skills = function() return {
+    { name = "deploy", description = "deploy stuff", path = "/tmp/skills/deploy/SKILL.md" },
+    { name = "review", description = "review stuff", path = "/tmp/skills/review/SKILL.md" },
+  } end
+
+  -- commands in declared order, then skills in discovery order
+  local uimod = boot(two_skills)
+  type_text(uimod, "/")
+  local S = uimod._get_state()
+  assert_eq(#S.palette_items, 9, "T79 commands + skills share one list")
+  assert_eq(S.palette_items[1].cmd, "clear", "T79 first entry is the first command")
+  assert_eq(S.palette_items[7].cmd, "copy", "T79 the last command precedes the skills")
+  assert_eq(S.palette_items[8].name, "deploy", "T79 first skill follows the commands")
+  assert_eq(S.palette_items[9].name, "review", "T79 skills keep discovery order")
+
+  -- a skill is found by typing its own name
+  type_text(uimod, "dep")
+  S = uimod._get_state()
+  assert_eq(#S.palette_items, 1, "T79 /dep narrows to the skill")
+  assert_eq(S.palette_items[1].name, "deploy", "T79 the skill is selected")
+
+  -- a name colliding with a command is not listed (case-insensitively)
+  local collided = boot(function() return {
+    { name = "Copy", description = "shadow", path = "/tmp/skills/Copy/SKILL.md" },
+    { name = "deploy", description = "deploy stuff", path = "/tmp/skills/deploy/SKILL.md" },
+  } end)
+  type_text(collided, "/")
+  S = collided._get_state()
+  assert_eq(#S.palette_items, 8, "T79 a colliding skill is not listed")
+  for _, it in ipairs(S.palette_items) do
+    assert_true(it.name ~= "Copy", "T79 no row for the colliding skill")
+  end
+
+  -- discovery resolves once per open, not per keystroke
+  local calls = 0
+  local counted = boot(function() calls = calls + 1; return two_skills() end)
+  type_text(counted, "/")
+  type_text(counted, "de")
+  assert_eq(calls, 1, "T79 discovery resolved once per open")
+  counted._handle_key({ kind = "esc" })
+  type_text(counted, "/")
+  assert_eq(calls, 2, "T79 a new open resolves discovery again")
+
+  -- a discovery failure degrades to the commands only
+  local broken = boot(function() error("discovery exploded") end)
+  type_text(broken, "/")
+  S = broken._get_state()
+  assert_eq(#S.palette_items, 7, "T79 discovery failure degrades to commands")
+  assert_true(S.palette_active, "T79 the palette survives a discovery failure")
+
+  -- the production path: the host registers modules as globals (main.c
+  -- load_module), so discovery is reached without require()
+  local orig_context = _G.context
+  _G.context = { discover_skills = function() return two_skills() end }
+  local real = boot(nil)
+  type_text(real, "/")
+  S = real._get_state()
+  assert_eq(#S.palette_items, 9, "T79 skills resolve through the context global")
+  assert_eq(S.palette_items[8].name, "deploy", "T79 the global path lists the skill")
+  _G.context = orig_context
+
+  print("T79 unified palette list: OK")
+end
+
+-- T80 (4.1 + 3.1): a skill row only composes `/<name> ` into the input —
+-- Enter and Tab send nothing, run nothing and never read the body; the row
+-- carries its argument hint and no longer produces a [skill: …] reference.
+do
+  local turns = 0
+  local agent_stub = { turn = function() turns = turns + 1; return true end,
+    get_history = function() return {} end }
+  local function boot()
+    local uimod = run_ui_with({ 17 }, { agent = agent_stub })
+    uimod._skills_stub = function() return {
+      { name = "deploy", description = "deploy stuff", path = "/tmp/skills/deploy/SKILL.md" },
+    } end
+    return uimod
+  end
+  local function type_text(uimod, text)
+    for i = 1, #text do
+      uimod._handle_key({ kind = "text", char = text:sub(i, i) })
+    end
+  end
+
+  local uimod = boot()
+  type_text(uimod, "/dep")
+  local S = uimod._get_state()
+  assert_eq(S.palette_items[1].label, "/deploy", "T80 skill row is the slash name")
+  assert_eq(S.palette_items[1].hint, "[задача]", "T80 skill row carries its hint")
+  uimod._handle_key({ kind = "enter" })
+  S = uimod._get_state()
+  assert_eq(S.input, "/deploy ", "T80 Enter composes the skill name")
+  assert_eq(S.cursor, #S.input, "T80 cursor at the end of the input")
+  assert_false(S.palette_active, "T80 palette closed after Enter")
+  assert_eq(turns, 0, "T80 Enter sent nothing to the agent")
+  assert_eq(#S.transcript, 0, "T80 transcript unchanged")
+  assert_true(S.input:find("SKILL.md", 1, true) == nil, "T80 no path in the input")
+  assert_true(S.input:find("deploy stuff", 1, true) == nil, "T80 no description in the input")
+
+  local uimod2 = boot()
+  type_text(uimod2, "/dep")
+  uimod2._handle_key({ kind = "tab" })
+  local S2 = uimod2._get_state()
+  assert_eq(S2.input, "/deploy ", "T80 Tab completes the skill name")
+  assert_false(S2.palette_active, "T80 palette closed after Tab")
+  assert_eq(turns, 0, "T80 Tab ran nothing")
+
+  print("T80 4.1 skill selection composes text: OK")
+end
+
+-- T81 (4.2): a submitted `/name` resolves without regard to case — a
+-- discovered skill reaches the agent as an ordinary message, a command runs,
+-- a skill shadowed by a command never dispatches, and an unknown name is not
+-- sent. The trailing space closes the palette so the submit path is exercised.
+do
+  local sent, turns = {}, 0
+  local orig_agent = _G.agent
   local agent_stub = {
-    turn = function() return true end,
+    turn = function(cfg, key, text) turns = turns + 1; sent[#sent + 1] = text; return true end,
     get_history = function() return {} end,
   }
-  local function type_skills(uimod)
-    for _, ch in ipairs({ 47, 115, 107, 105, 108, 108, 115 }) do
-      uimod._handle_key({ kind = "text", char = string.char(ch) })
+  local function boot()
+    local uimod = run_ui_with({ 17 }, { agent = agent_stub })
+    uimod._skills_stub = function() return {
+      { name = "deploy", description = "deploy stuff", path = "/tmp/skills/deploy/SKILL.md" },
+      { name = "copy", description = "shadow", path = "/tmp/skills/copy/SKILL.md" },
+    } end
+    -- the harness restores _G.agent after run(); the submit path needs it back
+    _G.agent = agent_stub
+    return uimod
+  end
+  local function submit(uimod, text)
+    for i = 1, #text do
+      uimod._handle_key({ kind = "text", char = text:sub(i, i) })
     end
     uimod._handle_key({ kind = "enter" })
   end
-  do
-    local uimod = run_ui_with({ 104, 105, 13, 17 }, { agent = agent_stub })
-    uimod._skills_stub = function() return {
-      { name = "debug", description = "debug stuff", path = "/tmp/.pi/skills/debug/SKILL.md" },
-      { name = "review", description = "review stuff", path = "/tmp/.pi/skills/review/SKILL.md" },
-    } end
-    type_skills(uimod)
-    local S = uimod._get_state()
-    assert_eq(S.palette_mode, "skills", "T79 two skills: mode is 'skills'")
-    assert_true(S.palette_active, "T79 two skills: palette active")
-    assert_eq(#S.palette_items, 2, "T79 two skills: two rows")
-    assert_eq(S.palette_items[1].label, "debug", "T79 two skills: first row label")
-    assert_eq(S.palette_items[2].label, "review", "T79 two skills: second row label")
-  end
-  do
-    local uimod = run_ui_with({ 104, 105, 13, 17 }, { agent = agent_stub })
-    uimod._skills_stub = function() return {} end
-    type_skills(uimod)
-    local S = uimod._get_state()
-    assert_eq(S.palette_mode, "skills", "T79 empty: mode is 'skills'")
-    assert_eq(#S.palette_items, 1, "T79 empty: single row")
-    assert_true(S.palette_items[1].empty, "T79 empty: row marked empty")
-  end
-  print("T79 6.1 /skills palette: OK")
-end
 
--- T80: 6.2 — Enter on a skill appends a name+path reference, never the body.
-do
-  local agent_stub = { turn = function() return true end, get_history = function() return {} end }
-  local uimod = run_ui_with({ 104, 105, 13, 17 }, { agent = agent_stub })
-  uimod._skills_stub = function() return {
-    { name = "my-skill", description = "does things",
-      path = "/home/x/.pi/skills/my-skill/SKILL.md" },
-  } end
-  for _, ch in ipairs({ 47, 115, 107, 105, 108, 108, 115 }) do
-    uimod._handle_key({ kind = "text", char = string.char(ch) })
-  end
-  uimod._handle_key({ kind = "enter" })
-  local S = uimod._get_state()
-  assert_eq(S.palette_mode, "skills", "T80 skills palette open after /skills")
-  uimod._handle_key({ kind = "enter" })
-  S = uimod._get_state()
-  assert_true(S.input:find("my-skill", 1, true) ~= nil, "T80 input names the skill")
-  assert_true(S.input:find("/home/x/.pi/skills/my-skill/SKILL.md", 1, true) ~= nil,
-    "T80 input holds SKILL.md path")
-  assert_true(S.input:find("[skill:", 1, true) ~= nil, "T80 input uses [skill: ref] form")
-  assert_true(S.input:find("does things", 1, true) == nil, "T80 body text NOT in input")
-  assert_false(S.palette_active, "T80 palette closed after Enter")
-  assert_eq(S.palette_mode, "command", "T80 back to command mode")
-  assert_eq(S.cursor, #S.input, "T80 cursor at end of input")
-  print("T80 6.2 skill reference append: OK")
-end
+  -- a discovered skill is sent verbatim
+  local a = boot()
+  submit(a, "/deploy выложи на прод")
+  assert_eq(turns, 1, "T81 the skill name is submitted")
+  assert_eq(sent[1], "/deploy выложи на прод", "T81 the text reaches the agent verbatim")
+  assert_true(#a._get_state().transcript > 0, "T81 the transcript shows the message")
 
--- T81: 6.3 — Enter on the empty state changes nothing in the input.
-do
-  local agent_stub = { turn = function() return true end, get_history = function() return {} end }
-  local uimod = run_ui_with({ 104, 105, 13, 17 }, { agent = agent_stub })
-  uimod._skills_stub = function() return {} end
-  for _, ch in ipairs({ 47, 115, 107, 105, 108, 108, 115 }) do
-    uimod._handle_key({ kind = "text", char = string.char(ch) })
-  end
-  uimod._handle_key({ kind = "enter" })
-  local S = uimod._get_state()
-  assert_eq(S.palette_mode, "skills", "T81 empty state palette open")
-  local input_before = S.input
-  uimod._handle_key({ kind = "enter" })
-  S = uimod._get_state()
-  assert_eq(S.input, input_before, "T81 Enter on empty row: input unchanged")
-  assert_false(S.palette_active, "T81 palette closed after Enter")
-  assert_eq(S.palette_mode, "command", "T81 back to command mode")
-  print("T81 6.3 empty-state Enter no-op: OK")
+  -- case does not matter for a skill name
+  local b = boot()
+  submit(b, "/Deploy выложи")
+  assert_eq(turns, 2, "T81 the skill case does not matter")
+  assert_eq(sent[2], "/Deploy выложи", "T81 the typed spelling is kept")
+
+  -- case does not matter for a command name either
+  local c = boot()
+  submit(c, "/CLEAR ")
+  assert_eq(turns, 2, "T81 a command case variant is not sent to the agent")
+  assert_eq(c._get_state().input, "", "T81 the command consumed the input")
+
+  -- a skill shadowed by a command never dispatches
+  local d = boot()
+  submit(d, "/COPY ")
+  assert_eq(turns, 2, "T81 a shadowed skill does not dispatch")
+  assert_true(d._get_state()._in_copy_palette, "T81 /COPY ran the copy command")
+
+  -- an unknown name is not sent
+  local e = boot()
+  submit(e, "/nosuchthing ")
+  assert_eq(turns, 2, "T81 an unknown name is not sent to the agent")
+  assert_eq(#e._get_state().transcript, 0, "T81 an unknown name adds no user row")
+
+  _G.agent = orig_agent
+  print("T81 4.2 slash dispatch: OK")
 end
 
 -- T82: 7.1 — color depth negotiation via M._color_depth test seam.
@@ -3364,9 +3529,18 @@ do
   assert_eq(r.candidates[1], "sub/", "T105 directory gets a trailing slash")
   local r2 = tools.path_complete("sub/", cfg)
   assert_eq(#r2.candidates, 1, "T105 descends into the directory")
-  assert_eq(r2.candidates[1], "inner.lua", "T105 lists inside the directory")
+  -- the candidate carries the typed directory: the UI replaces the whole token,
+  -- so a bare name would complete `read sub/inner.lua` to `read inner.lua`
+  assert_eq(r2.candidates[1], "sub/inner.lua",
+    "T105 candidate keeps the typed directory")
   local r3 = tools.path_complete("a", cfg)
   assert_eq(r3.candidates[1], "a.txt", "T105 files get no trailing slash")
+  -- several candidates keep it too, since the palette applies one of them
+  local h = assert(io.open(ws .. "/sub/inner.txt", "w")); h:write("x"); h:close()
+  local r4 = tools.path_complete("sub/in", cfg)
+  assert_eq(#r4.candidates, 2, "T105 two candidates inside the directory")
+  assert_eq(r4.candidates[1], "sub/inner.lua", "T105 first candidate keeps the directory")
+  assert_eq(r4.candidates[2], "sub/inner.txt", "T105 second candidate keeps the directory")
   _G.tether = orig
   os.execute("rm -rf " .. ws)
   print("T105 directory completion: OK")
@@ -3679,6 +3853,813 @@ do
   _G.tether = orig
   os.execute("rm -rf " .. dir)
   print("T114 session listing order/cap: OK")
+end
+
+-- === pretty-transcript-rendering: diff engine (tasks 1.1-1.5) ============
+do
+  local d = assert(loadfile("src/tether/diff.lua"))()
+
+  -- 1.1 new file: all additions, +N -0
+  local t1, c1 = d.unified("", "a\nb\nc\n", "a/x", "b/x")
+  assert_eq(c1.add, 3, "1.1 new file add count")
+  assert_eq(c1.del, 0, "1.1 new file del count")
+  assert_true(t1:find("@@ -0,0 +1,3 @@", 1, true) ~= nil, "1.1 new file hunk header")
+  assert_true(t1:find("^+a$") ~= nil or t1:find("\n+a\n", 1, true) ~= nil, "1.1 new file addition")
+
+  -- 1.1 overwrite keeps surrounding context
+  local t2, c2 = d.unified("l1\nl2\nl3\nl4\nl5\n", "l1\nl2\nl3\nX\nl5\n", "a/x", "b/x")
+  assert_eq(c2.add, 1, "1.1 overwrite add")
+  assert_eq(c2.del, 1, "1.1 overwrite del")
+  assert_true(t2:find("\n l3\n", 1, true) ~= nil, "1.1 context line kept")
+  assert_true(t2:find("-l4", 1, true) ~= nil, "1.1 removed line")
+  assert_true(t2:find("+X", 1, true) ~= nil, "1.1 added line")
+
+  -- 1.1 identical input -> empty diff
+  local t3, c3 = d.unified("x\ny\n", "x\ny\n")
+  assert_eq(t3, "", "1.1 identical -> empty diff")
+  assert_eq(c3.add, 0, "1.1 identical add 0")
+  assert_eq(c3.del, 0, "1.1 identical del 0")
+
+  -- 1.2 parse a multi-file diff
+  local multi = "--- a/x\n+++ b/x\n@@ -1 +1 @@\n-old\n+new\n"
+             .. "--- a/y\n+++ b/y\n@@ -3,2 +3,3 @@\n ctx\n+ins\n ctx2\n"
+  local rows = d.parse(multi)
+  assert_notnil(rows, "1.2 parse multi-file")
+  local add_rows, hunk_count, file_count = 0, 0, 0
+  for _, r in ipairs(rows) do
+    if r.kind == "add" then add_rows = add_rows + 1 end
+    if r.kind == "hunk-header" then hunk_count = hunk_count + 1 end
+    if r.kind == "file-header" then file_count = file_count + 1 end
+  end
+  assert_eq(hunk_count, 2, "1.2 two hunks")
+  assert_eq(file_count, 4, "1.2 four file headers")
+  -- hunk without explicit counts: `@@ -1 +1 @@` means one old / one new line
+  local first_add, first_rem
+  for _, r in ipairs(rows) do
+    if r.kind == "add" and not first_add then first_add = r end
+    if r.kind == "remove" and not first_rem then first_rem = r end
+  end
+  assert_eq(first_rem and first_rem.old, 1, "1.2 hunk-without-counts old line number")
+  assert_eq(first_add and first_add.new, 1, "1.2 hunk-without-counts new line number")
+  local second_add
+  for _, r in ipairs(rows) do
+    if r.kind == "add" and r.new == 4 then second_add = r end
+  end
+  assert_notnil(second_add, "1.2 add line number from hunk header")
+
+  -- 1.2 no-newline marker is recognised, not fatal
+  local marker = "@@ -1,1 +1,1 @@\n-a\n+b\n\\ No newline at end of file\n"
+  local mrows = d.parse(marker)
+  assert_notnil(mrows, "1.2 no-newline diff parses")
+  local saw_marker = false
+  for _, r in ipairs(mrows) do if r.kind == "no-newline" then saw_marker = true end end
+  assert_true(saw_marker, "1.2 no-newline row emitted")
+
+  -- 1.2 non-diff text -> nil
+  assert_eq(d.parse("hello\nworld"), nil, "1.2 plain text is not a diff")
+  assert_eq(d.parse(""), nil, "1.2 empty text is not a diff")
+
+  -- 1.3 only-changed-word pairing
+  local oseg, nseg = d.pair_words({ text = "foo(a, 1)" }, { text = "foo(a, 2)" })
+  assert_notnil(oseg, "1.3 paired only-changed-word")
+  local function changed_text(segs)
+    local out = {}
+    for _, s in ipairs(segs) do if s.changed then out[#out + 1] = s.text end end
+    return table.concat(out)
+  end
+  assert_eq(changed_text(oseg), "1)", "1.3 old changed word")
+  assert_eq(changed_text(nseg), "2)", "1.3 new changed word")
+  assert_eq(d.pair_words({ text = "alpha beta" }, { text = "gamma delta" }), nil,
+    "1.3 dissimilar pair not paired")
+  local longline = string.rep("x ", 300)
+  assert_eq(d.pair_words({ text = longline }, { text = longline .. "y" }), nil,
+    "1.3 over-long line skips comparison")
+  assert_eq(d.pair_words({ text = "one two" }, { text = "one" }), nil,
+    "1.3 unequal runs not paired")
+
+  -- 1.4 meter
+  local a12, d12 = d.meter(12, 3)
+  assert_true(a12 >= 1 and d12 >= 1, "1.4 +12 -3 both sides")
+  assert_true(a12 > d12, "1.4 +12 -3 added side longer")
+  local a34, d34 = d.meter(34, 0)
+  assert_true(a34 > 0 and d34 == 0, "1.4 +34 -0 added only")
+  local a05, d05 = d.meter(0, 5)
+  assert_true(a05 == 0 and d05 > 0, "1.4 +0 -5 removed only")
+
+  -- 1.5 module is callable through dofile
+  assert_true(type(d.unified) == "function" and type(d.parse) == "function"
+    and type(d.pair_words) == "function" and type(d.meter) == "function",
+    "1.5 diff module exports full API")
+  print("1.1-1.5 diff engine: OK")
+end
+
+-- === pretty-transcript-rendering: agent (tasks 2.1-2.5) =================
+do
+  local ws = "/tmp/tether_ptr_ws"
+  os.execute("rm -rf " .. ws .. " && mkdir -p " .. ws)
+  local diffmod = assert(loadfile("src/tether/diff.lua"))()
+  local pc = assert(loadfile("src/tether/providers/common.lua"))()
+
+  local saved = {}
+  for _, n in ipairs({"tether","config","session","api","agent","context","tools","diff","provider_common"}) do
+    saved[n] = _G[n]
+  end
+
+  local function fresh()
+    _G.tether = host_mock{
+      realpath = function(p) return (p:gsub("/+$", "")) end,
+      getcwd = function() return ws end,
+      exec = function() return true, 0 end,
+    }
+    _G.config = { get_system_prompt = function() return nil end }
+    _G.session = { append = function() end }
+    _G.tools = assert(loadfile("src/tether/tools.lua"))()
+    _G.diff = diffmod
+    _G.provider_common = pc
+    local a = assert(loadfile("src/tether/agent.lua"))()
+    _G.agent = a
+    return a
+  end
+
+  local function scripted(steps)
+    local n = 0
+    return function(cfg, key, hist, cb)
+      n = n + 1
+      local s = steps[n]
+      if not s then return true end
+      for _, ev in ipairs(s) do cb(ev) end
+      return true
+    end
+  end
+
+  local function write_file(name, content)
+    local f = assert(io.open(ws .. "/" .. name, "w")); f:write(content); f:close()
+  end
+  local function read_file(name)
+    local f = io.open(ws .. "/" .. name, "r")
+    if not f then return nil end
+    local d = f:read("*a"); f:close(); return d
+  end
+  local function cfg() return { workspace = ws, context = {}, _session_id = "s" } end
+  local function turn_events(a)
+    local starts, results = {}, {}
+    a.turn(cfg(), "k", "go", function(e)
+      if e.type == "tool_call_start" then starts[#starts + 1] = e end
+      if e.type == "tool_result" then results[#results + 1] = e end
+    end)
+    return starts, results
+  end
+
+  -- 2.1 + 2.3 write carries args, body is the applied diff, history matches
+  do
+    write_file("w.txt", "l1\nl2\nl3\n")
+    local a = fresh()
+    _G.api = { stream = scripted({
+      { { type = "tool_call_start", id = "c1", name = "write" },
+        { type = "tool_call_delta", id = "c1", arguments = pc.json_encode({ path = "w.txt", content = "l1\nX\nl3\n" }) } },
+      { { type = "text_delta", text = "done" } },
+    }) }
+    local starts, results = turn_events(a)
+    assert_eq(starts[1] and starts[1].args and starts[1].args.path, "w.txt", "2.1 tool_call_start carries args")
+    local proj = starts[1] and starts[1].projection
+    assert_notnil(proj, "2.2 write event carries projection")
+    assert_eq(proj.kind, "overwrite", "2.2 projection kind overwrite")
+    assert_true(proj.diff:find("-l2", 1, true) ~= nil and proj.diff:find("+X", 1, true) ~= nil,
+      "2.2 projection diff describes change")
+    local res = results[1]
+    assert_notnil(diffmod.parse(res.body), "2.3 write body is a diff")
+    assert_true(res.summary:find("+1", 1, true) ~= nil and res.summary:find("−1", 1, true) ~= nil,
+      "2.3 write summary +N −M")
+    assert_true(res.summary:find("перезаписан", 1, true) ~= nil, "2.3 write summary overwritten")
+    local hist
+    for _, m in ipairs(a.get_history()) do if m.role == "tool" then hist = m.content end end
+    assert_eq(hist, res.body, "2.3 history body equals UI body")
+  end
+
+  -- 2.2 new file projects a creation diff
+  do
+    local a = fresh()
+    _G.api = { stream = scripted({
+      { { type = "tool_call_start", id = "c2", name = "write" },
+        { type = "tool_call_delta", id = "c2", arguments = pc.json_encode({ path = "new.txt", content = "a\nb\n" }) } },
+      { { type = "text_delta", text = "ok" } },
+    }) }
+    local starts = turn_events(a)
+    local proj = starts[1] and starts[1].projection
+    assert_eq(proj and proj.kind, "new", "2.2 new file projection kind")
+    assert_true(proj.diff:find("@@ -0,0 +1,2 @@", 1, true) ~= nil, "2.2 new file creation diff")
+  end
+
+  -- 2.2 patch projects the submitted diff; 2.3 body is that diff
+  do
+    write_file("p.txt", "a\nb\n")
+    local patchstr = "--- a/p.txt\n+++ b/p.txt\n@@ -1,2 +1,2 @@\n a\n-b\n+B\n"
+    local a = fresh()
+    _G.api = { stream = scripted({
+      { { type = "tool_call_start", id = "c3", name = "patch" },
+        { type = "tool_call_delta", id = "c3", arguments = pc.json_encode({ patch = patchstr }) } },
+      { { type = "text_delta", text = "ok" } },
+    }) }
+    local starts, results = turn_events(a)
+    local proj = starts[1] and starts[1].projection
+    assert_eq(proj and proj.kind, "patch", "2.2 patch projection kind")
+    assert_eq(proj.add, 1, "2.2 patch add count")
+    assert_eq(proj.del, 1, "2.2 patch del count")
+    assert_true(results[1].body:find("+B", 1, true) ~= nil, "2.3 patch body is the diff")
+  end
+
+  -- 2.2 oversized / outside-workspace / non-write tools: no projection, no read
+  do
+    write_file("big.txt", string.rep("z\n", 600000))
+    local helper = fresh()
+    local before = read_file("big.txt")
+    local c = { workspace = ws }
+    assert_eq(helper._projection_for("write", { path = "big.txt", content = "x" }, c), nil,
+      "2.2 oversized target: no projection")
+    assert_eq(read_file("big.txt"), before, "2.2 oversized target file unchanged")
+    assert_eq(helper._projection_for("write", { path = "/etc/passwd", content = "x" }, c), nil,
+      "2.2 outside workspace: no projection")
+    assert_eq(helper._projection_for("read", { path = "big.txt" }, c), nil,
+      "2.2 other tools: no projection")
+  end
+
+  -- 2.4 oversized previous content falls back to the written path, no counts
+  do
+    write_file("big2.txt", string.rep("z\n", 600000))
+    local a = fresh()
+    _G.api = { stream = scripted({
+      { { type = "tool_call_start", id = "c4", name = "write" },
+        { type = "tool_call_delta", id = "c4", arguments = pc.json_encode({ path = "big2.txt", content = "small\n" }) } },
+      { { type = "text_delta", text = "ok" } },
+    }) }
+    local _, results = turn_events(a)
+    assert_eq(results[1].body, "big2.txt", "2.4 oversized fallback body is the path")
+    assert_true(results[1].summary:find("−", 1, true) == nil, "2.4 fallback summary has no diff counts")
+    assert_true(results[1].summary:find("B", 1, true) ~= nil, "2.4 fallback summary keeps byte form")
+  end
+
+  -- 2.4 a failed call keeps its error body and error summary
+  do
+    write_file("p2.txt", "a\nb\n")
+    local bad = "--- a/p2.txt\n+++ b/p2.txt\n@@ -1,2 +1,2 @@\n x\n-y\n+Y\n"
+    local a = fresh()
+    _G.api = { stream = scripted({
+      { { type = "tool_call_start", id = "c5", name = "patch" },
+        { type = "tool_call_delta", id = "c5", arguments = pc.json_encode({ patch = bad }) } },
+      { { type = "text_delta", text = "ok" } },
+    }) }
+    local _, results = turn_events(a)
+    assert_notnil(results[1].error, "2.4 failed call reports error")
+    assert_true(results[1].body:find("conflict", 1, true) ~= nil, "2.4 error body is kept")
+    assert_true(results[1].summary:find("✗", 1, true) ~= nil, "2.4 error summary uses the failure marker")
+  end
+
+  -- 2.5 other tools keep their body/summary; truncation still applies
+  do
+    local a = fresh()
+    _G.api = { stream = scripted({
+      { { type = "tool_call_start", id = "c6", name = "run" },
+        { type = "tool_call_delta", id = "c6", arguments = pc.json_encode({ command = "echo hi" }) } },
+      { { type = "text_delta", text = "ok" } },
+    }) }
+    local _, results = turn_events(a)
+    assert_true(results[1].summary:find("exit", 1, true) ~= nil, "2.5 run summary unchanged")
+
+    local a2 = fresh()
+    local bigout = string.rep("L", 20000)
+    _G.tools.run = function() return { output = bigout, exit_code = 0, elapsed_ms = 1 } end
+    _G.api = { stream = scripted({
+      { { type = "tool_call_start", id = "c7", name = "run" },
+        { type = "tool_call_delta", id = "c7", arguments = pc.json_encode({ command = "x" }) } },
+      { { type = "text_delta", text = "ok" } },
+    }) }
+    turn_events(a2)
+    local hist
+    for _, m in ipairs(a2.get_history()) do if m.role == "tool" then hist = m.content end end
+    assert_true(hist and hist:find("truncated", 1, true) ~= nil, "2.5 TOOL_BODY_MAX truncation still applies")
+  end
+
+  for _, n in ipairs({"tether","config","session","api","agent","context","tools","diff","provider_common"}) do
+    _G[n] = saved[n]
+  end
+  os.execute("rm -rf " .. ws)
+  print("2.1-2.5 agent projection/diff bodies: OK")
+end
+
+-- === pretty-transcript-rendering: UI rows/expansion/diffs (3.1-4.6) ====
+do
+  local diffmod = assert(loadfile("src/tether/diff.lua"))()
+
+  local uimod, S = run_ui_with({ 17 }, {})
+  local strip = uimod.strip_sgr
+  local function boot()
+    local m, st = run_ui_with({ 17 }, {})
+    return m, st
+  end
+  local function set_tools(m, st, list)
+    st.transcript = {}
+    st.known_count = 0
+    st.expand_all = false
+    st.scroll = 0
+    st.user_scrolled = false
+    for _, e in ipairs(list) do
+      e.role = "tool"
+      st.transcript[#st.transcript + 1] = e
+    end
+    m._invalidate_all()
+    return st.transcript
+  end
+
+  -- 3.1 status marker + clipped first error line
+  do
+    local m, st = boot()
+    local e = set_tools(m, st, { { name = "read", status = "ok", summary = "214 стр.", body = "abc" } })[1]
+    assert_true(strip(m._render_all(80)[1]):find("✓ read", 1, true) ~= nil,
+      "3.1 success row leads with the done glyph")
+    local f = set_tools(m, st, { { name = "run", status = "error", summary = "✗ boom1",
+      body = "boom1\nboom2\nboom3\nboom4" } })[1]
+    local rows = m._render_all(60)
+    assert_eq(#rows, 1, "3.1 failed row occupies exactly one row")
+    assert_true(strip(rows[1]):find("✗ run", 1, true) == 1, "3.1 failed row starts with ✗ run")
+    assert_true(strip(rows[1]):find("boom1", 1, true) ~= nil, "3.1 first error line visible")
+    assert_true(strip(rows[1]):find("boom2", 1, true) == nil, "3.1 later error lines hidden")
+    assert_true(m.vlen(rows[1]) <= 60, "3.1 failed row stays within the width")
+    f.expand_state = "expanded"
+    m._invalidate_all()
+    assert_true(strip(table.concat(m._render_all(60), "\n")):find("boom4", 1, true) ~= nil,
+      "3.1 full error behind expansion")
+    f.expand_state = nil
+    m._ascii_mode = true
+    m._invalidate_all()
+    assert_true(strip(m._render_all(80)[1]):find("[x] run", 1, true) ~= nil,
+      "3.1 ascii failure marker")
+    m._ascii_mode = nil
+  end
+
+  -- 3.2 sanitize_output
+  do
+    local m, st = boot()
+    local s = m.sanitize_output("abc\27[2K\27]0;title\7def\r\nghi\rj")
+    assert_true(s:find("\27", 1, true) == nil, "3.2 no escape sequence survives")
+    assert_true(s:find("title", 1, true) == nil, "3.2 OSC dropped")
+    assert_true(s:find("\r", 1, true) == nil, "3.2 carriage returns dropped")
+    assert_eq(s, "abcdef\nghij", "3.2 visible text only")
+    assert_eq(m.sanitize_output("a\27[31mb\27[0m"), "a\27[31mb\27[0m", "3.2 SGR survives while colour on")
+    m._ascii_mode = true
+    assert_eq(m.sanitize_output("a\27[31mb\27[0m"), "ab", "3.2 colour off strips SGR")
+    m._ascii_mode = nil
+    assert_eq(m.sanitize_output("a\n\n\n\nb"), "a\n\nb", "3.2 blank-line runs collapse")
+    local e = set_tools(m, st, { { name = "run", status = "ok", summary = "exit 0",
+      body = "x\27[2Ky\r" } })[1]
+    local before = e.body
+    m._invalidate_all()
+    m._render_all(80)
+    assert_eq(e.body, before, "3.2 stored body stays raw")
+  end
+
+  -- 3.3 per-entry / all-entries expansion
+  do
+    local m, st = boot()
+    st.kb_protocol = 1
+    local list = set_tools(m, st, {
+      { name = "read", status = "ok", summary = "1 стр.", body = "a" },
+      { name = "read", status = "ok", summary = "2 стр.", body = "b" },
+    })
+    m._handle_key({ kind = "ctrl", code = 15, shift = false })
+    assert_eq(list[2].expand_state, "expanded", "3.3 ctrl+o toggles the newest visible entry")
+    assert_eq(list[1].expand_state, nil, "3.3 the older entry is untouched")
+    assert_eq(m.transcript_height(80), #m._render_all(80), "3.3 height exact after per-entry toggle")
+    m._handle_key({ kind = "ctrl", code = 15, shift = true })
+    assert_eq(st.expand_all, true, "3.3 ctrl+shift+o expands all")
+    assert_eq(list[1].expand_state, nil, "3.3 ctrl+shift+o clears per-entry state")
+    assert_eq(list[2].expand_state, nil, "3.3 ctrl+shift+o clears per-entry state (2)")
+    st.kb_protocol = 0
+    m._handle_key({ kind = "ctrl", code = 15, shift = false })
+    assert_eq(st.expand_all, false, "3.3 plain terminal keeps ctrl+o = expand-all")
+  end
+
+  -- 3.3 ctrl+o with no tool row in the viewport falls back to the newest tool
+  do
+    local m, st = boot()
+    st.kb_protocol = 1
+    st.transcript = { { role = "tool", name = "read", status = "ok", summary = "1 стр.", body = "a" } }
+    for i = 1, 60 do
+      st.transcript[#st.transcript + 1] = { role = "system", text = "row " .. i }
+    end
+    m._invalidate_all()
+    st.scroll = 10
+    st.user_scrolled = true
+    m._handle_key({ kind = "ctrl", code = 15, shift = false })
+    assert_eq(st.transcript[1].expand_state, "expanded",
+      "3.3 ctrl+o falls back to the newest tool when the viewport holds none")
+  end
+
+  -- 3.4 click toggling under ui.mouse = "on" / "auto"
+  do
+    local m, st = boot()
+    st.cfg.ui = st.cfg.ui or {}
+    st.cfg.ui.mouse = "on"
+    local e = set_tools(m, st, { { name = "grep", status = "ok", summary = "1 совп.", body = "a" } })[1]
+    m._handle_key({ kind = "mouse", name = "press", row = 1, col = 1, button = 0 })
+    assert_eq(e.expand_state, "expanded", "3.4 click toggles the entry")
+    st.cfg.ui.mouse = "auto"
+    e.expand_state = nil
+    m._invalidate_all()
+    m._handle_key({ kind = "mouse", name = "press", row = 1, col = 1, button = 0 })
+    assert_eq(e.expand_state, nil, "3.4 auto mode delivers no transcript click")
+  end
+
+  -- 3.5 keymap documents the new bindings
+  do
+    assert_notnil(uimod.KEYMAP["ctrl+shift+o"], "3.5 ctrl+shift+o documented")
+    assert_true(uimod.KEYMAP["ctrl+o"]:find("tool", 1, true) ~= nil, "3.5 ctrl+o documents the per-entry toggle")
+  end
+
+  -- 4.1 tool body highlighting
+  do
+    local m, st = boot()
+    st.cfg.ui = st.cfg.ui or {}
+    st.cfg.ui.highlight = "on"
+    local e = set_tools(m, st, { { name = "read", status = "ok", summary = "1 стр.",
+      body = "1\tlocal x = 1 -- comment", path = "src/a.lua", expand_state = "expanded" } })[1]
+    local on = m._render_all(80)
+    assert_true(table.concat(on):find("\27[", 1, true) ~= nil, "4.1 lua read body is coloured")
+    st.cfg.ui.highlight = "off"
+    m._invalidate_all()
+    local off = m._render_all(80)
+    st.cfg.ui.highlight = "on"
+    m._invalidate_all()
+    local on2 = m._render_all(80)
+    assert_eq(#on2, #off, "4.1 strip-equality: same row count")
+    for i = 1, #on2 do
+      assert_eq(strip(on2[i]), strip(off[i]), "4.1 strip equals plain row " .. i)
+      assert_eq(m.vlen(on2[i]), m.vlen(off[i]), "4.1 identical geometry row " .. i)
+    end
+    set_tools(m, st, { { name = "read", status = "ok", summary = "1 стр.",
+      body = "1\tlocal x", path = "a.xyz", expand_state = "expanded" } })
+    local urows = m._render_all(80)
+    local ubody = {}
+    for i = 2, #urows do ubody[#ubody + 1] = urows[i] end
+    assert_true(table.concat(ubody):find("\27[", 1, true) == nil,
+      "4.1 unknown extension stays plain")
+    set_tools(m, st, { { name = "run", status = "ok", summary = "exit 0",
+      body = "local x = 1", expand_state = "expanded" } })
+    local rrows = m._render_all(80)
+    local rbody = {}
+    for i = 2, #rrows do rbody[#rbody + 1] = rrows[i] end
+    assert_true(table.concat(rbody):find("\27[", 1, true) == nil,
+      "4.1 run body stays plain")
+    set_tools(m, st, { { name = "grep", status = "ok", summary = "2 совп.", expand_state = "expanded",
+      body = "a.lua:1: local x = 1\nb.json:1: {\"a\":1}" } })
+    assert_true(table.concat(m._render_all(80)):find("\27[", 1, true) ~= nil,
+      "4.1 grep rows follow their own paths")
+  end
+
+  -- 4.2 write/patch rendered as a unified diff, plain fallback
+  do
+    local m, st = boot()
+    st.cfg.ui = st.cfg.ui or {}
+    st.cfg.ui.highlight = "on"
+    local dtxt = diffmod.unified("l1\nl2\nl3\nl4\nl5\n", "l1\nl2\nl3\nX\nl5\n", "a/w.lua", "b/w.lua")
+    set_tools(m, st, { { name = "write", status = "ok", summary = "+1 −1 перезаписан",
+      body = dtxt, path = "w.lua", expand_state = "expanded" } })
+    local joined = table.concat(m._render_all(80), "\n")
+    assert_true(strip(joined):find("+X", 1, true) ~= nil, "4.2 added line rendered")
+    assert_true(strip(joined):find("-l4", 1, true) ~= nil, "4.2 removed line rendered")
+    assert_true(joined:find("\27[", 1, true) ~= nil, "4.2 diff coloured")
+    set_tools(m, st, { { name = "write", status = "ok", summary = "+1 B",
+      body = "just text", path = "w.txt", expand_state = "expanded" } })
+    assert_true(strip(table.concat(m._render_all(80), "\n")):find("just text", 1, true) ~= nil,
+      "4.2 non-diff body renders as plain text")
+  end
+
+  -- 4.3 word-level emphasis and mono degradation
+  do
+    local m, st = boot()
+    st.cfg.ui = st.cfg.ui or {}
+    st.cfg.ui.highlight = "on"
+    local dtxt = diffmod.unified("local foo = 1\n", "local foo = 2\n")
+    set_tools(m, st, { { name = "write", status = "ok", summary = "+1 −1 перезаписан",
+      body = dtxt, path = "w.lua", expand_state = "expanded" } })
+    local joined = table.concat(m._render_all(80), "")
+    assert_true(joined:find("\27[2m", 1, true) ~= nil, "4.3 carried words rendered muted")
+    m.set_theme("mono")
+    m._invalidate_all()
+    assert_true(table.concat(m._render_all(80), ""):find("\27[", 1, true) == nil,
+      "4.3 mono theme renders without emphasis or escapes")
+    m.set_theme("default")
+    -- over-long line skips emphasis; row still one per line
+    local long = string.rep("x ", 300)
+    local dtxt2 = diffmod.unified(long .. "\n", long .. "y\n")
+    set_tools(m, st, { { name = "write", status = "ok", summary = "+1 −1 перезаписан",
+      body = dtxt2, path = "w.lua", expand_state = "expanded" } })
+    assert_true(table.concat(m._render_all(80), ""):find("\27[", 1, true) ~= nil,
+      "4.3 over-long diff still renders")
+  end
+
+  -- 4.4 summary meter
+  do
+    local m, st = boot()
+    set_tools(m, st, { { name = "write", status = "ok", summary = "+12 −3 перезаписан", path = "w.lua" } })
+    local head = strip(m._render_all(80)[1])
+    assert_true(head:find("+12 −3", 1, true) ~= nil, "4.4 summary counts")
+    assert_true(head:find("━", 1, true) ~= nil, "4.4 meter present")
+    set_tools(m, st, { { name = "write", status = "ok", summary = "+34 −0 создан", path = "n.lua" } })
+    assert_true(strip(m._render_all(80)[1]):find("━", 1, true) ~= nil, "4.4 created meter present")
+    m._ascii_mode = true
+    m._invalidate_all()
+    assert_true(strip(m._render_all(80)[1]):find("#", 1, true) ~= nil, "4.4 ascii meter uses #")
+    m._ascii_mode = nil
+  end
+
+  -- 4.5 pending projection, result replacement and denial drop
+  do
+    local m, st = boot()
+    local proj = { path = "w.lua", kind = "overwrite", diff = "@@ -1 +1 @@\n-a\n+b\n", add = 1, del = 1 }
+    local e = set_tools(m, st, { { id = "x", name = "write", status = "pending", summary = "",
+      body = proj.diff, projection = proj, path = "w.lua" } })[1]
+    assert_true(strip(m._render_all(80)[1]):find("write", 1, true) ~= nil, "4.5 pending row rendered")
+    e.expand_state = "expanded"
+    m._invalidate_all()
+    assert_true(strip(table.concat(m._render_all(80), "\n")):find("+b", 1, true) ~= nil,
+      "4.5 pending projection is expandable")
+    set_tools(m, st, { { id = "x", name = "write", status = "pending", summary = "",
+      body = proj.diff, projection = proj, path = "w.lua" } })
+    m._handle_agent_event({ type = "tool_result", id = "x", name = "write",
+      summary = "+1 −1 перезаписан", body = "NEWBODY" })
+    assert_eq(st.transcript[1].body, "NEWBODY", "4.5 result replaces the preview")
+    assert_eq(st.transcript[1].projection, nil, "4.5 projection cleared on result")
+    set_tools(m, st, { { id = "y", name = "write", status = "pending", summary = "",
+      body = proj.diff, projection = proj, path = "w.lua" } })
+    m._handle_agent_event({ type = "tool_result", id = "y", name = "write",
+      error = "denied by user", summary = "✗ denied by user", body = "denied by user" })
+    assert_eq(st.transcript[1].body, "", "4.5 denied call drops the preview/result body")
+    assert_eq(st.transcript[1].projection, nil, "4.5 denied call clears the projection")
+  end
+
+  -- 4.6 virtualization invariants with the new row shapes
+  do
+    local m, st = boot()
+    st.cfg.ui = st.cfg.ui or {}
+    st.cfg.ui.highlight = "on"
+    local old = string.rep("line\n", 50)
+    local new = string.rep("line\n", 49) .. "CHANGED\n"
+    local dtxt = diffmod.unified(old, new)
+    local e = set_tools(m, st, { { name = "write", status = "ok", summary = "+1 −1 перезаписан",
+      body = dtxt, path = "w.lua" } })[1]
+    assert_eq(m.transcript_height(80), #m._render_all(80), "4.6 collapsed parity")
+    e.expand_state = "expanded"
+    m._touch_entry(e)
+    assert_eq(m.transcript_height(80), #m._render_all(80), "4.6 per-entry toggle keeps parity")
+    assert_true(m.cache_rows() <= math.max(4 * (st.h - 6), 1024) + 64, "4.6 large diff respects the cache bound")
+  end
+
+  print("3.1-4.6 UI rows/expansion/diffs: OK")
+end
+
+-- T82 (2.1): the palette window helper is pure — at most 8 rows and at most
+-- half the terminal height, never below one, with the offset keeping the
+-- selected row inside the window.
+do
+  local ui = dofile("src/tether/ui.lua")
+  local function inside(h, n, sel)
+    local w, o = ui._palette_window(h, n, sel)
+    return sel >= o and sel <= o + w - 1
+  end
+  assert_eq(ui._palette_window(24, 20, 1), 8, "T82 window capped at 8 rows")
+  assert_eq(ui._palette_window(12, 20, 1), 6, "T82 half the terminal shrinks the window")
+  assert_eq(ui._palette_window(24, 3, 2), 3, "T82 a short list fits its own window")
+  assert_eq(ui._palette_window(24, 0, 1), 0, "T82 no entries, no window")
+  assert_eq(ui._palette_window(1, 5, 3), 1, "T82 the window never drops below one row")
+  assert_true(inside(24, 20, 1), "T82 selection stays inside (first)")
+  assert_true(inside(24, 20, 10), "T82 selection stays inside (middle)")
+  assert_true(inside(24, 20, 20), "T82 selection stays inside (last)")
+  assert_true(inside(12, 20, 7), "T82 selection stays inside on a short terminal")
+  local _, o = ui._palette_window(24, 20, 10)
+  assert_true(o > 1, "T82 the window shifts off the first entry")
+  print("T82 2.1 palette window: OK")
+end
+
+if failed > 0 then
+    os.exit(1)
+end
+
+-- T83 (2.2/2.3/2.4/2.5/3.1): frames — the window follows the selection, the
+-- overflow indicator sits in the row the reserved region already holds and is
+-- built from digits and `/` only, a short terminal shrinks the window and drops
+-- the indicator instead of painting over the separator or the status line, the
+-- argument hint is visible on a skill row only, and a palette click is resolved
+-- through the window offset.
+do
+  local agent_stub = { turn = function() return true end, get_history = function() return {} end }
+  local function strip(s) return (s or ""):gsub("\27%[[%d;]*m", "") end
+  local function many_skills()
+    local out = {}
+    for i = 1, 12 do
+      out[i] = {
+        name = "skill" .. string.format("%02d", i),
+        description = "desc " .. i,
+        path = "/tmp/skills/s" .. i .. "/SKILL.md",
+      }
+    end
+    return out
+  end
+  local function boot(stub, size)
+    local uimod = run_ui_with({ 17 }, { agent = agent_stub, size = size })
+    uimod._skills_stub = stub
+    return uimod
+  end
+  local function type_text(uimod, text)
+    for i = 1, #text do
+      uimod._handle_key({ kind = "text", char = text:sub(i, i) })
+    end
+  end
+  local function rows_with(uimod, S, needle)
+    local out = {}
+    for r = 1, S.h do
+      if strip(uimod._row(r)):find(needle, 1, true) then out[#out + 1] = r end
+    end
+    return out
+  end
+
+  -- 2.2/2.3: 19 entries on a 24-row terminal → an 8-row window plus indicator
+  local uimod = boot(many_skills)
+  type_text(uimod, "/")
+  uimod._paint(true)
+  local S = uimod._get_state()
+  local L = uimod._layout()
+  assert_eq(#S.palette_items, 19, "T83 twelve skills join the seven commands")
+  local win, off = uimod._palette_window(S.h, #S.palette_items, S.palette_sel)
+  assert_eq(win, 8, "T83 eight window rows")
+  assert_eq(off, 1, "T83 the first entry starts the window")
+  local painted = 0
+  for i = 1, win do
+    if strip(uimod._row(L.palette_row + i)):find("/", 1, true) then painted = painted + 1 end
+  end
+  assert_eq(painted, win, "T83 every window row is painted")
+  assert_true(strip(uimod._row(L.palette_row + win + 1)):match("^%s*1/19%s*$") ~= nil,
+    "T83 the indicator is digits and a slash")
+  assert_true(L.palette_row + win + 1 <= L.separator_row - 1, "T83 the indicator row is inside the region")
+
+  -- 2.2: the window follows the selection
+  for _ = 1, 10 do uimod._handle_key({ kind = "special", name = "down" }) end
+  uimod._paint(true)
+  S = uimod._get_state()
+  local win2 = uimod._palette_window(S.h, #S.palette_items, S.palette_sel)
+  assert_eq(S.palette_sel, 11, "T83 the selection moved to the 11th entry")
+  assert_eq(#rows_with(uimod, S, "/clear"), 0, "T83 the first entry is no longer painted")
+  assert_true(#rows_with(uimod, S, S.palette_items[S.palette_sel].label) > 0,
+    "T83 the selected entry is painted")
+  assert_true(strip(uimod._row(L.palette_row + win2 + 1)):match("^%s*11/19%s*$") ~= nil,
+    "T83 the indicator follows the selection")
+  assert_true(strip(uimod._row(L.separator_row)):find("─", 1, true) ~= nil,
+    "T83 the separator survives the palette")
+  assert_true(strip(uimod._row(L.status_row)):find("test", 1, true) ~= nil,
+    "T83 the status line keeps its content")
+
+  -- 3.1: the hint is on the skill row only
+  local one = boot(function() return {
+    { name = "deploy", description = "deploy stuff", path = "/tmp/skills/deploy/SKILL.md" } } end)
+  type_text(one, "/")
+  one._paint(true)
+  local S1 = one._get_state()
+  local L1 = one._layout()
+  assert_eq(#S1.palette_items, 8, "T83 eight entries fit the window")
+  local skill_rows = rows_with(one, S1, "/deploy")
+  local command_rows = rows_with(one, S1, "/clear")
+  assert_eq(#skill_rows, 1, "T83 the skill row is painted")
+  assert_eq(#command_rows, 1, "T83 the command row is painted")
+  assert_true(strip(one._row(skill_rows[1])):find("[задача]", 1, true) ~= nil,
+    "T83 the skill row shows [задача]")
+  assert_true(strip(one._row(command_rows[1])):find("[", 1, true) == nil,
+    "T83 the command row shows no hint")
+  assert_true(strip(one._row(L1.palette_row + 8 + 1)):match("%d+/%d+") == nil,
+    "T83 no indicator while everything fits")
+
+  -- 2.5: a click is resolved through the window offset
+  local m = boot(many_skills)
+  type_text(m, "/")
+  for _ = 1, 10 do m._handle_key({ kind = "special", name = "down" }) end
+  local Sm = m._get_state()
+  local Lm = m._layout()
+  local _, offm = m._palette_window(Sm.h, #Sm.palette_items, Sm.palette_sel)
+  local target = Sm.palette_items[offm + 2] -- the third painted row
+  assert_notnil(target, "T83 the third painted row has an entry")
+  assert_true(target.skill, "T83 the third painted row is a skill")
+  m._handle_key({ kind = "mouse", name = "press", row = Lm.palette_row + 3, col = 5, button = 0 })
+  Sm = m._get_state()
+  assert_eq(Sm.input, "/" .. target.name .. " ", "T83 the click follows the window offset")
+
+  -- 2.5: the indicator row selects nothing
+  local m2 = boot(many_skills)
+  type_text(m2, "/")
+  for _ = 1, 10 do m2._handle_key({ kind = "special", name = "down" }) end
+  local S2 = m2._get_state()
+  local L2 = m2._layout()
+  local w2 = m2._palette_window(S2.h, #S2.palette_items, S2.palette_sel)
+  local sel_before, input_before = S2.palette_sel, S2.input
+  m2._handle_key({ kind = "mouse", name = "press", row = L2.palette_row + w2 + 1, col = 5, button = 0 })
+  S2 = m2._get_state()
+  assert_eq(S2.palette_sel, sel_before, "T83 the indicator row selects nothing")
+  assert_eq(S2.input, input_before, "T83 the indicator row changes no input")
+  assert_true(S2.palette_active, "T83 the palette stays open")
+
+  -- 2.4: a 12-row terminal halves the window, the indicator still fits
+  local t12 = boot(many_skills, { width = 80, height = 12 })
+  type_text(t12, "/")
+  t12._paint(true)
+  local S12 = t12._get_state()
+  local L12 = t12._layout()
+  local w12 = t12._palette_window(S12.h, #S12.palette_items, S12.palette_sel)
+  assert_eq(w12, 6, "T83 a 12-row terminal shrinks the window to half")
+  assert_eq(L12.palette_h, w12 + 2, "T83 the reserved region follows the window")
+  assert_true(strip(t12._row(L12.palette_row + w12 + 1)):match("^%s*1/19%s*$") ~= nil,
+    "T83 the indicator still fits above the separator")
+  assert_true(strip(t12._row(L12.separator_row)):find("─", 1, true) ~= nil,
+    "T83 separator intact on a short terminal")
+  assert_true(strip(t12._row(L12.status_row)):find("test", 1, true) ~= nil,
+    "T83 status line intact on a short terminal")
+
+  -- 2.3: on an 8-row terminal the indicator has no room: it is dropped and the
+  -- palette paints nothing over the separator or the status line
+  local t8 = boot(many_skills, { width = 80, height = 8 })
+  type_text(t8, "/")
+  t8._paint(true)
+  local S8 = t8._get_state()
+  local L8 = t8._layout()
+  local w8 = t8._palette_window(S8.h, #S8.palette_items, S8.palette_sel)
+  assert_true(L8.palette_row + w8 + 1 > L8.separator_row - 1, "T83 the indicator row is outside the region")
+  for r = L8.palette_row + 1, L8.separator_row - 1 do
+    assert_true(strip(t8._row(r)):match("%d+/%d+") == nil,
+      "T83 no indicator is painted when it does not fit (row " .. r .. ")")
+  end
+  assert_true(#rows_with(t8, S8, "/clear") > 0, "T83 the palette still paints its window")
+  assert_true(strip(t8._row(L8.separator_row)):find("─", 1, true) ~= nil,
+    "T83 the separator is never painted by the palette")
+  assert_true(strip(t8._row(L8.status_row)):find("test", 1, true) ~= nil,
+    "T83 the status line is never painted by the palette")
+
+  print("T83 2.2-3.1 window/indicator/hint frames: OK")
+end
+
+-- T84 (1.2): Tab completion resolves tools through the host global — the
+-- production lookup path, with no M._tools_stub in play. Regression: ui.lua
+-- looked the module up with require("tools"), which the host does not provide
+-- (modules are globals, main.c load_module), so Tab was a silent no-op in the
+-- binary while every stubbed test still passed.
+do
+  local orig_tools = _G.tools
+  local real_tools = { path_complete = function(token, _cfg)
+    if token == "src/tether/ag" then
+      return { candidates = { "src/tether/agent.lua" }, truncated = false }
+    end
+    return { candidates = {}, truncated = false }
+  end }
+  local uimod = run_ui_with({ 17 },
+    { agent = { turn = function() return true end, get_history = function() return {} end } })
+  uimod._tools_stub = nil
+  _G.tools = real_tools -- the harness restores globals after run()
+
+  local input = "src/tether/ag"
+  for i = 1, #input do
+    uimod._handle_key({ kind = "text", char = input:sub(i, i) })
+  end
+  uimod._handle_key({ kind = "tab" })
+  local S = uimod._get_state()
+  assert_eq(S.input, "src/tether/agent.lua", "T84 Tab completes through the host global")
+  assert_eq(S.cursor, #S.input, "T84 cursor follows the completion")
+  assert_true(S.cursor <= #S.input, "T84 cursor never moves past the end of the input")
+
+  -- a token with no candidate leaves the input alone (the lookup still worked)
+  local uimod2 = run_ui_with({ 17 },
+    { agent = { turn = function() return true end, get_history = function() return {} end } })
+  uimod2._tools_stub = nil
+  _G.tools = real_tools
+  for i = 1, #"src/nope" do
+    uimod2._handle_key({ kind = "text", char = ("src/nope"):sub(i, i) })
+  end
+  uimod2._handle_key({ kind = "tab" })
+  assert_eq(uimod2._get_state().input, "src/nope", "T84 no candidate leaves the input alone")
+
+  -- the production path keeps text after the token too, with the cursor left
+  -- directly after the completed path and before that text
+  local uimod3 = run_ui_with({ 17 },
+    { agent = { turn = function() return true end, get_history = function() return {} end } })
+  uimod3._tools_stub = nil
+  _G.tools = real_tools
+  local tailed = "src/tether/ag.bak"
+  for i = 1, #tailed do
+    uimod3._handle_key({ kind = "text", char = tailed:sub(i, i) })
+  end
+  for _ = 1, 4 do uimod3._handle_key({ kind = "special", name = "left" }) end
+  uimod3._handle_key({ kind = "tab" })
+  local S3 = uimod3._get_state()
+  assert_eq(S3.input, "src/tether/agent.lua.bak", "T84 unique completion keeps the tail")
+  assert_eq(S3.cursor, #"src/tether/agent.lua", "T84 cursor stops before the tail")
+  assert_true(S3.cursor < #S3.input, "T84 cursor is not pushed to the end of the input")
+
+  _G.tools = orig_tools
+  print("T84 1.2 production tools lookup: OK")
 end
 
 if failed > 0 then

@@ -117,7 +117,18 @@ active provider; an unknown `provider` warns on stderr and behaves as
 
 ## Slash commands
 
-`/clear /compact /model /resume /new /quit /copy /skills`
+`/clear /compact /model /resume /new /quit /copy`
+
+Typing `/` opens one palette listing those commands followed by every
+discovered skill as `/skill-name`. Filtering is a case-insensitive
+subsequence match over the whole list; when the list is longer than the
+window the palette scrolls (at most 8 rows and at most half the terminal
+height) so the selected row stays visible, with a dim `N/total` indicator on
+the row below the entries. Skill rows show a `[задача]` hint for the task text
+that follows the name. Enter runs the highlighted command, or completes
+`/<name> ` into the input for a skill — submitting that then sends the name to
+the agent as an ordinary message, and the agent reads the skill file through
+the skills index in its prompt.
 
 - `/clear` clears the transcript display only — the agent keeps its
   history, so the next turn still sees the full context. `/new`
@@ -134,6 +145,19 @@ active provider; an unknown `provider` warns on stderr and behaves as
 - **Syntax highlighting** in fenced code blocks: lua, c, sh, python, js, go,
   rust, json (`ui.highlight`, on by default for truecolor/256-color terminals,
   off for mono/ascii).
+- **Tool result rows**: a leading `✓`/`✗`/pending marker with a one-line
+  summary; a failed call shows its first error line clipped to the row, with
+  the full error behind expansion. Expanded `read`/`grep` bodies are
+  syntax-highlighted from the file extension.
+- **Expansion**: `Ctrl+O` toggles the newest tool result visible in the
+  viewport, `Ctrl+Shift+O` toggles all results at once (on terminals that
+  report the Shift modifier); with `ui.mouse = "on"` a left click toggles the
+  clicked result. On plain terminals `Ctrl+O` keeps its expand-all meaning.
+- **Diffs for `write`/`patch`**: the result body renders as a unified diff
+  with old/new line numbers, add/remove colours and word-level emphasis; the
+  row summary reports `+N −M` with a proportional meter and whether the file
+  was created or overwritten. While the call is pending, the projected diff
+  is previewed before the tool runs.
 - **Turn separators** — a dim `── HH:MM ──` row before each user turn
   (`ui.turn_separators`;
   set `false` to hide).
@@ -155,8 +179,11 @@ active provider; an unknown `provider` warns on stderr and behaves as
 - **ASCII fallback**: on `TERM=dumb`/`NO_COLOR` all glyphs degrade to ASCII.
 - **`/copy`** — copies the last assistant answer, last tool output, last
   code block, or the full transcript to the clipboard.
-- **`/skills`** — lists available skills and appends the chosen skill's
-  reference to the input line.
+- **Slash palette with skills** — `/` lists the commands and every discovered
+  skill as `/name` (with the skill's argument hint); the list scrolls in a
+  window with an `N/total` indicator, and picking a skill only writes
+  `/<name> ` into the input. Submitting `/<name>` sends it to the agent as a
+  normal message; `/skills` no longer exists.
 - **`↓ +N` marker** on the newest visible transcript row while the user is
   scrolled up; the status line shows the same `↓ +N` count.
 
@@ -164,9 +191,10 @@ active provider; an unknown `provider` warns on stderr and behaves as
 
 UI keys live under `ui = { ... }` in `~/.tether/config.lua`:
 
-- `ui.highlight = "auto"` — syntax highlighting in fenced code blocks.
-  Values: `"auto"` / `"on"` / `"off"`. `auto` turns highlighting on when
-  the terminal color depth is above 16 colors, off for mono/ascii.
+- `ui.highlight = "auto"` — syntax highlighting in fenced code blocks and in
+  expanded `read`/`grep` tool bodies. Values: `"auto"` / `"on"` / `"off"`.
+  `auto` turns highlighting on when the terminal color depth is above 16
+  colors, off for mono/ascii.
 - `ui.turn_separators = true` — dim `── HH:MM ──` dividers before consecutive
   user turns; set `false` to disable.
 - `ui.path_completion = true` — Tab completes the workspace-relative path
@@ -182,6 +210,7 @@ UI keys live under `ui = { ... }` in `~/.tether/config.lua`:
 - **Lua modules** (`src/tether/`): loaded as globals via `lua_setglobal`
   - `config` — configuration loading, validation
   - `tools` — file I/O: `read`, `list`, `glob`, `grep`, `write`, `patch`, `run`
+  - `diff` — pure-Lua unified-diff engine (hunks, parsing, word pairing, meter)
   - `api` — SSE streaming to LLM via the in-process HTTPS transport
   - `agent` — tool dispatch loop, conversation history
   - `session` — JSONL journal, auto-save, resume by workspace

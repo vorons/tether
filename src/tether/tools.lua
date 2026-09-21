@@ -147,7 +147,11 @@ function M.path_complete(token, cfg)
     for _, e in ipairs(entries) do
         if e:sub(1, #filepfx) == filepfx then
             -- 4.4: directories get a trailing / so a second completion lists inside them
-            local label = is_dir(abs_dir .. "/" .. e) and (e .. "/") or e
+            local base = is_dir(abs_dir .. "/" .. e) and (e .. "/") or e
+            -- The candidate carries the typed directory: completing replaces the
+            -- whole token, so a bare name would drop it (spec tui: Path
+            -- completion — the token becomes `src/tether/agent.lua`).
+            local label = (dir == "") and base or (dir .. "/" .. base)
             candidates[#candidates + 1] = label
             if #candidates >= limit then truncated = true break end
         end

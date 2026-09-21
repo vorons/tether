@@ -1,0 +1,6 @@
+schema: spec-driven
+created: 2026-09-21
+# No spec-level behavior changes: the tui spec already requires Tab path
+# completion in the workspace, and this change only makes the shipped binary
+# conform to it (the requirement text is untouched).
+skip_specs: true

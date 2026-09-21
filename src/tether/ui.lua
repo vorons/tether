@@ -80,10 +80,10 @@ end
 -- The spec promises TERM=dumb renders pure ASCII; the old code only stripped
 -- ANSI colors, leaving box-drawing and emoji-width glyphs to break layout.
 local GLYPH_MAP = {
-    ["●"] = "*", ["⚙"] = "[t]", ["›"] = ">", ["✗"] = "x", ["✻"] = "*",
+    ["●"] = "*", ["⚙"] = "[t]", ["›"] = ">", ["✗"] = "[x]", ["✓"] = "[ok]", ["✻"] = "*",
     ["↻"] = "[r]", ["⏹"] = "[x]", ["⚠"] = "!", ["▸"] = ">", ["▾"] = "v",
     ["┌"] = "+", ["┐"] = "+", ["└"] = "+", ["┘"] = "+", ["─"] = "-",
-    ["│"] = "|", ["•"] = "-", ["…"] = "...", ["▓"] = "#", ["░"] = "-",
+    ["│"] = "|", ["•"] = "-", ["…"] = "...", ["▓"] = "#", ["░"] = "-", ["━"] = "#",
     ["↑"] = "^", ["↓"] = "v", ["←"] = "<", ["→"] = ">",
 }
 local function to_ascii(s)
@@ -727,7 +727,7 @@ local SLASH_COMMANDS = {
     { label = "/new",     desc = "начать новую сессию",              cmd = "new" },
     { label = "/quit",    desc = "выход",                            cmd = "quit" },
     { label = "/copy",    desc = "копировать из транскрипта",        cmd = "copy" },
-    { label = "/skills",  desc = "скиллы проекта",                   cmd = "skills" },
+    -- unified-slash-palette: /skills removed — skills are entries of this list
 }
 M.SLASH_COMMANDS = SLASH_COMMANDS
 
@@ -784,7 +784,8 @@ local KEYMAP = {
     ["ctrl+q"]     = "quit",
     ["ctrl+r"]     = "resume picker",
     ["ctrl+n"]     = "new session",
-    ["ctrl+o"]     = "expand all",
+    ["ctrl+o"]     = "toggle newest tool result",
+    ["ctrl+shift+o"] = "expand/collapse all tool results",
     ["ctrl+t"]     = "toggle thinking",
     ["ctrl+l"]     = "clear screen",
     ["ctrl+a"]     = "line start",
@@ -893,6 +894,7 @@ local function new_state()
         palette_mode = "command",
         palette_items = {},
         palette_sel = 1,
+        palette_skills = nil,    -- 1.3: skill rows, resolved once per palette open
         _in_copy_palette = nil,  -- 5.2: set when the /copy palette is open
 
         -- 5.4: one-shot confirmation; cleared on the next keypress in handle_key
@@ -1019,6 +1021,24 @@ local function input_lines()
     return out
 end
 
+-- unified-slash-palette 2.1: palette window geometry. Pure, so tests can call
+-- it directly. Height: at most 8 rows and at most half the terminal height,
+-- never below one. Offset: shifts so the selected row stays inside the window.
+local function palette_window(h, n, sel)
+    if n <= 0 then return 0, 1 end
+    local win = math.min(n, 8, math.max(1, math.floor(h / 2)))
+    if sel < 1 then sel = 1 end
+    if sel > n then sel = n end
+    local off = 1
+    if win < n then
+        off = sel - math.floor(win / 2)
+        if off < 1 then off = 1 end
+        if off > n - win + 1 then off = n - win + 1 end
+    end
+    return win, off
+end
+M._palette_window = palette_window
+
 local function layout()
     local total = #input_lines()
     local max_in = (S.cfg and S.cfg.ui and S.cfg.ui.input_max_lines) or 8
@@ -1027,7 +1047,10 @@ local function layout()
 
     local palette_h = 0
     if S.palette_active and #S.palette_items > 0 then
-        palette_h = math.min(#S.palette_items, 8) + 2
+        -- 2.4: the reserved region follows the window (items + 2); the indicator
+        -- row the palette may paint fits inside it (see render_palette)
+        local win = palette_window(S.h, #S.palette_items, S.palette_sel)
+        palette_h = win + 2
     end
     local error_h = S.error_banner and 1 or 0
 
@@ -1054,6 +1077,8 @@ local function layout()
         status_row = S.h,
     }
 end
+-- Test seam: the region layout, so frame tests can address palette rows.
+M._layout = function() return S and layout() end
 
 -- ============================================================
 -- Screen buffer (row diff)
@@ -1082,35 +1107,108 @@ M._row = function(row) return S and S.screen[row] or nil end
 -- ============================================================
 -- Palette: derived from input
 -- ============================================================
-local function palette_sync()
+-- unified-slash-palette 1.2: skill rows for the palette. Discovery is injected
+-- so tests can stub it (M._skills_stub, mirroring M._tools_stub); a discovery
+-- problem degrades to no rows instead of breaking the palette.
+local PALETTE_SKILL_HINT = "[задача]"
+
+local function discover_palette_skills()
+    local ok, res
+    if M._skills_stub then
+        ok, res = pcall(M._skills_stub)
+    else
+        ok, res = pcall(function()
+            -- modules are exposed as globals by the host (main.c load_module),
+            -- the same way agent/session/api are reached here; require() only
+            -- works in the plain-Lua test harness
+            local ctx = context
+            return ctx and ctx.discover_skills(S.cfg, S.workspace)
+        end)
+    end
+    if not ok or type(res) ~= "table" then return {} end
+    return res
+end
+
+-- Command names own their token: comparison ignores case in the palette and on
+-- the submit path alike, so a colliding skill gets neither a row nor a dispatch.
+local function command_set()
+    local set = {}
+    for _, c in ipairs(SLASH_COMMANDS) do set[c.cmd:lower()] = c end
+    return set
+end
+
+local function palette_skill_rows()
+    local commands = command_set()
+    local rows = {}
+    for _, sk in ipairs(discover_palette_skills()) do
+        local name = tostring(sk.name or "")
+        if name ~= "" and not commands[name:lower()] then
+            rows[#rows + 1] = {
+                label = "/" .. name,
+                desc = sk.description or "",
+                hint = PALETTE_SKILL_HINT,
+                skill = true,
+                name = name,
+                path = sk.path or "",
+            }
+        end
+    end
+    return rows
+end
+
+-- 4.2: submit-time lookup over the discovered skills, case-insensitive.
+local function palette_skill_named(name)
+    for _, row in ipairs(palette_skill_rows()) do
+        if (row.name or ""):lower() == name then return row end
+    end
+    return nil
+end
+
+-- forward declaration: palette_pick_skill closes the palette through it
+local palette_sync
+
+-- 4.1: a skill row only composes text into the input and closes the palette —
+-- nothing is executed and no skill body is read (spec: Palette).
+local function palette_pick_skill(it)
+    S.input = (it.label or ("/" .. (it.name or ""))) .. " "
+    S.cursor = #S.input
+    palette_sync() -- the trailing space closes the palette
+end
+
+palette_sync = function()
     if S._in_copy_palette then return end -- 5.2: copy palette is set explicitly
-    if S._in_skills_palette then return end -- 6.1: skills palette is set explicitly
     local first = S.input
     local nl = first:find("\n", 1, true)
     if nl then first = first:sub(1, nl - 1) end
 
-    if first:sub(1, 1) ~= "/" then
+    local function palette_hide()
         S.palette_active = false
         S.palette_items = {}
         S.palette_sel = 1
-        return
-    end
-    local filter = first:sub(2):lower()
-    if filter:find(" ", 1, true) then
-        S.palette_active = false
-        S.palette_items = {}
-        S.palette_sel = 1
-        return
+        S.palette_skills = nil
     end
 
+    if first:sub(1, 1) ~= "/" then palette_hide() return end
+    local filter = first:sub(2):lower()
+    if filter:find(" ", 1, true) then palette_hide() return end
+
+    local was_active = S.palette_active
     S.palette_active = true
-    -- 3.2: fuzzy ranking; declaration-order tie-breaks, empty filter lists all
+    -- 1.3: resolved once per open, not on every keystroke
+    if not was_active then S.palette_skills = palette_skill_rows() end
+
+    -- 3.2: fuzzy ranking; declaration-order tie-breaks, empty filter lists all.
+    -- unified-slash-palette 1.4: one list — commands in declared order, then the
+    -- discovered skills, ranked together so a prefix match wins in either group.
+    local entries = {}
+    for _, c in ipairs(SLASH_COMMANDS) do entries[#entries + 1] = c end
+    for _, r in ipairs(S.palette_skills or {}) do entries[#entries + 1] = r end
     local labels = {}
-    for _, c in ipairs(SLASH_COMMANDS) do labels[#labels + 1] = c.label end
+    for _, e in ipairs(entries) do labels[#labels + 1] = e.label end
     local order = M.fuzzy_rank(filter, labels)
     local items = {}
     for _, idx in ipairs(order) do
-        items[#items + 1] = SLASH_COMMANDS[idx]
+        items[#items + 1] = entries[idx]
     end
     S.palette_items = items
     if S.palette_sel < 1 then S.palette_sel = 1 end
@@ -1147,7 +1245,10 @@ local function completion_apply(label)
     local replace = at and ("@" .. label) or label
     local head = S.input:sub(1, comp.start - 1)
     S.input = head .. replace .. (comp.tail or "")
-    S.cursor = comp.start + #replace
+    -- comp.start is one-based and S.cursor is a zero-based offset, so the
+    -- cursor lands directly after the applied text: before the tail, and never
+    -- past the end of the input (spec tui: Path completion)
+    S.cursor = comp.start - 1 + #replace
 end
 -- 4.3: gated on ui.path_completion; Tab inside an open palette keeps its
 -- command-completion meaning (handled by the palette branch of handle_key).
@@ -1159,7 +1260,12 @@ M._skills_stub = nil
 local function path_complete_tab()
     if S.palette_active then return end
     if S.cfg and S.cfg.ui and S.cfg.ui.path_completion == false then return end
+    -- The host loads every module and exposes it as a global (load_module in
+    -- main.c calls lua_setglobal and never package.preload), so the production
+    -- lookup has to read the global; require() only resolves in the plain-Lua
+    -- harness, which is why it stays as a fallback.
     local tools_mod = M._tools_stub
+        or tools
         or (pcall(require, "tools") and package.loaded.tools)
         or nil
     if tools_mod == nil or tools_mod.path_complete == nil then return end
@@ -1169,8 +1275,12 @@ local function path_complete_tab()
     local cands = (r and r.candidates) or {}
     if #cands == 0 then return end -- no candidates -> input unchanged, no palette
     if #cands == 1 then
-        -- one-shot apply; no cycle state to restore
-        local one_comp = { start = token_pos, stop = token_pos + #token, original = token }
+        -- one-shot apply; no cycle state to restore, but the text after the
+        -- token still has to survive: a unique candidate completes the token
+        -- in place (spec tui: Path completion), so completing `ag` inside
+        -- `ag.bak` must not lose `.bak`. The palette branch carries the same tail.
+        local one_comp = { start = token_pos, stop = token_pos + #token,
+            original = token, tail = S.input:sub(token_pos + #token) }
         S.completion = one_comp
         completion_apply(cands[1])
         S.completion = nil
@@ -1205,7 +1315,7 @@ local function completion_cancel()
     if not comp then return end
     S.completion = nil
     S.input = S.input:sub(1, comp.start - 1) .. comp.original .. (comp.tail or "")
-    S.cursor = comp.start + #comp.original
+    S.cursor = comp.start - 1 + #comp.original
     S.palette_active = false
     S.palette_mode = "command"
     S.palette_items = {}
@@ -1264,7 +1374,9 @@ local function input_clear()
     S.cursor = 0
     -- 6.1: palette modes set explicitly (copy/skills) survive input_clear;
     -- palette_sync is a no-op for them via the _in_*_palette flags.
-    if not S._in_copy_palette and not S._in_skills_palette then palette_sync() end
+    -- 5.2: the copy palette sets its items explicitly; palette_sync is a no-op
+    -- for it via the _in_copy_palette flag (the palette is otherwise derived).
+    if not S._in_copy_palette then palette_sync() end
 end
 
 local function cursor_line_col()
@@ -1424,6 +1536,242 @@ local function with_prefix(prefix, pad_n, body)
     return out
 end
 
+-- ============================================================
+-- pretty-transcript-rendering: sanitization, highlighting, diffs
+-- ============================================================
+-- The diff engine is a global in the built binary; the loadfile fallback keeps
+-- plain-lua development and `lua tests/lua_tests.lua` working.
+local diff_mod = _G.diff
+    or (function()
+        local chunk = loadfile("src/tether/diff.lua")
+        return chunk and chunk()
+    end)()
+
+-- 3.2: drop every control sequence except SGR colour. Cursor moves, erase
+-- sequences, carriage returns and OSC/DCS escapes must never reach a
+-- transcript row; blank-line runs collapse. This is display-only: the stored
+-- body and the model's copy stay raw. SGR survives only while colour is on.
+local function sanitize_output(text)
+    if type(text) ~= "string" then return text end
+    local keep_sgr = M.color_depth() ~= "none"
+    local out = {}
+    local i, n = 1, #text
+    while i <= n do
+        local c = text:sub(i, i)
+        if c == "\27" then
+            local nx = text:sub(i + 1, i + 1)
+            if nx == "[" then
+                local j = i + 2
+                while j <= n do
+                    local b = text:byte(j)
+                    if b and b >= 0x30 and b <= 0x3F then j = j + 1 else break end
+                end
+                while j <= n do
+                    local b = text:byte(j)
+                    if b and b >= 0x20 and b <= 0x2F then j = j + 1 else break end
+                end
+                local final = text:sub(j, j)
+                if final == "m" and keep_sgr then out[#out + 1] = text:sub(i, j) end
+                i = j + 1
+            elseif nx == "]" then
+                local j = i + 2
+                while j <= n do
+                    local bj = text:sub(j, j)
+                    if bj == "\7" then j = j + 1; break end
+                    if bj == "\27" and text:sub(j + 1, j + 1) == "\\" then j = j + 2; break end
+                    j = j + 1
+                end
+                i = j
+            elseif nx == "P" or nx == "X" or nx == "^" or nx == "_" then
+                local j = i + 2
+                while j <= n do
+                    if text:sub(j, j) == "\27" and text:sub(j + 1, j + 1) == "\\" then j = j + 2; break end
+                    j = j + 1
+                end
+                i = j
+            else
+                i = i + 2
+            end
+        elseif c == "\r" then
+            if text:sub(i + 1, i + 1) == "\n" then out[#out + 1] = "\n"; i = i + 2 else i = i + 1 end
+        elseif c == "\n" or c == "\t" then
+            out[#out + 1] = c; i = i + 1
+        else
+            local b = text:byte(i)
+            if b and (b < 32 or b == 127) then i = i + 1 else out[#out + 1] = c; i = i + 1 end
+        end
+    end
+    local s = table.concat(out)
+    s = s:gsub("\n[ \t]*\n[ \t]*\n+", "\n\n")
+    return s
+end
+M.sanitize_output = sanitize_output
+
+-- 4.1: extension -> highlighter language (the highlighter keys are in HL_LANGS).
+local EXT_LANG = {
+    lua = "lua", c = "c", h = "c", sh = "sh", bash = "sh", py = "python",
+    js = "js", ts = "ts", go = "go", rs = "rust", json = "json",
+}
+local function lang_for_path(p)
+    if type(p) ~= "string" then return nil end
+    local ext = p:match("%.([%w_]+)$")
+    return ext and EXT_LANG[ext:lower()] or nil
+end
+M.lang_for_path = lang_for_path
+
+-- Clip a plain (SGR-free or SGR-aware) string to a display-width budget.
+local function clip(s, budget)
+    if budget < 1 then return "" end
+    if vlen(s) <= budget then return s end
+    return trunc(s, budget)
+end
+
+-- 3.3/4.5: effective expansion for a tool entry: an explicit per-entry state
+-- overrides the inherited all-entries flag, which defaults to collapsed.
+local function entry_expanded(e)
+    if e.expand_state == "expanded" then return true end
+    if e.expand_state == "collapsed" then return false end
+    return S and S.expand_all or false
+end
+M._entry_expanded = entry_expanded
+
+local function body_line_iter(body)
+    return (body .. "\n"):gmatch("([^\n]*)\n")
+end
+
+-- 4.2: one tokenizer state spans the body; syntax roles win over the
+-- add/remove/context base role, plain tokens take the base role.
+local function highlight_diff_line(text, lang, state, base_fn)
+    if not lang then return base_fn(text) end
+    local toks = M.tokenize_line(text, lang, state)
+    local out = {}
+    for _, t in ipairs(toks) do
+        local role = HL_ROLE[t.kind]
+        if role then out[#out + 1] = sgr_role(role, t.text)
+        else out[#out + 1] = base_fn(t.text) end
+    end
+    return table.concat(out)
+end
+
+-- 4.3: changed words keep the add/remove role, carried words are muted.
+local function emphasize(segs, role_fn)
+    local out = {}
+    for _, s in ipairs(segs) do
+        if s.changed then out[#out + 1] = role_fn(s.text)
+        else out[#out + 1] = dim(s.text) end
+    end
+    return table.concat(out)
+end
+
+local function diff_gutter(old, new)
+    return string.format("%4s %4s ", old and tostring(old) or "", new and tostring(new) or "")
+end
+
+local function diff_row_string(row, lang, state, emph)
+    local kind = row.kind
+    if kind == "file-header" or kind == "hunk-header" or kind == "no-newline" then
+        return dim(row.text or "")
+    end
+    local role_fn = function(s) return s end
+    if kind == "remove" then role_fn = red
+    elseif kind == "add" then role_fn = green end
+    local marker = (kind == "add" and "+") or (kind == "remove" and "-") or " "
+    local g
+    if kind == "context" then g = diff_gutter(row.old, row.new)
+    elseif kind == "add" then g = diff_gutter(nil, row.new)
+    else g = diff_gutter(row.old, nil) end
+    local content
+    if emph then content = emphasize(emph, role_fn)
+    else content = highlight_diff_line(row.text or "", lang, state, role_fn) end
+    return g .. marker .. content
+end
+
+-- Render a parsed diff: line-number gutter, add/remove/context roles, syntax
+-- colouring by the target path and word emphasis on paired runs.
+local function render_diff_rows(rows, path, inner)
+    local lang = lang_for_path(path)
+    local state = {}
+    local out = {}
+    local i = 1
+    while i <= #rows do
+        local r = rows[i]
+        if r.kind == "remove" then
+            local r0 = i
+            while i <= #rows and rows[i].kind == "remove" do i = i + 1 end
+            local a0 = i
+            while i <= #rows and rows[i].kind == "add" do i = i + 1 end
+            local rem, add = {}, {}
+            for k = r0, a0 - 1 do rem[#rem + 1] = rows[k] end
+            for k = a0, i - 1 do add[#add + 1] = rows[k] end
+            local emph_old, emph_new = {}, {}
+            local paired = #rem > 0 and #rem == #add
+            if paired and diff_mod then
+                for k = 1, #rem do
+                    emph_old[k], emph_new[k] = diff_mod.pair_words(rem[k], add[k])
+                end
+            end
+            for k = 1, #rem do
+                out[#out + 1] = diff_row_string(rem[k], lang, state, paired and emph_old[k] or nil)
+            end
+            for k = 1, #add do
+                out[#out + 1] = diff_row_string(add[k], lang, state, paired and emph_new[k] or nil)
+            end
+        elseif r.kind == "add" then
+            out[#out + 1] = diff_row_string(r, lang, state, nil)
+            i = i + 1
+        else
+            out[#out + 1] = diff_row_string(r, lang, state, nil)
+            i = i + 1
+        end
+    end
+    return out
+end
+
+-- Expanded tool body -> wrapped rows (no leading indent; the caller adds it).
+local function render_tool_body(name, e, inner)
+    local body = sanitize_output(e.body or "")
+    if body == "" then return {} end
+    local hl = highlight_enabled()
+    if name == "write" or name == "patch" then
+        local rows = diff_mod and diff_mod.parse(body)
+        if rows then return render_diff_rows(rows, hl and e.path or nil, inner) end
+        return wrap(body, math.max(inner, 1))
+    end
+    if name == "read" then
+        local lang = hl and lang_for_path(e.path) or nil
+        if lang then
+            local state = {}
+            local coloured = {}
+            for line in body_line_iter(body) do
+                local num, content = line:match("^(%d+)\t(.*)$")
+                if num then
+                    coloured[#coloured + 1] = num .. "\t" .. M.highlight_line(content, lang, state)
+                else
+                    coloured[#coloured + 1] = line
+                end
+            end
+            return wrap(table.concat(coloured, "\n"), math.max(inner, 1))
+        end
+    elseif name == "grep" then
+        local state_by = {}
+        local coloured = {}
+        for line in body_line_iter(body) do
+            local p = line:match("^(.-):%d+: (.*)$")
+            local l = (hl and p) and lang_for_path(p) or nil
+            if l then
+                state_by[l] = state_by[l] or {}
+                coloured[#coloured + 1] = line:gsub("^(.-:%d+: )(.*)$", function(pfx, c)
+                    return pfx .. M.highlight_line(c, l, state_by[l])
+                end)
+            else
+                coloured[#coloured + 1] = line
+            end
+        end
+        return wrap(table.concat(coloured, "\n"), math.max(inner, 1))
+    end
+    return wrap(body, math.max(inner, 1))
+end
+
 local function render_entry(e, width)
     -- Synthetic tail entries go through the same path as real entries so the
     -- height index, the scroll indicator and the parity helper stay consistent.
@@ -1471,24 +1819,49 @@ local function render_entry(e, width)
     elseif role == "system" then
         return { dim(e.text or "") }
     elseif role == "tool" then
-        local marker = e.status == "error" and red("✗") or yellow("⚙")
+        -- 3.1: leading status marker; a failed row appends its first error line
+        -- (clipped) so the failure is visible without expanding.
+        local marker
+        if e.status == "pending" then marker = yellow("…")
+        elseif e.status == "error" then marker = red("✗")
+        else marker = green("✓") end
         local head = marker .. " " .. yellow(e.name or "?")
         if e.status == "pending" then
             -- M8/R3: pending tools show live elapsed time
-            local elapsed = ""
             if e.started_at then
                 local secs = os.time() - e.started_at
-                elapsed = string.format(" %s %.1fs", (M._ascii_mode or M._env_ascii or _ascii) and "." or "…", secs)
+                head = head .. "  " .. dim(string.format(" %.1fs", secs))
             end
-            head = head .. "  " .. dim("…" .. elapsed)
+        elseif e.status == "error" then
+            local raw = (e.body ~= nil and e.body ~= "") and e.body or (e.summary or "")
+            raw = sanitize_output(raw):gsub("^✗%s*", "")
+            local first = raw:match("^[^\n]*") or ""
+            local budget = width - vlen(head) - 1
+            if budget >= 1 then head = head .. " " .. red(clip(first, budget)) end
+            head = trunc(head, width)
         elseif e.summary and e.summary ~= "" then
             head = head .. "  " .. dim(e.summary)
         end
+        -- 4.4: the write/patch row carries the +N -M meter.
+        if e.status ~= "error" and (e.name == "write" or e.name == "patch") and diff_mod then
+            local add, del
+            if e.projection then
+                add, del = e.projection.add, e.projection.del
+            else
+                local a, d = (e.summary or ""):match("^%+(%d+) −(%d+)")
+                add, del = tonumber(a), tonumber(d)
+            end
+            if add then
+                local ab, db = diff_mod.meter(add, del or 0)
+                if ab > 0 then head = head .. " " .. green(string.rep("━", ab)) end
+                if db > 0 then head = head .. red(string.rep("━", db)) end
+            end
+        end
         local out = { head }
-        local show = e.body and e.body ~= "" and
-                     (e.status == "error" or S.expand_all)
-        if show then
-            local bl = wrap(e.body, math.max(width - 2, 1))
+        -- 3.3: the full body (including a failed call's error text and a
+        -- pending write/patch projection) is behind expansion.
+        if e.body and e.body ~= "" and entry_expanded(e) then
+            local bl = render_tool_body(e.name, e, math.max(width - 2, 1))
             local cap = e.collapse_lines
                 or M.tool_collapse_cap(e.name, S.cfg and S.cfg.ui and S.cfg.ui.collapse, 200)
             for i, l in ipairs(bl) do
@@ -1859,13 +2232,27 @@ end
 local function render_palette(L)
     if not S.palette_active or #S.palette_items == 0 then return end
     -- M9: no frame; selected item is accent-colored, not reverse-video
-    local shown = math.min(#S.palette_items, L.palette_h - 2)
-    for i = 1, shown do
-        local it = S.palette_items[i]
-        local text = string.format(" %-10s %s", it.label or "", it.desc or "")
-        text = trunc(text, L.w - 2)
+    -- 2.2/2.3: a window over the ranked list, shifted so the selected row is
+    -- inside it, plus a dim pos/total row when the list overflows it. Neither
+    -- the separator nor the status row is ever painted here.
+    local n = #S.palette_items
+    local win, off = palette_window(L.h, n, S.palette_sel)
+    local last = L.separator_row - 1
+    for i = 1, win do
         local row = L.palette_row + i
-        set_row(row, (i == S.palette_sel) and sgr_role("accent", text) or dim(text))
+        if row > last then break end
+        local it = S.palette_items[off + i - 1]
+        if it then
+            -- 3.1: the argument hint sits after the name when the entry has one
+            local label = it.label or ""
+            if it.hint then label = label .. " " .. it.hint end
+            local text = trunc(string.format(" %-10s %s", label, it.desc or ""), L.w - 2)
+            set_row(row, (off + i - 1 == S.palette_sel) and sgr_role("accent", text) or dim(text))
+        end
+    end
+    local irow = L.palette_row + win + 1
+    if n > win and irow <= last then
+        set_row(irow, dim(trunc(string.format(" %d/%d", S.palette_sel, n), L.w - 2)))
     end
 end
 
@@ -2360,38 +2747,8 @@ local function execute_command(cmd)
         S._in_copy_palette = true
         return
     end
-    if cmd == "skills" then
-        -- 6.1: open the skills palette; discovery is lazy (test seam: M._skills_stub)
-        local skills
-        if M._skills_stub then
-            skills = M._skills_stub() or {}
-        else
-            local ok, res = pcall(function()
-                local ctx = require("context")
-                return ctx.discover_skills(S.cfg, S.workspace)
-            end)
-            skills = (ok and res) or {}
-        end
-        local items = {}
-        if #skills > 0 then
-            for _, sk in ipairs(skills) do
-                items[#items + 1] = {
-                    label = sk.name or "skill",
-                    desc = sk.description or "",
-                    path = sk.path or "",
-                }
-            end
-        else
-            -- explicit empty state: Enter on this row does nothing (6.3)
-            items[#items + 1] = { label = "(нет скиллов)", desc = "", empty = true }
-        end
-        S.palette_mode = "skills"
-        S.palette_active = true
-        S.palette_items = items
-        S.palette_sel = 1
-        S._in_skills_palette = true
-        return
-    end
+    -- unified-slash-palette: /skills removed — skills are entries of the one
+    -- palette, so the separate palette mode and the [skill: …] reference are gone
     if cmd == "model" then
         local ok, models = pcall(api.list_models_live, S.cfg, S.api_key or "")
         if not ok then models = nil end
@@ -2480,10 +2837,17 @@ local function handle_agent_event(ev)
         touch_entry(last)
         sync_tail()
     elseif ev.type == "tool_call_start" then
+        -- pretty-transcript-rendering 2.1/4.5: carry the parsed arguments and
+        -- the read-only projection; a pending write/patch previews its diff.
+        local proj = ev.projection
         S.transcript[#S.transcript + 1] = {
             role = "tool", id = ev.id or tostring(#S.transcript + 1),
             started_at = os.time(), -- M8/R3: for elapsed display
-            name = ev.name or "?", status = "pending", summary = "", body = "",
+            name = ev.name or "?", status = "pending", summary = "",
+            body = (proj and proj.diff) or "",
+            args = ev.args,
+            path = proj and proj.path or (ev.args and ev.args.path),
+            projection = proj,
         }
         S.waiting = false
         S.streaming = false
@@ -2496,7 +2860,11 @@ local function handle_agent_event(ev)
             if e.role == "tool" and e.id == ev.id then
                 e.status = ev.error and "error" or "ok"
                 e.summary = ev.summary or ""
-                e.body = ev.body or ""
+                -- 4.5: a denial/cancellation drops the preview and leaves no
+                -- result body; any other outcome replaces the preview.
+                local dropped = ev.error == "denied by user" or ev.error == "cancelled by user"
+                e.body = dropped and "" or (ev.body or "")
+                e.projection = nil
                 target = e
                 break
             end
@@ -2507,6 +2875,13 @@ local function handle_agent_event(ev)
     elseif ev.type == "aborted" then
         S.waiting = false
         S.streaming = false
+        -- 4.5: an aborted call drops its pending projection
+        for _, e in ipairs(S.transcript) do
+            if e.role == "tool" and e.status == "pending" then
+                e.projection = nil
+                e.body = ""
+            end
+        end
         S.transcript[#S.transcript + 1] = { role = "system", text = "⏹ прервано (Ctrl+C)" }
         bump_transcript()
         sync_tail()
@@ -2587,6 +2962,8 @@ local function handle_agent_event(ev)
     paint(force)
 end
 
+M._handle_agent_event = handle_agent_event
+
 local function commit_input()
     local text = S.input
     if text:match("^%s*$") then
@@ -2595,10 +2972,22 @@ local function commit_input()
     end
     local trimmed = text:match("^%s*(.-)%s*$")
     if trimmed:sub(1, 1) == "/" then
-        local cmd = trimmed:match("^/(%w+)")
-        if cmd then
-            execute_command(cmd)
-            return
+        local word = trimmed:match("^/(%w+)")
+        if word then
+            -- unified-slash-palette 4.2: names compare without regard to case.
+            -- A built-in command runs (so /CLEAR behaves like /clear); a name
+            -- that resolves to a discovered skill falls through to the ordinary
+            -- submit path below, so the agent receives it as a user message;
+            -- anything else keeps the old command path.
+            local name = word:lower()
+            if command_set()[name] then
+                execute_command(name)
+                return
+            end
+            if not palette_skill_named(name) then
+                execute_command(word)
+                return
+            end
         end
     end
     push_history(text)
@@ -2704,7 +3093,42 @@ local function handle_special(k)
     end
 end
 
-local function handle_ctrl(code)
+-- 3.3: expand every tool entry (and clear per-entry state), or toggle just the
+-- newest tool entry overlapping the viewport (falling back to the newest one).
+local function toggle_all_entries()
+    S.expand_all = not S.expand_all
+    for _, e in ipairs(S.transcript) do e.expand_state = nil end
+    invalidate_all()
+end
+M._toggle_all_entries = toggle_all_entries
+
+local function toggle_newest_visible_tool()
+    local L = layout()
+    local total = ensure_index(L.w)
+    local bottom = total - S.scroll
+    if bottom > total then bottom = total end
+    if bottom < 1 then bottom = 1 end
+    local top = bottom - L.transcript_h + 1
+    if top < 1 then top = 1 end
+    local lo = entry_of_row(top, L.w) or 0
+    local hi = entry_of_row(math.min(total, bottom), L.w) or -1
+    local chosen
+    for i = hi, lo, -1 do
+        local e = entry_at(i)
+        if e and e.role == "tool" then chosen = e; break end
+    end
+    if not chosen then
+        for i = #S.transcript, 1, -1 do
+            if S.transcript[i].role == "tool" then chosen = S.transcript[i]; break end
+        end
+    end
+    if not chosen then return end
+    chosen.expand_state = entry_expanded(chosen) and "collapsed" or "expanded"
+    touch_entry(chosen)
+end
+M._toggle_newest_visible_tool = toggle_newest_visible_tool
+
+local function handle_ctrl(code, shift)
     if code == 1 then move_line_start()
     elseif code == 5 then move_line_end()
     elseif code == 10 then input_insert("\n")   -- Ctrl+J fallback newline
@@ -2715,8 +3139,13 @@ local function handle_ctrl(code)
     elseif code == 14 then
         start_new_session()
     elseif code == 15 then
-        S.expand_all = not S.expand_all
-        invalidate_all()
+        -- Ctrl+O toggles the newest visible tool entry; Ctrl+Shift+O (or a
+        -- terminal that cannot report Shift) keeps the expand-all meaning.
+        if shift or (S.kb_protocol or 0) == 0 then
+            toggle_all_entries()
+        else
+            toggle_newest_visible_tool()
+        end
     elseif code == 20 then
         S.thinking_visible = not S.thinking_visible
         invalidate_all()
@@ -3106,11 +3535,41 @@ local function handle_key(k)
         end
         if k.name == "press" then
             local L = layout()
-            if S.palette_active and k.row >= L.palette_row + 1
-                and k.row <= L.palette_row + math.min(#S.palette_items, L.palette_h - 2) then
-                local idx = k.row - L.palette_row
-                local it = S.palette_items[idx]
-                if it then execute_command(it.cmd) end
+            if S.palette_active and k.row >= L.palette_row + 1 then
+                -- 2.5: hit-test through the window offset; the indicator row
+                -- selects nothing
+                local win, off = palette_window(L.h, #S.palette_items, S.palette_sel)
+                local last = math.min(L.palette_row + win, L.separator_row - 1)
+                if k.row <= last then
+                    local it = S.palette_items[off + (k.row - L.palette_row) - 1]
+                    if it then
+                        if it.skill then
+                            palette_pick_skill(it)
+                        elseif it.cmd then
+                            execute_command(it.cmd)
+                        end
+                    end
+                    return
+                end
+                if k.row == L.palette_row + win + 1 then return end -- indicator row
+            end
+            -- 3.4: a left click toggles the tool entry under the pointer, but
+            -- only where the mouse mode actually delivers transcript clicks.
+            local mode = (S.cfg and S.cfg.ui and S.cfg.ui.mouse) or "auto"
+            if mode == "on" and k.button == 0
+                and k.row >= L.transcript_row
+                and k.row <= L.transcript_row + L.transcript_h - 1 then
+                local total = ensure_index(L.w)
+                local bottom = math.min(total, total - S.scroll)
+                if bottom < 1 then bottom = 1 end
+                local top = bottom - L.transcript_h + 1
+                if top < 1 then top = 1 end
+                local idx = top + (k.row - L.transcript_row)
+                local e = entry_at(idx)
+                if e and e.role == "tool" then
+                    e.expand_state = entry_expanded(e) and "collapsed" or "expanded"
+                    touch_entry(e)
+                end
                 return
             end
         end
@@ -3203,40 +3662,6 @@ local function handle_key(k)
                 return
             end
             return
-        elseif S.palette_mode == "skills" then
-            -- 6.1/6.2/6.3: skills palette — Enter appends a name+path reference
-            -- (never the body); Esc closes; up/down navigate.
-            if k.kind == "enter" then
-                local it = S.palette_items[S.palette_sel]
-                if it and not it.empty then
-                    local ref = string.format("[skill: %s — SKILL.md at %s]", it.label, it.path or "")
-                    S.input = S.input .. " " .. ref
-                    S.cursor = #S.input
-                end
-                S.palette_active = false
-                S.palette_mode = "command"
-                S.palette_items = {}
-                S.palette_sel = 1
-                S._in_skills_palette = nil
-                paint(true)
-                return
-            elseif k.kind == "esc" then
-                S.palette_active = false
-                S.palette_mode = "command"
-                S.palette_items = {}
-                S.palette_sel = 1
-                S._in_skills_palette = nil
-                return
-            elseif k.kind == "special" then
-                local n = #S.palette_items
-                if k.name == "up" then
-                    S.palette_sel = math.max(1, S.palette_sel - 1)
-                elseif k.name == "down" and n > 0 then
-                    S.palette_sel = math.min(n, S.palette_sel + 1)
-                end
-                return
-            end
-            return
         elseif S.palette_mode == "path" then
             -- 4.2/4.3: path palette — Tab cycles, Esc restores the token as
             -- typed, Enter commits the selected path; text/backspace keep the
@@ -3283,7 +3708,10 @@ local function handle_key(k)
             -- command palette (existing behavior, 3.3/3.4/3.5)
             if k.kind == "enter" then
                 local it = S.palette_items[S.palette_sel]
-                if it then execute_command(it.cmd) end
+                if it then
+                    -- 4.1: a skill row composes text; a command row runs
+                    if it.skill then palette_pick_skill(it) else execute_command(it.cmd) end
+                end
                 return
             elseif k.kind == "tab" then
                 local it = S.palette_items[S.palette_sel]
@@ -3333,7 +3761,7 @@ local function handle_key(k)
     elseif k.kind == "newline" then input_insert("\n")
     elseif k.kind == "backspace" then input_backspace()
     elseif k.kind == "esc" then input_clear()
-    elseif k.kind == "ctrl" then handle_ctrl(k.code)
+    elseif k.kind == "ctrl" then handle_ctrl(k.code, k.shift)
     elseif k.kind == "special" then handle_special(k)
     end
 end

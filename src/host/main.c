@@ -987,6 +987,7 @@ int main(int argc, char **argv)
         /* provider_common first: session/agent resolve their JSON helpers to it */
         { provider_common_lua,    "provider_common"    },
         { session_lua, "session" },
+        { diff_lua,   "diff"   },
         { ui_lua,     "ui"     },
         { config_lua, "config" },
         { tools_lua,  "tools"  },
