@@ -16,6 +16,8 @@
 #include <sys/ioctl.h>
 #include <limits.h>
 #include <strings.h>
+#include <poll.h>
+#include <time.h>
 #include <lua.h>
 #include <lauxlib.h>
 #include <lualib.h>
@@ -35,6 +37,70 @@
 
 static struct termios orig_termios;
 static int termios_active = 0;
+
+/* --- Ctrl+C while a turn blocks -------------------------------------------
+   Raw mode clears ISIG, so an in-terminal Ctrl+C arrives as byte 0x03 rather
+   than SIGINT, and the UI reads input only between turns — exactly when no turn
+   is running. While a turn blocks (tether.sleep, an in-flight HTTP transfer)
+   the host therefore watches stdin itself: 0x03 raises `g_interrupt`, and every
+   other byte is queued so read_char still delivers it. That way a Ctrl+C can
+   stop the turn it was meant for, without losing a keystroke. */
+#define PENDING_CAP 256
+static unsigned char g_pending[PENDING_CAP];
+static size_t g_pending_len = 0; /* bytes queued */
+static size_t g_pending_pos = 0; /* bytes handed back */
+static int g_interrupt = 0;
+static int g_stdin_eof = 0; /* stop watching once input is exhausted */
+
+/* Take one queued byte, if any. */
+static int pending_take(unsigned char *out)
+{
+    if (g_pending_pos >= g_pending_len) {
+        g_pending_len = g_pending_pos = 0;
+        return 0;
+    }
+    *out = g_pending[g_pending_pos++];
+    return 1;
+}
+
+/* Non-blocking: queue every available byte, remember a Ctrl+C. Returns non-zero
+   when an interrupt is pending. Never blocks and never delays a caller. */
+static int poll_interrupt(void)
+{
+    if (g_stdin_eof) return g_interrupt;
+    for (;;) {
+        struct pollfd pfd;
+        pfd.fd = STDIN_FILENO;
+        pfd.events = POLLIN;
+        pfd.revents = 0;
+        int rc = poll(&pfd, 1, 0);
+        if (rc <= 0) break;
+        unsigned char buf[64];
+        ssize_t n = read(STDIN_FILENO, buf, sizeof buf);
+        if (n <= 0) {
+            if (n == 0) g_stdin_eof = 1; /* pipes: nothing more will arrive */
+            else if (errno != EINTR && errno != EAGAIN) g_stdin_eof = 1;
+            break;
+        }
+        for (ssize_t i = 0; i < n; i++) {
+            if (buf[i] == 3) {
+                g_interrupt = 1;
+            } else if (g_pending_len - g_pending_pos < PENDING_CAP) {
+                g_pending[g_pending_len++] = buf[i];
+            }
+        }
+    }
+    return g_interrupt;
+}
+
+/* libcurl progress callback: abort an in-flight transfer as soon as Ctrl+C
+   arrives, so a stalled stream cannot hold the turn. */
+static int http_xferinfo(void *clientp, curl_off_t dltotal, curl_off_t dlnow,
+                         curl_off_t ultotal, curl_off_t ulnow)
+{
+    (void)clientp; (void)dltotal; (void)dlnow; (void)ultotal; (void)ulnow;
+    return poll_interrupt() ? 1 : 0;
+}
 
 static void restore_termios(void)
 {
@@ -100,6 +166,12 @@ static int init_termios(void)
 
 static int l_read_char(lua_State *L)
 {
+    /* bytes the watch picked up during a blocked turn come first */
+    unsigned char queued;
+    if (pending_take(&queued)) {
+        lua_pushinteger(L, queued);
+        return 1;
+    }
     char c;
     ssize_t n = read(STDIN_FILENO, &c, 1);
     if (n != 1)
@@ -111,6 +183,11 @@ static int l_read_char(lua_State *L)
 
 static int l_read_char_nb(lua_State *L)
 {
+    unsigned char queued;
+    if (pending_take(&queued)) {
+        lua_pushinteger(L, queued);
+        return 1;
+    }
     fd_set fds;
     struct timeval tv;
     FD_ZERO(&fds);
@@ -763,6 +840,11 @@ static int l_http_stream(lua_State *L)
     curl_easy_setopt(h, CURLOPT_LOW_SPEED_TIME, (long)idle_s);
     curl_easy_setopt(h, CURLOPT_WRITEFUNCTION, http_write_cb);
     curl_easy_setopt(h, CURLOPT_WRITEDATA, &ctx);
+    /* Ctrl+C during a transfer: libcurl calls this between packets, so the
+       turn ends promptly instead of when the provider's stream happens to end. */
+    curl_easy_setopt(h, CURLOPT_NOPROGRESS, 0L);
+    curl_easy_setopt(h, CURLOPT_XFERINFOFUNCTION, http_xferinfo);
+    curl_easy_setopt(h, CURLOPT_XFERINFODATA, NULL);
     if (body_buf != NULL) {
         curl_easy_setopt(h, CURLOPT_POSTFIELDS, body_buf);
         curl_easy_setopt(h, CURLOPT_POSTFIELDSIZE, (long)body_len);
@@ -871,18 +953,59 @@ static int l_resize_requested(lua_State *L)
     return 1;
 }
 
-/* T15: sleep — used by API retry backoff */
-#include <time.h>
-
+/* T15: sleep — used by API retry backoff. add-retry-and-continuation: the wait
+   wakes as soon as input arrives (a Ctrl+C during a backoff ends the wait
+   instead of being read only after the turn it was meant to interrupt), and it
+   still lasts its requested duration when nothing arrives. */
 static int l_sleep(lua_State *L)
 {
     double secs = luaL_optnumber(L, 1, 0.0);
     if (secs <= 0.0) return 0;
-    long us = (long)(secs * 1000000);
-    struct timespec ts;
-    ts.tv_sec = us / 1000000;
-    ts.tv_nsec = (us % 1000000) * 1000L;
-    nanosleep(&ts, NULL);
+    if (g_stdin_eof) {
+        /* nothing to watch: a poll on a closed stdin would return at once */
+        long us = (long)(secs * 1000000);
+        struct timespec ts;
+        ts.tv_sec = us / 1000000;
+        ts.tv_nsec = (us % 1000000) * 1000L;
+        nanosleep(&ts, NULL);
+        return 0;
+    }
+    struct timespec start, now;
+    clock_gettime(CLOCK_MONOTONIC, &start);
+    for (;;) {
+        if (poll_interrupt()) return 0; /* interrupted: end the wait now */
+        clock_gettime(CLOCK_MONOTONIC, &now);
+        double elapsed = (double)(now.tv_sec - start.tv_sec)
+            + (double)(now.tv_nsec - start.tv_nsec) / 1e9;
+        double remaining = secs - elapsed;
+        if (remaining <= 0.0) break;
+        int ms = (int)(remaining * 1000.0);
+        if (ms > 200) ms = 200; /* bounded: re-check the flag at least every 200ms */
+        struct pollfd pfd;
+        pfd.fd = STDIN_FILENO;
+        pfd.events = POLLIN;
+        pfd.revents = 0;
+        poll(&pfd, 1, ms); /* returns early when the user types */
+    }
+    return 0;
+}
+
+/* add-retry-and-continuation: does the user want this turn stopped? The flag
+   stays set until clear_abort(), because the very same Ctrl+C has to keep
+   aborting an in-flight transfer (http_xferinfo) until the turn has actually
+   stopped — only the turn knows when that happened. */
+static int l_abort_requested(lua_State *L)
+{
+    poll_interrupt();
+    lua_pushboolean(L, g_interrupt != 0);
+    return 1;
+}
+
+/* Drop a stale interrupt when a turn starts. */
+static int l_clear_abort(lua_State *L)
+{
+    (void)L;
+    g_interrupt = 0;
     return 0;
 }
 
@@ -921,6 +1044,8 @@ static luaL_Reg tether_api[] = {
     {"http_get",    l_http_get},
     {"resize_requested", l_resize_requested},
     {"sleep",         l_sleep},
+    {"abort_requested", l_abort_requested},
+    {"clear_abort",   l_clear_abort},
     {"detect_kb_protocol", l_detect_kb_protocol},
     {NULL, NULL}
 };
@@ -986,8 +1111,14 @@ int main(int argc, char **argv)
     struct { const char *src; const char *name; } mods[] = {
         /* provider_common first: session/agent resolve their JSON helpers to it */
         { provider_common_lua,    "provider_common"    },
+        /* retry: pure policy module api/agent apply (see src/tether/retry.lua) */
+        { retry_lua,   "retry"   },
         { session_lua, "session" },
         { diff_lua,   "diff"   },
+        /* ask: the structured-question rules ui/agent apply (src/tether/ask.lua) */
+        { ask_lua,    "ask"    },
+        /* transcript: visible conversation model; ui loads it before State */
+        { transcript_lua, "transcript" },
         { ui_lua,     "ui"     },
         { config_lua, "config" },
         { tools_lua,  "tools"  },

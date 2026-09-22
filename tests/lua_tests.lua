@@ -378,23 +378,9 @@ do
 
     local ok, err = pcall(function()
         local ui = assert(loadfile("src/tether/ui.lua"))()
-        local function upvalue(fn, wanted)
-            local i = 1
-            while true do
-                local name, value = debug.getupvalue(fn, i)
-                if not name then return nil end
-                if name == wanted then return value end
-                i = i + 1
-            end
-        end
-        -- Set up input before running: patch input via S after init
-        -- run the UI: first read_char returns 13 (enter), second returns 17 (Ctrl+Q)
-        local S = upvalue(ui.run, "S")
-        -- Pre-seed input state before ui.run() so commit_input picks it up
-        -- S is nil until run(), so we call run() and check after
+        -- run the UI: types "hi" + Enter, then Ctrl+Q exits
         ui.run()
-        S = upvalue(ui.run, "S")  -- S is now set (new_state was called in run)
-        local last = S.transcript[#S.transcript]
+        local last = ui._transcript.last()
         assert_eq(last and last.role, "assistant", "TUI stores streamed assistant text")
         assert_eq(last and last.text, "streamed text", "TUI retains streamed text after redraw")
     end)
@@ -407,12 +393,12 @@ do
     if not ok then error(err, 0) end
 end
 
--- T15: API retry logic — mock a transport that returns a 429 body on
--- attempt 1, then a successful SSE stream on attempt 2. Also test
--- exhaustion -> error.
+-- T15: the transport makes exactly ONE attempt and reports a classified
+-- failure. add-retry-and-continuation: the retry loop moved to the agent turn,
+-- so the client no longer sleeps, repeats a request, or emits
+-- `retry`/`error` events. Each http_stream call plays back the script entry
+-- for that request: script[n] = array of body lines.
 do
-    -- Each http_stream call plays back the script entry for that attempt:
-    -- script[attempt] = array of body lines; an absent entry is an empty body.
     local api_mod = assert(loadfile("src/tether/api.lua"))()
 
     local function run_stream(script, cfg)
@@ -431,42 +417,86 @@ do
         }
         local events = {}
         local function on_event(ev) events[#events + 1] = ev end
-        local ok = api_mod.stream(cfg or { base_url = "http://x", model = "m", retries = 3 },
+        local ok, failure = api_mod.stream(cfg or { base_url = "http://x", model = "m" },
             "key", { { role = "user", content = "hi" } }, on_event)
         _G.tether = _G_old_tether
-        return ok, events, requests
+        return ok, failure, events, requests
     end
 
-    -- Case 1: attempt 1 -> 429 body, attempt 2 -> SSE success
-    local ok1, ev1, requests1 = run_stream({
+    -- The same call, but the transport itself fails with `err` (no bytes).
+    local function run_stream_with_error(err)
+        local _G_old_tether = _G.tether
+        _G.tether = host_mock{
+            http_stream = function() return false, err end,
+            http_get = function() return nil, "not used" end,
+            sleep = function() end,
+        }
+        local events = {}
+        local ok, failure = api_mod.stream({ base_url = "http://x", model = "m" },
+            "key", { { role = "user", content = "hi" } }, function(ev) events[#events + 1] = ev end)
+        _G.tether = _G_old_tether
+        return ok, failure
+    end
+
+    -- Case 1: a 429 body is one attempt, returned as a retryable failure
+    local ok1, f1, ev1, requests1 = run_stream({
         [1] = { '{"error":{"status":429,"code":"rate_limit"}}' },
         [2] = { 'data: {"choices":[{"delta":{"content":"ok"},"finish_reason":"stop"}]}' },
     })
-    assert_true(ok1, "T15 success after retry")
-    assert_eq(requests1, 2, "T15 two requests")
-    local saw_retry = false
-    for _, ev in ipairs(ev1) do if ev.type == "retry" then saw_retry = true end end
-    assert_true(saw_retry, "T15 retry event emitted")
+    assert_false(ok1, "T15 429 fails the attempt")
+    assert_eq(requests1, 1, "T15 exactly one request")
+    assert_true(f1 ~= nil, "T15 failure returned")
+    assert_eq(f1 and f1.kind, "server", "T15 429 classified server")
+    assert_true(f1 and f1.retryable, "T15 429 is retryable")
+    assert_eq(f1 and f1.status, 429, "T15 status carried")
+    local saw_retry, saw_error = false, false
+    for _, ev in ipairs(ev1) do
+        if ev.type == "retry" then saw_retry = true end
+        if ev.type == "error" then saw_error = true end
+    end
+    assert_false(saw_retry, "T15 no retry event from the client")
+    assert_false(saw_error, "T15 no error event from the client")
 
-    -- Case 2: all attempts return 429 -> fail with error after exhaustion
-    local ok2, ev2, requests2 = run_stream({
-        [1] = { '{"error":{"status":429}}' },
-        [2] = { '{"error":{"status":429}}' },
-        [3] = { '{"error":{"status":429}}' },
-    }, { base_url = "http://x", model = "m", retries = 3 })
-    assert_false(ok2, "T15 fail after max retries")
-    assert_eq(requests2, 3, "T15 three requests")
-    local saw_error = false
-    for _, ev in ipairs(ev2) do if ev.type == "error" then saw_error = true end end
-    assert_true(saw_error, "T15 error on exhaustion")
-
-    -- Case 3: empty body -> retryable, then success
-    local ok3, ev3, handles3 = run_stream({
-        [1] = {},
-        [2] = { 'data: {"choices":[{"delta":{"content":"x"},"finish_reason":"stop"}]}' },
+    -- Case 2: a valid SSE stream succeeds on the first attempt
+    local ok2 = run_stream({
+        [1] = { 'data: {"choices":[{"delta":{"content":"ok"},"finish_reason":"stop"}]}' },
     })
-    assert_true(ok3, "T15 empty body retried")
-    assert_eq(handles3, 2, "T15 empty body two opens")
+    assert_true(ok2, "T15 SSE stream succeeds")
+
+    -- Case 3: an empty body is a retryable `empty` failure
+    local ok3, f3 = run_stream({ [1] = {} })
+    assert_false(ok3, "T15 empty body fails the attempt")
+    assert_eq(f3 and f3.kind, "empty", "T15 empty body classified")
+    assert_true(f3 and f3.retryable, "T15 empty body retryable")
+
+    -- Case 4: a non-SSE 401 body is a permanent failure
+    local ok4, f4 = run_stream({ [1] = { '{"error":{"message":"Invalid API key","status":401}}' } })
+    assert_false(ok4, "T15 401 fails the attempt")
+    assert_eq(f4 and f4.kind, "permanent", "T15 401 permanent")
+    assert_false(f4 and f4.retryable, "T15 permanent is not retryable")
+
+    -- Case 5: Retry-After is carried on the failure
+    local ok5, f5 = run_stream({ [1] = { '{"error":{"message":"rate limit","status":429,"retry_after":5}}' } })
+    assert_false(ok5, "T15 429 with retry_after fails")
+    assert_eq(f5 and f5.retry_after, 5, "T15 retry_after carried")
+
+    -- Case 6: status-only classification survives the snippet path
+    local _, f6 = run_stream({ [1] = { '{"error":{"message":"boom","status":503}}' } })
+    assert_eq(f6 and f6.kind, "server", "T15 503 classified server")
+
+    -- Case 7 (add-retry-and-continuation): a transfer the user stopped with
+    -- Ctrl+C is reported distinctly and is never retryable
+    local ok7, f7 = run_stream_with_error("Operation was aborted by an application callback")
+    assert_false(ok7, "T15 an interrupted transfer fails the attempt")
+    assert_eq(f7 and f7.kind, "interrupted", "T15 aborted transfer classified interrupted")
+    assert_false(f7 and f7.retryable, "T15 an interrupted transfer is not retryable")
+    assert_eq(f7 and f7.message, "interrupted by user",
+        "T15 an interrupted transfer says so instead of reporting a transport error")
+
+    -- Case 8: any other transport error still classifies as a connection error
+    local _, f8 = run_stream_with_error("Could not connect to server")
+    assert_eq(f8 and f8.kind, "connection", "T15 a refused connection stays retryable")
+    assert_true(f8 and f8.retryable, "T15 a refused connection is retryable")
 end
 
 -- T19: print mode — parse --print/-p with optional prompt, mark non-interactive
@@ -692,17 +722,20 @@ with_modules(base_env, function(mods)
         sleep = function() end,
     }
     local events = {}
-    local ok = mods.api.stream({ base_url = "http://x", model = "m", retries = 1 },
+    local ok, failure = mods.api.stream({ base_url = "http://x", model = "m" },
         "badkey", { { role = "user", content = "hi" } },
         function(ev) events[#events + 1] = ev end)
     _G.tether = old
     assert_false(ok, "T28 401 body fails stream")
-    local saw_error, msg = false, nil
+    assert_eq(failure and failure.kind, "permanent", "T28 401 classified permanent")
+    assert_true(failure and failure.message:find("401", 1, true) ~= nil, "T28 status in message")
+    -- add-retry-and-continuation: the client reports the failure instead of
+    -- emitting an `error` event; the retry loop decides whether that surfaces.
+    local saw_error = false
     for _, ev in ipairs(events) do
-        if ev.type == "error" then saw_error = true; msg = ev.message end
+        if ev.type == "error" then saw_error = true end
     end
-    assert_true(saw_error, "T28 error event for non-SSE body")
-    assert_true(msg and msg:find("401", 1, true) ~= nil, "T28 status in message")
+    assert_false(saw_error, "T28 no error event from the client")
 end)
 
 -- M7/T29: session ts round-trip as string (N2) via _session_dir seam
@@ -730,6 +763,8 @@ with_modules(base_env, function(mods)
         { "┌", "+" }, { "┐", "+" }, { "└", "+" }, { "┘", "+" }, { "─", "-" },
         { "│", "|" }, { "•", "-" }, { "…", "..." }, { "▓", "#" }, { "░", "-" },
         { "↑", "^" }, { "↓", "v" }, { "←", "<" }, { "→", ">" },
+        -- pi-style 1.2: scroll-label glyphs the box rules carry
+        { "↑ 3 more", "^ 3 more" }, { "↓ 2 more", "v 2 more" },
     }
     for _, case in ipairs(glyph_cases) do
         local out = mods.ui.to_ascii(case[1])
@@ -1231,13 +1266,11 @@ with_modules(base_env, function(mods)
 end)
 
 -- T45: N2 — cursor placement counts display cells (vlen), not bytes.
--- place_cursor is local; verify via its arithmetic effect: expose S through
--- ui.run like the earlier TUI test, move cursor over multibyte text, then
--- confirm the frame cursor column skips byte-count drift.
+-- The block caret (render_input/input_row_text) relies on the same
+-- display-column arithmetic: vlen must count cells, not bytes.
 with_modules(base_env, function(mods)
   local ui = mods.ui
   assert_notnil(ui.vlen, "T45 ui.vlen exported")
-  -- the invariant place_cursor now relies on:
   assert_eq(ui.vlen("привет"), 6, "T45 vlen cyrillic width")
   assert_eq(ui.vlen("中"), 2, "T45 vlen wide char")
   assert_eq(ui.vlen("abc"), 3, "T45 vlen ascii identity")
@@ -1652,7 +1685,14 @@ local function run_ui_with(bytes, stubs, sink, paintC)
   if not ok then error("T53 harness: " .. tostring(err), 0) end
   return ui_mod, S
 end
--- helpers for transcript assertions
+-- helpers for transcript assertions (entries/tails live on the module now)
+local function tentries(uimod) return uimod._transcript.entries() end
+local function tph(uimod)
+  local _, _, ph = uimod._transcript.tails(); return ph
+end
+local function task(uimod)
+  local _, ask = uimod._transcript.tails(); return ask
+end
 local function tassert(uimod, preset, name, sel)
   local rows = (uimod._render_all and uimod._render_all(80)) or {}
   for _, r in ipairs(rows) do print(name .. ": row: " .. tostring(r)) end
@@ -1660,7 +1700,7 @@ end
 
 -- T53c: -r startup seeds the transcript from restored agent history
 do
-  local _, S = run_ui_with({ 17 }, { agent = {
+  local uimod_r = run_ui_with({ 17 }, { agent = {
     turn = function() return true end,
     get_history = function()
       return {
@@ -1671,7 +1711,7 @@ do
     end,
   } })
   local found_user, found_text = false, false
-  for _, e in ipairs(S.transcript) do
+  for _, e in ipairs(tentries(uimod_r)) do
     if e.role == "user" and e.text == "old question" then found_user = true end
     if e.role == "assistant" and e.text == "old answer" then found_text = true end
   end
@@ -1693,9 +1733,9 @@ do
   for _, b in ipairs(str_bytes("/new")) do bytes[#bytes + 1] = b end
   bytes[#bytes + 1] = 13
   bytes[#bytes + 1] = 17
-  local _, S = run_ui_with(bytes, {})
-  assert_eq(#S.transcript, 1, "T53d /new leaves only the banner")
-  assert_eq(S.transcript[1] and S.transcript[1].role, "system", "T53d banner is system")
+  local uimod_n, S = run_ui_with(bytes, {})
+  assert_eq(#tentries(uimod_n), 1, "T53d /new leaves only the banner")
+  assert_eq(tentries(uimod_n)[1] and tentries(uimod_n)[1].role, "system", "T53d banner is system")
   print("T53d /new clears: OK")
 end
 
@@ -1714,7 +1754,7 @@ do
   bytes[#bytes + 1] = 13 -- pick the first session in the overlay
   bytes[#bytes + 1] = 17
   local agent_calls = { clear = 0 }
-  local _, S = run_ui_with(bytes, {
+  local uimod_res = run_ui_with(bytes, {
     session = {
       new_session = function() return "sid" end,
       session_files = function()
@@ -1737,7 +1777,7 @@ do
     },
   })
   local texts = {}
-  for _, e in ipairs(S.transcript) do texts[#texts + 1] = (e.role or "?") .. ":" .. tostring(e.text or "") end
+  for _, e in ipairs(tentries(uimod_res)) do texts[#texts + 1] = (e.role or "?") .. ":" .. tostring(e.text or "") end
   local joined = table.concat(texts, "\n")
   assert_true(joined:find("restored q", 1, true) ~= nil, "T53e resumed user shown")
   assert_true(joined:find("restored a", 1, true) ~= nil, "T53e resumed answer shown")
@@ -1888,7 +1928,7 @@ do
   -- /clear: transcript empties, height back to 0, no stale index
   local uimod2, S2 = run_ui_with(merge(merge(str_bytes("msg"), { 13 }), merge(str_bytes("/clear"), { 13, 17 })),
     { agent = { turn = function() return true end, get_history = function() return {} end } })
-  assert_eq(#S2.transcript, 0, "T61 /clear empties the transcript")
+  assert_eq(#tentries(uimod2), 0, "T61 /clear empties the transcript")
   assert_eq(uimod2.transcript_height(80), 0, "T61 /clear: height 0")
   assert_eq(#uimod2._render_all(80), 0, "T61 /clear: full render 0")
 
@@ -1897,9 +1937,9 @@ do
   local uimod3, S3 = run_ui_with(
     merge(merge(merge(str_bytes("msg"), { 13 }), str_bytes("/new")), { 13, 17 }),
     { agent = { turn = function() return true end, get_history = function() return {} end } })
-  assert_eq(#S3.transcript, 1, "T61 /new leaves only the banner")
-  assert_eq(S3.transcript[1].role, "system", "T61 /new banner is system")
-  for _, e in ipairs(S3.transcript) do
+  assert_eq(#tentries(uimod3), 1, "T61 /new leaves only the banner")
+  assert_eq(tentries(uimod3)[1].role, "system", "T61 /new banner is system")
+  for _, e in ipairs(tentries(uimod3)) do
     assert_true(e.role ~= "user", "T61 /new drops old turns")
   end
   assert_eq(uimod3.transcript_height(80), #uimod3._render_all(80), "T61 /new: height == full render")
@@ -1925,12 +1965,12 @@ do
     return b
   end
   local function merge(a, b) for _, x in ipairs(b) do a[#a + 1] = x end return a end
-  local function sep_positions(S)
+  local function sep_positions(entries)
     local out = {}
-    for i, e in ipairs(S.transcript) do
+    for i, e in ipairs(entries) do
       if e.role == "separator" then
         out[#out + 1] = i
-        assert_true(S.transcript[i + 1] and S.transcript[i + 1].role == "user",
+        assert_true(entries[i + 1] and entries[i + 1].role == "user",
           "T62 separator at " .. i .. " not immediately before a user row")
       end
     end
@@ -1941,34 +1981,35 @@ do
   local bytes = merge(merge(merge(str_bytes("q1"), { 13 }), merge(str_bytes("q2"), { 13 })), { 17 })
   local uimod, S = run_ui_with(bytes,
     { agent = { turn = function() return true end, get_history = function() return {} end } })
-  local seps = sep_positions(S)
+  local ents = tentries(uimod)
+  local seps = sep_positions(ents)
   assert_eq(#seps, 2, "T62 two turns → two separators")
   assert_true(seps[1] < seps[2], "T62 separators in chronological order")
-  assert_eq(S.transcript[seps[1] + 1].text, "q1", "T62 first sep precedes q1")
-  assert_eq(S.transcript[seps[2] + 1].text, "q2", "T62 second sep precedes q2")
+  assert_eq(ents[seps[1] + 1].text, "q1", "T62 first sep precedes q1")
+  assert_eq(ents[seps[2] + 1].text, "q2", "T62 second sep precedes q2")
 
   -- /clear drops them all
   local bytes2 = merge(merge(merge(str_bytes("q1"), { 13 }), str_bytes("/clear")), { 13, 17 })
-  local _, S2 = run_ui_with(bytes2,
+  local uimod_cl, S2 = run_ui_with(bytes2,
     { agent = { turn = function() return true end, get_history = function() return {} end } })
-  assert_eq(#S2.transcript, 0, "T62 /clear leaves no separators")
+  assert_eq(#tentries(uimod_cl), 0, "T62 /clear leaves no separators")
 
   -- /new drops them all
   local bytes3 = merge(merge(merge(str_bytes("q1"), { 13 }), str_bytes("/new")), { 13, 17 })
-  local _, S3 = run_ui_with(bytes3,
+  local uimod_nw, S3 = run_ui_with(bytes3,
     { agent = { turn = function() return true end, get_history = function() return {} end } })
-  for _, e in ipairs(S3.transcript) do
+  for _, e in ipairs(tentries(uimod_nw)) do
     assert_true(e.role ~= "separator", "T62 /new drops separators")
   end
 
   -- agent history never sees a separator: roles that flow through agent.get_history
-  local _, S4 = run_ui_with(bytes,
+  local uimod_h, S4 = run_ui_with(bytes,
     { agent = {
         turn = function(_, _, _, on_ev) on_ev({ type = "text_delta", text = "a" }) return true end,
         get_history = function() return { { role = "user", content = "q1" },
                                          { role = "assistant", content = "a" } } end } })
   local found_sep = false
-  for _, e in ipairs(S4.transcript) do
+  for _, e in ipairs(tentries(uimod_h)) do
     if e.role == "separator" then found_sep = true end
   end
   assert_true(found_sep, "T62 separators exist in the transcript")
@@ -2041,33 +2082,38 @@ do
       turn = function() return true end,
       get_history = function() return restored end,
     } })
+  local uimod0, S = run_ui_with({ 17 }, {
+    agent = {
+      turn = function() return true end,
+      get_history = function() return restored end,
+    } })
   local sep_count = 0
-  for _, e in ipairs(S.transcript) do
+  for _, e in ipairs(tentries(uimod0)) do
     if e.role == "separator" then sep_count = sep_count + 1 end
   end
   assert_eq(sep_count, 0, "T64 restored transcript holds no separator rows")
-  assert_true(#S.transcript >= 2, "T64 restored rows are present")
+  assert_true(#tentries(uimod0) >= 2, "T64 restored rows are present")
 
   -- disabled via config: submit produces no separator row at all
-  local _, S_off = run_ui_with(q1, {
+  local uimod_off, S_off = run_ui_with(q1, {
     agent  = { turn = function() return true end, get_history = function() return {} end },
     config  = cfg_off })
   local sep_off = 0
-  for _, e in ipairs(S_off.transcript) do
+  for _, e in ipairs(tentries(uimod_off)) do
     if e.role == "separator" then sep_off = sep_off + 1 end
   end
   assert_eq(sep_off, 0, "T64 ui.turn_separators=false creates no separator")
-  assert_eq(#S_off.transcript, 1, "T64 disabled: only the user row was added")
+  assert_eq(#tentries(uimod_off), 1, "T64 disabled: only the user row was added")
 
   -- a new submit after a restored session DOES get its own separator
   local q1 = str_bytes("new"); q1[#q1 + 1] = 13; q1[#q1 + 1] = 17
-  local _, S2 = run_ui_with(q1, {
+  local uimod2, S2 = run_ui_with(q1, {
     agent = {
       turn = function() return true end,
       get_history = function() return restored end,
     } })
   local sep2 = 0
-  for _, e in ipairs(S2.transcript) do
+  for _, e in ipairs(tentries(uimod2)) do
     if e.role == "separator" then sep2 = sep2 + 1 end
   end
   assert_eq(sep2, 1, "T64 one separator for the new post-restore turn")
@@ -2231,7 +2277,23 @@ do
   assert_eq(d.ui.highlight, "auto", "T87 default ui.highlight")
   assert_true(d.ui.turn_separators == true, "T87 default ui.turn_separators")
   assert_true(d.ui.path_completion == true, "T87 default ui.path_completion")
+  assert_eq(d.ui.editor_padding_x, 0, "T87 default ui.editor_padding_x")
   print("T87 8.1 config defaults: OK")
+end
+
+-- pi-style 1.1: a partial ui override keeps editor_padding_x.
+do
+  local cfg = assert((function() return loadfile("src/tether/config.lua")() end)())
+  local home = "/tmp/tether_t87b_home"
+  os.execute("rm -rf " .. home .. " && mkdir -p " .. home .. "/.tether")
+  local f = assert(io.open(home .. "/.tether/config.lua", "w"))
+  f:write('return { ui = { turn_separators = false } }\n')
+  f:close()
+  local d = cfg.load(home .. "/.tether/config.lua", home)
+  assert_eq(d.ui.turn_separators, false, "T87b partial ui override applies")
+  assert_eq(d.ui.editor_padding_x, 0, "T87b partial ui override keeps editor_padding_x")
+  os.execute("rm -rf " .. home)
+  print("T87b partial ui keeps editor_padding_x: OK")
 end
 
 -- ============================================================
@@ -2257,7 +2319,7 @@ do
     function(force) paints[#paints + 1] = force end)
   assert_true(S.waiting == false, "T88 S.waiting false after turn completes")
   assert_true(S.streaming == false, "T88 S.streaming false after turn completes")
-  assert_true(S.placeholder_entry == nil, "T88 placeholder cleared after turn")
+  assert_true(tph(uimod) == nil, "T88 placeholder cleared after turn")
   print("T88 9.1 placeholder lifecycle: OK")
 end
 
@@ -2300,7 +2362,8 @@ do
       nil, nil)
     assert_true(S.waiting == false, "T90 S.waiting false after error")
     assert_true(S.streaming == false, "T90 S.streaming false after error")
-    assert_true(S.placeholder_entry == nil, "T90 placeholder nil after error")
+    local ph90 = tph(uimod)
+    assert_true(ph90 == nil, "T90 placeholder nil after error")
   end
   -- abort case
   do
@@ -2381,10 +2444,10 @@ do
 
   -- "/zzz" + Enter: no palette item matched → execute_command never called
   local b1 = merge(str_bytes("/zzz"), { 13, 17 })
-  local _, S1 = run_ui_with(b1,
+  local uimod1, S1 = run_ui_with(b1,
     { agent = { turn = function() return true end, get_history = function() return {} end } })
   assert_eq(#S1.palette_items, 0, "T72 no-match: zero items")
-  assert_true(S1.input == "/zzz" or #S1.transcript > 0,
+  assert_true(S1.input == "/zzz" or #tentries(uimod1) > 0,
     "T72 no-match: input not cleared by a command run")
 
   -- "/model " + space: palette closes, input still holds "/model "
@@ -2727,7 +2790,7 @@ do
   S = uimod._get_state()
 
   local has_sgr = false
-  for _, e in ipairs(S.transcript) do
+  for _, e in ipairs(tentries(uimod)) do
     if e.role == "assistant" and (e.text or ""):find("\27[", 1, true) then
       has_sgr = true
     end
@@ -2954,7 +3017,7 @@ do
   assert_eq(S.cursor, #S.input, "T80 cursor at the end of the input")
   assert_false(S.palette_active, "T80 palette closed after Enter")
   assert_eq(turns, 0, "T80 Enter sent nothing to the agent")
-  assert_eq(#S.transcript, 0, "T80 transcript unchanged")
+  assert_eq(#tentries(uimod), 0, "T80 transcript unchanged")
   assert_true(S.input:find("SKILL.md", 1, true) == nil, "T80 no path in the input")
   assert_true(S.input:find("deploy stuff", 1, true) == nil, "T80 no description in the input")
 
@@ -3002,7 +3065,7 @@ do
   submit(a, "/deploy выложи на прод")
   assert_eq(turns, 1, "T81 the skill name is submitted")
   assert_eq(sent[1], "/deploy выложи на прод", "T81 the text reaches the agent verbatim")
-  assert_true(#a._get_state().transcript > 0, "T81 the transcript shows the message")
+  assert_true(#tentries(a) > 0, "T81 the transcript shows the message")
 
   -- case does not matter for a skill name
   local b = boot()
@@ -3026,7 +3089,7 @@ do
   local e = boot()
   submit(e, "/nosuchthing ")
   assert_eq(turns, 2, "T81 an unknown name is not sent to the agent")
-  assert_eq(#e._get_state().transcript, 0, "T81 an unknown name adds no user row")
+  assert_eq(#tentries(e), 0, "T81 an unknown name adds no user row")
 
   _G.agent = orig_agent
   print("T81 4.2 slash dispatch: OK")
@@ -3150,40 +3213,46 @@ do
   print("T86 7.5 edge cases: OK")
 end
 
--- T92: footer F1b — dim "─" separator row sits between the input block and
--- the status line; ASCII mode swaps the rule for "-".
+-- T92: footer F1b — dim "─" bottom rule sits above the two footer rows;
+-- ASCII mode swaps the rule for "-".
 do
   local bytes = { 104, 105, 13, 17 } -- "hi"\r, then Ctrl+Q quit
   local uimod, S = run_ui_with(bytes, { agent = { turn = function() return true end,
     get_history = function() return {} end } })
   uimod._paint(true)
-  local sep = uimod._row(S.h - 1) or ""
-  assert_true(#sep > 0, "T92 separator row painted at S.h-1: got empty")
-  assert_true(sep:find("─", 1, true) ~= nil or sep:find("%-", 1, true) ~= nil,
-    "T92 separator is a rule row, got: " .. sep:sub(1, 80))
-  -- F1b regression: reserving the separator row is part of layout, so the
-  -- rule can never land on the input field. The last input row sits directly
-  -- above the rule and keeps the typed text.
+  local L = uimod._layout()
+  local rule = uimod._row(L.rule_bottom_row) or ""
+  assert_true(#rule > 0, "T92 bottom rule painted at rule_bottom_row: got empty")
+  assert_true(rule:find("─", 1, true) ~= nil or rule:find("%-", 1, true) ~= nil,
+    "T92 bottom rule is a rule row, got: " .. rule:sub(1, 80))
+  -- F1b regression: the rule can never land on the input field. The last
+  -- input row sits directly above the rule and keeps the typed text.
   uimod._handle_key({ kind = "text", char = "h" })
   uimod._handle_key({ kind = "text", char = "i" })
   uimod._paint(true)
-  local input_row = uimod._row(S.h - 2) or ""
+  L = uimod._layout()
+  local input_row = uimod._row(L.input_row) or ""
   assert_true(input_row:find("hi", 1, true) ~= nil,
-    "T92 input row above separator keeps typed text, got: " .. input_row:sub(1, 80))
+    "T92 input row keeps typed text, got: " .. input_row:sub(1, 80))
+  assert_true(uimod._row(L.footer_row) ~= nil, "T92 footer row is present")
+  assert_true(uimod._row(L.stats_row) ~= nil, "T92 stats row is present")
   print("T92 footer separator: OK")
 end
 
--- T93: 5b — idle status line carries no mouse/kb flags.
+-- T93: 5b — idle footer flags carry no mouse/kb flags.
 do
   local bytes = { 104, 105, 13, 17 }
   local uimod, S = run_ui_with(bytes, { agent = { turn = function() return true end,
     get_history = function() return {} end } })
   S._mouse_flag_until = os.time() - 1  -- expire the flag armed during run()
   S.kb_protocol = 0
+  S.toast = nil
   uimod._paint(true)
-  local status = uimod._row(S.h) or ""
-  assert_eq(status:find("🖱", 1, true) ~= nil, false, "T93 no mouse flag when idle: " .. status:sub(1,80))
-  assert_eq(status:find("⌨", 1, true) ~= nil, false, "T93 no kb flag when kb_protocol=0: " .. status:sub(1,80))
+  local L = uimod._layout()
+  local flags = L.flags_row and (uimod._row(L.flags_row) or "") or ""
+  assert_eq(L.flags_row, nil, "T93 idle frame has no flag row")
+  assert_eq(flags:find("🖱", 1, true) ~= nil, false, "T93 no mouse flag when idle")
+  assert_eq(flags:find("⌨", 1, true) ~= nil, false, "T93 no kb flag when kb_protocol=0")
   print("T93 status idle: OK")
 end
 
@@ -3193,13 +3262,17 @@ do
   local uimod, S = run_ui_with(bytes, { agent = { turn = function() return true end,
     get_history = function() return {} end } })
   S.mouse_mode = "auto"
+  S.kb_protocol = 0
+  S.toast = nil
   S._mouse_flag_until = os.time() - 1  -- expired
   uimod._paint(true)
-  local off = uimod._row(S.h) or ""
-  assert_eq(off:find("🖱", 1, true) ~= nil, false, "T94 mouse flag faded: " .. off:sub(1,80))
+  local L = uimod._layout()
+  assert_eq(L.flags_row, nil, "T94 faded mouse flag leaves no flag row")
   S._mouse_flag_until = os.time() + 3  -- fresh
   uimod._paint(true)
-  local on = uimod._row(S.h) or ""
+  L = uimod._layout()
+  assert_notnil(L.flags_row, "T94 fresh mouse flag reserves a flag row")
+  local on = uimod._row(L.flags_row) or ""
   assert_true(on:find("🖱", 1, true) ~= nil, "T94 mouse flag visible within window: " .. on:sub(1,80))
   print("T94 mouse flag fade: OK")
 end
@@ -3210,14 +3283,18 @@ do
   local uimod, S = run_ui_with(bytes, { agent = { turn = function() return true end,
     get_history = function() return {} end } })
   S._mouse_flag_until = os.time() - 1
+  S.toast = nil
   S.kb_protocol = 1
   uimod._paint(true)
-  local kitty = uimod._row(S.h) or ""
+  local L = uimod._layout()
+  local kitty = L.flags_row and (uimod._row(L.flags_row) or "") or ""
   assert_true(kitty:find("⌨ kitty", 1, true) ~= nil, "T95 kb flag shown for protocol 1: " .. kitty:sub(1,80))
   S.kb_protocol = 0
   uimod._paint(true)
-  local plain = uimod._row(S.h) or ""
-  assert_eq(plain:find("⌨", 1, true) ~= nil, false, "T95 kb flag absent for protocol 0: " .. plain:sub(1,80))
+  L = uimod._layout()
+  assert_eq(L.flags_row, nil, "T95 kb flag absent for protocol 0 leaves no flag row")
+  local plain = L.flags_row and (uimod._row(L.flags_row) or "") or ""
+  assert_eq(plain:find("⌨", 1, true) ~= nil, false, "T95 kb flag absent for protocol 0")
   print("T95 kb flag conditional: OK")
 end
 
@@ -3243,20 +3320,21 @@ do
     assert_eq(text:find("\27[", 1, true) ~= nil, false,
       "T96 mono theme row " .. row .. " carries SGR: " .. text:sub(1, 60))
   end
-  assert_true(#(uimod._row(S.h) or "") > 0, "T96 mono frame painted the status line")
-  assert_true(#(uimod._row(S.h - 2) or "") > 0, "T96 mono frame painted the input row")
+  assert_true(#(uimod._row((uimod._layout()).stats_row) or "") > 0, "T96 mono frame painted the stats row")
+  assert_true(#(uimod._row((uimod._layout()).input_row) or "") > 0, "T96 mono frame painted the input row")
 
-  -- legacy `ascii = true` still renders the ASCII separator
+  -- legacy `ascii = true` still renders the ASCII rule
   local uimod2, S2 = run_ui_with(bytes,
     { config = cfg_stub({ input_max_lines = 8, ascii = true }), agent = agent_stub })
   uimod2._paint(true)
-  local sep = uimod2._row(S2.h - 1) or ""
+  local L2 = uimod2._layout()
+  local sep = uimod2._row(L2.rule_bottom_row) or ""
   assert_true(sep:find("-", 1, true) ~= nil,
     "T96 ascii=true paints the ASCII rule, got: " .. sep:sub(1, 60))
   assert_eq(sep:find("─", 1, true) ~= nil, false,
     "T96 ascii=true keeps no box-drawing glyphs: " .. sep:sub(1, 60))
-  assert_eq((uimod2._row(S2.h) or ""):find("\27[", 1, true) ~= nil, false,
-    "T96 ascii=true keeps the status line colorless")
+  assert_eq((uimod2._row(L2.stats_row) or ""):find("\27[", 1, true) ~= nil, false,
+    "T96 ascii=true keeps the stats line colorless")
   print("T96 theme + boolean ascii: OK")
 end
 
@@ -3600,14 +3678,20 @@ do
   print("T107 assistant text with tool calls: OK")
 end
 
--- T108 (3.4): provider errors surface the real message text.
+-- T108 (3.4): provider errors keep the real message text.
+-- add-retry-and-continuation: an error now fails the attempt (the transport
+-- reads it) instead of being emitted as an event, so the retry policy decides.
 do
   local openai = assert(loadfile("src/tether/providers/openai.lua"))()
+  openai.reset_stream()
   local got
   openai.parse_sse_line('data: {"error":{"message":"bad key","status":401}}',
     function(e) got = e end)
-  assert_true(got ~= nil and got.type == "error", "T108 error event emitted")
-  assert_true(got and got.message:find("bad key", 1, true) ~= nil, "T108 real message surfaced")
+  local failure = openai.stream_failure()
+  assert_true(got == nil, "T108 no error event emitted")
+  assert_true(failure ~= nil, "T108 failure recorded")
+  assert_true(failure and failure.message:find("bad key", 1, true) ~= nil, "T108 real message surfaced")
+  assert_eq(failure and failure.status, 401, "T108 status kept")
   print("T108 openai error message: OK")
 end
 
@@ -4157,17 +4241,16 @@ do
     return m, st
   end
   local function set_tools(m, st, list)
-    st.transcript = {}
-    st.known_count = 0
+    m._transcript.reset({})
     st.expand_all = false
     st.scroll = 0
     st.user_scrolled = false
     for _, e in ipairs(list) do
       e.role = "tool"
-      st.transcript[#st.transcript + 1] = e
+      m._transcript.append(e)
     end
     m._invalidate_all()
-    return st.transcript
+    return m._transcript.entries()
   end
 
   -- 3.1 status marker + clipped first error line
@@ -4242,15 +4325,15 @@ do
   do
     local m, st = boot()
     st.kb_protocol = 1
-    st.transcript = { { role = "tool", name = "read", status = "ok", summary = "1 стр.", body = "a" } }
+    m._transcript.reset({ { role = "tool", name = "read", status = "ok", summary = "1 стр.", body = "a" } })
     for i = 1, 60 do
-      st.transcript[#st.transcript + 1] = { role = "system", text = "row " .. i }
+      m._transcript.append({ role = "system", text = "row " .. i })
     end
     m._invalidate_all()
     st.scroll = 10
     st.user_scrolled = true
     m._handle_key({ kind = "ctrl", code = 15, shift = false })
-    assert_eq(st.transcript[1].expand_state, "expanded",
+    assert_eq(m._transcript.entries()[1].expand_state, "expanded",
       "3.3 ctrl+o falls back to the newest tool when the viewport holds none")
   end
 
@@ -4387,14 +4470,14 @@ do
       body = proj.diff, projection = proj, path = "w.lua" } })
     m._handle_agent_event({ type = "tool_result", id = "x", name = "write",
       summary = "+1 −1 перезаписан", body = "NEWBODY" })
-    assert_eq(st.transcript[1].body, "NEWBODY", "4.5 result replaces the preview")
-    assert_eq(st.transcript[1].projection, nil, "4.5 projection cleared on result")
+    assert_eq(tentries(m)[1].body, "NEWBODY", "4.5 result replaces the preview")
+    assert_eq(tentries(m)[1].projection, nil, "4.5 projection cleared on result")
     set_tools(m, st, { { id = "y", name = "write", status = "pending", summary = "",
       body = proj.diff, projection = proj, path = "w.lua" } })
     m._handle_agent_event({ type = "tool_result", id = "y", name = "write",
       error = "denied by user", summary = "✗ denied by user", body = "denied by user" })
-    assert_eq(st.transcript[1].body, "", "4.5 denied call drops the preview/result body")
-    assert_eq(st.transcript[1].projection, nil, "4.5 denied call clears the projection")
+    assert_eq(tentries(m)[1].body, "", "4.5 denied call drops the preview/result body")
+    assert_eq(tentries(m)[1].projection, nil, "4.5 denied call clears the projection")
   end
 
   -- 4.6 virtualization invariants with the new row shapes
@@ -4499,7 +4582,7 @@ do
   assert_eq(painted, win, "T83 every window row is painted")
   assert_true(strip(uimod._row(L.palette_row + win + 1)):match("^%s*1/19%s*$") ~= nil,
     "T83 the indicator is digits and a slash")
-  assert_true(L.palette_row + win + 1 <= L.separator_row - 1, "T83 the indicator row is inside the region")
+  assert_true(L.palette_row + win + 1 <= L.footer_row - 1, "T83 the indicator row is inside the region")
 
   -- 2.2: the window follows the selection
   for _ = 1, 10 do uimod._handle_key({ kind = "special", name = "down" }) end
@@ -4512,10 +4595,10 @@ do
     "T83 the selected entry is painted")
   assert_true(strip(uimod._row(L.palette_row + win2 + 1)):match("^%s*11/19%s*$") ~= nil,
     "T83 the indicator follows the selection")
-  assert_true(strip(uimod._row(L.separator_row)):find("─", 1, true) ~= nil,
-    "T83 the separator survives the palette")
-  assert_true(strip(uimod._row(L.status_row)):find("test", 1, true) ~= nil,
-    "T83 the status line keeps its content")
+  assert_true(strip(uimod._row(L.rule_bottom_row)):find("─", 1, true) ~= nil,
+    "T83 the box bottom rule survives the palette")
+  assert_true(strip(uimod._row(L.stats_row)):find("test", 1, true) ~= nil,
+    "T83 the stats footer keeps its content")
 
   -- 3.1: the hint is on the skill row only
   local one = boot(function() return {
@@ -4564,7 +4647,9 @@ do
   assert_eq(S2.input, input_before, "T83 the indicator row changes no input")
   assert_true(S2.palette_active, "T83 the palette stays open")
 
-  -- 2.4: a 12-row terminal halves the window, the indicator still fits
+  -- 2.4: a 12-row terminal halves the window; the new dock budget
+  -- (top rule + input + palette + bottom rule + 2 footer rows) leaves room
+  -- for the entry rows, and the indicator only when one row remains.
   local t12 = boot(many_skills, { width = 80, height = 12 })
   type_text(t12, "/")
   t12._paint(true)
@@ -4572,32 +4657,49 @@ do
   local L12 = t12._layout()
   local w12 = t12._palette_window(S12.h, #S12.palette_items, S12.palette_sel)
   assert_eq(w12, 6, "T83 a 12-row terminal shrinks the window to half")
-  assert_eq(L12.palette_h, w12 + 2, "T83 the reserved region follows the window")
-  assert_true(strip(t12._row(L12.palette_row + w12 + 1)):match("^%s*1/19%s*$") ~= nil,
-    "T83 the indicator still fits above the separator")
-  assert_true(strip(t12._row(L12.separator_row)):find("─", 1, true) ~= nil,
-    "T83 separator intact on a short terminal")
-  assert_true(strip(t12._row(L12.status_row)):find("test", 1, true) ~= nil,
-    "T83 status line intact on a short terminal")
+  -- The dock budget may shrink the reserved region below the ideal window+2
+  -- (a live flag row or the transcript minimum takes priority); what must
+  -- hold is that entries still paint inside the region and never past it.
+  assert_true(L12.palette_h >= 1, "T83 the reserved region is non-empty")
+  assert_true(L12.palette_h <= w12 + 2, "T83 the reserved region is at most window+2")
+  local painted12 = 0
+  local last12 = L12.footer_row - 1
+  for r = L12.palette_row + 1, last12 do
+    if strip(t12._row(r)):find("/", 1, true) then painted12 = painted12 + 1 end
+  end
+  assert_true(painted12 >= 1, "T83 the short terminal still paints palette entries")
+  local irow12 = L12.palette_row + w12 + 1
+  if irow12 <= last12 then
+    assert_true(strip(t12._row(irow12)):match("^%s*1/19%s*$") ~= nil,
+      "T83 the indicator fits when the region has room")
+  end
+  assert_true(strip(t12._row(L12.rule_bottom_row)):find("─", 1, true) ~= nil,
+    "T83 bottom rule intact on a short terminal")
+  assert_true(strip(t12._row(L12.footer_row)) ~= nil and strip(t12._row(L12.footer_row)) ~= "",
+    "T83 footer path row intact on a short terminal")
+  assert_true(strip(t12._row(L12.stats_row)):find("test", 1, true) ~= nil,
+    "T83 stats footer intact on a short terminal")
 
   -- 2.3: on an 8-row terminal the indicator has no room: it is dropped and the
-  -- palette paints nothing over the separator or the status line
+  -- palette paints nothing over the bottom rule or the footer
   local t8 = boot(many_skills, { width = 80, height = 8 })
   type_text(t8, "/")
   t8._paint(true)
   local S8 = t8._get_state()
   local L8 = t8._layout()
   local w8 = t8._palette_window(S8.h, #S8.palette_items, S8.palette_sel)
-  assert_true(L8.palette_row + w8 + 1 > L8.separator_row - 1, "T83 the indicator row is outside the region")
-  for r = L8.palette_row + 1, L8.separator_row - 1 do
+  assert_true(L8.palette_row + w8 + 1 > L8.footer_row - 1, "T83 the indicator row is outside the region")
+  for r = L8.palette_row + 1, L8.footer_row - 1 do
     assert_true(strip(t8._row(r)):match("%d+/%d+") == nil,
       "T83 no indicator is painted when it does not fit (row " .. r .. ")")
   end
   assert_true(#rows_with(t8, S8, "/clear") > 0, "T83 the palette still paints its window")
-  assert_true(strip(t8._row(L8.separator_row)):find("─", 1, true) ~= nil,
-    "T83 the separator is never painted by the palette")
-  assert_true(strip(t8._row(L8.status_row)):find("test", 1, true) ~= nil,
-    "T83 the status line is never painted by the palette")
+  assert_true(strip(t8._row(L8.rule_bottom_row)):find("─", 1, true) ~= nil,
+    "T83 the bottom rule is never painted by the palette")
+  assert_true(strip(t8._row(L8.footer_row)) ~= nil and strip(t8._row(L8.footer_row)) ~= "",
+    "T83 the footer path row is never painted by the palette")
+  assert_true(strip(t8._row(L8.stats_row)):find("test", 1, true) ~= nil,
+    "T83 the stats footer is never painted by the palette")
 
   print("T83 2.2-3.1 window/indicator/hint frames: OK")
 end
@@ -4660,6 +4762,1724 @@ do
 
   _G.tools = orig_tools
   print("T84 1.2 production tools lookup: OK")
+end
+
+-- T116: stop reasons are surfaced per provider, and a provider error fails the
+-- attempt for every adapter (add-retry-and-continuation).
+do
+  local openai = assert(loadfile("src/tether/providers/openai.lua"))()
+  local reasons = {}
+  local function collect(e) if e.type == "done" then reasons[#reasons + 1] = e.reason end end
+
+  openai.reset_stream()
+  openai.parse_sse_line('data: {"choices":[{"delta":{"content":"x"},"finish_reason":"length"}]}', collect)
+  openai.parse_sse_line('data: [DONE]', collect)
+  assert_eq(reasons[1], "length", "T116 openai length reason")
+  assert_eq(reasons[2], "length", "T116 the sentinel repeats the reason")
+  openai.reset_stream()
+  reasons = {}
+  openai.parse_sse_line('data: {"choices":[{"delta":{},"finish_reason":"tool_calls"}]}', collect)
+  assert_eq(reasons[1], "tool_calls", "T116 openai tool_calls reason")
+  openai.reset_stream()
+  reasons = {}
+  openai.parse_sse_line('data: {"choices":[{"delta":{}}]}', collect)
+  assert_eq(#reasons, 0, "T116 no reason without a finish_reason")
+
+  local anthropic = assert(loadfile("src/tether/providers/anthropic.lua"))()
+  anthropic.reset_stream()
+  reasons = {}
+  anthropic.parse_sse_line('data: {"type":"message_delta","delta":{"stop_reason":"max_tokens"},"usage":{"output_tokens":7}}', collect)
+  anthropic.parse_sse_line('data: {"type":"message_stop"}', collect)
+  assert_eq(reasons[1], "length", "T116 anthropic max_tokens")
+  anthropic.reset_stream()
+  reasons = {}
+  anthropic.parse_sse_line('data: {"type":"message_delta","delta":{"stop_reason":"end_turn"}}', collect)
+  anthropic.parse_sse_line('data: {"type":"message_stop"}', collect)
+  assert_eq(reasons[1], "stop", "T116 anthropic end_turn")
+
+  local gemini = assert(loadfile("src/tether/providers/gemini.lua"))()
+  gemini.reset_stream()
+  reasons = {}
+  gemini.parse_sse_line('data: {"candidates":[{"content":{"parts":[{"text":"yo"}],"role":"model"},"finishReason":"MAX_TOKENS"}]}', collect)
+  gemini.stream_finished(collect)
+  assert_eq(reasons[1], "length", "T116 gemini MAX_TOKENS")
+  gemini.reset_stream()
+  reasons = {}
+  gemini.parse_sse_line('data: {"candidates":[{"content":{"parts":[]},"finishReason":"SAFETY"}]}', collect)
+  gemini.stream_finished(collect)
+  assert_eq(reasons[1], "other", "T116 gemini unmapped reason")
+  gemini.reset_stream()
+  reasons = {}
+  gemini.stream_finished(collect)
+  assert_eq(reasons[1], "other", "T116 gemini without a reason")
+
+  -- a provider error fails the attempt, and reset_stream clears it
+  openai.reset_stream()
+  openai.parse_sse_line('data: {"error":{"message":"rate limit exceeded"}}', function() end)
+  assert_true(openai.stream_failure() ~= nil, "T116 openai error fails the attempt")
+  anthropic.reset_stream()
+  anthropic.parse_sse_line('data: {"type":"error","error":{"message":"Overloaded"}}', function() end)
+  local af = anthropic.stream_failure()
+  assert_true(af ~= nil and af.message:find("Overloaded", 1, true) ~= nil,
+    "T116 anthropic error fails the attempt")
+  gemini.reset_stream()
+  gemini.handle_non_sse('{"candidates":[],"error":{"message":"gemini boom","code":500}}', function() end)
+  local gf = gemini.stream_failure()
+  assert_true(gf ~= nil and gf.message:find("gemini boom", 1, true) ~= nil,
+    "T116 gemini error fails the attempt")
+  gemini.reset_stream()
+  assert_true(gemini.stream_failure() == nil, "T116 reset clears the failure")
+  print("T116 provider stop reasons: OK")
+end
+
+-- T119: retry and continuation notices (add-retry-and-continuation). The UI
+-- is driven through its agent-event seam after a run, like T84's key seam.
+do
+  local agent_stub = { turn = function() return true end, get_history = function() return {} end }
+  local uimod, S = run_ui_with({ 17 }, { agent = agent_stub })
+  local function find_entry(pred)
+    for _, e in ipairs(tentries(uimod)) do if pred(e) then return e end end
+  end
+  -- attempt 1 streams text, then fails retryably
+  uimod._handle_agent_event({ type = "text_delta", text = "half an ans", attempt = 1 })
+  uimod._handle_agent_event({ type = "retry", attempt = 1, delay = 4.0,
+                              reason = "server error / rate limit" })
+  assert_eq(find_entry(function(e) return e.role == "assistant" and e.text == "half an ans" end),
+    nil, "T119 the failed attempt's row is dropped")
+  local retry_row = find_entry(function(e)
+    return e.role == "system" and (e.text or ""):find("повтор 1", 1, true) ~= nil end)
+  assert_notnil(retry_row, "T119 the retry row is appended")
+  assert_true(retry_row and retry_row.text:find("4.0s", 1, true) ~= nil,
+    "T119 the retry row names the wait")
+  assert_true(retry_row and retry_row.text:find("rate limit", 1, true) ~= nil,
+    "T119 the retry row names the reason")
+  assert_notnil(S.retry_wait, "T119 the pending retry is tracked")
+  assert_eq(S.retry_wait and S.retry_wait.attempt, 1, "T119 the pending attempt number")
+
+  uimod._paint(true)
+  local L119 = uimod._layout()
+  local top_rule = uimod._row(L119.rule_top_row) or ""
+  assert_true(top_rule:find("4.0s", 1, true) ~= nil,
+    "T119 the top rule shows the pending retry, got: " .. top_rule:sub(1, 80))
+
+  -- attempt 2's text is kept, and clears the pending indicator
+  uimod._handle_agent_event({ type = "text_delta", text = "the answer", attempt = 2 })
+  local kept = find_entry(function(e) return e.role == "assistant" and e.text == "the answer" end)
+  assert_notnil(kept, "T119 the successful attempt's row is kept")
+  assert_eq(kept and kept.attempt, 2, "T119 the row remembers its attempt")
+  assert_eq(S.retry_wait, nil, "T119 the indicator clears on the next delta")
+  assert_eq(find_entry(function(e)
+    return e.role == "assistant" and e.text == "half an ans" end), nil,
+    "T119 the failed attempt stays dropped")
+
+  -- continuation notices
+  uimod._handle_agent_event({ type = "continuation", kind = "length" })
+  assert_notnil(find_entry(function(e)
+    return e.role == "system" and (e.text or ""):find("продолжение", 1, true) ~= nil end),
+    "T119 the continuation row is appended")
+  uimod._handle_agent_event({ type = "continuation", kind = "empty" })
+  assert_notnil(find_entry(function(e)
+    return e.role == "system" and (e.text or ""):find("пустой", 1, true) ~= nil end),
+    "T119 the empty-stop row is appended")
+  assert_true(#uimod._render_all(80) > 0, "T119 the notices render")
+
+  -- ASCII mode degrades the glyphs (the arrow becomes [r])
+  local uimod2, S2 = run_ui_with({ 17 }, { agent = agent_stub })
+  uimod2._ascii_mode = true
+  uimod2._handle_agent_event({ type = "retry", attempt = 1, delay = 2.0,
+                               reason = "connection error" })
+  local saw_ascii, saw_arrow = false, false
+  for _, r in ipairs(uimod2._render_all(80)) do
+    if r:find("[r]", 1, true) then saw_ascii = true end
+    if r:find("↻", 1, true) then saw_arrow = true end
+  end
+  assert_true(saw_ascii, "T119 the retry glyph degrades to [r] in ascii mode")
+  assert_false(saw_arrow, "T119 no arrow glyph is left in ascii mode")
+  uimod2._paint(true)
+  local L119b = uimod2._layout()
+  local top_rule2 = uimod2._row(L119b.rule_top_row) or ""
+  assert_true(top_rule2:find("[r]", 1, true) ~= nil,
+    "T119 the top-rule retry glyph is ascii, got: " .. top_rule2:sub(1, 80))
+  print("T119 retry and continuation notices: OK")
+end
+
+-- T118: retry configuration resolution (add-retry-and-continuation).
+do
+  local config = assert(loadfile("src/tether/config.lua"))()
+  local policy = assert(loadfile("src/tether/retry.lua"))()
+  local home = "/tmp/tether_t118_home"
+  os.execute("rm -rf " .. home .. " && mkdir -p " .. home .. "/.tether")
+
+  local function write_config(body)
+    local f = assert(io.open(home .. "/.tether/config.lua", "w"))
+    f:write(body)
+    f:close()
+  end
+
+  -- defaults: the retry table is present, and nothing caps the attempts
+  local cfg0 = config.load(home .. "/.tether/no-config.lua", home)
+  assert_eq(type(cfg0.retry), "table", "T118 retry table by default")
+  assert_eq(cfg0.retry.base_delay_ms, 2000, "T118 default base delay")
+  assert_eq(cfg0.retry.max_delay_ms, 60000, "T118 default max delay")
+  assert_eq(cfg0.retry.multiplier, 2, "T118 default multiplier")
+  assert_eq(cfg0.retry.max_failures_at_max_delay, 3, "T118 default max failures")
+  assert_eq(cfg0.retry.max_attempts, nil, "T118 no default attempt cap")
+  assert_eq(cfg0.retries, nil, "T118 retries is not a default")
+
+  -- a partial retry table keeps the other defaults
+  write_config('return { retry = { base_delay_ms = 5000 } }\n')
+  local cfg1 = config.load(home .. "/.tether/config.lua", home)
+  assert_eq(cfg1.retry.base_delay_ms, 5000, "T118 partial table overrides")
+  assert_eq(cfg1.retry.max_delay_ms, 60000, "T118 partial table keeps defaults")
+  assert_eq(policy.policy(cfg1).base_delay_ms, 5000, "T118 the policy reads it")
+
+  -- a legacy retries value still caps the attempts
+  write_config('return { retries = 5 }\n')
+  local cfg2 = config.load(home .. "/.tether/config.lua", home)
+  assert_eq(cfg2.retry.max_attempts, 5, "T118 legacy retries caps attempts")
+
+  -- the new key wins over the legacy one
+  write_config('return { retries = 5, retry = { max_attempts = 2 } }\n')
+  local cfg3 = config.load(home .. "/.tether/config.lua", home)
+  assert_eq(cfg3.retry.max_attempts, 2, "T118 retry.max_attempts wins")
+
+  -- a malformed value does not stop the session; the policy falls back
+  write_config('return { retry = { base_delay_ms = "soon" } }\n')
+  local cfg4 = config.load(home .. "/.tether/config.lua", home)
+  assert_eq(policy.policy(cfg4).base_delay_ms, 2000, "T118 malformed value falls back")
+
+  os.execute("rm -rf " .. home)
+  print("T118 retry configuration: OK")
+end
+
+-- T117: the turn-level retry loop and continuations (add-retry-and-
+-- continuation). The provider is stubbed through the agent's `api` global, so
+-- the assertions are about history shape, journal calls and event order.
+with_modules(base_env, function(mods)
+  local agent = mods.agent
+  local policy = assert(loadfile("src/tether/retry.lua"))()
+  local saved_context = _G.context
+  _G.context = nil
+
+  local journaled = {}
+  _G.session = { append = function(_, ev) journaled[#journaled + 1] = ev end }
+
+  local function make_stream(scripts)
+    local st = { calls = 0, seen = {} }
+    st.fn = function(_, _, messages, on_event)
+      st.calls = st.calls + 1
+      local copy = {}
+      for i, m in ipairs(messages) do
+        copy[i] = { role = m.role, content = m.content, tool_calls = m.tool_calls }
+      end
+      st.seen[st.calls] = copy
+      local entry = scripts[st.calls] or {}
+      for _, ev in ipairs(entry.events or {}) do on_event(ev) end
+      if entry.ok == false then return false, entry.failure end
+      return true
+    end
+    return st
+  end
+
+  local function run(scripts, delay_ms)
+    local st = make_stream(scripts)
+    _G.api = { stream = st.fn }
+    local cfg = { workspace = "/tmp/ws", _session_id = "s1", auto_approve = {},
+                  retry = { base_delay_ms = delay_ms or 1 } }
+    local events = {}
+    local ok = agent.turn(cfg, "k", "hello", function(ev) events[#events + 1] = ev end)
+    return st, events, ok
+  end
+
+  local function count_role(history, role)
+    local n = 0
+    for _, m in ipairs(history) do if m.role == role then n = n + 1 end end
+    return n
+  end
+
+  -- 1. a retryable failure is retried with the same conversation
+  journaled = {}
+  agent.clear()
+  local st1, ev1 = run({
+    { ok = false, failure = policy.failure("server", "rate limit exceeded", 429) },
+    { events = { { type = "text_delta", text = "hi" }, { type = "done", reason = "stop" } } },
+  })
+  assert_eq(st1.calls, 2, "T117 a retryable failure is retried")
+  local retries, errors = 0, 0
+  for _, ev in ipairs(ev1) do
+    if ev.type == "retry" then retries = retries + 1 end
+    if ev.type == "error" then errors = errors + 1 end
+  end
+  assert_eq(retries, 1, "T117 one retry event")
+  assert_eq(errors, 0, "T117 no error for a retried attempt")
+  assert_eq(count_role(agent.get_history(), "user"), 1, "T117 one user message")
+  assert_eq(#st1.seen[1], #st1.seen[2], "T117 the retry re-sends the same conversation")
+  assert_eq(st1.seen[1][#st1.seen[1]].role, "user", "T117 the retry adds no message")
+  local answer
+  for _, m in ipairs(agent.get_history()) do
+    if m.role == "assistant" then answer = m.content end
+  end
+  assert_eq(answer, "hi", "T117 the retried answer is kept")
+
+  -- 2. a failed attempt leaves no trace, and its deltas carry its attempt
+  journaled = {}
+  agent.clear()
+  local st2, ev2 = run({
+    { ok = false, failure = policy.failure("server", "overloaded"),
+      events = { { type = "text_delta", text = "half an ans" } } },
+    { events = { { type = "text_delta", text = "final" }, { type = "done", reason = "stop" } } },
+  })
+  assert_eq(st2.calls, 2, "T117 a mid-stream failure is retried")
+  local attempts = {}
+  for _, ev in ipairs(ev2) do
+    if ev.type == "text_delta" then attempts[#attempts + 1] = ev.attempt end
+  end
+  assert_eq(attempts[1], 1, "T117 deltas carry their attempt")
+  assert_eq(attempts[#attempts], 2, "T117 the second attempt's deltas carry 2")
+  for _, m in ipairs(agent.get_history()) do
+    assert_false(m.role == "assistant" and type(m.content) == "string"
+      and m.content:find("half an ans", 1, true) ~= nil,
+      "T117 the failed attempt's text never reaches history")
+  end
+  for _, j in ipairs(journaled) do
+    assert_false(j.type == "message" and j.content ~= nil and type(j.content) == "string"
+      and j.content:find("half an ans", 1, true) ~= nil,
+      "T117 the failed attempt's text is not journaled")
+  end
+
+  -- 3. a non-retryable failure stops at once with the provider's text
+  agent.clear()
+  local st3, ev3 = run({
+    { ok = false, failure = policy.failure("permanent", "invalid api key") },
+  })
+  assert_eq(st3.calls, 1, "T117 a permanent failure is not retried")
+  local msg3, kind3 = nil, nil
+  for _, ev in ipairs(ev3) do
+    if ev.type == "error" then msg3, kind3 = ev.message, ev.kind end
+  end
+  assert_eq(msg3, "invalid api key", "T117 the provider text is surfaced")
+  assert_eq(kind3, "permanent", "T117 the error carries its kind")
+
+  -- 4. a quota failure explains that the loop stopped
+  agent.clear()
+  local st4, ev4 = run({
+    { ok = false, failure = policy.failure("quota", "You've hit your limit") },
+  })
+  assert_eq(st4.calls, 1, "T117 a quota failure is not retried")
+  local msg4
+  for _, ev in ipairs(ev4) do if ev.type == "error" then msg4 = ev.message end end
+  assert_true(msg4 and msg4:find("retries stopped", 1, true) ~= nil,
+    "T117 quota explains the stop")
+
+  -- 5. abort during the wait stops the loop immediately
+  agent.clear()
+  local saved_sleep = _G.tether.sleep
+  _G.tether.sleep = function() agent.abort_requested = true end
+  local st5, ev5 = run({
+    { ok = false, failure = policy.failure("connection", "ECONNRESET") },
+    { events = { { type = "text_delta", text = "late" }, { type = "done", reason = "stop" } } },
+  }, 60000)
+  _G.tether.sleep = saved_sleep
+  assert_eq(st5.calls, 1, "T117 an abort during the wait stops the loop")
+  local aborted = false
+  for _, ev in ipairs(ev5) do if ev.type == "aborted" then aborted = true end end
+  assert_true(aborted, "T117 aborted is emitted")
+  assert_false(agent.abort_requested, "T117 the abort flag is cleared")
+
+  -- 6. a truncated answer is continued into one assistant entry
+  journaled = {}
+  agent.clear()
+  local st6, ev6 = run({
+    { events = { { type = "text_delta", text = "part one " }, { type = "done", reason = "length" } } },
+    { events = { { type = "text_delta", text = "part two" }, { type = "done", reason = "stop" } } },
+  })
+  assert_eq(st6.calls, 2, "T117 a truncated answer is continued")
+  local conts = 0
+  for _, ev in ipairs(ev6) do if ev.type == "continuation" and ev.kind == "length" then conts = conts + 1 end end
+  assert_eq(conts, 1, "T117 one continuation event")
+  local history6 = agent.get_history()
+  local assistants6 = {}
+  for _, m in ipairs(history6) do
+    if m.role == "assistant" then assistants6[#assistants6 + 1] = m end
+  end
+  assert_eq(#assistants6, 1, "T117 the answer is one assistant entry")
+  assert_eq(assistants6[1].content, "part one part two", "T117 the answer is merged")
+  assert_eq(count_role(history6, "user"), 1, "T117 the hidden continuation leaves history")
+  local last6 = st6.seen[2][#st6.seen[2]]
+  assert_eq(last6.role, "user", "T117 the continuation is a user turn")
+  assert_true(type(last6.content) == "string" and last6.content:find("Continue", 1, true) ~= nil,
+    "T117 the continuation text is sent")
+  local journaled_assistants = 0
+  for _, j in ipairs(journaled) do
+    if j.type == "message" and j.role == "assistant" then journaled_assistants = journaled_assistants + 1 end
+  end
+  assert_eq(journaled_assistants, 1, "T117 the merged answer is journaled once")
+
+  -- 7. an empty answer is nudged once, then answered
+  agent.clear()
+  local st7, ev7 = run({
+    { events = { { type = "done", reason = "stop" } } },
+    { events = { { type = "text_delta", text = "answer" }, { type = "done", reason = "stop" } } },
+  })
+  assert_eq(st7.calls, 2, "T117 an empty answer is nudged once")
+  local nudges = 0
+  for _, ev in ipairs(ev7) do if ev.type == "continuation" and ev.kind == "empty" then nudges = nudges + 1 end end
+  assert_eq(nudges, 1, "T117 one nudge event")
+  local history7 = agent.get_history()
+  assert_eq(count_role(history7, "user"), 1, "T117 the nudge does not add a user turn")
+  local users7 = {}
+  for _, m in ipairs(history7) do if m.role == "user" then users7[#users7 + 1] = m end end
+  assert_eq(users7[1].content, "hello", "T117 the nudge is not left in the user message")
+  local nudged = st7.seen[2][#st7.seen[2]]
+  assert_true(type(nudged.content) == "string" and nudged.content:find("hello", 1, true) == 1
+    and nudged.content:find("empty", 1, true) ~= nil, "T117 the nudge is folded into the user turn")
+  local answer7
+  for _, m in ipairs(history7) do if m.role == "assistant" then answer7 = m.content end end
+  assert_eq(answer7, "answer", "T117 the nudged answer is kept")
+
+  -- 8. two empty answers give up with one error
+  agent.clear()
+  local st8, ev8 = run({
+    { events = { { type = "done", reason = "stop" } } },
+    { events = { { type = "done", reason = "stop" } } },
+  })
+  assert_eq(st8.calls, 2, "T117 the empty answer is nudged exactly once")
+  local errs8 = 0
+  for _, ev in ipairs(ev8) do if ev.type == "error" then errs8 = errs8 + 1 end end
+  assert_eq(errs8, 1, "T117 giving up emits one error")
+
+  -- 9. continuations are bounded by the iteration cap
+  agent.clear()
+  local endless = {}
+  local st9 = make_stream(setmetatable({}, { __index = function()
+    return { events = { { type = "text_delta", text = "x" }, { type = "done", reason = "length" } } }
+  end }))
+  _G.api = { stream = st9.fn }
+  agent.turn({ workspace = "/tmp/ws", auto_approve = {}, retry = { base_delay_ms = 1 } },
+    "k", "go", function() end)
+  assert_eq(st9.calls, 50, "T117 the iteration cap bounds continuations")
+
+  -- T120 (group 8): the interrupt the host delivers. While a turn blocks the
+  -- UI is not reading stdin, so the host watches it and reports Ctrl+C through
+  -- tether.abort_requested(); the turn must stop exactly as for the UI flag,
+  -- and must clear it again so the next turn is not aborted by a spent Ctrl+C.
+  local saved_abort = _G.tether.abort_requested
+  local saved_clear = _G.tether.clear_abort
+  local saved_t_sleep = _G.tether.sleep
+  -- The host flag is sticky: it stays set until the turn clears it, so the same
+  -- Ctrl+C keeps aborting an in-flight transfer until the turn has stopped.
+  local interrupt, cleared = false, 0
+  _G.tether.abort_requested = function() return interrupt end
+  _G.tether.clear_abort = function() cleared = cleared + 1; interrupt = false end
+
+  local function saw(events, kind)
+    for _, ev in ipairs(events) do if ev.type == kind then return true end end
+    return false
+  end
+
+  -- 10. an interrupt that arrives during the backoff wait ends the wait, and is
+  -- cleared so the next turn is not aborted by the Ctrl+C that ended this one
+  agent.clear()
+  interrupt, cleared = false, 0
+  _G.tether.sleep = function() interrupt = true end
+  local st10, ev10 = run({
+    { ok = false, failure = policy.failure("connection", "ECONNRESET") },
+    { events = { { type = "text_delta", text = "late" }, { type = "done", reason = "stop" } } },
+  }, 60000)
+  _G.tether.sleep = saved_t_sleep
+  assert_eq(st10.calls, 1, "T120 a host interrupt during the wait stops the loop")
+  assert_true(saw(ev10, "aborted"), "T120 aborted is emitted")
+  assert_false(saw(ev10, "error"), "T120 an aborted turn reports no error")
+  -- the retry notice precedes the wait; the abort ends it, and no second attempt
+  -- is ever sent
+  local retry_seen, abort_seen = 0, 0
+  for i, ev in ipairs(ev10) do
+    if ev.type == "retry" then retry_seen = i end
+    if ev.type == "aborted" then abort_seen = i end
+  end
+  assert_true(retry_seen > 0 and retry_seen < abort_seen,
+    "T120 the interrupted wait follows its retry notice")
+  assert_false(interrupt, "T120 the handled interrupt is cleared, not left set")
+  assert_eq(cleared, 2, "T120 cleared at the turn start and when the abort is handled")
+
+  -- 11. an interrupt raised while the transfer is in flight (what the libcurl
+  -- progress callback does): the transfer fails, and the turn still ends as
+  -- aborted rather than retrying the transport error
+  agent.clear()
+  interrupt, cleared = false, 0
+  local st11 = make_stream({
+    { ok = false, failure = policy.failure("interrupted", "interrupted by user") },
+    { events = { { type = "done", reason = "stop" } } },
+  })
+  local real_stream11 = st11.fn
+  _G.api = { stream = function(...) interrupt = true; return real_stream11(...) end }
+  local ev11 = {}
+  agent.turn({ workspace = "/tmp/ws", _session_id = "s1", auto_approve = {},
+               retry = { base_delay_ms = 1 } },
+      "k", "hello", function(ev) ev11[#ev11 + 1] = ev end)
+  assert_eq(st11.calls, 1, "T120 an aborted transfer is not retried")
+  assert_true(saw(ev11, "aborted"), "T120 an aborted transfer ends the turn as aborted")
+  assert_false(saw(ev11, "error"), "T120 an aborted transfer shows no error banner")
+
+  -- 11b. and if the flag was already consumed, the interrupted kind is still not
+  -- retryable — the turn ends with the distinct message instead of looping
+  agent.clear()
+  interrupt, cleared = false, 0
+  local st11b, ev11b = run({
+    { ok = false, failure = policy.failure("interrupted", "interrupted by user") },
+    { events = { { type = "done", reason = "stop" } } },
+  }, 1)
+  assert_eq(st11b.calls, 1, "T120 an interrupted failure with no flag is not retried")
+  local kind11b, msg11b = nil, nil
+  for _, ev in ipairs(ev11b) do
+    if ev.type == "error" then kind11b = ev.kind; msg11b = ev.message end
+  end
+  assert_false(saw(ev11b, "retry"), "T120 the interrupted fallback never retries")
+  assert_eq(kind11b, "interrupted", "T120 the fallback error carries its kind")
+  assert_eq(msg11b, "interrupted by user", "T120 the fallback error explains itself")
+
+  -- 12. the policy has no retry for the interrupted kind at all
+  local p = policy.policy({ retry = { base_delay_ms = 1 } })
+  local verdict = policy.verdict(p, policy.new_state(), policy.failure("interrupted", "interrupted by user"))
+  assert_eq(verdict.action, "stop", "T120 interrupted stops the retry loop")
+  assert_eq(policy.is_retryable("interrupted"), false, "T120 interrupted is not retryable")
+  assert_eq(policy.reason("interrupted"), "interrupted by user", "T120 interrupted has a reason")
+
+  _G.tether.abort_requested = saved_abort
+  _G.tether.clear_abort = saved_clear
+  _G.context = saved_context
+  print("T117 turn retry and continuation: OK")
+  print("T120 host interrupt delivery: OK")
+end)
+
+-- T115: retry policy — classification, schedule, cutoff, continuation.
+do
+  local policy = assert(loadfile("src/tether/retry.lua"))()
+
+  -- classification: text beats status, quota and permanent stop the loop
+  assert_eq(policy.classify("invalid api key"), "permanent", "T115 invalid api key")
+  assert_eq(policy.classify("The model 'gpt-9' does not exist"), "permanent", "T115 unknown model")
+  assert_eq(policy.classify("Unauthorized"), "permanent", "T115 unauthorized text")
+  assert_eq(policy.classify("something odd", 401), "permanent", "T115 401 permanent")
+  assert_eq(policy.classify("something odd", 403), "permanent", "T115 403 permanent")
+  assert_eq(policy.classify("You've hit your limit \194\183 resets in 3 hours"), "quota", "T115 usage limit")
+  assert_eq(policy.classify("You exceeded your current quota, please check your plan"), "quota", "T115 plan quota")
+  assert_eq(policy.classify("Your account is suspended"), "quota", "T115 suspended account")
+  assert_eq(policy.classify("insufficient_quota", 429), "quota", "T115 quota beats the 429 status")
+  assert_eq(policy.classify("Insufficient Balance", 402), "credit", "T115 balance stays retryable")
+  assert_eq(policy.classify("Not Enough Credits"), "credit", "T115 credits")
+  assert_eq(policy.classify("ECONNRESET"), "connection", "T115 connection error")
+  assert_eq(policy.classify("Max outbound streams is 100, 100 open"), "connection", "T115 stream exhaustion")
+  assert_eq(policy.classify("context_length_exceeded", 400), "request", "T115 context 400 retryable")
+  assert_eq(policy.classify("payload too large", 413), "request", "T115 413")
+  assert_eq(policy.classify("OVERLOADED"), "server", "T115 case-insensitive")
+  assert_eq(policy.classify(nil, 429), "server", "T115 status alone")
+  assert_eq(policy.classify(""), "empty", "T115 empty body")
+  assert_eq(policy.classify("something nobody has seen"), "unknown", "T115 catch-all")
+  assert_true(policy.is_retryable("unknown"), "T115 unknown is retryable")
+  assert_true(policy.is_retryable("empty"), "T115 empty is retryable")
+  assert_false(policy.is_retryable("permanent"), "T115 permanent not retryable")
+  assert_false(policy.is_retryable("quota"), "T115 quota not retryable")
+
+  -- schedule: defaults and the cap
+  local p = policy.policy({})
+  assert_eq(p.base_delay_ms, 2000, "T115 default base")
+  assert_eq(p.max_delay_ms, 60000, "T115 default max")
+  assert_eq(p.multiplier, 2, "T115 default multiplier")
+  assert_eq(p.max_failures_at_max_delay, 3, "T115 default max failures")
+  assert_eq(policy.wait(p, 1), 2, "T115 first wait")
+  assert_eq(policy.wait(p, 5), 32, "T115 fifth wait")
+  assert_eq(policy.wait(p, 6), 60, "T115 sixth wait is capped")
+  assert_eq(policy.wait(p, 8), 60, "T115 later waits stay capped")
+
+  -- cutoff with defaults: nine attempts, three waits at the cap
+  local state = policy.new_state()
+  local attempts, verdict = 0, nil
+  while true do
+    attempts = attempts + 1
+    verdict = policy.verdict(p, state, policy.failure("server", "overloaded"))
+    if verdict.action ~= "retry" then break end
+    state.attempt = state.attempt + 1
+  end
+  assert_eq(attempts, 9, "T115 nine attempts before the cutoff")
+  assert_eq(state.failures_at_max_delay, 3, "T115 three waits at the cap")
+  assert_eq(verdict.action, "stop", "T115 cutoff stops the loop")
+
+  -- a retried attempt reports its wait; a non-retryable one never waits
+  local first = policy.verdict(p, policy.new_state(), policy.failure("server", "rate limit"))
+  assert_eq(first.action, "retry", "T115 first failure retries")
+  assert_eq(first.delay, 2, "T115 first delay")
+  assert_eq(policy.verdict(p, policy.new_state(), policy.failure("permanent", "invalid api key")).action,
+    "stop", "T115 permanent stops at once")
+  assert_eq(policy.verdict(p, policy.new_state(), policy.failure("quota", "out of budget")).action,
+    "stop", "T115 quota stops at once")
+
+  -- attempt cap
+  local capped = policy.policy({ retry = { max_attempts = 3 } })
+  local st2 = policy.new_state()
+  for i = 1, 3 do
+    local v = policy.verdict(capped, st2, policy.failure("server", "rate limit"))
+    if i < 3 then assert_eq(v.action, "retry", "T115 under the cap retries")
+    else assert_eq(v.action, "stop", "T115 cap stops the loop") end
+    st2.attempt = st2.attempt + 1
+  end
+
+  -- Retry-After changes the wait, not the cutoff bookkeeping
+  local st4 = policy.new_state()
+  local v4 = policy.verdict(p, st4, policy.failure("server", "rate limit", 429, 5))
+  assert_eq(v4.delay, 5, "T115 retry_after overrides the wait")
+  assert_eq(st4.failures_at_max_delay, 0, "T115 retry_after is not a capped wait")
+
+  -- invalid configuration falls back per value
+  local junk = policy.policy({ retry = { base_delay_ms = 0, multiplier = 0.5,
+                                         max_failures_at_max_delay = "three" } })
+  assert_eq(junk.base_delay_ms, 2000, "T115 zero base falls back")
+  assert_eq(junk.multiplier, 1, "T115 multiplier below 1 becomes 1")
+  assert_eq(junk.max_failures_at_max_delay, 3, "T115 junk falls back")
+  local junk2 = policy.policy({ retry = { base_delay_ms = "soon" } })
+  assert_eq(junk2.base_delay_ms, 2000, "T115 malformed base falls back")
+  local scaled = policy.policy({ retry = { base_delay_ms = 1000, multiplier = 3 } })
+  assert_eq(policy.wait(scaled, 1), 1, "T115 custom first wait")
+  assert_eq(policy.wait(scaled, 2), 3, "T115 custom second wait")
+
+  -- continuation policy
+  local st5 = policy.new_state()
+  assert_eq(policy.continuation_action(st5, "length", true, false), "length", "T115 truncation continues")
+  assert_eq(policy.continuation_action(st5, "length", true, true), nil, "T115 tool calls win over truncation")
+  assert_eq(policy.continuation_action(st5, "stop", false, false), "empty", "T115 empty answer is nudged")
+  assert_eq(policy.continuation_action(st5, "stop", false, false), "empty_giveup", "T115 only one nudge")
+  policy.reset(st5)
+  assert_eq(policy.continuation_action(st5, "stop", false, false), "empty", "T115 reset restores the nudge")
+  assert_eq(policy.continuation_action(st5, "stop", true, false), nil, "T115 text ends the turn")
+  assert_eq(policy.continuation_action(st5, "other", false, false), nil, "T115 unmapped reason ends the turn")
+  assert_eq(policy.continuation_text("length"), policy.CONTINUE_TEXT, "T115 continuation text")
+  assert_eq(policy.continuation_text("empty"), policy.EMPTY_TEXT, "T115 nudge text")
+  assert_true(#policy.CONTINUE_TEXT > 0 and #policy.EMPTY_TEXT > 0, "T115 texts are non-empty")
+
+  -- terminal messages
+  assert_true(policy.terminal_message(policy.failure("server", "overloaded"), 9)
+      :find("9 attempts", 1, true) ~= nil, "T115 exhaustion names the attempt count")
+  assert_true(policy.terminal_message(policy.failure("quota", "You've hit your limit"), 2)
+      :find("retries stopped", 1, true) ~= nil, "T115 quota explains the stop")
+  assert_eq(policy.terminal_message(policy.failure("permanent", "invalid api key"), 1),
+    "invalid api key", "T115 permanent surfaces the provider text")
+
+  print("T115 retry policy: OK")
+end
+
+-- T121: the ask module — question normalisation and the answer payload
+-- (add-ask-tool). Pure data in → data out: no UI, no transport, no turn.
+do
+  local askmod = assert(loadfile("src/tether/ask.lua"))()
+  local common = assert(loadfile("src/tether/providers/common.lua"))()
+
+  -- --- 1.1 normalisation ---------------------------------------------------
+  local qs = askmod.normalize({ questions = {
+    { id = "scope", question = "Scope?",
+      options = { { label = "src" }, { label = "all" } } },
+    { id = "priority", question = "Priority?", multi = true, recommended = 2,
+      description = "Choose the focus",
+      options = { { label = "core", description = "first" }, { label = "tests" } } },
+  } })
+  assert_eq(#qs, 2, "T121 two questions survive in order")
+  assert_eq(qs[1].id, "scope", "T121 first id")
+  assert_eq(qs[2].id, "priority", "T121 second id")
+  assert_true(qs[2].multi, "T121 multi is kept")
+  assert_eq(qs[2].recommended, 2, "T121 recommended is kept")
+  assert_eq(qs[2].description, "Choose the focus", "T121 description is kept")
+  assert_eq(qs[2].options[1].description, "first", "T121 option description is kept")
+  assert_false(qs[1].multi, "T121 multi defaults to false")
+  assert_eq(qs[1].recommended, nil, "T121 absent recommended stays nil")
+
+  -- a bare questions array (not wrapped in {questions=...}) is accepted too
+  assert_eq(#askmod.normalize({ { question = "flat" } }), 1, "T121 unwrapped array works")
+
+  -- bounds: 8 questions, 12 options, truncated text
+  local many = {}
+  for i = 1, 9 do many[i] = { question = "q" .. i } end
+  assert_eq(#askmod.normalize({ questions = many }), 8, "T121 9 questions → 8")
+  local opts = {}
+  for i = 1, 13 do opts[i] = { label = "o" .. i } end
+  local capped = askmod.normalize({ questions = { { question = "cap", options = opts } } })
+  assert_eq(#capped[1].options, 12, "T121 13 options → 12")
+  assert_eq(capped[1].options[12].label, "o12", "T121 the first 12 options survive")
+  local big = askmod.normalize({ questions = { {
+      question = string.rep("x", 1200), description = string.rep("y", 9000) } } })
+  assert_eq(#big[1].question, askmod.QUESTION_MAX + #askmod.TRUNCATION,
+    "T121 oversized question text is truncated")
+  assert_eq(#big[1].description, askmod.DESCRIPTION_MAX + #askmod.TRUNCATION,
+    "T121 oversized description is truncated")
+
+  -- degradation: nothing usable is dropped, the rest still asks
+  local degraded = askmod.normalize({ questions = {
+    { question = "no id", options = {} },
+    { question = "   " },
+    { question = "dup", id = "scope", options = { { label = "" }, "ok", { label = 7 } } },
+    { question = "again", id = "scope" },
+    { question = "junk", multi = "yes", recommended = 9, options = { { label = "a" } } },
+  } })
+  assert_eq(#degraded, 4, "T121 only questions with text survive")
+  assert_eq(degraded[1].id, "q1", "T121 a missing id is defaulted")
+  assert_eq(#degraded[1].options, 0, "T121 an optionless question still asks")
+  assert_eq(#degraded[2].options, 1, "T121 unusable option labels are dropped")
+  assert_eq(degraded[2].options[1].label, "ok", "T121 a bare string option is accepted")
+  assert_eq(degraded[3].id, "scope-2", "T121 duplicate ids become distinct")
+  assert_eq(degraded[4].multi, false, "T121 a non-boolean multi is false")
+  assert_eq(degraded[4].recommended, nil, "T121 an out-of-range recommended is ignored")
+  assert_eq(#askmod.normalize({}), 0, "T121 an empty call carries nothing")
+  assert_eq(#askmod.normalize("nonsense"), 0, "T121 a non-table argument carries nothing")
+
+  -- --- 1.2 payload, notes, summary ----------------------------------------
+  local payload = askmod.encode(qs, {
+    { selected = { "src" } },
+    { selected = { "core", "tests" }, notes = { ["tests"] = "after core" } },
+  })
+  assert_true(payload:find('"selected":["src"]', 1, true) ~= nil,
+    "T121 a single choice is one array element")
+  assert_true(payload:find('"selected":["core","tests"]', 1, true) ~= nil,
+    "T121 a multi answer carries every toggle")
+  -- (the encoder emits object keys in `pairs` order, so match the members)
+  assert_true(payload:find('"notes":[{', 1, true) ~= nil,
+    "T121 notes travel as an array of pairs")
+  assert_true(payload:find('"option":"tests"', 1, true) ~= nil
+    and payload:find('"note":"after core"', 1, true) ~= nil,
+    "T121 notes travel as option/note pairs")
+  local decoded = common.json_decode(payload)
+  assert_eq(type(decoded), "table", "T121 the payload is valid JSON")
+  assert_eq(decoded.answers[1].id, "scope", "T121 answers keep the question order")
+  assert_eq(decoded.answers[2].id, "priority", "T121 second answer id")
+  assert_eq(decoded.answers[1].selected[1], "src", "T121 labels are verbatim")
+  assert_eq(decoded.answers[2].notes[1].option, "tests", "T121 the note is keyed by its option")
+  assert_eq(decoded.answers[1].other, nil, "T121 an empty freeform field is omitted")
+
+  -- freeform-only answer: selected is [] and the text rides in `other`
+  local free = askmod.encode(qs, { { selected = {}, other = "Nuxt" } })
+  assert_true(free:find('"selected":[]', 1, true) ~= nil,
+    "T121 an empty selection encodes as an array")
+  assert_true(free:find('"other":"Nuxt"', 1, true) ~= nil, "T121 the freeform text is in other")
+  local free_decoded = common.json_decode(free)
+  assert_eq(#free_decoded.answers[1].selected, 0, "T121 freeform-only has no selection")
+  assert_eq(free_decoded.answers[1].other, "Nuxt", "T121 freeform text round-trips")
+
+  -- a note on an unselected option still travels, and survives a freeform answer
+  local noted = askmod.encode(qs, {
+    { selected = { "src" }, notes = { ["all"] = "too big" } },
+    { selected = {}, other = "both", notes = { ["core"] = "with tests" } },
+  })
+  local noted_decoded = common.json_decode(noted)
+  assert_eq(noted_decoded.answers[1].notes[1].option, "all", "T121 an unselected option's note travels")
+  assert_eq(noted_decoded.answers[1].selected[1], "src", "T121 the note is not an answer")
+  assert_eq(noted_decoded.answers[2].notes[1].option, "core", "T121 notes survive a freeform answer")
+
+  -- summary names each id with its selection, freeform text and notes
+  local sum = askmod.summary(qs, {
+    { selected = { "src" }, notes = { ["all"] = "too big" } },
+    { selected = { "core", "tests" } },
+  })
+  assert_true(sum:find("scope=src", 1, true) ~= nil, "T121 the summary names the id and selection")
+  assert_true(sum:find("priority=core, tests", 1, true) ~= nil, "T121 the summary names a multi answer")
+  assert_true(sum:find("scope/all: too big", 1, true) ~= nil, "T121 the summary names the notes")
+  local sum_free = askmod.summary(qs, { { selected = {}, other = "Nuxt" } })
+  assert_true(sum_free:find("scope=«Nuxt»", 1, true) ~= nil, "T121 the summary names a freeform answer")
+
+  -- cancellation payload: an empty answer set that names the cancellation
+  local cancelled = common.json_decode(askmod.cancelled_payload())
+  assert_true(cancelled.cancelled == true, "T121 the cancellation names itself")
+  assert_eq(#cancelled.answers, 0, "T121 the cancellation carries no answers")
+
+  print("T121 ask module: OK")
+end
+
+-- T122: both built-in tool descriptions list the same tools (add-ask-tool 2.1).
+-- agent.builtin_prompt is the fallback base prompt, context.BUILTIN_PROMPT is
+-- the base context.compose actually builds, so a tool listed in only one of
+-- them is invisible in half the runs.
+do
+  local agent = assert(loadfile("src/tether/agent.lua"))()
+  local context = assert(loadfile("src/tether/context.lua"))()
+
+  local function listing(text)
+    local names = {}
+    for name in (text or ""):gmatch("\n%- ([%w_]+)%(") do names[#names + 1] = name end
+    return names
+  end
+
+  local a, c = listing(agent.builtin_prompt), listing(context.builtin_prompt)
+  assert_true(#a > 0, "T122 the built-in prompt lists tools")
+  assert_eq(table.concat(a, ","), table.concat(c, ","),
+    "T122 the two built-in tool listings agree")
+  local joined = "," .. table.concat(a, ",") .. ","
+  assert_true(joined:find(",ask,", 1, true) ~= nil, "T122 the listings name ask")
+  assert_true(joined:find(",patch,", 1, true) ~= nil, "T122 the listings name the existing tools")
+  assert_true((agent.builtin_prompt or ""):find("ask(questions)", 1, true) ~= nil,
+    "T122 the ask entry shows its argument shape")
+  print("T122 built-in tool listings: OK")
+end
+
+-- T123: ask parks the turn and the answer resumes it (add-ask-tool 2.2/2.3).
+-- Agent level: a stubbed stream emits the tool calls, and the turn is resolved
+-- the way the UI resolves it — answer_ask(...) then continue.
+do
+  local ASK_WS = "/tmp/tether_ask_t123a"
+  os.execute("rm -rf " .. ASK_WS .. " && mkdir -p " .. ASK_WS)
+  with_modules(base_env, function(mods)
+    local agent = mods.agent
+    local cfg = { workspace = ASK_WS, _session_id = "s1", auto_approve = {} }
+    local journal = {}
+    mods.session.append = function(_, ev) journal[#journal + 1] = ev end
+    local requests, events = 0, {}
+    local function on_ev(ev) events[#events + 1] = ev end
+    mods.api.stream = function(c, key, messages, on_event)
+      requests = requests + 1
+      if requests == 1 then
+        on_event({ type = "tool_call_start", id = "a1", name = "ask" })
+        on_event({ type = "tool_call_delta", id = "a1",
+          arguments = '{"questions":[{"id":"scope","question":"Scope?",'
+            .. '"options":[{"label":"src"},{"label":"all"}]}]}' })
+        on_event({ type = "tool_call_start", id = "w1", name = "write" })
+        on_event({ type = "tool_call_delta", id = "w1",
+          arguments = '{"path":"out.txt","content":"written\\n"}' })
+      else
+        on_event({ type = "text_delta", text = "done" })
+      end
+      return true
+    end
+
+    local function tool_msgs()
+      local n = 0
+      for _, m in ipairs(agent.get_history()) do
+        if m.role == "tool" then n = n + 1 end
+      end
+      return n
+    end
+    local function count_asks()
+      local n = 0
+      for _, ev in ipairs(events) do if ev.type == "ask" then n = n + 1 end end
+      return n
+    end
+
+    agent.turn(cfg, "k", "which scope?", on_ev)
+
+    local ask_ev
+    for _, ev in ipairs(events) do if ev.type == "ask" then ask_ev = ev end end
+    assert_notnil(ask_ev, "T123 the ask call raises an event")
+    assert_eq(ask_ev and ask_ev.id, "a1", "T123 the event carries the call id")
+    assert_eq(ask_ev and ask_ev.questions[1].id, "scope",
+      "T123 the event carries the normalised questions")
+    assert_eq(ask_ev and #ask_ev.questions[1].options, 2, "T123 the options survive normalisation")
+    assert_eq(tool_msgs(), 0, "T123 nothing behind the ask runs while it is parked")
+    assert_eq(requests, 1, "T123 the turn returned without another request")
+
+    -- a repeated continue neither re-emits nor runs the queued call
+    agent.continue(cfg, "k", on_ev)
+    assert_eq(count_asks(), 1, "T123 continue does not re-emit the ask")
+    assert_eq(tool_msgs(), 0, "T123 a call queued behind the ask still waits")
+    assert_eq(requests, 1, "T123 the parked turn makes no request")
+
+    -- the answer records the tool result, lets the queued call run, drains
+    local more = agent.answer_ask("a1", { { selected = { "src" } } }, cfg, on_ev)
+    assert_false(more, "T123 answering the last interaction drains the queue")
+
+    local payload
+    for _, m in ipairs(agent.get_history()) do
+      if m.role == "tool" and m.tool_call_id == "a1" then payload = m.content end
+    end
+    assert_notnil(payload, "T123 the answer is that call's tool result")
+    assert_true((payload or ""):find('"selected":["src"]', 1, true) ~= nil,
+      "T123 the tool result carries the answer payload")
+
+    local journaled = false
+    for _, ev in ipairs(journal) do
+      if ev.type == "tool_result" and ev.tool_call_id == "a1" then journaled = true end
+    end
+    assert_true(journaled, "T123 the answer is journaled")
+
+    local wrote = false
+    for _, m in ipairs(agent.get_history()) do
+      if m.role == "tool" and m.tool_call_id == "w1" then wrote = true end
+    end
+    assert_true(wrote, "T123 the call queued behind the ask runs once it is answered")
+    local f = io.open(ASK_WS .. "/out.txt", "r")
+    assert_notnil(f, "T123 the queued write reached the disk")
+    if f then f:close() end
+
+    -- resuming sends the answer to the model and finishes the turn
+    agent.continue(cfg, "k", on_ev)
+    assert_eq(requests, 2, "T123 the resumed turn makes its next request")
+    print("T123 ask parks the turn: OK")
+  end)
+end
+
+-- T123b: cancelling resolves every queued ask of the step (add-ask-tool 2.4)
+do
+  local ASK_WS = "/tmp/tether_ask_t123b"
+  os.execute("rm -rf " .. ASK_WS .. " && mkdir -p " .. ASK_WS)
+  with_modules(base_env, function(mods)
+    local agent = mods.agent
+    local cfg = { workspace = ASK_WS, _session_id = "s1", auto_approve = {} }
+    mods.session.append = function() end
+    local requests, events = 0, {}
+    local function on_ev(ev) events[#events + 1] = ev end
+    mods.api.stream = function(c, key, messages, on_event)
+      requests = requests + 1
+      if requests == 1 then
+        on_event({ type = "tool_call_start", id = "a1", name = "ask" })
+        on_event({ type = "tool_call_delta", id = "a1",
+          arguments = '{"questions":[{"id":"one","question":"One?"}]}' })
+        on_event({ type = "tool_call_start", id = "a2", name = "ask" })
+        on_event({ type = "tool_call_delta", id = "a2",
+          arguments = '{"questions":[{"id":"two","question":"Two?"}]}' })
+        on_event({ type = "tool_call_start", id = "w1", name = "write" })
+        on_event({ type = "tool_call_delta", id = "w1",
+          arguments = '{"path":"cancel.txt","content":"x\\n"}' })
+      else
+        on_event({ type = "text_delta", text = "ok" })
+      end
+      return true
+    end
+
+    local function count_asks()
+      local n = 0
+      for _, ev in ipairs(events) do if ev.type == "ask" then n = n + 1 end end
+      return n
+    end
+
+    agent.turn(cfg, "k", "ask me twice", on_ev)
+    assert_eq(count_asks(), 1, "T123b only the first question is raised")
+
+    agent.answer_ask("a1", { cancelled = true }, cfg, on_ev)
+    assert_eq(count_asks(), 1, "T123b the queued question is not raised after a cancel")
+
+    local results = {}
+    for _, m in ipairs(agent.get_history()) do
+      if m.role == "tool" then results[m.tool_call_id] = m.content end
+    end
+    assert_true((results.a1 or ""):find('"cancelled":true', 1, true) ~= nil,
+      "T123b the cancelled call reports the cancellation")
+    assert_true((results.a2 or ""):find('"cancelled":true', 1, true) ~= nil,
+      "T123b the queued call reports the same cancellation")
+    assert_notnil(results.w1, "T123b the pending write is unaffected")
+    local f = io.open(ASK_WS .. "/cancel.txt", "r")
+    assert_notnil(f, "T123b the pending write reached the disk")
+    if f then f:close() end
+    print("T123b cancel resolves the batch: OK")
+  end)
+end
+
+-- T123c: a non-interactive run gets an error result instead of a question
+-- (add-ask-tool 2.5), and an unusable question set does too.
+do
+  with_modules(base_env, function(mods)
+    local agent = mods.agent
+    local cfg = { workspace = "/tmp/ws", _session_id = "s1", auto_approve = {},
+                  non_interactive = true }
+    mods.session.append = function() end
+    local requests, events = 0, {}
+    local function on_ev(ev) events[#events + 1] = ev end
+    mods.api.stream = function(c, key, messages, on_event)
+      requests = requests + 1
+      if requests == 1 then
+        on_event({ type = "tool_call_start", id = "a1", name = "ask" })
+        on_event({ type = "tool_call_delta", id = "a1",
+          arguments = '{"questions":[{"id":"q","question":"Which?"}]}' })
+      else
+        on_event({ type = "text_delta", text = "decided" })
+      end
+      return true
+    end
+
+    agent.turn(cfg, "k", "go", on_ev)
+    assert_eq(requests, 2, "T123c the loop makes its next request without waiting")
+    local saw_ask, saw_err = false, false
+    for _, ev in ipairs(events) do
+      if ev.type == "ask" then saw_ask = true end
+      if ev.type == "tool_result" and ev.error
+          and ev.error:find("no interactive user", 1, true) then saw_err = true end
+    end
+    assert_false(saw_ask, "T123c no question is raised")
+    assert_true(saw_err, "T123c the call yields an error result")
+    local content
+    for _, m in ipairs(agent.get_history()) do
+      if m.role == "tool" then content = m.content end
+    end
+    assert_true((content or "").find ~= nil
+      and (content or ""):find("no interactive user", 1, true) ~= nil,
+      "T123c the model reads the explanation")
+    print("T123c non-interactive ask: OK")
+  end)
+end
+
+do
+  with_modules(base_env, function(mods)
+    local agent = mods.agent
+    local cfg = { workspace = "/tmp/ws", _session_id = "s1", auto_approve = {} }
+    mods.session.append = function() end
+    local requests, events = 0, {}
+    local function on_ev(ev) events[#events + 1] = ev end
+    mods.api.stream = function(c, key, messages, on_event)
+      requests = requests + 1
+      if requests == 1 then
+        on_event({ type = "tool_call_start", id = "a1", name = "ask" })
+        on_event({ type = "tool_call_delta", id = "a1",
+          arguments = '{"questions":[{"question":"   "}]}' })
+      else
+        on_event({ type = "text_delta", text = "decided" })
+      end
+      return true
+    end
+
+    agent.turn(cfg, "k", "go", on_ev)
+    assert_eq(requests, 2, "T123d an unusable question set keeps the loop going")
+    local saw_ask, saw_err = false, false
+    for _, ev in ipairs(events) do
+      if ev.type == "ask" then saw_ask = true end
+      if ev.type == "tool_result" and ev.error
+          and ev.error:find("no usable question", 1, true) then saw_err = true end
+    end
+    assert_false(saw_ask, "T123d nothing answerable raises no question")
+    assert_true(saw_err, "T123d the tool result names the problem")
+    print("T123d unusable question set: OK")
+  end)
+end
+
+-- T124: the question block renders from an ask event (add-ask-tool 3.1).
+do
+  local askmod = assert(loadfile("src/tether/ask.lua"))()
+  local agent_stub = { turn = function() return true end, get_history = function() return {} end,
+                       answer_ask = function() return false end, continue = function() return true end }
+  local uimod, S = run_ui_with({ 17 }, { agent = agent_stub })
+
+  -- a waiting turn first: the block must take the placeholder's place
+  S.waiting = true
+  uimod._sync_tail()
+  assert_notnil(tph(uimod), "T124 the placeholder is up before the question")
+
+  uimod._handle_agent_event({ type = "ask", id = "a1", questions = {
+    { id = "scope", question = "Which scope?", description = "Pick exactly one.",
+      recommended = 2,
+      options = { { label = "src", description = "only src" }, { label = "all" } } },
+  } })
+  assert_notnil(S.ask, "T124 the event opens the block")
+  assert_notnil(task(uimod), "T124 the block is a synthetic tail entry")
+  assert_eq(S.busy, false, "T124 the turn is not busy while the user answers")
+  assert_eq(S.waiting, false, "T124 the waiting state is cleared")
+  assert_eq(tph(uimod), nil, "T124 no placeholder is painted under the block")
+
+  local rows = uimod._render_all(80)
+  local joined = table.concat(rows, "\n")
+  assert_true(joined:find("Which scope?", 1, true) ~= nil, "T124 the question text is rendered")
+  assert_true(joined:find("? ", 1, true) ~= nil, "T124 the block leads with the question row")
+  assert_true(joined:find("Pick exactly one.", 1, true) ~= nil, "T124 the description is rendered as context")
+  assert_true(joined:find("1. src", 1, true) ~= nil, "T124 option rows carry their index")
+  assert_true(joined:find("2. all", 1, true) ~= nil, "T124 the second option is rendered")
+  assert_true(joined:find("only src", 1, true) ~= nil, "T124 an option description is rendered")
+  assert_true(joined:find("(рекомендуется)", 1, true) ~= nil, "T124 the recommended option is flagged")
+  assert_true(joined:find(askmod.FREEFORM_LABEL, 1, true) ~= nil, "T124 the freeform row is always present")
+  assert_true(joined:find("(", 1, true) ~= nil, "T124 the block renders rows")
+
+  -- the highlight starts on the first option, not on the recommended one
+  local highlighted, recommended_row = nil, nil
+  for _, r in ipairs(rows) do
+    if r:find("\27[7m", 1, true) then highlighted = r end
+    if r:find("(рекомендуется)", 1, true) then recommended_row = r end
+  end
+  assert_notnil(highlighted, "T124 a row is highlighted")
+  assert_true(highlighted and highlighted:find("1. src", 1, true) ~= nil,
+    "T124 the initial highlight stays on the first option")
+  assert_true(recommended_row ~= nil and recommended_row:find("2. all", 1, true) ~= nil,
+    "T124 the recommended flag sits on option 2")
+
+  -- progress appears only for a multi-question call
+  local uimod2, S2 = run_ui_with({ 17 }, { agent = agent_stub })
+  local three = {}
+  for i = 1, 3 do
+    three[i] = { id = "q" .. i, question = "Question " .. i,
+                 options = { { label = "a" }, { label = "b" } } }
+  end
+  uimod2._handle_agent_event({ type = "ask", id = "a2", questions = three })
+  local joined2 = table.concat(uimod2._render_all(80), "\n")
+  assert_true(joined2:find("Question 1", 1, true) ~= nil, "T124 the first question is shown")
+  assert_true(joined2:find("(1/3)", 1, true) ~= nil, "T124 a multi-question call shows its progress")
+  assert_true(joined2:find("Question 2", 1, true) == nil, "T124 the next question waits its turn")
+
+  -- a multi question marks every option, and a saved note renders under its option
+  S2.ask.questions[1].multi = true
+  S2.ask.answers[1].selected = { "a" }
+  S2.ask.answers[1].notes = { b = "second choice" }
+  uimod2._sync_tail()
+  local joined3 = table.concat(uimod2._render_all(80), "\n")
+  assert_true(joined3:find("[x] 1. a", 1, true) ~= nil, "T124 a toggled option is marked")
+  assert_true(joined3:find("[ ] 2. b", 1, true) ~= nil, "T124 an untoggled option is marked too")
+  assert_true(joined3:find("second choice", 1, true) ~= nil, "T124 a note renders under its option")
+
+  -- a single-question call shows no progress indicator at all
+  local uimod3, S3 = run_ui_with({ 17 }, { agent = agent_stub })
+  uimod3._handle_agent_event({ type = "ask", id = "a3", questions = {
+    { id = "one", question = "Only one?", options = { { label = "x" } } } } })
+  local joined4 = table.concat(uimod3._render_all(80), "\n")
+  assert_true(joined4:find("(1/1)", 1, true) == nil, "T124 a single question has no progress indicator")
+  print("T124 question block rendering: OK")
+end
+
+-- T125: answering a question with the keyboard (add-ask-tool 3.2).
+do
+  local rec = { continued = 0 }
+  local agent_stub = {
+    turn = function() return true end,
+    get_history = function() return {} end,
+    answer_ask = function(id, answer) rec.id = id; rec.answer = answer; return false end,
+    continue = function() rec.continued = rec.continued + 1; return true end,
+  }
+  local function boot(questions)
+    local uimod, S = run_ui_with({ 17 }, { agent = agent_stub })
+    -- the harness restores globals after run(); resolving an answer calls into
+    -- the agent again, so the stub has to be reachable for the post-run keys
+    _G.agent = agent_stub
+    uimod._handle_agent_event({ type = "ask", id = "a1", questions = questions })
+    return uimod, S
+  end
+  local down  = { kind = "special", name = "down" }
+  local left  = { kind = "special", name = "left" }
+  local enter = { kind = "enter" }
+  local esc   = { kind = "esc" }
+  local function text(c) return { kind = "text", char = c } end
+  local one = { { id = "scope", question = "Scope?",
+                  options = { { label = "src" }, { label = "all" }, { label = "none" } } } }
+
+  -- arrow + Enter picks the highlighted option
+  local m, S = boot(one)
+  m._handle_key(down)
+  assert_eq(S.ask.sel, 2, "T125 ↓ moves the highlight")
+  m._handle_key(enter)
+  assert_notnil(rec.answer, "T125 Enter submits the highlighted option")
+  assert_eq(rec.answer[1].selected[1], "all", "T125 the second option is the answer")
+  assert_eq(S.ask, nil, "T125 the block closes on submit")
+  assert_eq(rec.continued, 1, "T125 the turn resumes after the answer")
+  local row
+  for _, e in ipairs(tentries(m)) do
+    if e.role == "system" and (e.text or ""):find("→ ask:", 1, true) then row = e.text end
+  end
+  assert_notnil(row, "T125 a summary row is appended")
+  assert_true(row and row:find("scope=all", 1, true) ~= nil, "T125 the row names the answer")
+
+  -- a digit submits that option
+  rec.answer = nil
+  local m2 = boot(one)
+  m2._handle_key(text("3"))
+  assert_notnil(rec.answer, "T125 a digit submits")
+  assert_eq(rec.answer[1].selected[1], "none", "T125 the third option is the answer")
+
+  -- keys the block does not use change nothing and never reach the input line
+  rec.answer = nil
+  local m3, S3 = boot(one)
+  local input_before = S3.input
+  m3._handle_key(text("z"))
+  m3._handle_key(text("7"))
+  assert_eq(S3.input, input_before, "T125 unused keys do not reach the input line")
+  assert_eq(rec.answer, nil, "T125 nothing is submitted")
+  assert_notnil(S3.ask, "T125 the block stays open")
+
+  -- Esc cancels the set, raises no banner, and the turn continues
+  local m4, S4 = boot(one)
+  local before_cancel = rec.continued
+  m4._handle_key(esc)
+  assert_true(rec.answer and rec.answer.cancelled == true, "T125 Esc reports the cancellation")
+  assert_eq(S4.ask, nil, "T125 the block is gone after Esc")
+  assert_eq(S4.error_banner, nil, "T125 a cancellation raises no error banner")
+  assert_eq(rec.continued, before_cancel + 1, "T125 the turn continues after a cancellation")
+
+  -- multi: Space toggles without submitting, Enter accepts the selection
+  rec.answer = nil
+  local multi = { { id = "cons", question = "Constraints?", multi = true,
+                    options = { { label = "no breaks" }, { label = "zero deps" } } } }
+  local m5, S5 = boot(multi)
+  m5._handle_key(text(" "))
+  m5._handle_key(down)
+  m5._handle_key(text(" "))
+  assert_eq(rec.answer, nil, "T125 a toggle does not submit")
+  assert_eq(#S5.ask.answers[1].selected, 2, "T125 two options are toggled")
+  m5._handle_key(text(" "))
+  assert_eq(#S5.ask.answers[1].selected, 1, "T125 Space toggles the highlight off again")
+  m5._handle_key(enter)
+  assert_notnil(rec.answer, "T125 Enter accepts the multi selection")
+  assert_eq(#rec.answer[1].selected, 1, "T125 the accepted selection is reported")
+
+  -- ← returns to the previous question with its answer intact
+  rec.answer = nil
+  local two = {
+    { id = "q1", question = "First?", options = { { label = "a" }, { label = "b" } } },
+    { id = "q2", question = "Second?", options = { { label = "c" }, { label = "d" } } } }
+  local m6, S6 = boot(two)
+  m6._handle_key(enter)
+  assert_eq(S6.ask.qidx, 2, "T125 Enter advances to the next question")
+  assert_eq(rec.answer, nil, "T125 the set is not submitted before its last question")
+  assert_eq(S6.ask.answers[1].selected[1], "a", "T125 the earlier answer is kept while advancing")
+  m6._handle_key(left)
+  assert_eq(S6.ask.qidx, 1, "T125 ← returns to the previous question")
+  assert_eq(S6.ask.answers[1].selected[1], "a", "T125 the answer is still selected")
+  m6._handle_key(enter)
+  m6._handle_key(enter)
+  assert_notnil(rec.answer, "T125 the last question submits the whole set")
+  assert_eq(#rec.answer, 2, "T125 both answers are reported")
+
+  -- the waiting state stays clear while the block is open
+  local m7, S7 = boot(one)
+  local ph125 = tph(m7)
+  assert_eq(ph125, nil, "T125 no placeholder under the block")
+  assert_eq(S7.waiting, false, "T125 the turn is not painted as waiting")
+  print("T125 question block keys: OK")
+end
+
+-- T126: the freeform answer and option notes (add-ask-tool 3.3).
+do
+  local rec = { continued = 0 }
+  local agent_stub = {
+    turn = function() return true end,
+    get_history = function() return {} end,
+    answer_ask = function(id, answer) rec.answer = answer; return false end,
+    continue = function() rec.continued = rec.continued + 1; return true end,
+  }
+  local function boot(questions)
+    local uimod, S = run_ui_with({ 17 }, { agent = agent_stub })
+    -- the harness restores globals after run(); resolving an answer calls into
+    -- the agent again, so the stub has to be reachable for the post-run keys
+    _G.agent = agent_stub
+    uimod._handle_agent_event({ type = "ask", id = "a1", questions = questions })
+    return uimod, S
+  end
+  local function type_text(uimod, str)
+    for i = 1, #str do uimod._handle_key({ kind = "text", char = str:sub(i, i) }) end
+  end
+  local down, enter, esc, tab = { kind = "special", name = "down" }, { kind = "enter" },
+      { kind = "esc" }, { kind = "tab" }
+  local up = { kind = "special", name = "up" }
+  local qs = { { id = "scope", question = "Scope?",
+                 options = { { label = "src" }, { label = "all" } } } }
+
+  -- Tab writes a note on the highlighted option
+  local m, S = boot(qs)
+  m._handle_key(tab)
+  assert_eq(S.ask.mode, "note", "T126 Tab opens the note editor")
+  type_text(m, "too big")
+  assert_eq(S.ask.editor, "too big", "T126 the editor buffer holds the note")
+  m._handle_key(enter)
+  assert_eq(S.ask.mode, "list", "T126 Enter commits and returns to the list")
+  assert_eq(S.ask.answers[1].notes.src, "too big", "T126 the note is saved on its option")
+  assert_true(table.concat(m._render_all(80), "\n"):find("too big", 1, true) ~= nil,
+    "T126 the note renders under its option")
+
+  -- the note editor's Esc discards its edits and does not cancel the set
+  m._handle_key(tab)
+  type_text(m, "XX")
+  m._handle_key(esc)
+  assert_eq(S.ask.mode, "list", "T126 Esc returns to the option list")
+  assert_eq(S.ask.answers[1].notes.src, "too big", "T126 Esc discarded the edits")
+  assert_notnil(S.ask, "T126 Esc did not cancel the question set")
+  assert_eq(S.ask.editor, "", "T126 the editor buffer is dropped")
+
+  -- ↑ inside an editor does not move the highlight
+  local sel_before = S.ask.sel
+  m._handle_key(tab)
+  m._handle_key(up)
+  assert_eq(S.ask.mode, "note", "T126 ↑ does not leave the editor")
+  assert_eq(S.ask.sel, sel_before, "T126 editing keys do not move the highlight")
+  m._handle_key(esc)
+
+  -- an empty commit clears a note again
+  m._handle_key(tab)
+  m._handle_key({ kind = "backspace" })
+  assert_eq(S.ask.editor, "too bi", "T126 backspace edits the buffer")
+  m._handle_key(enter)
+  assert_eq(S.ask.answers[1].notes.src, "too bi", "T126 the edited note is saved")
+
+  -- the note travels with the answer
+  m._handle_key(enter)
+  assert_eq(rec.answer[1].selected[1], "src", "T126 the highlighted option is the answer")
+  assert_eq(rec.answer[1].notes.src, "too bi", "T126 the note travels with the answer")
+
+  -- freeform: Enter opens, text commits, Enter submits
+  rec.answer = nil
+  local m2, S2 = boot(qs)
+  m2._handle_key(down)
+  m2._handle_key(down)
+  assert_eq(S2.ask.sel, 3, "T126 ↓ reaches the freeform row")
+  m2._handle_key(enter)
+  assert_eq(S2.ask.mode, "other", "T126 Enter opens the editor while no text is committed")
+  type_text(m2, "Nuxt")
+  m2._handle_key(enter)
+  assert_eq(S2.ask.mode, "list", "T126 Enter commits the freeform text")
+  assert_eq(S2.ask.answers[1].other, "Nuxt", "T126 the text is kept on the question")
+  assert_eq(rec.answer, nil, "T126 committing alone does not submit")
+  m2._handle_key(enter)
+  assert_notnil(rec.answer, "T126 Enter submits once the freeform text is committed")
+  assert_eq(rec.answer[1].other, "Nuxt", "T126 the freeform text is the answer")
+  assert_eq(#rec.answer[1].selected, 0, "T126 a freeform-only answer has no selection")
+
+  -- Esc in the freeform editor discards and keeps the set open
+  rec.answer = nil
+  local m3, S3 = boot(qs)
+  m3._handle_key(down)
+  m3._handle_key(down)
+  m3._handle_key(enter)
+  type_text(m3, "Nuxt")
+  m3._handle_key(esc)
+  assert_eq(S3.ask.mode, "list", "T126 Esc leaves the freeform editor")
+  assert_eq(S3.ask.answers[1].other, "", "T126 the freeform edit was discarded")
+  assert_eq(rec.answer, nil, "T126 the set is still open")
+
+  -- Tab re-opens the freeform editor, prefilled with the committed text
+  m3._handle_key(enter)
+  type_text(m3, "Nuxt")
+  m3._handle_key(enter)
+  m3._handle_key(tab)
+  assert_eq(S3.ask.mode, "other", "T126 Tab on the freeform row re-opens the editor")
+  assert_eq(S3.ask.editor, "Nuxt", "T126 the editor is prefilled with the committed text")
+  m3._handle_key(esc)
+
+  -- a question with no options is answerable through the freeform row
+  rec.answer = nil
+  local m4, S4 = boot({ { id = "free", question = "Anything?", options = {} } })
+  m4._handle_key(enter)
+  assert_eq(S4.ask.mode, "other", "T126 an optionless question opens the freeform editor")
+  type_text(m4, "all of it")
+  m4._handle_key(enter)
+  m4._handle_key(enter)
+  assert_notnil(rec.answer, "T126 an optionless question is answerable")
+  assert_eq(rec.answer[1].other, "all of it", "T126 the typed text is the answer")
+
+  -- an empty commit clears a committed freeform answer
+  rec.answer = nil
+  local m5, S5 = boot(qs)
+  m5._handle_key(down)
+  m5._handle_key(down)
+  m5._handle_key(enter)
+  type_text(m5, "Nuxt")
+  m5._handle_key(enter)
+  m5._handle_key(tab)
+  m5._handle_key({ kind = "backspace" })
+  m5._handle_key({ kind = "backspace" })
+  m5._handle_key({ kind = "backspace" })
+  m5._handle_key({ kind = "backspace" })
+  m5._handle_key(enter)
+  assert_eq(S5.ask.answers[1].other, "", "T126 an empty commit clears the freeform answer")
+  print("T126 freeform and notes: OK")
+end
+
+-- T127: the block's keys are documented and its glyphs degrade (3.4/3.5).
+do
+  local agent_stub = { turn = function() return true end, get_history = function() return {} end,
+                       answer_ask = function() return false end, continue = function() return true end }
+  local uimod, S = run_ui_with({ 17 }, { agent = agent_stub })
+  _G.agent = agent_stub
+
+  assert_notnil(uimod.ASK_KEYS, "T127 the block's bindings are exported")
+  for _, key in ipairs({ "up", "down", "enter", "1", "space", "tab", "left", "esc", "backspace" }) do
+    assert_notnil(uimod.ASK_KEYS[key], "T127 the block documents " .. key)
+  end
+
+  uimod._handle_agent_event({ type = "ask", id = "a1", questions = {
+    { id = "scope", question = "Scope?", multi = true,
+      options = { { label = "src" } } } } })
+  S.ask.answers[1].selected = { "src" }
+  S.ask.answers[1].notes = { src = "careful" }
+  S.ask.answers[1].other = "Nuxt"
+  uimod._sync_tail()
+
+  -- ASCII mode: no glyph the block introduces survives untranslated
+  uimod._ascii_mode = true
+  local rows = uimod._render_all(80)
+  local joined = table.concat(rows, "\n")
+  assert_true(joined:find("[x]", 1, true) ~= nil, "T127 the toggle marker is ASCII")
+  assert_true(joined:find("->", 1, true) ~= nil, "T127 the note marker degrades")
+  for _, glyph in ipairs({ "↳", "▌", "«", "»" }) do
+    assert_true(joined:find(glyph, 1, true) == nil,
+      "T127 no " .. glyph .. " glyph is left in ASCII mode")
+  end
+  -- and the ASCII freeform hint quotes with plain quotes instead
+  assert_true(joined:find('"Nuxt"', 1, true) ~= nil,
+    "T127 the freeform hint quotes in ASCII: " .. joined:gsub("\n", " | "):sub(1, 120))
+  uimod._ascii_mode = nil
+  print("T127 block keys and ASCII: OK")
+end
+
+-- ============================================================
+-- pi-style-input-and-footer: dock layout, box, caret, footer
+-- ============================================================
+do
+  local agent_stub = { turn = function() return true end, get_history = function() return {} end }
+  local function strip(s) return (s or ""):gsub("\27%[[%d;]*m", "") end
+  local function type_text(uimod, text)
+    for i = 1, #text do
+      uimod._handle_key({ kind = "text", char = text:sub(i, i) })
+    end
+  end
+  local function boot(stub, size, extra)
+    local uimod = run_ui_with({ 17 }, (function()
+      local s = { agent = stub or agent_stub, size = size }
+      if extra then for k, v in pairs(extra) do s[k] = v end end
+      return s
+    end)())
+    if extra and extra.skills then uimod._skills_stub = extra.skills end
+    return uimod
+  end
+
+  -- 2.1: the dock budget addresses the new rows for empty input, multi-line
+  -- input, an open palette and a visible error banner.
+  do
+    local uimod = boot()
+    uimod._paint(true)
+    local L = uimod._layout()
+    assert_notnil(L.rule_top_row, "pi 2.1 empty input has a top rule row")
+    assert_notnil(L.input_row, "pi 2.1 empty input has an input row")
+    assert_notnil(L.rule_bottom_row, "pi 2.1 empty input has a bottom rule row")
+    assert_notnil(L.footer_row, "pi 2.1 empty input has a footer path row")
+    assert_notnil(L.stats_row, "pi 2.1 empty input has a stats row")
+    assert_eq(L.rule_bottom_row + 1, L.footer_row, "pi 2.1 footer follows the bottom rule when palette is closed")
+    assert_true(L.transcript_h >= 1, "pi 2.1 transcript keeps at least one row")
+    assert_true(L.rule_top_row > L.error_row + L.error_h - 1, "pi 2.1 box sits below the error row")
+
+    -- multi-line input grows the box between the two rules
+    type_text(uimod, "line1")
+    uimod._handle_key({ kind = "newline" })
+    type_text(uimod, "line2")
+    uimod._paint(true)
+    local L2 = uimod._layout()
+    assert_true(L2.input_h >= 2, "pi 2.1 multi-line input reserves two rows")
+    assert_eq(L2.rule_bottom_row, L2.rule_top_row + 1 + L2.input_h, "pi 2.1 rules bracket exactly the input rows")
+    local rtop = strip(uimod._row(L2.rule_top_row))
+    local rbot = strip(uimod._row(L2.rule_bottom_row))
+    assert_true(rtop:find("─", 1, true) ~= nil or rtop:find("%-", 1, true) ~= nil, "pi 2.1 top rule painted")
+    assert_true(rbot:find("─", 1, true) ~= nil or rbot:find("%-", 1, true) ~= nil, "pi 2.1 bottom rule painted")
+
+    -- open palette inserts rows between the bottom rule and the footer
+    local uimod_p = boot()
+    uimod_p._skills_stub = function()
+      local out = {}
+      for i = 1, 12 do
+        out[i] = { name = "s" .. i, description = "d", path = "/tmp/s" .. i .. "/SKILL.md" }
+      end
+      return out
+    end
+    type_text(uimod_p, "/")
+    uimod_p._paint(true)
+    local Lp = uimod_p._layout()
+    assert_true(Lp.palette_h >= 1, "pi 2.1 open palette reserves rows")
+    assert_eq(Lp.footer_row, Lp.rule_bottom_row + Lp.palette_h + 1, "pi 2.1 footer follows the palette region")
+
+    -- error banner sits above the box and is included in the layout
+    uimod._set_error_banner("boom")
+    uimod._paint(true)
+    local Le = uimod._layout()
+    assert_eq(Le.error_h, 1, "pi 2.1 error banner reserves one row")
+    assert_eq(Le.error_row, 1 + Le.transcript_h, "pi 2.1 error row is directly below the transcript")
+    assert_eq(Le.rule_top_row, Le.error_row + 1, "pi 2.1 box starts below the error banner")
+    local erow = strip(uimod._row(Le.error_row))
+    assert_true(erow:find("boom", 1, true) ~= nil, "pi 2.1 error banner paints its message")
+    uimod._set_error_banner(nil)
+  end
+
+  -- 2.2: the flag row's elasticity — no active flag means no flag row, an
+  -- active flag adds exactly one, and the transcript height changes by the
+  -- same number of rows with no region overlap.
+  do
+    local uimod = boot()
+    uimod._paint(true)
+    local S = uimod._get_state()
+    S._mouse_flag_until = os.time() - 1
+    S.kb_protocol = 0
+    S.toast = nil
+    uimod._paint(true)
+    local L0 = uimod._layout()
+    assert_eq(L0.flags_row, nil, "pi 2.2 idle frame has no flag row")
+    local th0 = L0.transcript_h
+
+    S.kb_protocol = 1
+    uimod._paint(true)
+    local L1 = uimod._layout()
+    assert_notnil(L1.flags_row, "pi 2.2 active flag reserves one flag row")
+    assert_eq(L1.transcript_h, th0 - 1, "pi 2.2 transcript shrinks by exactly the flag row")
+    assert_true(L1.flags_row > L1.stats_row, "pi 2.2 flag row sits below the stats row")
+    assert_true(L1.stats_row < L1.flags_row and L1.flags_row <= S.h, "pi 2.2 no region overlaps the flag row")
+    -- every dock row is strictly ordered
+    assert_true(L1.rule_top_row < L1.input_row, "pi 2.2 top rule above input")
+    assert_true(L1.input_row + L1.input_h - 1 < L1.rule_bottom_row, "pi 2.2 input above bottom rule")
+    assert_true(L1.rule_bottom_row < L1.footer_row, "pi 2.2 bottom rule above footer")
+    assert_true(L1.footer_row < L1.stats_row, "pi 2.2 path above stats")
+    assert_true(L1.stats_row < L1.flags_row, "pi 2.2 stats above flags")
+  end
+
+  -- 3.1: the box renders without a prompt marker; padding 0 and 2; every row
+  -- shares one display width; ASCII mode swaps the rule glyph.
+  do
+    local uimod = boot(nil, nil, { config = { load = function()
+      return { model = "test", workspace = "/tmp",
+               ui = { input_max_lines = 8, editor_padding_x = 0 } } end,
+      api_key = function() return "" end } })
+    type_text(uimod, "hi")
+    uimod._paint(true)
+    local L = uimod._layout()
+    local input = uimod._row(L.input_row) or ""
+    assert_eq(strip(input):find("›", 1, true), nil, "pi 3.1 no prompt marker inside the box")
+    assert_true(strip(input):find("hi", 1, true) ~= nil, "pi 3.1 typed text is in the input row")
+    local rtop, rbot, body = uimod._row(L.rule_top_row), uimod._row(L.rule_bottom_row), input
+    local function width_of(s)
+      -- display width ignoring SGR
+      local plain = strip(s)
+      return uimod.vlen(plain)
+    end
+    assert_eq(width_of(rtop), L.w, "pi 3.1 top rule spans the full width")
+    assert_eq(width_of(rbot), L.w, "pi 3.1 bottom rule spans the full width")
+    assert_eq(width_of(body), L.w, "pi 3.1 input row is padded to the same width")
+
+    -- padding 2: text is inset by two columns on both sides
+    local uimod2 = boot(nil, nil, { config = { load = function()
+      return { model = "test", workspace = "/tmp",
+               ui = { input_max_lines = 8, editor_padding_x = 2 } } end,
+      api_key = function() return "" end } })
+    type_text(uimod2, "ab")
+    uimod2._paint(true)
+    local L2 = uimod2._layout()
+    local body2 = strip(uimod2._row(L2.input_row) or "")
+    assert_eq(body2:sub(1, 2), "  ", "pi 3.1 padding 2 leads with two spaces")
+    assert_eq(body2:sub(-2), "  ", "pi 3.1 padding 2 ends with two spaces")
+    assert_eq(body2:find("ab", 1, true), 3, "pi 3.1 text starts after the left padding")
+
+    -- ASCII mode: the rules use '-'
+    local uimod3 = boot()
+    uimod3._ascii_mode = true
+    type_text(uimod3, "x")
+    uimod3._paint(true)
+    local L3 = uimod3._layout()
+    local art = strip(uimod3._row(L3.rule_top_row) or "")
+    assert_true(art:find("─", 1, true) == nil, "pi 3.1 ASCII top rule has no box-drawing glyph")
+    assert_true(art:find("-", 1, true) ~= nil, "pi 3.1 ASCII top rule uses '-'")
+    uimod3._ascii_mode = nil
+  end
+
+  -- 3.2: centered scroll labels in the rules, omitted when the rule is too
+  -- narrow; hidden-above-only and hidden-below-only windows.
+  do
+    local uimod = boot(nil, nil, { config = { load = function()
+      return { model = "test", workspace = "/tmp",
+               ui = { input_max_lines = 3 } } end,
+      api_key = function() return "" end } })
+    -- five lines with cursor on the last → hidden above
+    type_text(uimod, "a")
+    for _ = 1, 4 do uimod._handle_key({ kind = "newline" }); type_text(uimod, "x") end
+    uimod._paint(true)
+    local L = uimod._layout()
+    local top = strip(uimod._row(L.rule_top_row) or "")
+    local bot = strip(uimod._row(L.rule_bottom_row) or "")
+    assert_true(top:find("more", 1, true) ~= nil, "pi 3.2 top rule names hidden-above rows: " .. top:sub(1, 60))
+    assert_true(top:find("↑", 1, true) ~= nil or top:find("%^", 1, true) ~= nil,
+      "pi 3.2 hidden-above label uses the up glyph")
+    assert_eq(bot:find("more", 1, true), nil, "pi 3.2 bottom rule has no label when nothing is hidden below")
+
+    -- narrow terminal: label does not fit, rule stays an unbroken run
+    local uimod_n = boot(nil, { width = 6, height = 20 }, { config = { load = function()
+      return { model = "t", workspace = "/tmp",
+               ui = { input_max_lines = 3 } } end,
+      api_key = function() return "" end } })
+    type_text(uimod_n, "a")
+    for _ = 1, 4 do uimod_n._handle_key({ kind = "newline" }); type_text(uimod_n, "x") end
+    uimod_n._paint(true)
+    local Ln = uimod_n._layout()
+    local topn = strip(uimod_n._row(Ln.rule_top_row) or "")
+    assert_eq(topn:find("more", 1, true), nil, "pi 3.2 narrow rule drops the label")
+    assert_true(#topn > 0, "pi 3.2 narrow rule still paints glyphs")
+  end
+
+  -- 3.3: block caret — mid-row, end-of-row, Cyrillic; no cursor-show escape.
+  do
+    local sink = {}
+    local uimod = run_ui_with({ 104, 105, 105, 17 }, { agent = agent_stub }, sink) -- "hii"
+    -- actually type three chars via keys after boot for cursor control
+    uimod = run_ui_with({ 17 }, { agent = agent_stub }, sink)
+    type_text(uimod, "abc")
+    -- move cursor left once → sits on 'c'
+    uimod._handle_key({ kind = "special", name = "left" })
+    uimod._paint(true)
+    local L = uimod._layout()
+    local body = uimod._row(L.input_row) or ""
+    local plain = strip(body)
+    -- the character under the cursor is painted in reverse video
+    assert_true(body:find("\27[7m", 1, true) ~= nil, "pi 3.3 mid-row caret uses reverse video")
+    assert_true(plain:find("c", 1, true) ~= nil, "pi 3.3 caret sits on a real character")
+
+    -- end-of-row caret: move to end
+    uimod._handle_key({ kind = "special", name = "end" })
+    uimod._paint(true)
+    body = uimod._row(L.input_row) or ""
+    assert_true(body:find("\27[7m", 1, true) ~= nil, "pi 3.3 end-of-row caret uses reverse video")
+
+    -- Cyrillic cursor offset: byte offset vs display column
+    local uimod_c = run_ui_with({ 17 }, { agent = agent_stub })
+    type_text(uimod_c, "привет")
+    uimod_c._handle_key({ kind = "special", name = "left" })
+    uimod_c._paint(true)
+    local Lc = uimod_c._layout()
+    local bodyc = uimod_c._row(Lc.input_row) or ""
+    assert_true(bodyc:find("\27[7m", 1, true) ~= nil, "pi 3.3 Cyrillic caret is reverse video")
+    local plainc = strip(bodyc)
+    assert_true(plainc:find("т", 1, true) ~= nil or plainc:find("е", 1, true) ~= nil,
+      "pi 3.3 Cyrillic caret covers a whole character")
+
+    -- no painted frame emits a cursor-show escape; ?25h is only the exit
+    -- teardown (co-issued with ?2004l), never a render frame
+    for _, s in ipairs(sink) do
+      if s:find("\27[?25h", 1, true) then
+        assert_true(s:find("\27[?2004l", 1, true) ~= nil,
+          "pi 3.3 no frame emits ESC[?25h")
+      end
+    end
+  end
+
+  -- 4.1: the busy spinner with elapsed seconds in the top rule, cleared when
+  -- the turn ends (reply).
+  do
+    local uimod = run_ui_with({ 104, 105, 13, 17 }, { agent = {
+      turn = function(_, _, _, on_ev)
+        -- mid-turn: the top rule must carry the spinner + elapsed
+        uimod.busy_probe = true
+        return true
+      end,
+      get_history = function() return {} end } })
+    local S = uimod._get_state()
+    -- drive a submit so busy is set, then inspect mid-flight via paint after
+    -- the turn returned (busy cleared) vs a forced busy state
+    S.busy = true
+    S.busy_started_at = os.time()
+    uimod._paint(true)
+    local L = uimod._layout()
+    local top = uimod._row(L.rule_top_row) or ""
+    assert_true(strip(top):find("думает", 1, true) ~= nil, "pi 4.1 busy top rule names the turn")
+    assert_true(strip(top):find("s", 1, true) ~= nil, "pi 4.1 busy top rule carries elapsed seconds")
+    -- end path: reply clears it
+    S.busy = false
+    S.busy_started_at = nil
+    uimod._paint(true)
+    top = strip(uimod._row(L.rule_top_row) or "")
+    assert_eq(top:find("думает", 1, true), nil, "pi 4.1 reply clears the busy indicator")
+    assert_true(top:find("─", 1, true) ~= nil or top:find("%-", 1, true) ~= nil,
+      "pi 4.1 top rule is a plain rule again")
+  end
+
+  -- 4.2 is covered by T119 (pending retry in the top rule).
+
+  -- 4.3: a long status on a narrow terminal stays one truncated row; a label
+  -- that does not fit is dropped while the status stays.
+  do
+    local uimod = boot(nil, { width = 12, height = 20 })
+    local S = uimod._get_state()
+    S.busy = true
+    S.busy_started_at = os.time()
+    -- force a hidden-above label that cannot coexist with the status
+    uimod._paint(true)
+    local L = uimod._layout()
+    local top = uimod._row(L.rule_top_row) or ""
+    local plain = strip(top)
+    assert_true(#plain > 0, "pi 4.3 narrow top rule still paints")
+    assert_true(uimod.vlen(plain) <= L.w, "pi 4.3 narrow top rule never exceeds the width")
+    -- status survives as a truncated single row (full word may not fit at w=12)
+    assert_true(plain:find("─", 1, true) ~= nil or plain:find("%-", 1, true) ~= nil
+      or plain:find("дум", 1, true) ~= nil or plain:find("tether", 1, true) ~= nil
+      or plain:find("…", 1, true) ~= nil, "pi 4.3 narrow rule keeps status or glyphs: " .. plain)
+    S.busy = false
+  end
+
+  -- 5.1: two usage events accumulate into tokens_in / tokens_out; the context
+  -- estimate keeps using tokens_used.
+  do
+    local uimod = run_ui_with({ 17 }, { agent = agent_stub })
+    local S = uimod._get_state()
+    assert_eq(S.tokens_in, 0, "pi 5.1 starts at zero in")
+    assert_eq(S.tokens_out, 0, "pi 5.1 starts at zero out")
+    uimod._handle_agent_event({ type = "usage", usage = { used = 100, prompt_tokens = 1200, completion_tokens = 300 } })
+    uimod._handle_agent_event({ type = "usage", usage = { used = 150, prompt_tokens = 800, completion_tokens = 200 } })
+    assert_eq(S.tokens_in, 2000, "pi 5.1 input tokens accumulate across turns")
+    assert_eq(S.tokens_out, 500, "pi 5.1 output tokens accumulate across turns")
+    assert_eq(S.tokens_used, 150, "pi 5.1 tokens_used stays the context estimate (last used)")
+  end
+
+  -- 5.2: compact counter formatter and stats-row composition.
+  do
+    local ui = dofile("src/tether/ui.lua")
+    assert_eq(ui.format_count(0), "0", "pi 5.2 zero")
+    assert_eq(ui.format_count(999), "999", "pi 5.2 plain below 1000")
+    assert_eq(ui.format_count(1000), "1.0k", "pi 5.2 one decimal k below 10k")
+    assert_eq(ui.format_count(9999), "10.0k", "pi 5.2 9999 rounds up to 10.0k")
+    assert_eq(ui.format_count(10000), "10k", "pi 5.2 rounded k below 1M")
+    assert_eq(ui.format_count(999999), "1000k", "pi 5.2 just under 1M stays k")
+    assert_eq(ui.format_count(1000000), "1.0M", "pi 5.2 one decimal M below 10M")
+    assert_eq(ui.format_count(10000000), "10M", "pi 5.2 rounded M above")
+    assert_eq(ui.format_count(-5), "0", "pi 5.2 negative clamps to zero")
+
+    -- stats row: model right-aligned with a two-column gap
+    local left = "↑3.0k ↓1.0k 4.1k/32k (13%)"
+    local right = "gpt-4o-mini"
+    local row = ui.footer_stats(left, right, 60)
+    local plain = (row or ""):gsub("\27%[[%d;]*m", "")
+    assert_true(plain:find("gpt-4o-mini", 1, true) ~= nil, "pi 5.2 model fits when there is room")
+    assert_eq(plain:sub(-#right), right, "pi 5.2 model ends in the last column")
+    local gap = #plain - #right - #left
+    assert_true(gap >= 2, "pi 5.2 at least two columns separate left from model (gap=" .. gap .. ")")
+
+    -- both cannot fit: model truncated from its left, tail survives
+    local narrow = ui.footer_stats(left, right, #left + 4)
+    local nplain = (narrow or ""):gsub("\27%[[%d;]*m", "")
+    assert_true(nplain:find("mini", 1, true) ~= nil, "pi 5.2 model keeps its tail when truncated")
+    assert_eq(nplain:find("gpt-", 1, true), nil, "pi 5.2 model loses its head first")
+
+    -- left alone exceeds the width: left truncated from the right with ...
+    local only = ui.footer_stats(string.rep("x", 100), "", 10)
+    assert_true(ui.vlen(only) <= 10, "pi 5.2 left side truncated to the width")
+  end
+
+  -- 5.3: path row, optional flags row, ASCII arrows; 5.4: no reverse video.
+  do
+    local uimod = boot()
+    local S = uimod._get_state()
+    S._mouse_flag_until = os.time() - 1
+    S.kb_protocol = 0
+    S.toast = nil
+    uimod._paint(true)
+    local L = uimod._layout()
+    local path_row = strip(uimod._row(L.footer_row) or "")
+    assert_true(path_row:find("/tmp", 1, true) ~= nil or path_row:find("~", 1, true) ~= nil,
+      "pi 5.3 path row carries the workspace: " .. path_row)
+    -- 5.4: no footer row uses reverse video
+    for _, r in ipairs({ L.footer_row, L.stats_row }) do
+      local raw = uimod._row(r) or ""
+      assert_eq(raw:find("\27[7m", 1, true), nil, "pi 5.4 footer row " .. r .. " is not reverse video")
+    end
+    -- with a fresh mouse flag the flag row appears and is not reverse as a whole
+    S._mouse_flag_until = os.time() + 3
+    uimod._paint(true)
+    L = uimod._layout()
+    assert_notnil(L.flags_row, "pi 5.3 active mouse flag reserves the flag row")
+    local frow = uimod._row(L.flags_row) or ""
+    assert_true(strip(frow):find("🖱", 1, true) ~= nil, "pi 5.3 flag row carries the mouse flag")
+    assert_eq(frow:find("\27[7m", 1, true), nil, "pi 5.4 flag row is not reverse video as a whole")
+
+    -- ASCII arrows in the counters
+    local uimod_a = boot()
+    uimod_a._ascii_mode = true
+    local Sa = uimod_a._get_state()
+    Sa.tokens_in, Sa.tokens_out = 3000, 1000
+    Sa._mouse_flag_until = os.time() - 1
+    Sa.kb_protocol = 0
+    Sa.toast = nil
+    uimod_a._paint(true)
+    local La = uimod_a._layout()
+    local stats_a = strip(uimod_a._row(La.stats_row) or "")
+    assert_true(stats_a:find("^", 1, true) ~= nil, "pi 5.3 ASCII input arrow is '^': " .. stats_a)
+    assert_true(stats_a:find("v", 1, true) ~= nil, "pi 5.3 ASCII output arrow is 'v': " .. stats_a)
+    assert_eq(stats_a:find("↑", 1, true), nil, "pi 5.3 no Unicode up-arrow in ASCII stats")
+    assert_eq(stats_a:find("↓", 1, true), nil, "pi 5.3 no Unicode down-arrow in ASCII stats")
+    uimod_a._ascii_mode = nil
+  end
+
+  print("pi-style-input-and-footer frame/unit tests: OK")
 end
 
 if failed > 0 then

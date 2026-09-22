@@ -85,6 +85,8 @@ local GLYPH_MAP = {
     ["┌"] = "+", ["┐"] = "+", ["└"] = "+", ["┘"] = "+", ["─"] = "-",
     ["│"] = "|", ["•"] = "-", ["…"] = "...", ["▓"] = "#", ["░"] = "-", ["━"] = "#",
     ["↑"] = "^", ["↓"] = "v", ["←"] = "<", ["→"] = ">",
+    -- add-ask-tool: the question block's glyphs (note marker, quoted freeform)
+    ["↳"] = "->", ["«"] = '"', ["»"] = '"',
 }
 local function to_ascii(s)
     if not (M._ascii_mode or M._env_ascii or _ascii) then return s end
@@ -816,6 +818,34 @@ local KEYMAP = {
 }
 M.KEYMAP = KEYMAP
 
+-- add-ask-tool: the question block's own bindings, as data. While the block is
+-- open it owns the keyboard, so these are its meanings for the shared keys:
+-- the arrows move across the option rows and the freeform row, a digit picks
+-- that option (toggling it on a `multi` question), Space toggles a `multi`
+-- option, Enter submits/accepts, Tab edits the highlighted row (a note on an
+-- option, the freeform answer on its row), ← returns to the previous question
+-- and Esc cancels the set without stopping the turn.
+local ASK_KEYS = {
+    ["up"]        = "previous option",
+    ["down"]      = "next option",
+    ["enter"]     = "submit / accept the question",
+    ["1"]         = "pick option 1",
+    ["space"]     = "toggle an option of a multi question",
+    ["tab"]       = "edit the highlighted option's note / the freeform answer",
+    ["left"]      = "previous question",
+    ["esc"]       = "cancel the question set",
+    ["backspace"] = "edit the open note / freeform editor",
+}
+M.ASK_KEYS = ASK_KEYS
+
+-- transcript: embedded global (main.c mods[]); loadfile fallback for tests.
+local transcript = _G.transcript
+if type(transcript) ~= "table" then
+    local chunk = loadfile("src/tether/transcript.lua")
+    transcript = (chunk and chunk()) or {}
+end
+M._transcript = transcript
+
 -- ============================================================
 -- State
 -- ============================================================
@@ -854,25 +884,9 @@ local function new_state()
         api_key = nil,
         debug = false,
 
-        transcript = {},
-        transcript_ver = 0,
-        known_count = 0,     -- entries seen at the last bump (append detection)
-
-        -- Virtualized transcript model: per-entry row caches plus a prefix-sum
-        -- height index (see "Transcript model" below).
-        index_w = nil,           -- width the index was built for
-        index_start = {},        -- index_start[i] = first row of entry i (1-based)
-        index_h = {},            -- index_h[i] = entry height in rows
-        index_total = 0,         -- total transcript rows
-        index_dirty_from = nil,  -- prefix sums must be rebuilt from this entry
-        cached_rows = 0,         -- wrapped rows retained across entries
-        use_counter = 0,         -- stamp source for the LRU approximation
-        visible_lo = 0,          -- entries framing the viewport (eviction guard)
-        visible_hi = -1,
+        -- Transcript rows / index / cache / synthetic tails live in the
+        -- transcript module; S keeps only paint-time viewport dimensions.
         last_transcript_h = nil,
-
-        confirm_entry = nil,     -- synthetic tail entries
-        placeholder_entry = nil,
 
         input = "",
         cursor = 0,  -- byte offset
@@ -889,6 +903,11 @@ local function new_state()
 
         expand_all = false,
         thinking_visible = true, -- M8 follow-up: overridden from cfg.ui.thinking in run()
+
+        -- add-ask-tool: the open question block (or nil) and its synthetic
+        -- tail entry — see render_entry's virt == "ask" branch and
+        -- handle_ask_key.
+        ask = nil,
 
         palette_active = false,
         palette_mode = "command",
@@ -923,67 +942,35 @@ local function new_state()
         tokens_used = 0,
         tokens_max = 32768,
         tokens_estimated = true,
+        -- pi-style-input-and-footer: session totals for the footer's ↑/↓
+        -- counters (the context cell keeps using tokens_used)
+        tokens_in = 0,
+        tokens_out = 0,
 
         spinner_frame = 0,
         last_ctrl_c = nil,
+
+        -- add-retry-and-continuation: the pending backoff wait, {attempt, delay}
+        retry_wait = nil,
     }
 end
 
--- Structural change by appending (new turn, new tool entry, system line):
--- existing entries keep their rows and heights, so this costs O(new entries).
+-- Structural / in-place / single-entry transcript mutations live in the
+-- transcript module; these are thin ui-local aliases for existing call sites.
 local function bump_transcript()
-    S.transcript_ver = S.transcript_ver + 1
-    local n = #S.transcript
-    local from = (S.known_count or 0) + 1
-    for i = from, n do
-        local e = S.transcript[i]
-        e.pos = i
-        e.ver = e.ver or 0
-    end
-    if from <= n and (not S.index_dirty_from or S.index_dirty_from > from) then
-        S.index_dirty_from = from
-    end
-    S.known_count = n
+    transcript.bump()
 end
 
--- In-place change that can affect ANY entry (expand-all, thinking toggle, a new
--- width). Every entry is re-derived, so these stay rare on purpose: content
--- edits go through touch_entry instead.
 local function invalidate_all()
-    local n = #S.transcript
-    for i = 1, n do
-        local e = S.transcript[i]
-        e.pos = i
-        e.ver = (e.ver or 0) + 1
-    end
-    S.index_dirty_from = 1
-    S.transcript_ver = S.transcript_ver + 1
-    S.known_count = n
+    transcript.invalidate()
 end
 
--- One entry's content changed (a streamed delta, a tool result): only that
--- entry is re-derived, so a long session never re-measures on a delta.
 local function touch_entry(e)
-    if not e then return end
-    e.ver = (e.ver or 0) + 1
-    S.transcript_ver = S.transcript_ver + 1
-    local pos = e.pos
-    if pos then
-        if not S.index_dirty_from or S.index_dirty_from > pos then
-            S.index_dirty_from = pos
-        end
-    else
-        S.index_dirty_from = 1 -- unknown position: rebuild from the start
-    end
+    transcript.touch(e)
 end
 
--- The whole list was replaced (/, /new, /resume, /clear).
 local function reset_transcript(list)
-    S.transcript = list or {}
-    S.known_count = 0
-    S.index_dirty_from = 1
-    S.visible_lo, S.visible_hi = 0, -1
-    bump_transcript()
+    transcript.reset(list)
 end
 M._touch_entry = touch_entry
 M._invalidate_all = invalidate_all
@@ -1039,28 +1026,125 @@ local function palette_window(h, n, sel)
 end
 M._palette_window = palette_window
 
+-- pi-style-input-and-footer: the box's rule glyph and the labels its rules
+-- carry for the input rows hidden above/below the window. ASCII twins come from
+-- GLYPH_MAP (─ → -, ↑ → ^, ↓ → v) through the dim() role, so no branch is
+-- needed here.
+local RULE_GLYPH = "─"
+local RULE_LABEL_UP = "↑ %d more"
+local RULE_LABEL_DOWN = "↓ %d more"
+
+-- pi-style-input-and-footer: horizontal padding inside the box's rules: whole
+-- columns, 0..3 (pi's editorPaddingX), further clamped so the content keeps at
+-- least one column. Pure, so tests can call it directly.
+function M.editor_padding(width, cfg_value)
+    local p = cfg_value
+    if type(p) ~= "number" then p = 0 end
+    p = math.floor(p)
+    if p < 0 then p = 0 elseif p > 3 then p = 3 end
+    local maxp = math.max(0, math.floor((math.max(width or 0, 1) - 1) / 2))
+    if p > maxp then p = maxp end
+    return p
+end
+
+local function box_padding(width)
+    return M.editor_padding(width, S.cfg and S.cfg.ui and S.cfg.ui.editor_padding_x)
+end
+
+-- pi-style-input-and-footer: the flags that do not depend on the transcript
+-- height — the one-shot toast, the mouse-mode flag (non-ASCII only, as before)
+-- and the keyboard-protocol flag. layout() reserves a row from their count;
+-- render_footer adds the scroll indicator, which does depend on the height.
+local function static_flags()
+    local out = {}
+    if S.toast then out[#out + 1] = green(S.toast) end
+    local mm = S.mouse_mode or (S.cfg and S.cfg.ui and S.cfg.ui.mouse) or "auto"
+    if S._mouse_flag_until and os.time() < S._mouse_flag_until
+        and not (M._ascii_mode or M._env_ascii or _ascii) then
+        out[#out + 1] = "🖱 " .. mm
+    end
+    if S.kb_protocol == 1 then
+        out[#out + 1] = "⌨ kitty"
+    elseif S.kb_protocol == 2 then
+        out[#out + 1] = "⌨ xterm"
+    end
+    return out
+end
+
+-- The scroll indicator as the footer shows it: the count of transcript rows
+-- hidden below the viewport, or nil while following. Uses M.scroll_indicator so
+-- layout() can call it before the local is declared (the module table is
+-- complete by the time any frame is painted).
+local function scroll_flag(transcript_h)
+    if not S.user_scrolled then return nil end
+    local hidden = M.scroll_indicator(M.transcript_height(S.w), S.scroll, transcript_h)
+    if not hidden or hidden <= 0 then return nil end
+    return ((M._ascii_mode or M._env_ascii or _ascii) and "v" or "↓") .. " +" .. hidden
+end
+
 local function layout()
     local total = #input_lines()
     local max_in = (S.cfg and S.cfg.ui and S.cfg.ui.input_max_lines) or 8
     local shown_in = math.min(total, max_in)
     if shown_in < 1 then shown_in = 1 end
 
-    local palette_h = 0
+    local error_h = S.error_banner and 1 or 0
+    local want_palette_h = 0
     if S.palette_active and #S.palette_items > 0 then
         -- 2.4: the reserved region follows the window (items + 2); the indicator
         -- row the palette may paint fits inside it (see render_palette)
         local win = palette_window(S.h, #S.palette_items, S.palette_sel)
-        palette_h = win + 2
+        want_palette_h = win + 2
     end
-    local error_h = S.error_banner and 1 or 0
 
-    -- M9: hint row removed — its line is returned to the transcript
-    -- footer: input block, then 1-row dim separator, then status line — the
-    -- separator must be reserved here too (F1b), otherwise it lands on the
-    -- last input row and paints over the input field.
-    local fixed = shown_in + palette_h + error_h + 1 + 1
-    local th = S.h - fixed
-    if th < 1 then th = 1 end
+    -- pi-style-input-and-footer: the dock runs, top to bottom — the box's top
+    -- rule, the input's rows, its bottom rule (which is what the separator row
+    -- used to be), the palette, the footer's path row, its stats row, and the
+    -- optional flag row. Everything is reserved here so no region can overlap
+    -- another; the error banner keeps its row above the box.
+    local function reserve(flags_h, pal_h)
+        return 1 + shown_in + pal_h + 1 + 2 + flags_h
+    end
+    local function th_for(flags_h, pal_h)
+        local th = S.h - error_h - reserve(flags_h, pal_h)
+        if th < 1 then return nil end
+        return th
+    end
+
+    -- The error banner sits above the dock, so the transcript gets every row
+    -- left after both the banner and the dock are reserved. On a short
+    -- terminal the palette is the flexible part: shrink it until the dock
+    -- fits with at least one transcript row, so the footer never leaves the
+    -- screen (the indicator row is the first thing to go).
+    local flags_h = #static_flags() > 0 and 1 or 0
+    local palette_h = want_palette_h
+    local th = th_for(flags_h, palette_h)
+    while th == nil and palette_h > 0 do
+        palette_h = palette_h - 1
+        th = th_for(flags_h, palette_h)
+    end
+    if th == nil then
+        palette_h = 0
+        th = th_for(flags_h, 0) or 1
+    end
+    -- The scroll indicator's own row depends on the transcript height, so it
+    -- settles in one extra pass: shrinking the transcript by that row can only
+    -- keep the indicator, never remove it.
+    if flags_h == 0 and scroll_flag(th) then
+        local th2 = th_for(1, palette_h)
+        while th2 == nil and palette_h > 0 do
+            palette_h = palette_h - 1
+            th2 = th_for(1, palette_h)
+        end
+        if th2 then
+            flags_h = 1
+            th = th2
+        end
+    end
+
+    local rule_top_row = 1 + th + error_h
+    local rule_bottom_row = rule_top_row + 1 + shown_in
+    local footer_row = rule_bottom_row + palette_h + 1
 
     return {
         w = S.w, h = S.h,
@@ -1068,13 +1152,16 @@ local function layout()
         transcript_h = th,
         error_row = 1 + th,
         error_h = error_h,
-        input_row = 1 + th + error_h,
+        rule_top_row = rule_top_row,
+        input_row = rule_top_row + 1,
         input_h = shown_in,
         input_total = total,
-        palette_row = 1 + th + error_h + shown_in,
+        rule_bottom_row = rule_bottom_row,
+        palette_row = rule_bottom_row,
         palette_h = palette_h,
-        separator_row = S.h - 1, -- footer: dim rule between input and status
-        status_row = S.h,
+        footer_row = footer_row,      -- the ~-abbreviated workspace, dim
+        stats_row = footer_row + 1,   -- counters + context cell, model right-aligned
+        flags_row = flags_h == 1 and footer_row + 2 or nil,
     }
 end
 -- Test seam: the region layout, so frame tests can address palette rows.
@@ -1344,13 +1431,8 @@ end
 -- declared) so the closures capture the locals correctly.
 M._path_complete_tab = function() if S then path_complete_tab() end end
 local function input_insert(s)
-    if s:find("\n", 1, true) then
-        local total = #input_lines()
-        local extra = select(2, s:gsub("\n", ""))
-        if total + extra > ((S.cfg and S.cfg.ui and S.cfg.ui.input_max_lines) or 8) then
-            s = s:gsub("\n", " ")
-        end
-    end
+    -- input_max_lines is the viewport window (design §7); the buffer may
+    -- grow past it and the rule row scrolls with ↑/↓ labels.
     S.input = S.input:sub(1, S.cursor) .. s .. S.input:sub(S.cursor + 1)
     S.cursor = S.cursor + #s
     palette_sync()
@@ -1358,14 +1440,18 @@ end
 
 local function input_backspace()
     if S.cursor <= 0 then return end
-    S.input = S.input:sub(1, S.cursor - 1) .. S.input:sub(S.cursor + 1)
-    S.cursor = S.cursor - 1
+    local prev = utf8.offset(S.input, -1, S.cursor + 1)
+    if not prev then return end
+    S.input = S.input:sub(1, prev - 1) .. S.input:sub(S.cursor + 1)
+    S.cursor = prev - 1
     palette_sync()
 end
 
 local function input_delete()
     if S.cursor >= #S.input then return end
-    S.input = S.input:sub(1, S.cursor) .. S.input:sub(S.cursor + 2)
+    local nxt = utf8.offset(S.input, 1, S.cursor + 1)
+    if not nxt then return end
+    S.input = S.input:sub(1, S.cursor) .. S.input:sub(nxt)
     palette_sync()
 end
 
@@ -1544,6 +1630,15 @@ end
 local diff_mod = _G.diff
     or (function()
         local chunk = loadfile("src/tether/diff.lua")
+        return chunk and chunk()
+    end)()
+
+-- add-ask-tool: the question block's constants and answer payload rules are a
+-- global in the built binary; the loadfile fallback keeps plain-lua runs and
+-- `lua tests/lua_tests.lua` working.
+local ask = _G.ask
+    or (function()
+        local chunk = loadfile("src/tether/ask.lua")
         return chunk and chunk()
     end)()
 
@@ -1772,9 +1867,82 @@ local function render_tool_body(name, e, inner)
     return wrap(body, math.max(inner, 1))
 end
 
+-- add-ask-tool: is `label` among this question's selected answers?
+local function ask_selected(answer, label)
+    for _, l in ipairs((answer and answer.selected) or {}) do
+        if l == label then return true end
+    end
+    return false
+end
+
+-- The question block's rows. Rendered from S.ask directly, so the highlight and
+-- the rows can never disagree about what is selectable: option rows are 1..n in
+-- order, then the always-present freeform row at n+1.
+local function render_ask(width)
+    local a = S.ask
+    if not a then return {} end
+    local q = a.questions and a.questions[a.qidx]
+    if not q then return {} end
+    local answer = a.answers[a.qidx] or {}
+    local n = #q.options
+    local inner = math.max(width - 2, 1)
+    local out = { "" }
+
+    local progress = #a.questions > 1
+        and string.format(" (%d/%d)", a.qidx, #a.questions) or ""
+    out[#out + 1] = cyan("? ") .. (q.question or "") .. dim(progress)
+
+    if q.description and q.description ~= "" then
+        for _, l in ipairs(md_render(q.description, inner)) do
+            out[#out + 1] = "  " .. l
+        end
+    end
+
+    for i, opt in ipairs(q.options) do
+        local row = {}
+        if q.multi then
+            row[#row + 1] = ask_selected(answer, opt.label) and "[x] " or "[ ] "
+        end
+        row[#row + 1] = i .. ". " .. opt.label
+        if q.recommended == i then row[#row + 1] = dim("  (рекомендуется)") end
+        local text = "  " .. table.concat(row)
+        if i == a.sel and a.mode == "list" then text = rev(text) end
+        out[#out + 1] = text
+        if opt.description and opt.description ~= "" then
+            for _, l in ipairs(wrap(opt.description, inner - 4)) do
+                out[#out + 1] = "      " .. dim(l)
+            end
+        end
+        if a.mode == "note" and a.note_sel == i then
+            out[#out + 1] = "    " .. dim("note> ") .. (a.editor or "") .. caret_glyph()
+        else
+            local note = answer.notes and answer.notes[opt.label]
+            if note and note ~= "" then
+                out[#out + 1] = "    " .. dim("↳ " .. note)
+            end
+        end
+    end
+
+    local freeform = ask.FREEFORM_LABEL
+    if a.mode == "other" then
+        out[#out + 1] = "  " .. freeform .. ": " .. (a.editor or "") .. caret_glyph()
+    else
+        local text = "  " .. freeform
+        if answer.other and answer.other ~= "" then
+            text = text .. dim("  («" .. answer.other .. "»)")
+        end
+        if a.sel == n + 1 and a.mode == "list" then text = rev(text) end
+        out[#out + 1] = text
+    end
+    return out
+end
+
 local function render_entry(e, width)
     -- Synthetic tail entries go through the same path as real entries so the
     -- height index, the scroll indicator and the parity helper stay consistent.
+    if e.virt == "ask" then
+        return render_ask(width)
+    end
     if e.virt == "placeholder" then
         -- the spinner frame is painted on this row by render_transcript
         return { "", dim("✻ tether думает…") }
@@ -1877,184 +2045,58 @@ local function render_entry(e, width)
     return {}
 end
 
--- ============================================================
--- Transcript model (virtualized: per-entry row caches + height index)
--- ============================================================
--- One render path for everything on screen. Entries are rendered on demand and
--- their wrapped rows cached per entry; the transcript height lives in a
--- prefix-sum index so a repaint touches the viewport instead of the session.
--- The confirmation menu and the waiting placeholder are synthetic tail entries
--- (S.confirm_entry / S.placeholder_entry) so heights, the scroll indicator and
--- the parity helper see them exactly like real entries.
+-- Wire render_entry + viewport cache bound into the transcript module. Must
+-- run after render_entry exists (above) and before any height query.
+transcript.configure({
+    render = render_entry,
+    cache_bound = function()
+        local vh = S and S.last_transcript_h
+        if not vh or vh < 1 then vh = (S and S.h or 24) - 6 end
+        if vh < 1 then vh = 1 end
+        return math.max(4 * vh, 1024)
+    end,
+})
+
+-- Thin delegates into transcript (kept as ui locals so existing call sites
+-- and test seams — M._sync_tail, M.transcript_height, … — stay stable).
 local function visible_count()
-    local n = #S.transcript
-    if S.confirm_entry then n = n + 1 end
-    if S.placeholder_entry then n = n + 1 end
-    return n
+    return transcript.visible_count()
 end
 
 local function entry_at(i)
-    local n = #S.transcript
-    if i <= n then return S.transcript[i] end
-    local k = i - n
-    if S.confirm_entry then
-        if k == 1 then return S.confirm_entry end
-        k = k - 1
-    end
-    if S.placeholder_entry and k == 1 then return S.placeholder_entry end
-    return nil
+    return transcript.entry_at(i)
 end
 
--- Called whenever S.confirmation or S.waiting changes: keeps the synthetic tail
--- entries in sync and invalidates the index from the tail (cheap — they sit
--- last). A fresh confirm entry bumps its version so the menu's rows re-render
--- (the selected option is styled in the rows).
+-- Called whenever S.confirmation or S.waiting changes: keeps the synthetic
+-- tail entries in sync (owned by transcript).
 local function sync_tail()
-    if S.confirmation then
-        S.confirm_entry = S.confirm_entry or { virt = "confirm", ver = 0 }
-        S.confirm_entry.ver = (S.confirm_entry.ver or 0) + 1
-    else
-        S.confirm_entry = nil
-    end
-    if S.waiting then
-        S.placeholder_entry = S.placeholder_entry or { virt = "placeholder", ver = 0 }
-    else
-        S.placeholder_entry = nil
-    end
-    local n = #S.transcript + 1
-    if not S.index_dirty_from or S.index_dirty_from > n then S.index_dirty_from = n end
+    transcript.sync_tail(S and S.confirmation, S and S.ask, S and S.waiting)
 end
 M._sync_tail = sync_tail
 
--- Rows this entry would occupy when wrapped to `width`; measured without
--- retaining the rows, so an off-screen entry costs a wrap pass once per
--- content/width change and no cached memory.
-local function entry_height(e, width)
-    if e.height ~= nil and e.h_w == width and e.h_ver == (e.ver or 0) then return e.height end
-    if e.rows and e.rows_w == width and e.rows_ver == (e.ver or 0) then
-        e.height, e.h_w, e.h_ver = #e.rows, width, (e.ver or 0)
-        return e.height
-    end
-    local rows = render_entry(e, width)
-    e.height, e.h_w, e.h_ver = #rows, width, (e.ver or 0)
-    return e.height
-end
-
--- Documented bound on retained wrapped rows: max(4 x viewport, 1024) rows total,
--- and no single entry may pin more than half of it (a giant entry is re-rendered
--- per repaint instead of filling the cache).
-local function cache_bound()
-    local vh = S.last_transcript_h
-    if not vh or vh < 1 then vh = (S.h or 24) - 6 end
-    if vh < 1 then vh = 1 end
-    return math.max(4 * vh, 1024)
-end
-
-local function evict_cached_rows()
-    local bound = cache_bound()
-    while (S.cached_rows or 0) > bound do
-        local best, best_use = nil, nil
-        for i = 1, visible_count() do
-            -- never evict the entries framing the viewport: they are repainted
-            -- immediately, which would make eviction pointless thrash
-            if i ~= S.visible_lo and i ~= S.visible_hi then
-                local e = entry_at(i)
-                if e and e.rows then
-                    local u = e.used or 0
-                    if not best_use or u < best_use then best, best_use = e, u end
-                end
-            end
-        end
-        if not best then return end
-        S.cached_rows = (S.cached_rows or 0) - #best.rows
-        best.rows, best.rows_w, best.rows_ver = nil, nil, nil
-    end
-end
-
-local function entry_rows(e, width)
-    if e.rows and e.rows_w == width and e.rows_ver == (e.ver or 0) then
-        S.use_counter = (S.use_counter or 0) + 1
-        e.used = S.use_counter
-        return e.rows
-    end
-    local rows = render_entry(e, width)
-    if S.cached_rows and #rows > cache_bound() / 2 then
-        return rows -- too big to cache; re-rendered on the next repaint
-    end
-    if e.rows then S.cached_rows = (S.cached_rows or 0) - #e.rows end
-    e.rows, e.rows_w, e.rows_ver = rows, width, (e.ver or 0)
-    S.use_counter = (S.use_counter or 0) + 1
-    e.used = S.use_counter
-    S.cached_rows = (S.cached_rows or 0) + #rows
-    evict_cached_rows()
-    return rows
-end
-M.cache_rows = function() return S.cached_rows or 0 end
-
--- Rebuild the prefix-sum height index, from the first dirty entry (O(1) for a
--- plain append) or from the start when the width changed.
 local function ensure_index(width)
-    if S.index_w == width and not S.index_dirty_from then return S.index_total end
-    local n = visible_count()
-    local from, rows = 1, 0
-    if S.index_w == width and S.index_dirty_from and S.index_dirty_from <= n then
-        from = S.index_dirty_from
-        rows = (from > 1) and (S.index_start[from - 1] or 0) or 0
-    else
-        S.index_start, S.index_h = {}, {}
-    end
-    for i = from, n do
-        local e = entry_at(i)
-        local h = e and entry_height(e, width) or 0
-        S.index_h[i] = h
-        rows = rows + h
-        S.index_start[i] = rows - h + 1
-    end
-    for i = n + 1, #S.index_start do
-        S.index_start[i], S.index_h[i] = nil, nil
-    end
-    S.index_w, S.index_total, S.index_dirty_from = width, rows, nil
-    return rows
+    return transcript.ensure_index(width)
+end
+
+local function entry_of_row(k, width)
+    return transcript.entry_of_row(k, width)
+end
+
+local function row_text(k, width)
+    return transcript.row_text(k, width)
 end
 
 function M.transcript_height(width)
     if not S then return 0 end
-    return ensure_index(width or S.w)
+    return transcript.height(width or S.w)
 end
-
-local function entry_of_row(k, width)
-    ensure_index(width)
-    local lo, hi, best = 1, visible_count(), nil
-    while lo <= hi do
-        local mid = (lo + hi) // 2
-        local s = S.index_start[mid]
-        if s and s <= k then best, lo = mid, mid + 1 else hi = mid - 1 end
-    end
-    return best
-end
-
-local function row_text(k, width)
-    local i = entry_of_row(k, width)
-    if not i then return "" end
-    local e = entry_at(i)
-    if not e then return "" end
-    local rows = entry_rows(e, width)
-    return rows[k - (S.index_start[i] or 0) + 1] or ""
-end
+M.cache_rows = function() return transcript.cache_rows() end
 
 -- Parity seam: the same rows the viewport path produces, but for the whole
 -- transcript. Tests compare the two to prove virtualization changes nothing.
 function M._render_all(width)
     if not S then return {} end
-    local out = {}
-    ensure_index(width or S.w)
-    for i = 1, visible_count() do
-        local e = entry_at(i)
-        if e then
-            for _, r in ipairs(entry_rows(e, width or S.w)) do out[#out + 1] = r end
-        end
-    end
-    return out
+    return transcript.render_all(width or S.w)
 end
 
 -- Full-render wrapper kept for the rare call sites that index rows directly
@@ -2171,8 +2213,9 @@ local function render_transcript(L)
         end
     end
     local last_painted = math.min(total, bottom)
-    S.visible_lo = entry_of_row(top, L.w) or 0
-    S.visible_hi = entry_of_row(last_painted, L.w) or -1
+    local lo = entry_of_row(top, L.w) or 0
+    local hi = entry_of_row(last_painted, L.w) or -1
+    transcript.set_visible(lo, hi)
     for i = 1, L.transcript_h do
         local idx = top + i - 1
         local text = ""
@@ -2199,6 +2242,130 @@ local function render_error_banner(L)
     set_row(L.error_row, rev(red(" ! ")) .. " " .. red(trunc(S.error_banner, L.w - 4)))
 end
 
+-- pi-style-input-and-footer: does the active renderer emit video attributes
+-- at all? ASCII/NO_COLOR and the `mono` theme emit none, so the block caret
+-- would be invisible there and a bar glyph stands in for it.
+local function caret_block()
+    local theme = THEMES[_theme_name] or THEMES.default
+    return M.color_depth() ~= "none" and theme.reverse ~= nil
+end
+
+-- Display-column slicing of a row body: drop `n` columns from the start, and
+-- keep at most `width` columns from the start. Both are SGR- and wide-char
+-- aware (they walk cells(), not bytes).
+local function drop_cols(s, n)
+    if not s or s == "" or n <= 0 then return s or "" end
+    local out, col = {}, 0
+    for _, c in ipairs(cells(s)) do
+        col = col + c.w
+        if col > n then out[#out + 1] = c.t end
+    end
+    return table.concat(out)
+end
+
+local function take_cols(s, width)
+    local out, col = {}, 0
+    if width <= 0 then return "", 0 end
+    for _, c in ipairs(cells(s)) do
+        if col + c.w > width then break end
+        out[#out + 1] = c.t
+        col = col + c.w
+    end
+    return table.concat(out), col
+end
+
+-- One input row's body: the line windowed to `width` display columns with the
+-- caret inside the window, padded out so every input row and both rules share
+-- one display width. `caret_off` is the cursor's byte offset inside `text`, or
+-- nil on the rows the cursor is not on. A line wider than the row scrolls so
+-- the caret stays visible, the way a one-line editor scrolls.
+local function input_row_text(text, caret_off, width)
+    text = text or ""
+    local before, caret, after
+    if caret_off then
+        before = text:sub(1, caret_off)
+        local rest = text:sub(caret_off + 1)
+        local ch = rest:match("^" .. utf8.charpattern) or ""
+        if caret_block() then
+            -- pi's caret: the cell under the cursor painted in reverse video,
+            -- or a reverse-video space at the end of the row
+            caret = rev(ch ~= "" and ch or " ")
+            after = ch ~= "" and rest:sub(#ch + 1) or ""
+        else
+            caret = "|"
+            after = rest
+        end
+    else
+        before, caret, after = text, "", ""
+    end
+    local caret_col = vlen(before)
+    local caret_w = vlen(caret)
+    local total_w = caret_col + caret_w + vlen(after)
+    local from = 0
+    if total_w > width then
+        -- scroll right just far enough to bring the caret's own cell inside
+        from = math.min(math.max(0, total_w - width),
+                        math.max(0, caret_col + caret_w - width))
+    end
+    local shown = take_cols(drop_cols(before .. caret .. after, from), width)
+    local w = vlen(shown)
+    if w < width then shown = shown .. string.rep(" ", width - w) end
+    return shown
+end
+
+-- A rule row: the box's top and bottom rules. It can carry the turn's status at
+-- the left (pi's "── status ────") and a centered "N more" label naming the
+-- input rows the window hides. Always exactly `width` columns, dim in every
+-- theme; the ASCII rules come from GLYPH_MAP through dim().
+local function rule_row(width, status, label)
+    if width <= 0 then return "" end
+    local function fill(n) return string.rep(RULE_GLYPH, math.max(0, n)) end
+    local sw = status and vlen(status) or 0
+    if status and sw > 0 and sw + 4 <= width then
+        local rest = width - 3 - sw - 1
+        if label then
+            local lw = vlen(label)
+            local start = math.floor((width - lw) / 2)
+            local left_block = 3 + sw + 1
+            -- the label survives only when it clears the status by a column
+            if lw + 2 <= width and start - left_block >= 1 then
+                return dim(fill(3)) .. status ..
+                    dim(" " .. fill(start - left_block) .. label ..
+                        fill(width - start - lw))
+            end
+        end
+        return dim(fill(3)) .. status .. dim(" " .. fill(rest))
+    end
+    if status and sw > 0 then
+        -- too narrow for the "── " head: the status alone, truncated to fit
+        return trunc(status, width)
+    end
+    if label then
+        local lw = vlen(label)
+        if lw + 2 <= width then
+            local start = math.floor((width - lw) / 2)
+            return dim(fill(start) .. label .. fill(width - start - lw))
+        end
+    end
+    return dim(fill(width))
+end
+
+-- The turn's status for the box's top rule: the pending retry while the agent
+-- waits between attempts, otherwise the spinner with the turn's elapsed time.
+local function turn_status()
+    if S.retry_wait then
+        local g = (M._ascii_mode or M._env_ascii or _ascii) and "[r]" or "↻"
+        return yellow(g) .. dim(string.format(" повтор %d · %.1fs",
+            S.retry_wait.attempt or 1, S.retry_wait.delay or 0))
+    end
+    if S.busy then
+        local secs = S.busy_started_at and (os.time() - S.busy_started_at) or 0
+        return cyan(spinner_glyph()) .. dim(" tether думает… " .. secs .. "s")
+    end
+    return nil
+end
+M._turn_status = turn_status
+
 local function render_input(L)
     local lines = input_lines()
     local total = #lines
@@ -2210,34 +2377,45 @@ local function render_input(L)
         if start < 1 then start = 1 end
         if start > total - shown + 1 then start = total - shown + 1 end
     end
+    local pad = box_padding(L.w)
+    local content_w = math.max(1, L.w - pad * 2)
+    local side = string.rep(" ", pad)
+    local cursor_li = cursor_line_col()
+
+    -- pi-style-input-and-footer: the box. The top rule carries the turn's
+    -- status and, like the bottom rule, names the input rows the window hides.
+    local hidden_above = start - 1
+    local hidden_below = total - (start + shown - 1)
+    set_row(L.rule_top_row, rule_row(L.w, turn_status(),
+        hidden_above > 0 and string.format(RULE_LABEL_UP, hidden_above) or nil))
+
     for i = 1, shown do
         local li = start + i - 1
         local ln = lines[li]
         if not ln then
-            set_row(L.input_row + i - 1, "")
+            set_row(L.input_row + i - 1, side .. string.rep(" ", content_w) .. side)
         else
-            local prefix = (li == 1) and (cyan("›") .. " ") or "  "
-            set_row(L.input_row + i - 1, prefix .. ln.text)
+            local caret_off = (li == cursor_li) and (S.cursor - ln.from) or nil
+            set_row(L.input_row + i - 1,
+                side .. input_row_text(ln.text, caret_off, content_w) .. side)
         end
     end
-    -- footer: dim rule between the input block and the status line (F1b);
-    -- ASCII twin is "-".
-    if L.separator_row then
-        local ascii = M.ascii_active(S.cfg and S.cfg.ui and S.cfg.ui.ascii)
-        local sep = string.rep(ascii and "-" or "─", L.w)
-        set_row(L.separator_row, dim(sep))
-    end
+
+    set_row(L.rule_bottom_row, rule_row(L.w, nil,
+        hidden_below > 0 and string.format(RULE_LABEL_DOWN, hidden_below) or nil))
 end
 
 local function render_palette(L)
     if not S.palette_active or #S.palette_items == 0 then return end
     -- M9: no frame; selected item is accent-colored, not reverse-video
     -- 2.2/2.3: a window over the ranked list, shifted so the selected row is
-    -- inside it, plus a dim pos/total row when the list overflows it. Neither
-    -- the separator nor the status row is ever painted here.
+    -- inside it, plus a dim pos/total row when the list overflows it. The
+    -- palette starts below the box's bottom rule and neither rule nor any
+    -- footer row is ever painted here. (pi renders its dropdown the same way:
+    -- directly under the editor's bottom border.)
     local n = #S.palette_items
     local win, off = palette_window(L.h, n, S.palette_sel)
-    local last = L.separator_row - 1
+    local last = L.footer_row - 1
     for i = 1, win do
         local row = L.palette_row + i
         if row > last then break end
@@ -2301,54 +2479,94 @@ function M.token_usage(used, max_tokens, summarize_at)
         math.floor(pct * 100 + 0.5)))
 end
 
-local function render_status(L)
+-- pi-style-input-and-footer: compact token counts for the footer, mirrored
+-- from pi's footer formatter (plain below 1000, one decimal k, rounded k, M).
+function M.format_count(n)
+    n = tonumber(n) or 0
+    if n < 0 then n = 0 end
+    n = math.floor(n)
+    if n < 1000 then return tostring(n) end
+    if n < 10000 then return string.format("%.1fk", n / 1000) end
+    if n < 1000000 then return string.format("%dk", math.floor(n / 1000 + 0.5)) end
+    if n < 10000000 then return string.format("%.1fM", n / 1000000) end
+    return string.format("%dM", math.floor(n / 1000000 + 0.5))
+end
+
+-- The tail of `s`, at most `maxw` display columns. The footer keeps the model
+-- name readable from its end, where the model id actually lives.
+local function tail_cols(s, maxw)
+    if maxw <= 0 then return "" end
+    if vlen(s) <= maxw then return s end
+    local cs = cells(s)
+    local out, col = {}, 0
+    for i = #cs, 1, -1 do
+        local c = cs[i]
+        if col + c.w > maxw then break end
+        table.insert(out, 1, c.t)
+        col = col + c.w
+    end
+    return table.concat(out)
+end
+
+-- The footer's stats row: `left` at the start, `right` right-aligned and kept
+-- at least two columns away. Both sides may carry SGR; widths are display
+-- columns. When they cannot both fit, the right side loses its start (so its
+-- tail survives) and is dropped only when nothing of it fits; the left side is
+-- truncated only when it alone exceeds the row.
+function M.footer_stats(left, right, width)
+    if width <= 0 then return "" end
+    left, right = left or "", right or ""
+    local lw = vlen(left)
+    if lw >= width then return trunc(left, width) end
+    local room = width - lw - 2 -- the two columns the model must stay clear of
+    local rw = vlen(right)
+    if rw == 0 or room <= 0 then
+        return left .. string.rep(" ", width - lw)
+    end
+    local kept = rw <= room and right or tail_cols(right, room)
+    local kw = vlen(kept)
+    return left .. string.rep(" ", width - lw - kw) .. kept
+end
+
+-- pi-style-input-and-footer: the footer is dim rows below the box. Persistent
+-- facts only — the path, the session's token stats with the model name
+-- right-aligned, and the flags while one is active; the turn's progress lives in
+-- the box's top rule instead (see turn_status).
+local function render_footer(L)
+    -- path row: $HOME shortened to ~ (pi's footer line 1)
     local home = os.getenv("HOME") or ""
     local ws = S.workspace
     if home ~= "" and ws:sub(1, #home) == home then
         ws = "~" .. ws:sub(#home + 1)
     end
-    -- 5b: mandatory parts in fixed order; flags only while relevant
-    local parts = { S.model_name or "?", ws }
-    -- 5.4: leading confirmation field (one-shot, cleared by next keypress)
-    if S.toast then table.insert(parts, 1, S.toast) end
-    -- A: while a turn runs, lead the status line with spinner + elapsed time
-    -- (the transcript tail shows the same spinner on its placeholder row).
-    if S.busy then
-        local secs = S.busy_started_at and (os.time() - S.busy_started_at) or 0
-        table.insert(parts, 1, spinner_glyph() .. string.format(" %ds", secs))
+    set_row(L.footer_row, dim(trunc(ws, L.w)))
+
+    -- stats row: the session's own traffic, the context cell, then the model
+    local left = {}
+    if (S.tokens_in or 0) > 0 then
+        left[#left + 1] = dim("↑" .. M.format_count(S.tokens_in))
+    end
+    if (S.tokens_out or 0) > 0 then
+        left[#left + 1] = dim("↓" .. M.format_count(S.tokens_out))
     end
     if S.tokens_max and S.tokens_max > 0 then
         -- T47: "4.2k/32k (13%)" — value + budget + percent
         local summarize_at = (S.cfg.context and S.cfg.context.summarize_at) or 0.7
-        parts[#parts + 1] = (S.tokens_estimated and "≈" or "") ..
+        left[#left + 1] = dim(S.tokens_estimated and "≈" or "") ..
             M.token_usage(S.tokens_used, S.tokens_max, summarize_at)
     end
-    -- scroll indicator — hidden rows below while the user scrolled up
-    if S.user_scrolled then
-        -- O(1) after the index is warm: the status line must not rescan the
-        -- transcript every frame (tui: viewport-proportional rendering)
-        local hidden = scroll_indicator(M.transcript_height(L.w), S.scroll, L.transcript_h)
-        if hidden and hidden > 0 then
-            parts[#parts + 1] = ((M._ascii_mode or M._env_ascii or _ascii) and "v" or "↓") .. " +" .. hidden
-        end
+    set_row(L.stats_row, M.footer_stats(table.concat(left, " "),
+        dim(S.model_name or "?"), L.w))
+
+    -- flag row: transient state only, one space between flags, painted while at
+    -- least one is active (layout reserves the row from the same flags)
+    local flags = static_flags()
+    local scroll = scroll_flag(L.transcript_h)
+    if scroll then flags[#flags + 1] = scroll end
+    if L.flags_row then
+        set_row(L.flags_row,
+            #flags > 0 and trunc(to_ascii(table.concat(flags, " ")), L.w) or "")
     end
-    -- 5b: mouse flag fades out ~3 s after the effective mode changes
-    local mm = S.mouse_mode or (S.cfg.ui and S.cfg.ui.mouse) or "auto"
-    if S._mouse_flag_until and os.time() < S._mouse_flag_until
-        and not (M._ascii_mode or M._env_ascii or _ascii) then
-        parts[#parts + 1] = "🖱 " .. mm
-    end
-    -- 5b: kb flag only when a protocol was actually detected
-    if S.kb_protocol == 1 then
-        parts[#parts + 1] = "⌨ kitty"
-    elseif S.kb_protocol == 2 then
-        parts[#parts + 1] = "⌨ xterm"
-    end
-    local text = table.concat(parts, " · ")
-    text = trunc(text, L.w - 2)
-    local pad = L.w - vlen(text) -- M9: display width, not raw char count
-    if pad > 0 then text = text .. string.rep(" ", pad) end
-    set_row(L.status_row, rev(text))
 end
 
 -- ============================================================
@@ -2418,29 +2636,10 @@ end
 -- ============================================================
 -- Cursor & redraw
 -- ============================================================
-local function place_cursor(L)
-    if S.overlay then return end
-    local lines = input_lines()
-    local li = cursor_line_col()
-    local total = #lines
-    local shown = L.input_h
-    local start = 1
-    if total > shown then
-        start = li - math.floor(shown / 2)
-        if start < 1 then start = 1 end
-        if start > total - shown + 1 then start = total - shown + 1 end
-    end
-    local row_in = li - start + 1
-    if row_in < 1 or row_in > L.input_h then return end
-    local ln = lines[li]
-    local col = S.cursor - ln.from
-    -- N2: terminal column counts display cells, not bytes — multibyte input
-    -- (кириллица) used to drift the caret left of its real position.
-    local term_row = L.input_row + row_in - 1
-    local term_col = 3 + vlen(ln.text:sub(1, col))  -- "› " = 2 cols
-    frame_put(ESC .. "[" .. term_row .. ";" .. term_col .. "H")
-    frame_put(ESC .. "[?25h")
-end
+-- pi-style-input-and-footer: the caret is painted inside the input box by
+-- render_input (pi's block caret), so the hardware terminal cursor stays hidden
+-- for the whole session — there is no cursor-positioning pass left. Overlays
+-- never showed it either, and the exit sequence turns it back on.
 
 local function redraw()
     local L = layout()
@@ -2459,10 +2658,9 @@ local function redraw()
         render_error_banner(L)
         render_input(L)
         render_palette(L)
-        render_status(L)
+        render_footer(L)
     end
 
-    place_cursor(L)
     frame_flush()
 end
 
@@ -2689,6 +2887,8 @@ local function start_new_session(banner)
     end
     if S.cfg then S.cfg._session_id = S.session_id end
     if agent and agent.clear then agent.clear() end
+    -- pi-style-input-and-footer: the footer's counters are per session
+    S.tokens_in, S.tokens_out = 0, 0
     -- a new session knows nothing of the old transcript — drop it too,
     -- otherwise the screen shows messages the agent never saw
     reset_transcript({ { role = "system", text = banner or "↻ Новая сессия" } })
@@ -2721,7 +2921,7 @@ local function execute_command(cmd)
                     summary = tostring(m.content)
                 end
             end
-            S.transcript[#S.transcript + 1] = { role = "system", text = summary ~= "" and summary or "── summary ──" }
+            transcript.append({ role = "system", text = summary ~= "" and summary or "── summary ──" })
         end
         if agent and agent.estimate_tokens then
             S.tokens_used = agent.estimate_tokens(agent.get_history())
@@ -2735,7 +2935,7 @@ local function execute_command(cmd)
     end
     if cmd == "copy" then
         -- 5.2: open the copy palette; targets are built from the transcript
-        local targets = M.copy_targets(S.transcript)
+        local targets = M.copy_targets(transcript.entries())
         local items = {}
         for _, tg in ipairs(targets) do
             items[#items + 1] = { label = tg.name, desc = tostring(tg.bytes) .. " bytes", copy = tg }
@@ -2814,92 +3014,43 @@ local function handle_agent_event(ev)
     -- caret, or caret -> nothing) repaints at once instead of waiting out the
     -- delta throttle.
     local was_waiting, was_streaming = S.waiting, S.streaming
-    if ev.type == "text_delta" then
-        local last = S.transcript[#S.transcript]
-        if not last or last.role ~= "assistant" then
-            S.transcript[#S.transcript + 1] = { role = "assistant", text = "" }
-            last = S.transcript[#S.transcript]
-        end
-        last.text = (last.text or "") .. (ev.text or "")
+
+    -- Row mutations belong to the transcript module; ui owns only the mode
+    -- flags (waiting/streaming/retry_wait/error/tokens) and confirmation/ask.
+    local need_sync = transcript.handle(ev)
+
+    if ev.type == "text_delta" or ev.type == "reasoning_delta" then
+        S.retry_wait = nil
         S.waiting = false
         S.streaming = true
-        touch_entry(last)
-        sync_tail()
-    elseif ev.type == "reasoning_delta" then
-        local last = S.transcript[#S.transcript]
-        if not last or last.role ~= "thinking" then
-            S.transcript[#S.transcript + 1] = { role = "thinking", text = "" }
-            last = S.transcript[#S.transcript]
-        end
-        last.text = (last.text or "") .. (ev.text or "")
-        S.waiting = false
-        S.streaming = true
-        touch_entry(last)
-        sync_tail()
     elseif ev.type == "tool_call_start" then
-        -- pretty-transcript-rendering 2.1/4.5: carry the parsed arguments and
-        -- the read-only projection; a pending write/patch previews its diff.
-        local proj = ev.projection
-        S.transcript[#S.transcript + 1] = {
-            role = "tool", id = ev.id or tostring(#S.transcript + 1),
-            started_at = os.time(), -- M8/R3: for elapsed display
-            name = ev.name or "?", status = "pending", summary = "",
-            body = (proj and proj.diff) or "",
-            args = ev.args,
-            path = proj and proj.path or (ev.args and ev.args.path),
-            projection = proj,
-        }
         S.waiting = false
         S.streaming = false
-        bump_transcript()
-        sync_tail()
-    elseif ev.type == "tool_result" then
-        local target
-        for i = #S.transcript, 1, -1 do
-            local e = S.transcript[i]
-            if e.role == "tool" and e.id == ev.id then
-                e.status = ev.error and "error" or "ok"
-                e.summary = ev.summary or ""
-                -- 4.5: a denial/cancellation drops the preview and leaves no
-                -- result body; any other outcome replaces the preview.
-                local dropped = ev.error == "denied by user" or ev.error == "cancelled by user"
-                e.body = dropped and "" or (ev.body or "")
-                e.projection = nil
-                target = e
-                break
-            end
-        end
-        touch_entry(target)
     elseif ev.type == "error" then
         S.error_banner = ev.message or "ошибка"
+        S.retry_wait = nil -- a terminal failure ends the backoff wait
     elseif ev.type == "aborted" then
         S.waiting = false
         S.streaming = false
-        -- 4.5: an aborted call drops its pending projection
-        for _, e in ipairs(S.transcript) do
-            if e.role == "tool" and e.status == "pending" then
-                e.projection = nil
-                e.body = ""
-            end
-        end
-        S.transcript[#S.transcript + 1] = { role = "system", text = "⏹ прервано (Ctrl+C)" }
-        bump_transcript()
-        sync_tail()
+        S.retry_wait = nil
     elseif ev.type == "usage" and ev.usage then
         if ev.usage.used then S.tokens_used = ev.usage.used end
+        -- pi-style-input-and-footer: accumulate the session's own traffic —
+        -- tokens_used is the context estimate and gets overwritten by it
+        S.tokens_in = (S.tokens_in or 0) + (tonumber(ev.usage.prompt_tokens) or 0)
+        S.tokens_out = (S.tokens_out or 0) + (tonumber(ev.usage.completion_tokens) or 0)
         S.tokens_estimated = false
     elseif ev.type == "context_compressed" then
-        S.transcript[#S.transcript + 1] = { role = "system", text = "── summary ──" }
         S.tokens_estimated = true
-        bump_transcript()
     elseif ev.type == "retry" then
-        S.transcript[#S.transcript + 1] = {
-            role = "system",
-            text = string.format("↻ повтор %d (ждём %.1fs): %s",
-                ev.attempt or 1, ev.delay or 0.5, ev.reason or ""),
-        }
-        bump_transcript()
+        S.retry_wait = { attempt = ev.attempt or 1, delay = ev.delay or 0,
+                         reason = ev.reason }
+        S.streaming = false
+    elseif ev.type == "continuation" then
+        S.retry_wait = nil
+        S.streaming = false
     end
+    if need_sync then sync_tail() end
     -- Fallback: estimate tokens from the real agent history. Estimate is
     -- O(history) — refresh only on coarse events, not on every streamed delta.
     local significant = ev.type == "tool_call_start" or ev.type == "tool_result"
@@ -2952,6 +3103,28 @@ local function handle_agent_event(ev)
             sync_tail()
         end
     end
+    if ev.type == "ask" then
+        -- add-ask-tool: the question block replaces the placeholder, exactly as
+        -- the confirmation menu does — the turn is waiting on the user.
+        S.ask = {
+            id = ev.id,
+            questions = ev.questions or {},
+            qidx = 1,
+            sel = 1,
+            mode = "list",
+            note_sel = nil,
+            editor = "",
+            answers = {},
+        }
+        for i = 1, #S.ask.questions do
+            S.ask.answers[i] = { selected = {}, other = "", notes = {} }
+        end
+        S.busy = false
+        S.waiting = false
+        S.streaming = false
+        S.retry_wait = nil
+        sync_tail()
+    end
     if not S.user_scrolled then S.scroll = 0 end
     -- A: repaint now — the main loop only redraws between keypresses, so
     -- without this nothing the model produced would be visible mid-turn.
@@ -2995,9 +3168,9 @@ local function commit_input()
     -- placed before the user row. It is a transcript row — it scrolls and counts
     -- toward the height — but it never reaches the agent.
     if not (S.cfg and S.cfg.ui and S.cfg.ui.turn_separators == false) then
-        S.transcript[#S.transcript + 1] = { role = "separator", text = os.date("%H:%M") }
+        transcript.append({ role = "separator", text = os.date("%H:%M") })
     end
-    S.transcript[#S.transcript + 1] = { role = "user", text = text }
+    transcript.append({ role = "user", text = text })
     bump_transcript()
     input_clear()
     S.error_banner = nil
@@ -3017,6 +3190,7 @@ local function commit_input()
     S.busy_started_at = nil
     S.waiting = false
     S.streaming = false
+    S.retry_wait = nil
     sync_tail()
     agent.abort_requested = false
     if not ok and err then
@@ -3051,9 +3225,15 @@ end
 -- ============================================================
 local function handle_special(k)
     if k.name == "left" then
-        if S.cursor > 0 then S.cursor = S.cursor - 1 end
+        if S.cursor > 0 then
+            local prev = utf8.offset(S.input, -1, S.cursor + 1)
+            if prev then S.cursor = prev - 1 end
+        end
     elseif k.name == "right" then
-        if S.cursor < #S.input then S.cursor = S.cursor + 1 end
+        if S.cursor < #S.input then
+            local nxt = utf8.offset(S.input, 1, S.cursor + 1)
+            if nxt then S.cursor = nxt - 1 end
+        end
     elseif k.name == "home" and S.input == "" then
         -- M8/R3: Home jumps to top of transcript (input empty);
         -- with text in input, Home moves to line start (branch below)
@@ -3097,7 +3277,7 @@ end
 -- newest tool entry overlapping the viewport (falling back to the newest one).
 local function toggle_all_entries()
     S.expand_all = not S.expand_all
-    for _, e in ipairs(S.transcript) do e.expand_state = nil end
+    for _, e in ipairs(transcript.entries()) do e.expand_state = nil end
     invalidate_all()
 end
 M._toggle_all_entries = toggle_all_entries
@@ -3118,8 +3298,9 @@ local function toggle_newest_visible_tool()
         if e and e.role == "tool" then chosen = e; break end
     end
     if not chosen then
-        for i = #S.transcript, 1, -1 do
-            if S.transcript[i].role == "tool" then chosen = S.transcript[i]; break end
+        for i = #transcript.entries(), 1, -1 do
+            local e = transcript.entries()[i]
+            if e.role == "tool" then chosen = e; break end
         end
     end
     if not chosen then return end
@@ -3210,9 +3391,10 @@ end
 
 local function copy_last_assistant()
     local last_text = ""
-    for i = #S.transcript, 1, -1 do
-        if S.transcript[i].role == "assistant" then
-            last_text = S.transcript[i].text or ""
+    for i = #transcript.entries(), 1, -1 do
+        local e = transcript.entries()[i]
+        if e.role == "assistant" then
+            last_text = e.text or ""
             break
         end
     end
@@ -3289,6 +3471,243 @@ function M.copy_targets(transcript)
     return out
 end
 
+-- ============================================================
+-- add-ask-tool: the question block
+-- ============================================================
+-- The block owns the keyboard while it is open (handle_key dispatches here
+-- before the input line), so nothing it does not use reaches the input field,
+-- the palette or the transcript scroll. Two single-line editors run inside it —
+-- the freeform answer and an option's note — and they only ever commit on
+-- Enter; Esc closes the editor without cancelling the question set.
+
+-- Drop the last UTF-8 codepoint from an editor buffer.
+local function editor_backspace(text)
+    if text == nil or text == "" then return "" end
+    local i = #text
+    while i > 0 do
+        local b = text:byte(i)
+        if b < 0x80 or b >= 0xC0 then break end
+        i = i - 1
+    end
+    return text:sub(1, i - 1)
+end
+
+local function ask_question()
+    local a = S.ask
+    return a and a.questions and a.questions[a.qidx] or nil
+end
+
+local function ask_answer()
+    local a = S.ask
+    if not a then return nil end
+    a.answers[a.qidx] = a.answers[a.qidx] or { selected = {}, other = "", notes = {} }
+    return a.answers[a.qidx]
+end
+
+-- Toggle one option of a multi question, keeping toggle order.
+local function ask_toggle(answer, option)
+    if not (answer and option) then return end
+    local selected = answer.selected or {}
+    for i, label in ipairs(selected) do
+        if label == option.label then
+            table.remove(selected, i)
+            answer.selected = selected
+            return
+        end
+    end
+    selected[#selected + 1] = option.label
+    answer.selected = selected
+end
+
+-- Close the block and hand the answer (or the cancellation) to the agent, then
+-- resume the turn exactly the way resolve_confirmation does. A cancellation is
+-- an answer the model can act on — the turn continues either way.
+local function resolve_ask(cancelled)
+    local a = S.ask
+    if not a then return end
+    local questions, answers = a.questions or {}, a.answers or {}
+    S.ask = nil
+    transcript.append({
+        role = "system",
+        text = "→ ask: " .. (cancelled and ask.CANCELLED_TEXT or ask.summary(questions, answers)),
+    })
+    S.busy = false
+    S.waiting = false
+    S.streaming = false
+    S.retry_wait = nil
+    local ok, err = pcall(agent.answer_ask, a.id,
+        cancelled and { cancelled = true } or answers, S.cfg, handle_agent_event)
+    if not ok and err then S.error_banner = tostring(err) end
+    bump_transcript()
+    sync_tail()
+
+    S.busy = true
+    S.waiting = true
+    S.streaming = false
+    sync_tail()
+    paint(true)
+    local ok2, err2 = pcall(agent.continue, S.cfg, S.api_key or "", handle_agent_event)
+    S.busy = false
+    S.waiting = false
+    S.streaming = false
+    S.retry_wait = nil
+    if not ok2 and err2 then S.error_banner = tostring(err2) end
+    bump_transcript()
+    sync_tail()
+end
+
+-- The current question is answered: move to the next one, or hand the whole
+-- set to the agent once the last one is done.
+local function ask_advance()
+    local a = S.ask
+    if not a then return end
+    if a.qidx < #a.questions then
+        a.qidx = a.qidx + 1
+        a.sel = 1
+        a.mode = "list"
+        a.note_sel = nil
+        a.editor = ""
+        sync_tail()
+    else
+        resolve_ask(false)
+    end
+end
+
+local function handle_ask_key(k)
+    local a = S.ask
+    if not a then return end
+    local q = ask_question()
+    if not q then resolve_ask(true); return end
+    local n = #q.options
+    local freeform_row = n + 1
+    local answer = ask_answer()
+
+    -- --- editors: characters and backspace edit the buffer ----------------
+    if a.mode == "other" or a.mode == "note" then
+        if k.kind == "esc" then
+            -- discard this editor session's edits; the set stays open
+            a.mode = "list"
+            a.note_sel = nil
+            a.editor = ""
+            sync_tail()
+            return
+        end
+        if k.kind == "enter" then
+            local text = a.editor or ""
+            if a.mode == "other" then
+                answer.other = text
+            else
+                local opt = q.options[a.note_sel]
+                if opt then
+                    if text ~= "" then answer.notes[opt.label] = text
+                    else answer.notes[opt.label] = nil end
+                end
+            end
+            a.mode = "list"
+            a.note_sel = nil
+            a.editor = ""
+            sync_tail()
+            return
+        end
+        if k.kind == "backspace" then
+            a.editor = editor_backspace(a.editor)
+            sync_tail()
+            return
+        end
+        if k.kind == "text" then
+            a.editor = (a.editor or "") .. (k.char or "")
+            sync_tail()
+            return
+        end
+        if k.kind == "paste" then
+            a.editor = (a.editor or "") .. ((k.text or ""):gsub("[%r%n]+", " "))
+            sync_tail()
+            return
+        end
+        return
+    end
+
+    -- --- list mode -------------------------------------------------------
+    if k.kind == "esc" then resolve_ask(true); return end
+    if k.kind == "special" then
+        if k.name == "up" then
+            a.sel = math.max(1, a.sel - 1)
+            sync_tail()
+        elseif k.name == "down" then
+            a.sel = math.min(freeform_row, a.sel + 1)
+            sync_tail()
+        elseif k.name == "left" and a.qidx > 1 then
+            -- back to the previous question, its answer still in place
+            a.qidx = a.qidx - 1
+            a.sel = 1
+            sync_tail()
+        end
+        return
+    end
+    if k.kind == "tab" then
+        -- Tab edits the highlighted row: a note on an option, the freeform
+        -- answer on the freeform row (which Enter submits once it holds text)
+        if a.sel <= n then
+            local opt = q.options[a.sel]
+            a.mode = "note"
+            a.note_sel = a.sel
+            a.editor = (answer.notes and answer.notes[opt.label]) or ""
+            sync_tail()
+        elseif a.sel == freeform_row then
+            a.mode = "other"
+            a.editor = answer.other or ""
+            sync_tail()
+        end
+        return
+    end
+    if k.kind == "enter" then
+        if a.sel == freeform_row then
+            if answer.other and answer.other ~= "" then
+                ask_advance() -- a committed freeform answer is the answer
+            else
+                a.mode = "other"
+                a.editor = ""
+                sync_tail()
+            end
+            return
+        end
+        if a.sel <= n then
+            if q.multi then
+                -- Enter accepts the toggled selection and moves on; Space and
+                -- digits are what toggle
+                ask_advance()
+            else
+                answer.selected = { q.options[a.sel].label }
+                ask_advance()
+            end
+        end
+        return
+    end
+    if k.kind == "text" then
+        local c = k.char or ""
+        if c == " " and q.multi then
+            if a.sel <= n then
+                ask_toggle(answer, q.options[a.sel])
+                sync_tail()
+            end
+            return
+        end
+        local digit = tonumber(c)
+        if digit and digit >= 1 and digit <= n then
+            local opt = q.options[digit]
+            if q.multi then
+                ask_toggle(answer, opt)
+                sync_tail()
+            else
+                a.sel = digit
+                answer.selected = { opt.label }
+                ask_advance()
+            end
+        end
+        return
+    end
+end
+
 local function resolve_confirmation(decision)
     local detail = S.confirmation and S.confirmation.detail
     if decision ~= "details" then
@@ -3311,10 +3730,10 @@ local function resolve_confirmation(decision)
         end
         local ok, err = pcall(agent.confirm, detail.id, decision, S.cfg, handle_agent_event)
         if not ok and err then S.error_banner = tostring(err) end
-        S.transcript[#S.transcript + 1] = {
+        transcript.append({
             role = "system",
             text = "→ подтверждение: " .. decision .. " (" .. detail.name .. ")",
-        }
+        })
         if decision == "cancel" then needs_resume = false end
         if needs_resume then
             -- resume the agent loop after confirmation
@@ -3329,6 +3748,7 @@ local function resolve_confirmation(decision)
             S.busy = false
             S.waiting = false
             S.streaming = false
+            S.retry_wait = nil
             if not ok2 and err2 then S.error_banner = tostring(err2) end
         end
     end
@@ -3452,17 +3872,20 @@ local function handle_overlay_key(k)
                 -- the picked session replaces the visible transcript;
                 -- appending would mix two conversations on one screen
                 reset_transcript({})
+                -- pi-style-input-and-footer: a resumed session starts its
+                -- counters over; the old session's totals are not this one's
+                S.tokens_in, S.tokens_out = 0, 0
                 local messages = session.resume(it.id)
                 if messages then
                     for _, msg in ipairs(messages) do
                         if msg.role == "user" then
-                            S.transcript[#S.transcript + 1] = { role = "user", text = msg.content }
+                            transcript.append({ role = "user", text = msg.content })
                             agent.add_user(msg.content)
                         elseif msg.role == "assistant" then
                             if msg.tool_calls then
                                 agent.add_assistant({ tool_calls = msg.tool_calls })
                             else
-                                S.transcript[#S.transcript + 1] = { role = "assistant", text = msg.content }
+                                transcript.append({ role = "assistant", text = msg.content })
                                 agent.add_assistant(msg.content)
                             end
                         elseif msg.role == "tool" then
@@ -3474,8 +3897,8 @@ local function handle_overlay_key(k)
                 end
                 S.session_id = it.id
                 if S.cfg then S.cfg._session_id = it.id end
-                S.transcript[#S.transcript + 1] =
-                    { role = "system", text = "↻ сессия " .. tostring(it.id):sub(1, 8) .. " возобновлена" }
+                transcript.append(
+                    { role = "system", text = "↻ сессия " .. tostring(it.id):sub(1, 8) .. " возобновлена" })
                 bump_transcript()
             end
         end
@@ -3497,8 +3920,8 @@ local function handle_overlay_key(k)
                 S.model_name = model_id
                 S.cfg.model = model_id
                 S.overlay = nil; S.overlay_data = nil
-                S.transcript[#S.transcript + 1] =
-                    { role = "system", text = "→ модель: " .. model_id }
+                transcript.append(
+                    { role = "system", text = "→ модель: " .. model_id })
                 bump_transcript()
             end
         end
@@ -3513,6 +3936,8 @@ local function handle_key(k)
 
     if S.overlay then handle_overlay_key(k); return end
     if S.confirmation then handle_confirmation_key(k); return end
+    -- add-ask-tool: the question block owns the keyboard while it is open
+    if S.ask then handle_ask_key(k); return end
 
     -- M8/R3: Enter on an active error banner opens the full error overlay
     if k.kind == "enter" and S.error_banner then
@@ -3539,7 +3964,7 @@ local function handle_key(k)
                 -- 2.5: hit-test through the window offset; the indicator row
                 -- selects nothing
                 local win, off = palette_window(L.h, #S.palette_items, S.palette_sel)
-                local last = math.min(L.palette_row + win, L.separator_row - 1)
+                local last = math.min(L.palette_row + win, L.footer_row - 1)
                 if k.row <= last then
                     local it = S.palette_items[off + (k.row - L.palette_row) - 1]
                     if it then
@@ -3775,6 +4200,7 @@ M._read_key = function() return read_key() end
 -- ============================================================
 function M.run()
     S = new_state()
+    transcript.clear()
 
     S.cfg = (config and config.load and config.load()) or {}
     S.model_name = S.cfg.model or "gpt-4o-mini"
@@ -3816,12 +4242,10 @@ function M.run()
     if agent and agent.get_history then
         local okh, hist = pcall(agent.get_history)
         if okh and hist then
-            for _, e in ipairs(transcript_entries(hist)) do
-                S.transcript[#S.transcript + 1] = e
-            end
-            if #S.transcript > 0 then
-                S.transcript[#S.transcript + 1] =
-                    { role = "system", text = "↻ сессия возобновлена" }
+            local seeded = transcript.seed(hist)
+            if #seeded > 0 then
+                transcript.append(
+                    { role = "system", text = "↻ сессия возобновлена" })
             end
         end
     end
