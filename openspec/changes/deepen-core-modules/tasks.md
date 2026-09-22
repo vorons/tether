@@ -39,6 +39,6 @@
 
 ## 6. Final verification
 
-- [ ] 6.1 Run full `make test` (luac + lua_tests + context_tests) — verify all green
-- [ ] 6.2 Confirm `CONTEXT.md` architecture notes match landed cuts — verify glossary lists `transcript`, `commands`, `turn`, `confirm_policy` and cut order
-- [ ] 6.3 Smoke: TUI start, one tool confirm, `/resume`, `-r` startup — verify no regression in transcript restore or confirmation menu
+- [x] 6.1 Run full `make test` (luac + lua_tests + context_tests) — verify all green
+- [x] 6.2 Confirm `CONTEXT.md` architecture notes match landed cuts — verify glossary lists `transcript`, `commands`, `turn`, `confirm_policy` and cut order
+- [x] 6.3 Smoke: TUI start, one tool confirm, `/resume`, `-r` startup — verify no regression in transcript restore or confirmation menu
