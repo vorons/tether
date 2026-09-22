@@ -2689,8 +2689,19 @@ end
 M._paint = paint
 
 -- ============================================================
--- Key reading
+-- Key reading — bytes → typed events (narrow contract)
 -- ============================================================
+-- Event shapes produced here (and the only ones handle_key consumes):
+--   { kind = "esc" | "enter" | "newline" | "backspace" | "tab" }
+--   { kind = "text",  char = string }
+--   { kind = "paste", text = string }
+--   { kind = "ctrl",  code = number, shift = bool?, alt = bool? }
+--   { kind = "alt",   code = number }
+--   { kind = "special", name = string, ctrl = bool?, shift = bool? }
+--   { kind = "mouse", name = string, col = number, row = number, button = number }
+-- No layout, palette, overlay, or mode knowledge lives here — decode is pure
+-- bytes → event. Terminal quirks (kitty CSI-u, modifyOtherKeys, X11 copy
+-- chords) are normalized into the typed fields above before return.
 
 -- kitty keyboard protocol (spec: "Comprehensive keyboard handling in
 -- terminals"). We push flag 1 (disambiguate escape codes) at startup and pop
@@ -2819,7 +2830,13 @@ local function read_key()
                 if c3 == 117 and p ~= "" then
                     local kitty = decode_csi_u(p)
                     if kitty then return kitty end
-                    return { kind = "special", name = "unknown", params = p }
+                    return { kind = "special", name = "unknown" }
+                end
+                -- T18: some terminals report Ctrl+Shift+C (copy) as a CSI
+                -- whose final byte is C with a non-arrow params blob. Normalize
+                -- to a typed ctrl event so handle_key never re-parses params.
+                if p == "4:53;96" and c3 == 67 then
+                    return { kind = "ctrl", code = 3, shift = true }
                 end
                 local names = {
                     [65] = "up", [66] = "down", [67] = "right", [68] = "left",
@@ -2827,7 +2844,11 @@ local function read_key()
                 }
                 if names[c3] then
                     local mods = legacy_csi_mods(p)
-                    return { kind = "special", name = names[c3], params = p,
+                    -- X11 fallback: Shift+Ctrl+C as `CSI 1;2 C` — same chord
+                    if c3 == 67 and p == "1;2" then
+                        return { kind = "ctrl", code = 3, shift = true }
+                    end
+                    return { kind = "special", name = names[c3],
                              ctrl = mods and mods.ctrl, shift = mods and mods.shift }
                 end
                 if c3 == 126 then
@@ -2842,7 +2863,7 @@ local function read_key()
                                  ["4"]="end", ["5"]="pgup", ["6"]="pgdn",
                                  ["7"]="home", ["8"]="end" })[base]
                     if m then
-                        return { kind = "special", name = m, params = p,
+                        return { kind = "special", name = m,
                                  ctrl = mods and mods.ctrl, shift = mods and mods.shift }
                     end
                 end
@@ -2864,7 +2885,7 @@ local function read_key()
                     return { kind = "mouse", name = name,
                              col = col, row = row, button = code }
                 end
-                return { kind = "special", name = "unknown", final = c3, params = p }
+                return { kind = "special", name = "unknown" }
             end
         end
     elseif c == 13 then return { kind = "enter" }
@@ -4023,30 +4044,11 @@ local function handle_key(k)
         end
     end
 
-    -- T18: kitty keyboard protocol — Ctrl+Shift+C as ESC[4:53;96C
-    if k.kind == "special" and k.params == "4:53;96" then
-        copy_last_assistant()
+    -- Ctrl+Up / Ctrl+Down — history recall. Decoder always sets k.ctrl for
+    -- kitty `CSI 1;5A`, modifyOtherKeys, and the bare `5;A` form.
+    if k.kind == "special" and (k.name == "up" or k.name == "down") and k.ctrl then
+        if k.name == "up" then history_prev() else history_next() end
         return
-    end
-    -- T18: X11 fallback — Shift+Ctrl+C as ESC[1;2C
-    if k.kind == "special" and k.params and k.params:match("^1;2%a") then
-        local key = k.params:match("(%a)$")
-        if key == "C" then copy_last_assistant() end
-        return
-    end
-
-    -- Ctrl+Up / Ctrl+Down — history recall. read_key decodes the modifiers
-    -- (kitty `CSI 1;5A`, modifyOtherKeys, the odd bare `5;A` form); the string
-    -- heuristics stay as a fallback for terminals that drop the modifier.
-    -- (Ctrl+Shift+C was already caught above.)
-    if k.kind == "special" and (k.name == "up" or k.name == "down") then
-        local params = k.params or ""
-        local is_ctrl = k.ctrl or params:match(";5%a$") or params:match("^1;5%a$")
-            or params:match("^%a$")
-        if is_ctrl then
-            if k.name == "up" then history_prev() else history_next() end
-            return
-        end
     end
 
     -- palette mode

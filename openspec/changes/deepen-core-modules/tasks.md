@@ -10,8 +10,8 @@
 
 ## 2. Cut 2 — input contract (2A, no new global)
 
-- [ ] 2.1 Give `read_key` / `decode_*` a narrow bytes→events contract (typed `{kind=…}` events only; no layout or mode knowledge) — verify existing input/CSI tests still pass
-- [ ] 2.2 Route `handle_key` to consume only those events — verify `make test` green and no new exports required for input tests
+- [x] 2.1 Give `read_key` / `decode_*` a narrow bytes→events contract (typed `{kind=…}` events only; no layout or mode knowledge) — verify existing input/CSI tests still pass
+- [x] 2.2 Route `handle_key` to consume only those events — verify `make test` green and no new exports required for input tests
 
 ## 3. Cut 3 — confirm_policy module
 
