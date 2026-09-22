@@ -1121,6 +1121,8 @@ int main(int argc, char **argv)
         { confirm_policy_lua, "confirm_policy" },
         /* transcript: visible conversation model; ui loads it before State */
         { transcript_lua, "transcript" },
+        /* commands: session lifecycle + slash side effects (src/tether/commands.lua) */
+        { commands_lua, "commands" },
         { ui_lua,     "ui"     },
         { config_lua, "config" },
         { tools_lua,  "tools"  },

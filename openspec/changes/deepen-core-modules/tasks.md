@@ -22,12 +22,12 @@
 
 ## 4. Cut 4 — commands module (session lifecycle + slash side effects)
 
-- [ ] 4.1 Create `src/tether/commands.lua`: `resume(id?)`, `new()`, `compact()`, model-list helpers; return `session_id` — verify `luac -p`
-- [ ] 4.2 Wire embed (`Makefile` + `main.c mods[]`) — verify `make tether`
-- [ ] 4.3 Point `app -r` and `ui /resume` / `/new` / `/compact` / `/model` at `commands.*`; write `cfg._session_id` at call sites only — verify `-r` startup seeds transcript (tui spec scenario) and `/resume` replaces it
-- [ ] 4.4 Deduplicate resume/new between `app.lua` and `ui.lua`; seed via `transcript.seed` — verify both paths share one implementation and `make test` green
-- [ ] 4.5 Retarget slash/session tests to `commands.*` — verify no `ui` key-handler test needs `agent.history` reach-in
-- [ ] 4.6 One logical commit for cut 4 — verify `make test` green
+- [x] 4.1 Create `src/tether/commands.lua`: `resume(id?)`, `new()`, `compact()`, model-list helpers; return `session_id` — verify `luac -p`
+- [x] 4.2 Wire embed (`Makefile` + `main.c mods[]`) — verify `make tether`
+- [x] 4.3 Point `app -r` and `ui /resume` / `/new` / `/compact` / `/model` at `commands.*`; write `cfg._session_id` at call sites only — verify `-r` startup seeds transcript (tui spec scenario) and `/resume` replaces it
+- [x] 4.4 Deduplicate resume/new between `app.lua` and `ui.lua`; seed via `transcript.seed` — verify both paths share one implementation and `make test` green
+- [x] 4.5 Retarget slash/session tests to `commands.*` — verify no `ui` key-handler test needs `agent.history` reach-in
+- [x] 4.6 One logical commit for cut 4 — verify `make test` green
 
 ## 5. Cut 5 — turn facade
 

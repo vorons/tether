@@ -846,6 +846,13 @@ if type(transcript) ~= "table" then
 end
 M._transcript = transcript
 
+-- commands: embedded global (main.c mods[]); loadfile fallback for tests.
+local commands = _G.commands
+if type(commands) ~= "table" then
+    local chunk = loadfile("src/tether/commands.lua")
+    commands = (chunk and chunk()) or {}
+end
+
 -- ============================================================
 -- State
 -- ============================================================
@@ -2902,12 +2909,9 @@ end
 -- Command execution
 -- ============================================================
 local function start_new_session(banner)
-    if session and session.new_session then
-        local ok, id = pcall(session.new_session, S.workspace, S.model_name)
-        if ok and id then S.session_id = id end
-    end
+    local sid = commands.new(S.workspace, S.model_name)
+    if sid then S.session_id = sid end
     if S.cfg then S.cfg._session_id = S.session_id end
-    if agent and agent.clear then agent.clear() end
     -- pi-style-input-and-footer: the footer's counters are per session
     S.tokens_in, S.tokens_out = 0, 0
     -- a new session knows nothing of the old transcript — drop it too,
@@ -2930,18 +2934,8 @@ local function execute_command(cmd)
     end
     if cmd == "compact" then
         -- §6.8: force summarization of old messages, report as ── summary ──
-        if agent and agent.compress_history then
-            local h = agent.get_history()
-            local compressed = agent.compress_history(h)
-            -- replace history contents in place
-            for i = #h, 1, -1 do table.remove(h) end
-            for _, m in ipairs(compressed) do h[#h + 1] = m end
-            local summary = ""
-            for _, m in ipairs(h) do
-                if m.role == "system" and tostring(m.content):find("summary") then
-                    summary = tostring(m.content)
-                end
-            end
+        local summary = commands.compact()
+        if summary ~= nil then
             transcript.append({ role = "system", text = summary ~= "" and summary or "── summary ──" })
         end
         if agent and agent.estimate_tokens then
@@ -2971,14 +2965,7 @@ local function execute_command(cmd)
     -- unified-slash-palette: /skills removed — skills are entries of the one
     -- palette, so the separate palette mode and the [skill: …] reference are gone
     if cmd == "model" then
-        local ok, models = pcall(api.list_models_live, S.cfg, S.api_key or "")
-        if not ok then models = nil end
-        if not (models and #models > 0) then
-            models = {}
-            for _, m in ipairs(api.list_models(S.cfg)) do
-                models[#models + 1] = { id = m, name = m }
-            end
-        end
+        local models = commands.list_models(S.cfg, S.api_key or "")
         local items = {}
         for _, m in ipairs(models) do
             items[#items + 1] = {
@@ -2992,17 +2979,14 @@ local function execute_command(cmd)
     end
     if cmd == "resume" then
         local items = {}
-        if session and session.session_files then
-            local files = session.session_files(S.workspace) or {}
-            for _, f in ipairs(files) do
-                items[#items + 1] = {
-                    label = string.format("%s · %s · %s",
-                        (f.ts and f.ts:sub(1, 5)) or "…",
-                        (f.id and f.id:sub(1, 8)) or "…",
-                        (f.first_line or ""):sub(1, 40)),
-                    id = f.id,
-                }
-            end
+        for _, f in ipairs(commands.list_sessions(S.workspace)) do
+            items[#items + 1] = {
+                label = string.format("%s · %s · %s",
+                    (f.ts and f.ts:sub(1, 5)) or "…",
+                    (f.id and f.id:sub(1, 8)) or "…",
+                    (f.first_line or ""):sub(1, 40)),
+                id = f.id,
+            }
         end
         S.overlay = "resume"
         S.overlay_data = { items = items, sel = 1 }
@@ -3889,38 +3873,20 @@ local function handle_overlay_key(k)
             if it and it.id then
                 S.overlay = nil; S.overlay_data = nil
                 -- §6.8 /resume: actually load the picked session
-                agent.clear()
-                -- the picked session replaces the visible transcript;
-                -- appending would mix two conversations on one screen
-                reset_transcript({})
-                -- pi-style-input-and-footer: a resumed session starts its
-                -- counters over; the old session's totals are not this one's
-                S.tokens_in, S.tokens_out = 0, 0
-                local messages = session.resume(it.id)
-                if messages then
-                    for _, msg in ipairs(messages) do
-                        if msg.role == "user" then
-                            transcript.append({ role = "user", text = msg.content })
-                            agent.add_user(msg.content)
-                        elseif msg.role == "assistant" then
-                            if msg.tool_calls then
-                                agent.add_assistant({ tool_calls = msg.tool_calls })
-                            else
-                                transcript.append({ role = "assistant", text = msg.content })
-                                agent.add_assistant(msg.content)
-                            end
-                        elseif msg.role == "tool" then
-                            -- M7/D4: restore tool results too; without them
-                            -- the API rejects the first turn after resume.
-                            agent.add_tool_result(msg.tool_call_id, msg.content or "")
-                        end
-                    end
+                local sid, messages = commands.resume(it.id)
+                if sid then
+                    S.session_id = sid
+                    if S.cfg then S.cfg._session_id = sid end
+                    -- pi-style-input-and-footer: a resumed session starts its
+                    -- counters over; the old session's totals are not this one's
+                    S.tokens_in, S.tokens_out = 0, 0
+                    -- the picked session replaces the visible transcript;
+                    -- appending would mix two conversations on one screen
+                    transcript.seed(messages or {})
+                    transcript.append(
+                        { role = "system", text = "↻ сессия " .. tostring(sid):sub(1, 8) .. " возобновлена" })
+                    bump_transcript()
                 end
-                S.session_id = it.id
-                if S.cfg then S.cfg._session_id = it.id end
-                transcript.append(
-                    { role = "system", text = "↻ сессия " .. tostring(it.id):sub(1, 8) .. " возобновлена" })
-                bump_transcript()
             end
         end
     elseif ov == "model" then

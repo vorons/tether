@@ -6104,6 +6104,111 @@ do
   print("T127 block keys and ASCII: OK")
 end
 
+-- T128 (4.1/4.5): commands module owns resume/new/compact/list helpers.
+do
+  local names = {"session", "agent", "api"}
+  local orig = {}
+  for _, n in ipairs(names) do orig[n] = _G[n] end
+
+  local history
+  local clears = 0
+  local journal = {
+    sess1 = {
+      { role = "user", content = "q1" },
+      { role = "assistant", content = "a1" },
+      { role = "assistant", tool_calls = { { id = "c1", name = "read" } } },
+      { role = "tool", tool_call_id = "c1", content = "file body" },
+      { role = "user", content = "q2" },
+      { role = "assistant", content = "a2" },
+    },
+  }
+  _G.session = {
+    latest = function() return "sess1" end,
+    resume = function(id) return journal[id] end,
+    new_session = function(ws, model) return "new-" .. tostring(model) end,
+    session_files = function()
+      return { { id = "sess1", ts = "2026-01-01", first_line = "q1" } }
+    end,
+  }
+  _G.agent = {
+    clear = function() clears = clears + 1; history = {} end,
+    get_history = function() return history end,
+    add_user = function(c) history[#history + 1] = { role = "user", content = c } end,
+    add_assistant = function(m)
+      if type(m) == "table" then history[#history + 1] = { role = "assistant", tool_calls = m.tool_calls }
+      else history[#history + 1] = { role = "assistant", content = m } end
+    end,
+    add_tool_result = function(id, content)
+      history[#history + 1] = { role = "tool", tool_call_id = id, content = content }
+    end,
+    compress_history = function(h)
+      return { { role = "system", content = "summary: short" }, { role = "user", content = "q2" } }
+    end,
+    estimate_tokens = function() return 10 end,
+  }
+  _G.api = {
+    list_models = function() return { "static-a", "static-b" } end,
+    list_models_live = function() return nil, "offline" end,
+  }
+
+  local commands = assert(loadfile("src/tether/commands.lua"))()
+
+  -- resume with explicit id rebuilds history including tool results
+  history = { { role = "system", content = "stale" } }
+  local sid, messages = commands.resume("sess1")
+  assert_eq(sid, "sess1", "T128 resume returns explicit id")
+  assert_eq(#messages, 6, "T128 resume returns journal messages")
+  assert_eq(clears, 1, "T128 resume clears agent first")
+  assert_eq(#history, 6, "T128 history rebuilt in order")
+  assert_eq(history[1].role, "user", "T128 first rebuilt is user")
+  assert_notnil(history[3].tool_calls, "T128 tool_calls preserved for API")
+  assert_eq(history[4].role, "tool", "T128 tool result restored")
+  assert_eq(history[6].content, "a2", "T128 full journal restored")
+
+  -- resume with no id falls back to latest(workspace)
+  local sid2 = commands.resume(nil, "/ws")
+  assert_eq(sid2, "sess1", "T128 resume(nil, ws) resolves latest")
+
+  -- unknown journal id still returns the id (caller owns cfg) but no messages
+  clears = 0
+  history = { { role = "user", content = "keep" } }
+  local sid3, msgs3 = commands.resume("missing")
+  assert_eq(sid3, "missing", "T128 explicit id is returned as-is")
+  assert_eq(msgs3, nil, "T128 missing journal yields nil messages")
+  assert_eq(clears, 1, "T128 resume always clears the agent")
+
+  -- new creates a session and clears the agent
+  clears = 0
+  history = { { role = "user", content = "keep" } }
+  local nid = commands.new("/ws", "test")
+  assert_eq(nid, "new-test", "T128 new returns session id")
+  assert_eq(clears, 1, "T128 new clears agent")
+  assert_eq(#history, 0, "T128 new leaves empty history")
+
+  -- compact compresses in place and returns the summary
+  history = {
+    { role = "user", content = "q1" },
+    { role = "assistant", content = "a1" },
+    { role = "user", content = "q2" },
+  }
+  local summary = commands.compact()
+  assert_eq(summary, "summary: short", "T128 compact returns summary text")
+  assert_eq(#history, 2, "T128 compact mutates history in place")
+  assert_eq(history[1].role, "system", "T128 compact result is system summary")
+
+  -- list_sessions + list_models fallback
+  local files = commands.list_sessions("/ws")
+  assert_eq(#files, 1, "T128 list_sessions returns journal rows")
+  assert_eq(files[1].id, "sess1", "T128 list_sessions keeps ids")
+  local models = commands.list_models({}, "key")
+  assert_eq(#models, 2, "T128 list_models falls back to static list")
+  assert_eq(models[1].id, "static-a", "T128 static model shape has id")
+  assert_eq(models[1].name, "static-a", "T128 static model shape has name")
+
+  for _, n in ipairs(names) do _G[n] = orig[n] end
+  print("T128 commands module: OK")
+end
+
 -- ============================================================
 -- pi-style-input-and-footer: dock layout, box, caret, footer
 -- ============================================================

@@ -3,6 +3,13 @@ local M = {}
 
 local version = false
 
+-- commands: embedded global (main.c mods[]); loadfile fallback for tests.
+local commands = _G.commands
+if type(commands) ~= "table" then
+    local chunk = loadfile("src/tether/commands.lua")
+    commands = (chunk and chunk()) or {}
+end
+
 local function parse_args()
     local args = arg or {}
     local opts = {
@@ -85,7 +92,7 @@ local function run_inner()
             os.exit(1)
         end
 
-        local sid = session.new_session(cfg.workspace, cfg.model)
+        local sid = commands.new(cfg.workspace, cfg.model)
         cfg._session_id = sid
 
         -- 1.5: agent.turn adds (and journals) the user message; adding it here
@@ -150,36 +157,16 @@ local function run_inner()
     -- Resume logic (design §10): only with -r
     local resume_id = nil
     if opts.resume then
-        local id = session.latest(cfg.workspace)
-        if id then
-            resume_id = id
-            local messages = session.resume(id)
-            if messages then
-                agent.clear()
-                for _, msg in ipairs(messages) do
-                    if msg.role == "user" then
-                        agent.add_user(msg.content)
-                    elseif msg.role == "assistant" then
-                        if msg.tool_calls then
-                            agent.add_assistant({ tool_calls = msg.tool_calls })
-                        else
-                            agent.add_assistant(msg.content)
-                        end
-                    elseif msg.role == "tool" then
-                        -- M7/D4: without tool results the API rejects the
-                        -- first turn after resume (400: tool_call without
-                        -- tool response).
-                        agent.add_tool_result(msg.tool_call_id, msg.content or "")
-                    end
-                end
-            end
+        local sid = commands.resume(nil, cfg.workspace)
+        if sid then
+            resume_id = sid
         else
             io.stderr:write("tether: no previous session for this workspace; starting a new one\n")
         end
     end
 
     -- Start new session or reuse resumed one
-    local id = resume_id or session.new_session(cfg.workspace, cfg.model)
+    local id = resume_id or commands.new(cfg.workspace, cfg.model)
     cfg._session_id = id
 
     -- Run TUI
