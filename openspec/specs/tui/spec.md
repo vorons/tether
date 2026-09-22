@@ -25,8 +25,7 @@ change the transcript height by the same number of rows.
 
 Within the dock the rows SHALL run, top to bottom: the input box's
 top rule, the input's content rows, its bottom rule, the palette rows
-(only while the palette is open), the footer's path row, the footer's
-stats row, and the optional flag row.
+(only while the palette is open), and the footer's single row.
 
 #### Scenario: alt_screen default
 - **WHEN** the user starts the TUI without config
@@ -34,7 +33,7 @@ stats row, and the optional flag row.
 
 #### Scenario: Dock order
 - **WHEN** a frame is rendered with a one-line input and a closed palette
-- **THEN** the box's two rules and the footer's two rows are the last four rows of the screen, in that order, with no other region between them
+- **THEN** the box's two rules and the footer's single row are the last three rows of the screen, in that order, with no other region between them
 
 ### Requirement: Markdown-lite rendering
 Assistant text SHALL render inline code, bold, italic, lists, and
@@ -123,35 +122,32 @@ the agent history, not on screen):
 
 ### Requirement: Scroll position indicator
 When the user scrolled up, the TUI SHALL report how many transcript
-rows are hidden below as `↓ +N` (ASCII `v +N`). The footer's flag row
-SHALL show the count, and the newest visible transcript row SHALL
-additionally carry the same marker, right-aligned, while following is
-off. Returning to the bottom SHALL re-enter follow mode and remove
-both indicators. The in-transcript marker SHALL be omitted when the
-count is zero, when the row is too narrow to hold it without
-truncating the row's own content, and while an overlay is open. The
-reported count SHALL stay exact across appends, expansion toggles,
-`/clear`, `/new`, and resize.
+rows are hidden below as `↓ +N` (ASCII `v +N`) on the footer's single
+row while following is off. Returning to the bottom SHALL re-enter
+follow mode and remove the indicator. No marker SHALL be painted
+inside the transcript. The indicator SHALL be omitted when the count
+is zero. The reported count SHALL stay exact across appends,
+expansion toggles, `/clear`, `/new`, and resize.
 
 #### Scenario: Indicator while scrolled up
 - **WHEN** the transcript is scrolled up with lines below
-- **THEN** the footer's flag row shows `↓ +N` with the count
+- **THEN** the footer shows `↓ +N` with the count and no transcript row carries a scroll marker
 
 #### Scenario: In-transcript marker
 - **WHEN** the user scrolled up and 7 transcript rows are hidden below
-- **THEN** the newest visible transcript row ends with `↓ +7` and the footer's flag row shows the same count
+- **THEN** no transcript row ends with a scroll marker; only the footer shows `↓ +7`
 
 #### Scenario: Marker hidden at the bottom
 - **WHEN** the user is in follow mode at the bottom of the transcript
-- **THEN** neither the transcript row nor the footer shows the marker
+- **THEN** the footer does not show the scroll indicator
 
 #### Scenario: ASCII mode renders the marker in ASCII
 - **WHEN** ASCII mode is active and the transcript is scrolled up
-- **THEN** the marker renders as `v +N` with no non-ASCII glyphs
+- **THEN** the footer indicator renders as `v +N` with no non-ASCII glyphs
 
 #### Scenario: No room for the marker
-- **WHEN** the newest visible row is too narrow to hold the marker
-- **THEN** the marker is omitted and the row content is rendered intact
+- **WHEN** the footer row is too narrow to hold the scroll indicator beside the left content
+- **THEN** the indicator is omitted or truncated per the footer truncation order and the row content is rendered intact
 
 #### Scenario: Count survives expansion
 - **WHEN** the user is scrolled up, expands all tool results, and stays scrolled up
@@ -1189,45 +1185,41 @@ in the same order, at any scroll offset.
 - **THEN** its rows are identical to the first render and the cache stayed bounded
 
 ### Requirement: Footer
-The TUI SHALL render the footer as dim rows below the input box and
-SHALL NOT use a reverse-video row for it.
+The TUI SHALL render the footer as a single dim row below the input
+box and SHALL NOT use a reverse-video row for it. The footer SHALL
+occupy exactly one row regardless of active indicators.
 
-The first footer row SHALL carry the workspace path with a leading
-`$HOME` abbreviated to `~`, and SHALL be truncated from the right with
-a dim `...` when it exceeds the width.
+That row SHALL carry, left to right: the workspace path with a
+leading `$HOME` abbreviated to `~`; on the left side joined by a
+single space the session's accumulated input tokens as `↑<count>`,
+its accumulated output tokens as `↓<count>` (each omitted while
+zero), and the context cell `used/max (pct%)`; any active transient
+flags joined by a single space (the one-shot toast and the scroll
+indicator only — no mouse-mode or keyboard-protocol icons); and the
+model name right-aligned on the same row, at least two columns away
+from the left side. Counts SHALL use the compact form: plain below
+1000, one decimal with `k` below 10000, a rounded `k` below 1000000,
+and `M` above. The model name SHALL end in the row's last column
+whenever both sides fit; when they cannot both fit, the model name
+SHALL be truncated from its left so its tail survives, and dropped
+entirely only when nothing of it fits. When the left content alone
+exceeds the available width, SHALL truncate in this order: path from
+the right with a dim `...`, then transient flags dropped (toast
+before the scroll indicator), then the left stats side from the
+right with a dim `...`.
 
-The second footer row SHALL carry on its left, joined by a single
-space: the session's accumulated input tokens as `↑<count>`, its
-accumulated output tokens as `↓<count>` (each omitted while zero), and
-the context cell `used/max (pct%)`; and the model name right-aligned on
-the same row, at least two columns away from the left side. Counts
-SHALL use the compact form: plain below 1000, one decimal with `k`
-below 10000, a rounded `k` below 1000000, and `M` above. The model name
-SHALL end in the row's last column whenever both sides fit; when they
-cannot both fit, the model name SHALL be truncated from its left so its
-tail survives, and dropped entirely only when nothing of it fits. The
-left side SHALL be truncated from the right with `...` only when it
-alone exceeds the width.
-
-The footer SHALL have an optional third row carrying the active flags
-joined by a single space — the one-shot toast, the mouse-mode flag, the
-keyboard-protocol flag, and the scroll indicator — and SHALL exist only
-while at least one flag is active. That row SHALL be truncated from the
-right with a dim `...` and SHALL NOT be dim as a whole, because its
-flags carry their own presentation.
-
-The footer's rows SHALL be counted in display columns: wide East-Asian
-characters count as 2 and ANSI sequences as 0. In ASCII mode the token
-arrows SHALL render as `^` and `v`, and no non-ASCII glyph SHALL be
-introduced by the footer.
+The footer's row SHALL be counted in display columns: wide
+East-Asian characters count as 2 and ANSI sequences as 0. In ASCII
+mode the token and scroll arrows SHALL render as `^` and `v`, and no
+non-ASCII glyph SHALL be introduced by the footer.
 
 #### Scenario: Idle footer
 - **WHEN** no turn is running, no flag is active, and the session has used 3000 input and 1000 output tokens
-- **THEN** the first row is the `~`-abbreviated workspace, the second row starts with `↑3.0k ↓1.0k` followed by the context cell and ends with the model name, and no third row is painted
+- **THEN** the single footer row starts with the `~`-abbreviated workspace followed by `↑3.0k ↓1.0k` and the context cell, and ends with the model name
 
 #### Scenario: Model is right-aligned
 - **WHEN** the model name fits beside the left side
-- **THEN** it ends in the last column of the stats row and at least two blank columns separate it from the left side
+- **THEN** it ends in the last column of the footer row and at least two blank columns separate it from the left side
 
 #### Scenario: Counters accumulate across turns
 - **WHEN** one turn reports 1200 prompt and 300 completion tokens and a later turn reports 800 and 200
@@ -1237,16 +1229,16 @@ introduced by the footer.
 - **WHEN** token usage reaches `ui.summarize_at`
 - **THEN** the context cell is rendered as a warning, and at 90% or more as an error
 
-#### Scenario: Flags row appears while active
-- **WHEN** the mouse mode has just changed and the transcript is scrolled up
-- **THEN** a third row carries both flags separated by one space, and it disappears once they expire
+#### Scenario: Toast and scroll share the footer row
+- **WHEN** a one-shot toast is active and the transcript is scrolled up
+- **THEN** the footer's single row carries both the toast and `↓ +N` separated by one space (no second or third footer row is painted), and each disappears when it expires or returns to the bottom
 
 #### Scenario: No reverse video
-- **WHEN** any footer row is rendered
-- **THEN** no footer row uses reverse video and the path and stats rows are dim
+- **WHEN** the footer row is rendered
+- **THEN** no footer row uses reverse video and the row is dim
 
 #### Scenario: Narrow terminal drops the model name
-- **WHEN** the model name cannot fit beside the left side of the stats row
+- **WHEN** the model name cannot fit beside the left side of the footer
 - **THEN** the left side is rendered intact and the model name is truncated from its left, or omitted if nothing of it fits
 
 #### Scenario: ASCII mode

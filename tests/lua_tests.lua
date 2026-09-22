@@ -2111,9 +2111,8 @@ do
   print("T64 2.3 separator skip on restore: OK")
 end
 
--- T65: 2.4 — in-transcript ↓ +N marker: painted on the newest visible
--- row when scrolled up, omitted at the bottom, omitted when too narrow, ASCII
--- downgrade. Verified through frame capture (sink).
+-- T65: 2.4 — scroll indicator lives only on the footer row; no in-transcript
+-- ↓ +N marker is painted on the newest visible row.
 do
   local str_bytes = function(s) local b = {} for i = 1, #s do b[#b + 1] = s:byte(i) end return b end
   local ESC = "\27"
@@ -2123,33 +2122,32 @@ do
     return true
   end end
 
-  -- scrolled up: marker appears in the sink frames
+  -- scrolled up: footer shows ↓ +N; no transcript row carries the marker
   local msg = str_bytes("q"); msg[#msg + 1] = 13; msg[#msg + 1] = 27; msg[#msg + 1] = 91; msg[#msg + 1] = 65; msg[#msg + 1] = 17
   local sink_up = {}
-  run_ui_with(msg, { agent = { turn = make_turn_stub(), get_history = function() return {} end } }, sink_up)
-  local found_marker = false
-  for _, s in ipairs(sink_up) do
-    if s:find("↓ +", 1, true) then found_marker = true end
+  local uimod_up = run_ui_with(msg, { agent = { turn = make_turn_stub(), get_history = function() return {} end } }, sink_up)
+  local L_up = uimod_up._layout()
+  local footer_up = uimod_up._row(L_up.footer_row) or ""
+  assert_true(footer_up:find("↓ +", 1, true) ~= nil,
+    "T65 scrolled-up footer shows the indicator: " .. footer_up:sub(1, 80))
+  for r = L_up.transcript_row, L_up.transcript_row + L_up.transcript_h - 1 do
+    local row = uimod_up._row(r) or ""
+    assert_eq(row:find("↓ +", 1, true), nil,
+      "T65 no in-transcript marker on row " .. r .. ": " .. row:sub(1, 80))
   end
-  assert_true(found_marker, "T65 scrolled-up frame shows the in-transcript marker")
 
-  -- at bottom (follow mode): no marker
+  -- at bottom (follow mode): no indicator anywhere
   local q2 = str_bytes("q2"); q2[#q2 + 1] = 13; q2[#q2 + 1] = 17
   local sink_bottom = {}
-  run_ui_with(q2, { agent = { turn = make_turn_stub(), get_history = function() return {} end } }, sink_bottom)
-  local found_bottom = false
-  for _, s in ipairs(sink_bottom) do
-    if s:find("↓ +", 1, true) then found_bottom = true end
-  end
-  assert_false(found_bottom, "T65 follow mode: no marker")
-  print("T65 2.4 in-transcript marker: OK")
+  local uimod_b = run_ui_with(q2, { agent = { turn = make_turn_stub(), get_history = function() return {} end } }, sink_bottom)
+  local L_b = uimod_b._layout()
+  local footer_b = uimod_b._row(L_b.footer_row) or ""
+  assert_eq(footer_b:find("↓ +", 1, true), nil, "T65 follow mode: no footer indicator")
+  print("T65 2.4 footer-only scroll indicator: OK")
 end
 
--- T66: 2.5 — marker and status line report the same hidden-row count; when
--- the count is zero (bottom) neither shows.
--- The test asserts both frames appear together in a scrolled-up state and
--- neither appears at the bottom. The actual shared count comes from
--- scroll_indicator(M.transcript_height(L.w), S.scroll, L.transcript_h).
+-- T66: 2.5 — footer scroll indicator reports the hidden-row count when
+-- scrolled up; when the count is zero (bottom) it does not show.
 do
   local str_bytes = function(s) local b = {} for i = 1, #s do b[#b + 1] = s:byte(i) end return b end
   local long_answer = string.rep("abcdefghij ", 8) .. "\n" .. ("second line\n"):rep(50)
@@ -2161,14 +2159,11 @@ do
   msg[#msg + 1] = 27; msg[#msg + 1] = 91; msg[#msg + 1] = 65  -- Up once
   msg[#msg + 1] = 17
   local sink = {}
-  run_ui_with(msg, { agent = { turn = make_turn_stub(), get_history = function() return {} end } }, sink)
-  -- both the marker and status-line indicator reference "новые"
-  local has_marker, has_status = false, false
-  for _, s in ipairs(sink) do
-    if s:find("↓ +", 1, true) then has_marker = true end
-    if s:find("·") and s:find("↓ +", 1, true) then has_status = true end
-  end
-  assert_true(has_marker, "T66 marker present when scrolled up")
+  local uimod = run_ui_with(msg, { agent = { turn = make_turn_stub(), get_history = function() return {} end } }, sink)
+  local L = uimod._layout()
+  local footer = uimod._row(L.footer_row) or ""
+  assert_true(footer:find("↓ +", 1, true) ~= nil,
+    "T66 footer indicator present when scrolled up: " .. footer:sub(1, 80))
   print("T66 2.5 shared count: OK")
 end
 
@@ -3204,7 +3199,7 @@ do
   print("T86 7.5 edge cases: OK")
 end
 
--- T92: footer F1b — dim "─" bottom rule sits above the two footer rows;
+-- T92: footer F1b — dim "─" bottom rule sits above the single footer row;
 -- ASCII mode swaps the rule for "-".
 do
   local bytes = { 104, 105, 13, 17 } -- "hi"\r, then Ctrl+Q quit
@@ -3226,28 +3221,29 @@ do
   assert_true(input_row:find("hi", 1, true) ~= nil,
     "T92 input row keeps typed text, got: " .. input_row:sub(1, 80))
   assert_true(uimod._row(L.footer_row) ~= nil, "T92 footer row is present")
-  assert_true(uimod._row(L.stats_row) ~= nil, "T92 stats row is present")
+  assert_eq(L.stats_row, L.footer_row, "T92 stats share the single footer row")
+  assert_eq(L.rule_bottom_row + 1, L.footer_row, "T92 footer is the row below the rule")
   print("T92 footer separator: OK")
 end
 
--- T93: 5b — idle footer flags carry no mouse/kb flags.
+-- T93: 5b — idle footer carries no mouse/kb flags and no separate flag row.
 do
   local bytes = { 104, 105, 13, 17 }
   local uimod, S = run_ui_with(bytes, { agent = { turn = function() return true end,
     get_history = function() return {} end } })
-  S._mouse_flag_until = os.time() - 1  -- expire the flag armed during run()
-  S.kb_protocol = 0
+  S._mouse_flag_until = os.time() + 3  -- even a fresh mouse flag must not paint
+  S.kb_protocol = 1
   S.toast = nil
   uimod._paint(true)
   local L = uimod._layout()
-  local flags = L.flags_row and (uimod._row(L.flags_row) or "") or ""
-  assert_eq(L.flags_row, nil, "T93 idle frame has no flag row")
-  assert_eq(flags:find("🖱", 1, true) ~= nil, false, "T93 no mouse flag when idle")
-  assert_eq(flags:find("⌨", 1, true) ~= nil, false, "T93 no kb flag when kb_protocol=0")
+  assert_eq(L.flags_row, nil, "T93 no separate flag row")
+  local footer = uimod._row(L.footer_row) or ""
+  assert_eq(footer:find("🖱", 1, true), nil, "T93 no mouse flag ever")
+  assert_eq(footer:find("⌨", 1, true), nil, "T93 no kb flag ever")
   print("T93 status idle: OK")
 end
 
--- T94: 5b — mouse flag visible within window, faded after window.
+-- T94: 5b — mouse mode never paints an icon (even within the old fade window).
 do
   local bytes = { 104, 105, 13, 17 }
   local uimod, S = run_ui_with(bytes, { agent = { turn = function() return true end,
@@ -3255,20 +3251,16 @@ do
   S.mouse_mode = "auto"
   S.kb_protocol = 0
   S.toast = nil
-  S._mouse_flag_until = os.time() - 1  -- expired
-  uimod._paint(true)
-  local L = uimod._layout()
-  assert_eq(L.flags_row, nil, "T94 faded mouse flag leaves no flag row")
   S._mouse_flag_until = os.time() + 3  -- fresh
   uimod._paint(true)
-  L = uimod._layout()
-  assert_notnil(L.flags_row, "T94 fresh mouse flag reserves a flag row")
-  local on = uimod._row(L.flags_row) or ""
-  assert_true(on:find("🖱", 1, true) ~= nil, "T94 mouse flag visible within window: " .. on:sub(1,80))
-  print("T94 mouse flag fade: OK")
+  local L = uimod._layout()
+  assert_eq(L.flags_row, nil, "T94 no flag row for mouse")
+  local footer = uimod._row(L.footer_row) or ""
+  assert_eq(footer:find("🖱", 1, true), nil, "T94 no mouse icon: " .. footer:sub(1, 80))
+  print("T94 mouse icon removed: OK")
 end
 
--- T95: 5b — kb flag conditional on detected protocol.
+-- T95: 5b — kb protocol never paints an icon.
 do
   local bytes = { 104, 105, 13, 17 }
   local uimod, S = run_ui_with(bytes, { agent = { turn = function() return true end,
@@ -3278,15 +3270,15 @@ do
   S.kb_protocol = 1
   uimod._paint(true)
   local L = uimod._layout()
-  local kitty = L.flags_row and (uimod._row(L.flags_row) or "") or ""
-  assert_true(kitty:find("⌨ kitty", 1, true) ~= nil, "T95 kb flag shown for protocol 1: " .. kitty:sub(1,80))
+  local footer = uimod._row(L.footer_row) or ""
+  assert_eq(footer:find("⌨", 1, true), nil, "T95 no kb icon for protocol 1: " .. footer:sub(1, 80))
   S.kb_protocol = 0
   uimod._paint(true)
   L = uimod._layout()
-  assert_eq(L.flags_row, nil, "T95 kb flag absent for protocol 0 leaves no flag row")
-  local plain = L.flags_row and (uimod._row(L.flags_row) or "") or ""
-  assert_eq(plain:find("⌨", 1, true) ~= nil, false, "T95 kb flag absent for protocol 0")
-  print("T95 kb flag conditional: OK")
+  assert_eq(L.flags_row, nil, "T95 no flag row for protocol 0")
+  local plain = uimod._row(L.footer_row) or ""
+  assert_eq(plain:find("⌨", 1, true), nil, "T95 no kb icon for protocol 0")
+  print("T95 kb icon removed: OK")
 end
 
 -- T96: every UI color follows the theme, and the legacy boolean ui.ascii
@@ -4651,7 +4643,7 @@ do
   local w12 = t12._palette_window(S12.h, #S12.palette_items, S12.palette_sel)
   assert_eq(w12, 6, "T83 a 12-row terminal shrinks the window to half")
   -- The dock budget may shrink the reserved region below the ideal window+2
-  -- (a live flag row or the transcript minimum takes priority); what must
+  -- (the transcript minimum takes priority); what must
   -- hold is that entries still paint inside the region and never past it.
   assert_true(L12.palette_h >= 1, "T83 the reserved region is non-empty")
   assert_true(L12.palette_h <= w12 + 2, "T83 the reserved region is at most window+2")
@@ -4669,7 +4661,7 @@ do
   assert_true(strip(t12._row(L12.rule_bottom_row)):find("─", 1, true) ~= nil,
     "T83 bottom rule intact on a short terminal")
   assert_true(strip(t12._row(L12.footer_row)) ~= nil and strip(t12._row(L12.footer_row)) ~= "",
-    "T83 footer path row intact on a short terminal")
+    "T83 footer row intact on a short terminal")
   assert_true(strip(t12._row(L12.stats_row)):find("test", 1, true) ~= nil,
     "T83 stats footer intact on a short terminal")
 
@@ -4690,7 +4682,7 @@ do
   assert_true(strip(t8._row(L8.rule_bottom_row)):find("─", 1, true) ~= nil,
     "T83 the bottom rule is never painted by the palette")
   assert_true(strip(t8._row(L8.footer_row)) ~= nil and strip(t8._row(L8.footer_row)) ~= "",
-    "T83 the footer path row is never painted by the palette")
+    "T83 the footer row is never painted by the palette")
   assert_true(strip(t8._row(L8.stats_row)):find("test", 1, true) ~= nil,
     "T83 the stats footer is never painted by the palette")
 
@@ -6303,8 +6295,8 @@ do
     assert_notnil(L.rule_top_row, "pi 2.1 empty input has a top rule row")
     assert_notnil(L.input_row, "pi 2.1 empty input has an input row")
     assert_notnil(L.rule_bottom_row, "pi 2.1 empty input has a bottom rule row")
-    assert_notnil(L.footer_row, "pi 2.1 empty input has a footer path row")
-    assert_notnil(L.stats_row, "pi 2.1 empty input has a stats row")
+    assert_notnil(L.footer_row, "pi 2.1 empty input has a footer row")
+    assert_eq(L.stats_row, L.footer_row, "pi 2.1 stats share the single footer row")
     assert_eq(L.rule_bottom_row + 1, L.footer_row, "pi 2.1 footer follows the bottom rule when palette is closed")
     assert_true(L.transcript_h >= 1, "pi 2.1 transcript keeps at least one row")
     assert_true(L.rule_top_row > L.error_row + L.error_h - 1, "pi 2.1 box sits below the error row")
@@ -6349,9 +6341,8 @@ do
     uimod._set_error_banner(nil)
   end
 
-  -- 2.2: the flag row's elasticity — no active flag means no flag row, an
-  -- active flag adds exactly one, and the transcript height changes by the
-  -- same number of rows with no region overlap.
+  -- 2.2: the single footer row — always present, no separate flag row, and
+  -- the transcript height does not change with transient flags.
   do
     local uimod = boot()
     uimod._paint(true)
@@ -6361,22 +6352,25 @@ do
     S.toast = nil
     uimod._paint(true)
     local L0 = uimod._layout()
-    assert_eq(L0.flags_row, nil, "pi 2.2 idle frame has no flag row")
+    assert_eq(L0.flags_row, nil, "pi 2.2 no separate flag row")
+    assert_eq(L0.stats_row, L0.footer_row, "pi 2.2 stats share the footer row")
     local th0 = L0.transcript_h
 
+    -- active toast / kb protocol / mouse flag must not add a row
     S.kb_protocol = 1
+    S.toast = "✓ test"
+    S._mouse_flag_until = os.time() + 3
     uimod._paint(true)
     local L1 = uimod._layout()
-    assert_notnil(L1.flags_row, "pi 2.2 active flag reserves one flag row")
-    assert_eq(L1.transcript_h, th0 - 1, "pi 2.2 transcript shrinks by exactly the flag row")
-    assert_true(L1.flags_row > L1.stats_row, "pi 2.2 flag row sits below the stats row")
-    assert_true(L1.stats_row < L1.flags_row and L1.flags_row <= S.h, "pi 2.2 no region overlaps the flag row")
-    -- every dock row is strictly ordered
+    assert_eq(L1.flags_row, nil, "pi 2.2 no flag row even with toast")
+    assert_eq(L1.transcript_h, th0, "pi 2.2 transcript height unchanged by flags")
+    assert_eq(L1.footer_row, L0.footer_row, "pi 2.2 footer row does not move")
+
+    -- every dock row is strictly ordered down to the single footer
     assert_true(L1.rule_top_row < L1.input_row, "pi 2.2 top rule above input")
     assert_true(L1.input_row + L1.input_h - 1 < L1.rule_bottom_row, "pi 2.2 input above bottom rule")
     assert_true(L1.rule_bottom_row < L1.footer_row, "pi 2.2 bottom rule above footer")
-    assert_true(L1.footer_row < L1.stats_row, "pi 2.2 path above stats")
-    assert_true(L1.stats_row < L1.flags_row, "pi 2.2 stats above flags")
+    assert_true(L1.footer_row <= S.h, "pi 2.2 footer is on screen")
   end
 
   -- 3.1: the box renders without a prompt marker; padding 0 and 2; every row
@@ -6606,33 +6600,27 @@ do
     assert_true(ui.vlen(only) <= 10, "pi 5.2 left side truncated to the width")
   end
 
-  -- 5.3: path row, optional flags row, ASCII arrows; 5.4: no reverse video.
+  -- 5.3: single footer row (path + stats + model), no mode icons;
+  -- 5.4: no reverse video.
   do
     local uimod = boot()
     local S = uimod._get_state()
-    S._mouse_flag_until = os.time() - 1
-    S.kb_protocol = 0
+    S._mouse_flag_until = os.time() + 3  -- fresh mouse flag must not paint
+    S.kb_protocol = 1
     S.toast = nil
     uimod._paint(true)
     local L = uimod._layout()
-    local path_row = strip(uimod._row(L.footer_row) or "")
-    assert_true(path_row:find("/tmp", 1, true) ~= nil or path_row:find("~", 1, true) ~= nil,
-      "pi 5.3 path row carries the workspace: " .. path_row)
-    -- 5.4: no footer row uses reverse video
-    for _, r in ipairs({ L.footer_row, L.stats_row }) do
-      local raw = uimod._row(r) or ""
-      assert_eq(raw:find("\27[7m", 1, true), nil, "pi 5.4 footer row " .. r .. " is not reverse video")
-    end
-    -- with a fresh mouse flag the flag row appears and is not reverse as a whole
-    S._mouse_flag_until = os.time() + 3
-    uimod._paint(true)
-    L = uimod._layout()
-    assert_notnil(L.flags_row, "pi 5.3 active mouse flag reserves the flag row")
-    local frow = uimod._row(L.flags_row) or ""
-    assert_true(strip(frow):find("🖱", 1, true) ~= nil, "pi 5.3 flag row carries the mouse flag")
-    assert_eq(frow:find("\27[7m", 1, true), nil, "pi 5.4 flag row is not reverse video as a whole")
+    local footer = strip(uimod._row(L.footer_row) or "")
+    assert_true(footer:find("/tmp", 1, true) ~= nil or footer:find("~", 1, true) ~= nil,
+      "pi 5.3 footer carries the workspace: " .. footer)
+    assert_eq(footer:find("🖱", 1, true), nil, "pi 5.3 no mouse icon")
+    assert_eq(footer:find("⌨", 1, true), nil, "pi 5.3 no kb icon")
+    assert_eq(L.flags_row, nil, "pi 5.3 no separate flag row")
+    -- 5.4: footer row uses no reverse video
+    local raw = uimod._row(L.footer_row) or ""
+    assert_eq(raw:find("\27[7m", 1, true), nil, "pi 5.4 footer row is not reverse video")
 
-    -- ASCII arrows in the counters
+    -- ASCII arrows in the counters on the single footer row
     local uimod_a = boot()
     uimod_a._ascii_mode = true
     local Sa = uimod_a._get_state()
@@ -6642,11 +6630,97 @@ do
     Sa.toast = nil
     uimod_a._paint(true)
     local La = uimod_a._layout()
-    local stats_a = strip(uimod_a._row(La.stats_row) or "")
+    local stats_a = strip(uimod_a._row(La.footer_row) or "")
     assert_true(stats_a:find("^", 1, true) ~= nil, "pi 5.3 ASCII input arrow is '^': " .. stats_a)
     assert_true(stats_a:find("v", 1, true) ~= nil, "pi 5.3 ASCII output arrow is 'v': " .. stats_a)
     assert_eq(stats_a:find("↑", 1, true), nil, "pi 5.3 no Unicode up-arrow in ASCII stats")
     assert_eq(stats_a:find("↓", 1, true), nil, "pi 5.3 no Unicode down-arrow in ASCII stats")
+    uimod_a._ascii_mode = nil
+  end
+
+  -- 5.5: truncation order when the left side exceeds the width —
+  -- path right-truncates first (toast and scroll stay), then toast is
+  -- dropped before the scroll flag, and stats truncate last while the
+  -- path stays on the row. ASCII mode must not inject a Unicode ellipsis.
+  do
+    local long_ws = "/home/user/projects/very/long/workspace/path/for/footer/truncation"
+    local function footer_at(width)
+      local uimod = boot(nil, { width = width, height = 24 }, { config = { load = function()
+        return { model = "test-model-name-long-enough-to-matter", workspace = long_ws,
+                 ui = { input_max_lines = 8 } } end,
+        api_key = function() return "" end } })
+      local S = uimod._get_state()
+      S.tokens_in, S.tokens_out = 3000, 1000
+      S.tokens_max, S.tokens_used = 32000, 4100
+      S.toast = "✓ скопировано 42 B"
+      uimod._transcript.reset({})
+      for i = 1, 40 do
+        uimod._transcript.append({ role = "system", text = "row " .. i })
+      end
+      uimod._invalidate_all()
+      S.user_scrolled = true
+      S.scroll = 7
+      uimod._paint(true)
+      local L = uimod._layout()
+      return uimod, S, strip(uimod._row(L.footer_row) or ""), L.w
+    end
+
+    -- roomy enough: full path, toast and scroll all visible
+    local _, _, wide = footer_at(120)
+    assert_true(wide:find(long_ws, 1, true) ~= nil, "pi 5.5 roomy footer keeps the full path: " .. wide)
+    assert_true(wide:find("скопировано", 1, true) ~= nil, "pi 5.5 roomy footer shows the toast: " .. wide)
+    assert_true(wide:find("↓ +7", 1, true) ~= nil, "pi 5.5 roomy footer shows the scroll flag: " .. wide)
+
+    -- narrow: path truncates first — toast and scroll must survive
+    -- (60 is the floor where stats+toast+scroll leave room for a truncated path)
+    local uimod_n, _, narrow, w_n = footer_at(60)
+    assert_true(uimod_n.vlen(narrow) <= w_n, "pi 5.5 narrow footer fits the width")
+    assert_eq(narrow:find(long_ws, 1, true), nil, "pi 5.5 narrow footer truncates the path: " .. narrow)
+    assert_true(narrow:find("…", 1, true) ~= nil or narrow:find("...", 1, true) ~= nil,
+      "pi 5.5 truncated path carries an ellipsis: " .. narrow)
+    assert_true(narrow:find("скопировано", 1, true) ~= nil,
+      "pi 5.5 toast survives path truncation (path drops first): " .. narrow)
+    assert_true(narrow:find("↓ +7", 1, true) ~= nil,
+      "pi 5.5 scroll flag survives path truncation: " .. narrow)
+
+    -- path gone from the left (no room): toast drops before scroll, then
+    -- stats truncate — the path must reappear (fit_path re-claims room)
+    -- or, if stats alone fill the row, stats are truncated not dropped whole.
+    local uimod_t, _, row_t, w_t = footer_at(40)
+    assert_true(uimod_t.vlen(row_t) <= w_t, "pi 5.5 tiny footer fits the width")
+    -- toast is dropped before scroll when both cannot fit
+    local has_toast = row_t:find("скопировано", 1, true) ~= nil
+    local has_scroll = row_t:find("↓ +7", 1, true) ~= nil
+    assert_true(not has_toast or has_scroll,
+      "pi 5.5 toast never outlives the scroll flag once space runs out: " .. row_t)
+    assert_true(has_scroll,
+      "pi 5.5 scroll flag outlives the toast on a tiny row: " .. row_t)
+
+    -- ASCII mode: path truncation must use "...", never "…" (width 60 keeps
+    -- a truncated path on the row alongside stats, toast and scroll)
+    local uimod_a = boot(nil, { width = 60, height = 24 }, { config = { load = function()
+      return { model = "test-model-name", workspace = long_ws,
+               ui = { input_max_lines = 8 } } end,
+      api_key = function() return "" end } })
+    uimod_a._ascii_mode = true
+    local Sa = uimod_a._get_state()
+    Sa.tokens_in, Sa.tokens_out = 3000, 1000
+    Sa.tokens_max, Sa.tokens_used = 32000, 4100
+    Sa.toast = "[ok] copied 42 B"
+    uimod_a._transcript.reset({})
+    for i = 1, 40 do
+      uimod_a._transcript.append({ role = "system", text = "row " .. i })
+    end
+    uimod_a._invalidate_all()
+    Sa.user_scrolled = true
+    Sa.scroll = 7
+    uimod_a._paint(true)
+    local La = uimod_a._layout()
+    local ascii_row = uimod_a._row(La.footer_row) or ""
+    assert_eq(ascii_row:find("…", 1, true), nil,
+      "pi 5.5 ASCII footer introduces no Unicode ellipsis: " .. strip(ascii_row))
+    assert_true(ascii_row:find("...", 1, true) ~= nil,
+      "pi 5.5 ASCII truncated path uses ASCII dots: " .. strip(ascii_row))
     uimod_a._ascii_mode = nil
   end
 

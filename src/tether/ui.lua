@@ -684,19 +684,26 @@ M.md_render = md_render
 local function trunc(s, maxw)
     if maxw < 1 then return "" end
     if vlen(s) <= maxw then return s end
+    local ascii = M._ascii_mode or M._env_ascii or _ascii
+    local ell = ascii and "..." or "…"
+    local ell_w = ascii and 3 or 1
+    if maxw < ell_w then
+        return ascii and string.rep(".", maxw) or ell
+    end
     local i, width = 1, 0
+    local budget = maxw - ell_w
     while i <= #s do
         local _, finish = s:find("^\27%[[0-9;?]*[a-zA-Z]", i)
         if finish then
             i = finish + 1
         else
             local w = char_width(utf8.codepoint(s, i))
-            if width + w > maxw - 1 then break end
+            if width + w > budget then break end
             width = width + w
             i = utf8.offset(s, 2, i) or (#s + 1)
         end
     end
-    return s:sub(1, i - 1) .. "…" .. ESC .. "[0m"
+    return s:sub(1, i - 1) .. ell .. ESC .. "[0m"
 end
 M.vlen = vlen   -- export (M9/T39: SGR-aware display width)
 -- 7.4: test seam — strip every SGR escape sequence (text-invariant checks).
@@ -1065,23 +1072,11 @@ local function box_padding(width)
     return M.editor_padding(width, S.cfg and S.cfg.ui and S.cfg.ui.editor_padding_x)
 end
 
--- pi-style-input-and-footer: the flags that do not depend on the transcript
--- height — the one-shot toast, the mouse-mode flag (non-ASCII only, as before)
--- and the keyboard-protocol flag. layout() reserves a row from their count;
--- render_footer adds the scroll indicator, which does depend on the height.
+-- slim-footer-indicators: transient flags only (the one-shot toast);
+-- mouse/keyboard mode icons are gone. Everything lives on the single footer row.
 local function static_flags()
     local out = {}
     if S.toast then out[#out + 1] = green(S.toast) end
-    local mm = S.mouse_mode or (S.cfg and S.cfg.ui and S.cfg.ui.mouse) or "auto"
-    if S._mouse_flag_until and os.time() < S._mouse_flag_until
-        and not (M._ascii_mode or M._env_ascii or _ascii) then
-        out[#out + 1] = "🖱 " .. mm
-    end
-    if S.kb_protocol == 1 then
-        out[#out + 1] = "⌨ kitty"
-    elseif S.kb_protocol == 2 then
-        out[#out + 1] = "⌨ xterm"
-    end
     return out
 end
 
@@ -1111,16 +1106,16 @@ local function layout()
         want_palette_h = win + 2
     end
 
-    -- pi-style-input-and-footer: the dock runs, top to bottom — the box's top
-    -- rule, the input's rows, its bottom rule (which is what the separator row
-    -- used to be), the palette, the footer's path row, its stats row, and the
-    -- optional flag row. Everything is reserved here so no region can overlap
-    -- another; the error banner keeps its row above the box.
-    local function reserve(flags_h, pal_h)
-        return 1 + shown_in + pal_h + 1 + 2 + flags_h
+    -- slim-footer-indicators: the dock runs, top to bottom — the box's top
+    -- rule, the input's rows, its bottom rule, the palette, and the footer's
+    -- single row (path + stats + transient flags left, model right-aligned).
+    -- Everything is reserved here so no region can overlap another; the error
+    -- banner keeps its row above the box.
+    local function reserve(pal_h)
+        return 1 + shown_in + pal_h + 1 + 1
     end
-    local function th_for(flags_h, pal_h)
-        local th = S.h - error_h - reserve(flags_h, pal_h)
+    local function th_for(pal_h)
+        local th = S.h - error_h - reserve(pal_h)
         if th < 1 then return nil end
         return th
     end
@@ -1129,31 +1124,16 @@ local function layout()
     -- left after both the banner and the dock are reserved. On a short
     -- terminal the palette is the flexible part: shrink it until the dock
     -- fits with at least one transcript row, so the footer never leaves the
-    -- screen (the indicator row is the first thing to go).
-    local flags_h = #static_flags() > 0 and 1 or 0
+    -- screen.
     local palette_h = want_palette_h
-    local th = th_for(flags_h, palette_h)
+    local th = th_for(palette_h)
     while th == nil and palette_h > 0 do
         palette_h = palette_h - 1
-        th = th_for(flags_h, palette_h)
+        th = th_for(palette_h)
     end
     if th == nil then
         palette_h = 0
-        th = th_for(flags_h, 0) or 1
-    end
-    -- The scroll indicator's own row depends on the transcript height, so it
-    -- settles in one extra pass: shrinking the transcript by that row can only
-    -- keep the indicator, never remove it.
-    if flags_h == 0 and scroll_flag(th) then
-        local th2 = th_for(1, palette_h)
-        while th2 == nil and palette_h > 0 do
-            palette_h = palette_h - 1
-            th2 = th_for(1, palette_h)
-        end
-        if th2 then
-            flags_h = 1
-            th = th2
-        end
+        th = th_for(0) or 1
     end
 
     local rule_top_row = 1 + th + error_h
@@ -1173,9 +1153,9 @@ local function layout()
         rule_bottom_row = rule_bottom_row,
         palette_row = rule_bottom_row,
         palette_h = palette_h,
-        footer_row = footer_row,      -- the ~-abbreviated workspace, dim
-        stats_row = footer_row + 1,   -- counters + context cell, model right-aligned
-        flags_row = flags_h == 1 and footer_row + 2 or nil,
+        footer_row = footer_row,      -- the single footer row
+        stats_row = footer_row,       -- same row (path/stats/model/flags combined)
+        flags_row = nil,              -- no separate flag row
     }
 end
 -- Test seam: the region layout, so frame tests can address palette rows.
@@ -2215,17 +2195,6 @@ local function render_transcript(L)
         if S.waiting then tail = " " .. spinner_glyph()
         elseif S.streaming then tail = caret_glyph() end
     end
-    -- tui: Scroll position indicator — the same count as the status line, painted
-    -- on the newest visible row. Only the rows the viewport needs are rendered:
-    -- row_text() maps a transcript row to its entry and caches that entry's rows.
-    local marker = ""
-    if S.user_scrolled and not S.overlay then
-        local hidden = scroll_indicator(total, S.scroll, L.transcript_h)
-        if hidden and hidden > 0 then
-            marker = ((M._ascii_mode or M._env_ascii or _ascii) and "v" or "↓")
-                .. " +" .. hidden
-        end
-    end
     local last_painted = math.min(total, bottom)
     local lo = entry_of_row(top, L.w) or 0
     local hi = entry_of_row(last_painted, L.w) or -1
@@ -2235,14 +2204,6 @@ local function render_transcript(L)
         local text = ""
         if idx >= 1 and idx <= total then
             text = row_text(idx, L.w)
-        end
-        if idx == last_painted and marker ~= "" then
-            -- reserve room by cutting the row, like ui.wrap=false does; on a row
-            -- too narrow for the marker plus a fragment of content, drop it
-            local room = L.w - vlen(marker) - 2
-            if room >= 8 then
-                text = trunc(text, room) .. " " .. marker
-            end
         end
         if idx == total and tail ~= "" then
             text = trunc(text, L.w - 2) .. tail
@@ -2522,7 +2483,7 @@ local function tail_cols(s, maxw)
     return table.concat(out)
 end
 
--- The footer's stats row: `left` at the start, `right` right-aligned and kept
+-- The footer row composition: `left` at the start, `right` right-aligned and kept
 -- at least two columns away. Both sides may carry SGR; widths are display
 -- columns. When they cannot both fit, the right side loses its start (so its
 -- tail survives) and is dropped only when nothing of it fits; the left side is
@@ -2531,7 +2492,7 @@ function M.footer_stats(left, right, width)
     if width <= 0 then return "" end
     left, right = left or "", right or ""
     local lw = vlen(left)
-    if lw >= width then return trunc(left, width) end
+    if lw >= width then return to_ascii(trunc(left, width)) end
     local room = width - lw - 2 -- the two columns the model must stay clear of
     local rw = vlen(right)
     if rw == 0 or room <= 0 then
@@ -2542,45 +2503,91 @@ function M.footer_stats(left, right, width)
     return left .. string.rep(" ", width - lw - kw) .. kept
 end
 
--- pi-style-input-and-footer: the footer is dim rows below the box. Persistent
--- facts only — the path, the session's token stats with the model name
--- right-aligned, and the flags while one is active; the turn's progress lives in
--- the box's top rule instead (see turn_status).
+-- slim-footer-indicators: one dim footer row below the box — path ($HOME → ~),
+-- session token stats + context cell, transient flags (toast, scroll), and the
+-- model right-aligned. Truncation when over width (spec tui Footer): path
+-- right-truncate first, then toast dropped, then scroll dropped, then stats
+-- right-truncate; model is handled separately by footer_stats. No reverse
+-- video, no mode icons.
 local function render_footer(L)
-    -- path row: $HOME shortened to ~ (pi's footer line 1)
     local home = os.getenv("HOME") or ""
     local ws = S.workspace
     if home ~= "" and ws:sub(1, #home) == home then
         ws = "~" .. ws:sub(#home + 1)
     end
-    set_row(L.footer_row, dim(trunc(ws, L.w)))
 
-    -- stats row: the session's own traffic, the context cell, then the model
-    local left = {}
+    local stats = {}
     if (S.tokens_in or 0) > 0 then
-        left[#left + 1] = dim("↑" .. M.format_count(S.tokens_in))
+        stats[#stats + 1] = dim("↑" .. M.format_count(S.tokens_in))
     end
     if (S.tokens_out or 0) > 0 then
-        left[#left + 1] = dim("↓" .. M.format_count(S.tokens_out))
+        stats[#stats + 1] = dim("↓" .. M.format_count(S.tokens_out))
     end
     if S.tokens_max and S.tokens_max > 0 then
-        -- T47: "4.2k/32k (13%)" — value + budget + percent
         local summarize_at = (S.cfg.context and S.cfg.context.summarize_at) or 0.7
-        left[#left + 1] = dim(S.tokens_estimated and "≈" or "") ..
+        stats[#stats + 1] = dim(S.tokens_estimated and "≈" or "") ..
             M.token_usage(S.tokens_used, S.tokens_max, summarize_at)
     end
-    set_row(L.stats_row, M.footer_stats(table.concat(left, " "),
-        dim(S.model_name or "?"), L.w))
+    local stats_str = table.concat(stats, " ")
 
-    -- flag row: transient state only, one space between flags, painted while at
-    -- least one is active (layout reserves the row from the same flags)
     local flags = static_flags()
     local scroll = scroll_flag(L.transcript_h)
     if scroll then flags[#flags + 1] = scroll end
-    if L.flags_row then
-        set_row(L.flags_row,
-            #flags > 0 and trunc(to_ascii(table.concat(flags, " ")), L.w) or "")
+    local flags_str = #flags > 0 and to_ascii(table.concat(flags, " ")) or ""
+
+    local width = L.w
+    -- Visual order: path, stats, flags. Truncation order (spec): path first
+    -- (to_ascii so ASCII mode gets "..." not "…"), then toast, then scroll,
+    -- then stats — each step re-fits the path into the room that opened up.
+    local function join(path_s, s_str, f_str)
+        local parts = {}
+        if path_s ~= "" then parts[#parts + 1] = path_s end
+        if s_str ~= "" then parts[#parts + 1] = s_str end
+        if f_str ~= "" then parts[#parts + 1] = f_str end
+        return table.concat(parts, " ")
     end
+
+    local function fit_path(f_str, s_str)
+        local rest = 0
+        if s_str ~= "" then rest = rest + 1 + vlen(s_str) end
+        if f_str ~= "" then rest = rest + 1 + vlen(f_str) end
+        local room = width - rest
+        if room < 1 then return "" end
+        return to_ascii(trunc(dim(ws), room))
+    end
+
+    local f_str, s_str = flags_str, stats_str
+    local path_s = fit_path(f_str, s_str)
+    local left = join(path_s, s_str, f_str)
+
+    if vlen(left) > width then
+        -- Drop toast before the scroll indicator.
+        if S.toast and f_str:find(to_ascii(green(S.toast)), 1, true) then
+            f_str = scroll and to_ascii(scroll) or ""
+            path_s = fit_path(f_str, s_str)
+            left = join(path_s, s_str, f_str)
+        end
+    end
+    if vlen(left) > width and f_str ~= "" then
+        f_str = ""
+        path_s = fit_path(f_str, s_str)
+        left = join(path_s, s_str, f_str)
+    end
+    if vlen(left) > width then
+        local stats_room = width - (path_s ~= "" and vlen(path_s) + 1 or 0)
+        if stats_room >= 1 then
+            s_str = to_ascii(trunc(s_str, stats_room))
+        else
+            s_str = ""
+        end
+        path_s = fit_path(f_str, s_str)
+        left = join(path_s, s_str, f_str)
+        if vlen(left) > width then
+            left = to_ascii(trunc(left, width))
+        end
+    end
+
+    set_row(L.footer_row, M.footer_stats(left, dim(S.model_name or "?"), width))
 end
 
 -- ============================================================
@@ -3219,8 +3226,6 @@ local function mouse_update_tracking()
                                        palette_active = S.palette_active })
     if want ~= S.mouse_enabled then
         S.mouse_enabled = want
-        S.mouse_mode = mode -- 5b: effective config mode, shown in the fading flag
-        S._mouse_flag_until = os.time() + 3 -- 5b: flag visible for ~3 s after change
         w(M.mouse_tracking_seqs(want))
     end
 end

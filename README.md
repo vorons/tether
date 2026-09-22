@@ -217,7 +217,7 @@ the skills index in its prompt.
   the newest line), and a `✻ tether думает…` placeholder plus a spinner and
   elapsed time in the input box's top rule cover the wait before the first
   token.
-- **Token usage** in the footer stats row as `4.1k/32k (13%)` — used over
+- **Token usage** in the single footer row as `4.1k/32k (13%)` — used over
   budget, colored by threshold (green → yellow at summarize threshold → red
   at 90%+).
 - **Mouse modes** (`ui.mouse` in `~/.tether/config.lua`):
@@ -235,8 +235,8 @@ the skills index in its prompt.
   window with an `N/total` indicator, and picking a skill only writes
   `/<name> ` into the input. Submitting `/<name>` sends it to the agent as a
   normal message; `/skills` no longer exists.
-- **`↓ +N` marker** on the newest visible transcript row while the user is
-  scrolled up; the footer flag row shows the same `↓ +N` count.
+- **`↓ +N` scroll indicator** on the single footer row while the user is
+  scrolled up; no in-transcript marker.
 - **Retry and continuation notices** — a failed attempt that is about to be
   retried drops the rows it already painted and leaves one dim
   `↻ повтор N (ждём Xs): reason` row, with the pending retry also shown in the
