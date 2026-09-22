@@ -3147,6 +3147,8 @@ local function handle_agent_event(ev)
     paint(force)
 end
 
+-- Test seam: mode/paint shell tests drive events through here; row mutations
+-- go to transcript.handle. Row-only tests use M._transcript.* directly (D8).
 M._handle_agent_event = handle_agent_event
 
 local function commit_input()

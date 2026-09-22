@@ -543,16 +543,14 @@ end
 -- only the turn knows when the abort has actually been handled.
 --
 -- Implementation lives in turn.lua (cut 5); these locals keep agent's internal
--- call sites and the M._take_abort / M._ack_abort test seams working.
+-- call sites working. The test seam is turn.take_abort / turn.ack_abort.
 local function take_abort()
     return turn_mod.take_abort(M)
 end
-M._take_abort = take_abort
 
 local function ack_abort()
     turn_mod.ack_abort(M)
 end
-M._ack_abort = ack_abort
 
 -- Sleep in slices so Ctrl+C is honored during a wait of up to a minute.
 -- Returns true when the wait was interrupted by an abort. tether.sleep itself

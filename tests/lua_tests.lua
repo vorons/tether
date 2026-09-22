@@ -1335,17 +1335,8 @@ do
 
   local ok, err = pcall(function()
     local ui_mod = assert(loadfile("src/tether/ui.lua"))()
-    local function upvalue(fn, want)
-      local i = 1
-      while true do
-        local name, val = debug.getupvalue(fn, i)
-        if not name then return nil end
-        if name == want then return val end
-        i = i + 1
-      end
-    end
     ui_mod.run()
-    local S = upvalue(ui_mod.run, "S")
+    local S = ui_mod._get_state()
     -- input must remain empty: neither scroll nor ctrl-up inserted text
     assert_eq(S.input, "", "T49b input empty after up/ctrl-up with empty field")
   end)
