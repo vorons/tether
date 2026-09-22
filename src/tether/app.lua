@@ -72,6 +72,9 @@ local function run_inner()
             cfg._cli_agents_files = opts.agents_files
         end
         cfg.debug = opts.debug
+        -- add-ask-tool: a print run has nobody to answer `ask`, so the agent
+        -- degrades such a call to an error tool result instead of parking.
+        cfg.non_interactive = true
         -- Design §14: workspace defaults to cwd; -w overrides (tools read cfg.workspace)
         if not cfg.workspace then cfg.workspace = tether.getcwd() end
         local rp = tether.realpath(cfg.workspace)

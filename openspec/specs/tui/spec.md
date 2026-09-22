@@ -11,20 +11,30 @@ history, status line, themes, ASCII fallback, and overlays.
 
 ### Requirement: Screen regions
 The TUI SHALL lay out: an optional header (disabled by default),
-the scrollable transcript region, a status line, and a bottom
-input field. With `ui.alt_screen = true` the TUI SHALL enter the
-alternate screen buffer on start and leave it on exit; with `false`
-the native scrollback is kept.
+the scrollable transcript region, and a bottom dock holding the
+input box, the optional palette, and the footer. With
+`ui.alt_screen = true` the TUI SHALL enter the alternate screen
+buffer on start and leave it on exit; with `false` the native
+scrollback is kept.
 
-Rows SHALL be allocated bottom-up: the footer rows are reserved from
-the bottom of the screen (see the footer separator requirement for the
-exact budget) and the transcript receives every remaining row. No
-region SHALL overlap another, and a change in footer height SHALL
+Rows SHALL be allocated bottom-up: the dock rows are reserved from
+the bottom of the screen (see the footer requirement for the exact
+budget) and the transcript receives every remaining row. No
+region SHALL overlap another, and a change in dock height SHALL
 change the transcript height by the same number of rows.
+
+Within the dock the rows SHALL run, top to bottom: the input box's
+top rule, the input's content rows, its bottom rule, the palette rows
+(only while the palette is open), the footer's path row, the footer's
+stats row, and the optional flag row.
 
 #### Scenario: alt_screen default
 - **WHEN** the user starts the TUI without config
 - **THEN** the alternate screen buffer is used
+
+#### Scenario: Dock order
+- **WHEN** a frame is rendered with a one-line input and a closed palette
+- **THEN** the box's two rules and the footer's two rows are the last four rows of the screen, in that order, with no other region between them
 
 ### Requirement: Markdown-lite rendering
 Assistant text SHALL render inline code, bold, italic, lists, and
@@ -113,8 +123,8 @@ the agent history, not on screen):
 
 ### Requirement: Scroll position indicator
 When the user scrolled up, the TUI SHALL report how many transcript
-rows are hidden below as `↓ +N` (ASCII `v +N`). The status line SHALL
-show the count, and the newest visible transcript row SHALL
+rows are hidden below as `↓ +N` (ASCII `v +N`). The footer's flag row
+SHALL show the count, and the newest visible transcript row SHALL
 additionally carry the same marker, right-aligned, while following is
 off. Returning to the bottom SHALL re-enter follow mode and remove
 both indicators. The in-transcript marker SHALL be omitted when the
@@ -125,15 +135,15 @@ reported count SHALL stay exact across appends, expansion toggles,
 
 #### Scenario: Indicator while scrolled up
 - **WHEN** the transcript is scrolled up with lines below
-- **THEN** the status line shows `↓ +N` with the count
+- **THEN** the footer's flag row shows `↓ +N` with the count
 
 #### Scenario: In-transcript marker
 - **WHEN** the user scrolled up and 7 transcript rows are hidden below
-- **THEN** the newest visible transcript row ends with `↓ +7` and the status line shows the same count
+- **THEN** the newest visible transcript row ends with `↓ +7` and the footer's flag row shows the same count
 
 #### Scenario: Marker hidden at the bottom
 - **WHEN** the user is in follow mode at the bottom of the transcript
-- **THEN** neither the transcript row nor the status line shows the marker
+- **THEN** neither the transcript row nor the footer shows the marker
 
 #### Scenario: ASCII mode renders the marker in ASCII
 - **WHEN** ASCII mode is active and the transcript is scrolled up
@@ -146,54 +156,6 @@ reported count SHALL stay exact across appends, expansion toggles,
 #### Scenario: Count survives expansion
 - **WHEN** the user is scrolled up, expands all tool results, and stays scrolled up
 - **THEN** the reported hidden-row count equals the difference between the new transcript height and the viewport bottom
-
-
-### Requirement: Token usage in status line
-The status line SHALL consist of a small fixed set of mandatory parts
-rendered in this order, joined by ` · `:
-1. `spinner Ns` — only while a turn is busy
-2. `model` — the active model name
-3. `workspace` — the current workspace path (`~`-abbreviated)
-4. `token usage` — `used/max (pct%)` with a `≈` prefix when estimated
-
-Additional flags SHALL NOT be visible by default; they appear only
-while relevant:
-- `🖱 <mode>` — visible for a short window after the mouse mode
-  actually changes, then fades.
-- `⌨ <proto>` — visible only when a keyboard protocol is detected
-  (non-zero).
-- `↓ +N` / `v +N` — the scroll indicator, visible while the user is
-  scrolled up.
-- The one-shot toast (e.g. `✓ скопировано`) — leads the line while
-  active and is cleared by the next keypress.
-
-The status line SHALL stay on a single row; when mandatory parts exceed
-the width, overflow SHALL be truncated from the right.
-
-#### Scenario: Default idle line
-- **WHEN** no turn is running, no flags are active, and the user is at
-  the bottom of the transcript
-- **THEN** the status line is `model · ~/workspace · used/max (pct%)`
-  with no `🖱`, no `⌨`, no scroll indicator, and no spinner
-
-#### Scenario: Busy turn leads with spinner
-- **WHEN** a turn is running and 3 seconds have elapsed
-- **THEN** the first part is `spinner 3s` followed by model, workspace,
-  and token usage
-
-#### Scenario: Mouse mode shown briefly after change
-- **WHEN** the effective mouse mode switches from `auto` to `off`
-- **THEN** `🖱 off` is visible in the status line for a few seconds and
-  then disappears
-
-#### Scenario: Keyboard protocol shown only when detected
-- **WHEN** the TUI negotiated the Kitty keyboard protocol
-- **THEN** `⌨ kitty` is visible; when no protocol was detected the
-  part is absent
-
-#### Scenario: Summary threshold shown
-- **WHEN** token usage reaches `ui.summarize_at`
-- **THEN** the status line shows the percentage as a warning
 
 ### Requirement: Mouse tracking
 When `ui.mouse` is on the TUI SHALL enable SGR mouse reporting
@@ -266,12 +228,12 @@ the row directly below the last painted entry row, where `<selected>` is
 the selected entry's 1-based position in the ranked list and `<total>` is
 the number of entries; the indicator SHALL consist of digits and `/`
 only, and it SHALL occupy the row the footer budget already reserves for
-the palette, so that budget and the separator row do not move. The
+it, so that budget and the input box's rules do not move. The
 indicator SHALL be painted only while that row is inside the palette
-region, above the separator; when the terminal is too short for the
-region to hold it, the indicator SHALL be omitted, entry rows SHALL keep
-their window, and no palette row SHALL be painted over the separator or
-the status line.
+region, below the input box's bottom rule; when the terminal is too short
+for the region to hold it, the indicator SHALL be omitted, entry rows
+SHALL keep their window, and no palette row SHALL be painted over the
+input box's rules or the footer's rows.
 
 The palette SHALL close when the filter contains a space or the first
 character is no longer `/`. Skill rows SHALL be resolved when the palette
@@ -345,7 +307,7 @@ holds the commands only.
 
 #### Scenario: No room for the indicator
 - **WHEN** the palette region holds room for the entry rows but not for a row below them
-- **THEN** the indicator is omitted, the entry rows stay as they are, and no palette row covers the separator or the status line
+- **THEN** the indicator is omitted, the entry rows stay as they are, and no palette row covers the input box's rules or the footer's rows
 
 #### Scenario: Discovery failure degrades
 - **WHEN** skill discovery fails and the user types `/`
@@ -395,9 +357,38 @@ resolves takes the non-skill path.
 - **WHEN** the user submits `/nosuchthing`
 - **THEN** no message is sent to the agent and the transcript gains no user row
 
-
-
 ### Requirement: Input field and history
+The input field SHALL render as a box: one dim rule spanning the
+terminal width directly above the input's rows, those rows rendered
+with `ui.editor_padding_x` columns of horizontal padding on both
+sides, and one dim rule spanning the width directly below them. The
+input rows SHALL be padded out to the content width so that both rules
+and the text rows have the same display width. The box SHALL NOT draw
+side borders and SHALL NOT print a prompt marker inside it: the rules
+delimit the input. `ui.editor_padding_x` SHALL be a whole number of
+columns, 0 to 3; a larger value SHALL be clamped to 3, a negative one
+to 0, and the value SHALL further be clamped so that the content keeps
+at least one column. The rules SHALL be dim in every theme, including
+`mono` (they are static glyph rows, not colored roles). In ASCII mode
+the rules SHALL use `-` instead of `─`.
+
+The caret SHALL be drawn as a reverse-video block: when the cursor
+sits on a character, that character SHALL be painted in reverse video
+and no other cell SHALL be; when the cursor sits at the end of a row, a
+reverse-video space SHALL be painted after the text. The block SHALL be
+painted in the TUI's own frame and SHALL be the only caret shown while
+the input has focus; the hardware terminal cursor SHALL stay hidden,
+except while an overlay needs it. In ASCII mode the block SHALL still
+be used, since it is a video attribute and not a glyph.
+
+The input SHALL show at most `ui.input_max_lines` rows at a time,
+never fewer than one, and the window SHALL shift to keep the cursor row
+inside it. While the window hides rows above the cursor, the top rule
+SHALL carry a centered `↑ N more` label (ASCII `^ N more`); while it
+hides rows below, the bottom rule SHALL carry a centered `↓ N more`
+label (ASCII `v N more`). A scroll label SHALL be omitted when the rule
+is too narrow to hold it without losing the rule's own glyphs.
+
 The input field SHALL support multi-line editing up to
 `ui.input_max_lines` (default 8) with UTF-8-aware cursor movement.
 History navigation SHALL work as follows:
@@ -412,6 +403,34 @@ History navigation SHALL work as follows:
 - The recall list SHALL contain only messages that were committed
   to the agent; text typed and discarded without submission SHALL
   not enter the list.
+
+#### Scenario: Framed input
+- **WHEN** the input holds one line of text
+- **THEN** a dim rule spans the width directly above the text row and another directly below it, the text row is padded out to the same width, and no `›` marker is printed
+
+#### Scenario: Block caret on a character
+- **WHEN** the input holds `abc` and the cursor sits after `b`
+- **THEN** `b` is painted in reverse video and no other cell is
+
+#### Scenario: End-of-line caret
+- **WHEN** the cursor is at the end of the row's text
+- **THEN** a reverse-video space is painted directly after the last character
+
+#### Scenario: Hardware cursor stays hidden
+- **WHEN** any frame is painted while the input has focus
+- **THEN** no cursor-show escape is emitted by the input field's rendering
+
+#### Scenario: Padding applied
+- **WHEN** `ui.editor_padding_x` is 2
+- **THEN** every input row starts and ends with two padding columns and the text never reaches the row's last column
+
+#### Scenario: Scroll labels in the rules
+- **WHEN** the input holds more rows than the window and the cursor is on the last row
+- **THEN** the top rule carries `↑ N more` with the number of hidden rows above and the bottom rule carries no label
+
+#### Scenario: Scroll label omitted on a narrow rule
+- **WHEN** the terminal is narrower than the label needs
+- **THEN** the rule renders as an unbroken run of its glyph with no label
 
 #### Scenario: Scroll with empty input
 - **WHEN** the input is empty and Up is pressed
@@ -485,12 +504,14 @@ fall back to modifyOtherKeys / xterm fallback sequences.
 - **WHEN** the terminal advertises Kitty keyboard protocol support
 - **THEN** the TUI enables it and keys carry modifier state in the
   CSI u encoding
+
 ### Requirement: Live turn feedback
 The TUI SHALL show turn progress while the agent works, without
 waiting for the turn to finish. On submit it SHALL paint the waiting
 state immediately: the newest transcript row SHALL carry a
-`✻ tether думает…` placeholder with a spinner frame, and the status
-line SHALL show a spinner with the elapsed seconds of the turn. The
+`✻ tether думает…` placeholder with a spinner frame, and the input
+box's top rule SHALL carry the same spinner with the elapsed seconds of
+the turn. The
 placeholder SHALL disappear with the first `text_delta` or
 `reasoning_delta` and SHALL give way to a caret `▌` (ASCII `|`) at
 the end of the newest line while deltas keep arriving; the caret
@@ -512,7 +533,7 @@ SHALL be introduced by this feedback.
 
 #### Scenario: Placeholder before the first token
 - **WHEN** the user submits a message and no token has arrived yet
-- **THEN** the transcript shows the `✻ tether думает…` placeholder with a spinner and the status line shows the spinner and elapsed seconds
+- **THEN** the transcript shows the `✻ tether думает…` placeholder with a spinner and the input box's top rule shows the spinner and elapsed seconds
 
 #### Scenario: First delta replaces the placeholder
 - **WHEN** the first text or reasoning delta arrives
@@ -528,7 +549,7 @@ SHALL be introduced by this feedback.
 
 #### Scenario: Cleared when the turn ends
 - **WHEN** a turn ends after a reply, an error, or an abort
-- **THEN** no placeholder, caret or elapsed field remains
+- **THEN** no placeholder, caret or elapsed field remains, and the input box's top rule is a plain dim rule again
 
 #### Scenario: Confirmation clears the busy state
 - **WHEN** a tool call requires confirmation and the menu is raised
@@ -545,6 +566,7 @@ SHALL be introduced by this feedback.
 #### Scenario: No repaint is required while nothing happens
 - **WHEN** a tool runs for a long time without producing stream events
 - **THEN** the TUI is not required to repaint and the last painted frame stays on screen
+
 ### Requirement: Retry and continuation notices
 While a turn is being retried or continued the TUI SHALL keep the user
 informed with dim system rows, painted as the events arrive and without
@@ -561,9 +583,9 @@ On a `continuation` event the TUI SHALL append one dim row naming what
 was continued, so an answer that was stitched together is visibly
 stitched.
 
-While the TUI waits between attempts the status line SHALL show the
-pending retry — the attempt number and the wait in seconds — in
-addition to the turn's own indicator; the ordinary indicator SHALL
+While the TUI waits between attempts the input box's top rule SHALL
+show the pending retry — the attempt number and the wait in seconds —
+in place of the turn's own indicator; the ordinary indicator SHALL
 return once the next attempt starts. The wait shown SHALL be the fixed
 duration carried by the event, not a live countdown, so no background
 timer is required.
@@ -593,9 +615,9 @@ and SHALL NOT introduce a non-ASCII glyph.
 
 #### Scenario: Status line during the wait
 - **WHEN** the TUI waits 60 seconds before the next attempt
-- **THEN** the status line shows the attempt number and the 60-second
-  wait, and returns to the ordinary turn indicator when the next
-  attempt starts
+- **THEN** the input box's top rule shows the attempt number and the
+  60-second wait, and returns to the ordinary turn indicator when the
+  next attempt starts
 
 #### Scenario: Painted without a keypress
 - **WHEN** a retry or continuation event arrives
@@ -607,8 +629,9 @@ and SHALL NOT introduce a non-ASCII glyph.
 - **THEN** nothing from the row reaches the agent or its history
 
 #### Scenario: ASCII mode
-- **WHEN** ASCII mode is active and a retry row is painted
-- **THEN** the row carries only ASCII glyphs
+- **WHEN** ASCII mode is active during a retry
+- **THEN** the retry row and the top-rule notice use ASCII glyphs and
+  introduce no non-ASCII character
 
 ### Requirement: Ctrl+C during a turn
 Pressing Ctrl+C while a turn is running SHALL stop that turn. The byte is
@@ -670,6 +693,7 @@ with the previous session.
 #### Scenario: ASCII mode
 - **WHEN** ASCII mode is active and a turn separator is rendered
 - **THEN** it is rendered as `-- HH:MM --` with no non-ASCII glyphs
+
 ### Requirement: Path completion
 With `ui.path_completion` on (default) and a non-empty input, pressing
 Tab outside an open palette SHALL complete the workspace-relative
@@ -748,6 +772,7 @@ path token under the cursor against the workspace contents:
 #### Scenario: Disabled
 - **WHEN** `ui.path_completion` is false and the user presses Tab outside the palette
 - **THEN** the input and the palette state are unchanged
+
 ### Requirement: Copy targets
 The `/copy` slash command SHALL open a palette of copy targets for the
 current session, listed newest-first: the last assistant answer, the
@@ -843,6 +868,7 @@ SHALL stay legible at every depth.
 #### Scenario: Degraded depth
 - **WHEN** `COLORTERM` is unset and the terminal reports 256 colors
 - **THEN** token colors use 256-color SGR sequences and the block stays readable
+
 ### Requirement: Tool row status and failure visibility
 Every tool call SHALL occupy a transcript row whose leading marker reports
 its state: `✓` for a successful call (ASCII `[ok]`), `✗` for a failed one
@@ -1162,51 +1188,211 @@ in the same order, at any scroll offset.
 - **WHEN** the user scrolls far away from an entry and back to it
 - **THEN** its rows are identical to the first render and the cache stayed bounded
 
-### Requirement: Footer separator
-The TUI SHALL render a single dim `─`-filled separator row between the
-input field and the status line. The separator SHALL be owned by the
-layout computation so it stays exact across input-height changes,
-palette visibility, error-banner visibility, and terminal resizes.
-The separator SHALL be dim in every theme, including `mono` (it is a
-static glyph row, not a colored role). In ASCII mode the separator
-SHALL use `─` replaced by `-`.
+### Requirement: Footer
+The TUI SHALL render the footer as dim rows below the input box and
+SHALL NOT use a reverse-video row for it.
 
-The layout SHALL reserve the footer row by row, counted from the bottom
-of the screen, as
-`input_h + palette_h + error_h + 1 (separator) + 1 (status)`,
-where `input_h = min(#input_lines, ui.input_max_lines)` but never less
-than 1, `error_h` is 1 while the error banner is visible and 0
-otherwise, and `palette_h` is 0 while no palette is visible. That
-reserved count SHALL be the only source of the transcript height, so
-the transcript SHALL NOT extend into the footer and no two regions
-SHALL claim the same row: every input row SHALL sit strictly above the
-separator row, and the separator row strictly above the status line.
-The separator row SHALL therefore be reserved even when the input holds
-a single line and no palette or error banner is visible.
+The first footer row SHALL carry the workspace path with a leading
+`$HOME` abbreviated to `~`, and SHALL be truncated from the right with
+a dim `...` when it exceeds the width.
 
-#### Scenario: Separator sits between input and status
-- **WHEN** the TUI renders a normal frame with a non-empty or empty input
-- **THEN** the row directly above the status line is a dim rule
-  spanning the terminal width
+The second footer row SHALL carry on its left, joined by a single
+space: the session's accumulated input tokens as `↑<count>`, its
+accumulated output tokens as `↓<count>` (each omitted while zero), and
+the context cell `used/max (pct%)`; and the model name right-aligned on
+the same row, at least two columns away from the left side. Counts
+SHALL use the compact form: plain below 1000, one decimal with `k`
+below 10000, a rounded `k` below 1000000, and `M` above. The model name
+SHALL end in the row's last column whenever both sides fit; when they
+cannot both fit, the model name SHALL be truncated from its left so its
+tail survives, and dropped entirely only when nothing of it fits. The
+left side SHALL be truncated from the right with `...` only when it
+alone exceeds the width.
 
-#### Scenario: One-line input keeps its own row
-- **WHEN** the TUI renders a frame with a one-line input and neither palette nor error banner
-- **THEN** the input row directly above the separator still shows the text the user typed, the separator occupies the next row, and the status line occupies the last row
+The footer SHALL have an optional third row carrying the active flags
+joined by a single space — the one-shot toast, the mouse-mode flag, the
+keyboard-protocol flag, and the scroll indicator — and SHALL exist only
+while at least one flag is active. That row SHALL be truncated from the
+right with a dim `...` and SHALL NOT be dim as a whole, because its
+flags carry their own presentation.
 
-#### Scenario: Budget follows a growing input
-- **WHEN** `ui.input_max_lines` grows the input block from 1 to N visible rows
-- **THEN** the transcript height shrinks by N − 1 rows and the input block, separator row, and status line still occupy N + 2 distinct rows
+The footer's rows SHALL be counted in display columns: wide East-Asian
+characters count as 2 and ANSI sequences as 0. In ASCII mode the token
+arrows SHALL render as `^` and `v`, and no non-ASCII glyph SHALL be
+introduced by the footer.
 
-#### Scenario: Palette and error banner stay inside the budget
-- **WHEN** the command palette is open and an error banner is visible
-- **THEN** the transcript height shrinks by the palette and banner heights, and neither the palette nor the banner overlaps the input block or the separator row
+#### Scenario: Idle footer
+- **WHEN** no turn is running, no flag is active, and the session has used 3000 input and 1000 output tokens
+- **THEN** the first row is the `~`-abbreviated workspace, the second row starts with `↑3.0k ↓1.0k` followed by the context cell and ends with the model name, and no third row is painted
 
-#### Scenario: Separator survives resize and input height change
-- **WHEN** the terminal is resized while the input holds several lines
-- **THEN** the separator remains a single row between the input block and
-  the status line, and the status line still occupies the last row of the
-  screen
+#### Scenario: Model is right-aligned
+- **WHEN** the model name fits beside the left side
+- **THEN** it ends in the last column of the stats row and at least two blank columns separate it from the left side
 
-#### Scenario: Separator in ASCII mode
+#### Scenario: Counters accumulate across turns
+- **WHEN** one turn reports 1200 prompt and 300 completion tokens and a later turn reports 800 and 200
+- **THEN** the counters read `↑2.0k` and `↓500`
+
+#### Scenario: Context cell keeps its thresholds
+- **WHEN** token usage reaches `ui.summarize_at`
+- **THEN** the context cell is rendered as a warning, and at 90% or more as an error
+
+#### Scenario: Flags row appears while active
+- **WHEN** the mouse mode has just changed and the transcript is scrolled up
+- **THEN** a third row carries both flags separated by one space, and it disappears once they expire
+
+#### Scenario: No reverse video
+- **WHEN** any footer row is rendered
+- **THEN** no footer row uses reverse video and the path and stats rows are dim
+
+#### Scenario: Narrow terminal drops the model name
+- **WHEN** the model name cannot fit beside the left side of the stats row
+- **THEN** the left side is rendered intact and the model name is truncated from its left, or omitted if nothing of it fits
+
+#### Scenario: ASCII mode
+- **WHEN** ASCII mode is active and counters are shown
+- **THEN** the arrows render as `^` and `v` and the footer introduces no non-ASCII glyph
+
+### Requirement: Question block
+
+When the agent emits an `ask` event the TUI SHALL render a question block at the
+tail of the transcript, built like the confirmation menu so it scrolls, counts
+toward the transcript height, and is removed when it is resolved.
+
+The block SHALL show:
+
+- a `?` row with the question text, carrying an `N/M` progress indicator when the
+  call holds more than one question;
+- the question's `description`, when present, as read-only markdown-lite context
+  above the options;
+- one row per option, each prefixed with its 1-based index, the highlighted row
+  rendered like the confirmation menu's selected row;
+- the model's `recommended` option marked as the suggestion;
+- on a `multi` question a toggled/un-toggled marker on every option row;
+- a note already written on an option as a dim line beneath that option;
+- a final freeform row, always present, inviting the user to type their own
+  answer.
+
+While the block is open the TUI SHALL clear the waiting placeholder, the caret
+and the elapsed field, exactly as it does when a confirmation menu is raised —
+the turn is waiting on the user. No header or hint row SHALL be added beyond the
+rows above.
+
+#### Scenario: Single question
+- **WHEN** a single-question `ask` event arrives
+- **THEN** the block shows the question text, its options with indices, and the freeform row, with no progress indicator
+
+#### Scenario: Several questions
+- **WHEN** a three-question `ask` event arrives
+- **THEN** the first question is shown with a `1/3` indicator
+
+#### Scenario: Description context
+- **WHEN** the question carries a description
+- **THEN** it is rendered above the options as formatted read-only context
+
+#### Scenario: Recommended option
+- **WHEN** the question marks option 2 as recommended
+- **THEN** that row is marked as the suggestion while the highlight stays on the first option
+
+#### Scenario: Waiting state cleared
+- **WHEN** the block appears during a turn
+- **THEN** no placeholder, caret or elapsed field is painted while it is open
+
+#### Scenario: ASCII mode
 - **WHEN** ASCII mode is active
-- **THEN** the separator uses ASCII `-` instead of `─`
+- **THEN** every glyph the block introduces (toggles, note marker, progress) is rendered with an ASCII equivalent
+
+### Requirement: Answering a question by keyboard
+
+While the block is open it SHALL own the keyboard: a key the block does not use
+SHALL NOT reach the input line, the palette or the transcript scroll.
+
+- `↑`/`↓` SHALL move the highlight across the option rows and the freeform row.
+- On a single-answer question, `Enter` SHALL submit the highlighted option and a
+  digit `1..9` SHALL submit the option with that index.
+- On a `multi` question, `Space` and a digit `1..9` SHALL toggle the option with
+  that index without submitting, and `Enter` SHALL accept the current selection
+  and move on.
+- `Enter` on the freeform row SHALL open the freeform editor when the question
+  has no committed freeform text, and SHALL submit the question (single answer)
+  or accept the current selection and move on (`multi`) once text is committed,
+  so a freeform-only answer can be sent.
+- `Tab` on an option row SHALL open that option's note editor.
+- `←` SHALL return to the previous question of the same call when one has already
+  been answered, restoring its selections, freeform answer and notes for editing.
+- `Esc` SHALL cancel the question set (see "Submitting and cancelling a question
+  set").
+
+#### Scenario: Pick with the arrow and Enter
+- **WHEN** the user presses `↓` on a single-answer question and presses `Enter`
+- **THEN** the second option is the answer and the question is submitted
+
+#### Scenario: Pick with a digit
+- **WHEN** the user presses `3` on a single-answer question with at least three options
+- **THEN** the third option is submitted
+
+#### Scenario: Multi-select
+- **WHEN** the user presses `Space` twice on a `multi` question
+- **THEN** two options are marked selected and nothing is submitted yet
+
+#### Scenario: A freeform-only answer can be submitted
+- **WHEN** the user opens the freeform row, commits `Nuxt`, and presses `Enter` again
+- **THEN** the question is answered with that text and the set moves on
+
+#### Scenario: Freeform row without text
+- **WHEN** the user presses `Enter` on the freeform row with no committed freeform text
+- **THEN** the freeform editor opens instead of submitting
+
+#### Scenario: Return to a previous question
+- **WHEN** the user has answered the first of two questions and presses `←` on the second
+- **THEN** the first question is shown again with its answer still selected
+
+#### Scenario: Unused keys do not leak
+- **WHEN** the user types an ordinary letter while the block is open
+- **THEN** the input line is unchanged and nothing is submitted
+
+### Requirement: Freeform answer and option notes
+
+Choosing the freeform row SHALL open a single-line editor inside the block,
+prefilled with the current freeform answer; `Tab` on an option SHALL open a
+single-line note editor for that option, prefilled with that option's saved note.
+While an editor is open, characters and backspace SHALL edit its text
+(the question highlight SHALL NOT move), `Enter` SHALL commit the text — an empty
+commit clearing the value — and return to the option list, and `Esc` SHALL
+discard the edits made in that editor and return to the option list without
+cancelling the question set.
+
+#### Scenario: Freeform text becomes the answer
+- **WHEN** the user opens the freeform row, types `Nuxt` and presses `Enter`
+- **THEN** the question is answerable with that text and the option list is shown again
+
+#### Scenario: Note is written on an option
+- **WHEN** the user presses `Tab` on an option, types a note and presses `Enter`
+- **THEN** the note is shown beneath that option and travels with the answer
+
+#### Scenario: Note discarded
+- **WHEN** the user opens a note editor, types text and presses `Esc`
+- **THEN** no note is recorded and the question set is still open
+
+#### Scenario: Editing keys do not move the highlight
+- **WHEN** the user presses `↑` while a note editor is open
+- **THEN** the question's highlight is unchanged
+
+### Requirement: Submitting and cancelling a question set
+
+On the last question, `Enter` SHALL submit the whole answer set. Submitting SHALL
+remove the block, append one dim row summarising the answers (the question ids
+with their selected labels, freeform text and notes), and resume the turn.
+
+`Esc` in the option list SHALL cancel the whole set: the block is removed, one
+dim row records the cancellation, the tool result reports it without an error
+banner, and the turn continues.
+
+#### Scenario: Submitted answer is recorded
+- **WHEN** the user submits answers to two questions
+- **THEN** the block is gone, one dim row summarises both answers, and the turn resumes
+
+#### Scenario: Cancel
+- **WHEN** the user presses `Esc` in the option list
+- **THEN** the block is gone, a dim row records the cancellation, and the turn continues without an error banner
+

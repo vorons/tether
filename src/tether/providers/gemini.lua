@@ -17,20 +17,33 @@ assert(common, "gemini provider: cannot load provider_common")
 local jesc = common.jesc
 local json_unescape = common.json_unescape
 
--- Per-stream counter for synthesized tool-call ids (model-role parts carry
--- no ids). Reset per request via reset_stream().
-local S = { tool_seq = 0, saw_rest = false }
+-- Per-stream state: a counter for synthesized tool-call ids (model-role parts
+-- carry no ids), whether the REST fallback already closed the stream, the last
+-- finishReason (the stream terminator carries none of its own) and a provider
+-- error. Reset per request via reset_stream().
+local S = { tool_seq = 0, saw_rest = false, stop_reason = nil, failure = nil }
 
 function M.reset_stream()
     S.tool_seq = 0
     S.saw_rest = false
+    S.stop_reason = nil
+    S.failure = nil
 end
+
+-- Read by the transport after the stream: a non-nil table means the attempt
+-- failed with the provider's own message.
+function M.stream_failure()
+    return S.failure
+end
+
+-- Gemini finishReason -> canonical stop reason (see the api-client spec).
+local STOP_REASONS = { STOP = "stop", MAX_TOKENS = "length" }
 
 -- SSE object lines carry no stream terminator; the transport calls this at
 -- clean EOF. Skipped when the REST fallback already closed the stream.
 function M.stream_finished(on_event)
-    if not S.saw_rest then
-        on_event({ type = "done" })
+    if not S.saw_rest and not S.failure then
+        on_event({ type = "done", reason = S.stop_reason or "other" })
     end
 end
 
@@ -236,10 +249,21 @@ local function emit_response(payload, on_event)
         } })
         any = true
     end
+    -- finishReason: remembered so the `done` emitted at stream end repeats it
+    local reason = payload:match('"finishReason"[%s]*:[%s]*"([^"]+)"')
+    if reason then
+        S.stop_reason = STOP_REASONS[reason] or "other"
+        any = true
+    end
     -- error payloads: {"error":{"message":"...","code":...}}
+    -- add-retry-and-continuation: recorded as a failure for the transport; the
+    -- retry policy classifies it, so the provider never emits `error`.
     if not any and payload:find('"error"', 1, true) then
         local msg = payload:match('"message"[%s]*:[%s]*"(.-[^\\])"')
-        on_event({ type = "error", message = msg and json_unescape(msg) or "gemini error" })
+        local status = tonumber(payload:match('"code"[%s]*:[%s]*(%d+)'))
+            or tonumber(payload:match('"status"[%s]*:[%s]*(%d+)'))
+        S.failure = { message = msg and json_unescape(msg) or "gemini error",
+                      status = status }
         return true
     end
     return any
@@ -249,7 +273,7 @@ local function parse_sse_line(line, on_event)
     if line:sub(1, 6) ~= "data: " then return end
     local payload = line:sub(7)
     if payload == "[DONE]" then
-        on_event({ type = "done" })
+        on_event({ type = "done", reason = S.stop_reason or "other" })
         return
     end
     if emit_response(payload, on_event) then
@@ -258,11 +282,15 @@ local function parse_sse_line(line, on_event)
     end
 end
 
--- Non-SSE body (REST generateContent): same events, then done.
+-- Non-SSE body (REST generateContent): same events, then done. A body that
+-- turned out to carry a provider error is consumed without a `done` — the
+-- transport reports the failure instead.
 function M.handle_non_sse(body, on_event)
     if emit_response(body, on_event) then
         S.saw_rest = true
-        on_event({ type = "done" })
+        if not S.failure then
+            on_event({ type = "done", reason = S.stop_reason or "other" })
+        end
         return true
     end
     return false

@@ -21,8 +21,11 @@ Available tools:
 - grep(pattern, path?, glob?, ignore_case?, max_results?) — search text in files
 - run(command, cwd?, timeout?) — run shell command via /bin/sh -c
 - patch(patch) — apply unified diff, strictly
+- ask(questions) — ask the user to choose: [{question, options:[{label, description?}], id?, description?, multi?, recommended?}]
 
-When the user asks you to inspect or edit code, use these tools.
+When a decision belongs to the user (which option, which scope, which
+constraint), ask instead of guessing. When the user asks you to inspect or edit
+code, use these tools.
 Work in the current directory.
 Outside workspace, write/patch/run require user confirmation.
 ]==]

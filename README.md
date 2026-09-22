@@ -76,6 +76,55 @@ The model list depends on your OpenAI-compatible provider; `/model` falls
 back to a static list — set `model = "..."` in `~/.tether/config.lua` for
 direct control.
 
+## The `ask` tool
+
+The model can stop and ask instead of guessing. `ask(questions)` renders a
+question block in the transcript — options, an always-available freeform answer,
+per-option notes — and the user's answer comes back to the model as a tool result
+carrying a JSON payload:
+
+```json
+{"answers":[{"id":"framework","question":"Which framework?","selected":["React"],"other":"typed by hand","notes":[{"option":"Vue","note":"too heavy"}]}]}
+```
+
+The argument is an array of questions:
+
+```json
+{
+  "questions": [{
+    "id": "framework",
+    "question": "Which framework should we use?",
+    "description": "Optional markdown context rendered above the options",
+    "recommended": 2,
+    "options": [{ "label": "React" }, { "label": "Vue" },
+                { "label": "Svelte", "description": "smallest bundle" }]
+  }, {
+    "id": "constraints",
+    "question": "Which constraints apply?",
+    "multi": true,
+    "options": [{ "label": "No breaking changes" }, { "label": "Zero dependencies" }]
+  }]
+}
+```
+
+- Up to 8 questions and 12 options each; one call is one answer set, shown one
+  question at a time with an `N/M` indicator.
+- Keys: `↑`/`↓` move across the options and the freeform row, `Enter` submits a
+  single-answer question (or accepts a `multi` selection and moves on), a digit
+  `1..9` picks that option, `Space` toggles an option of a `multi` question, `Tab`
+  edits the highlighted option's note (or the freeform answer), `←` returns to
+  the previous question with its answer intact, `Esc` cancels the whole set.
+- The last row is always `Other (ввести свой вариант)`: Enter opens it, Enter
+  commits the text, and once text is committed Enter submits the question. It is
+  also how a question with no usable options is answered.
+- A note belongs to the option it was written on and is returned even when that
+  option was not selected; `recommended` only flags the model's suggestion and
+  never preselects it.
+- `Esc` cancels without stopping the turn — the model can proceed or ask
+  differently — and a cancel raises no error banner.
+- Under `--print` there is nobody to ask: the call returns an error result saying
+  so, the model decides on its own, and the run still prints its answer.
+
 ## Providers
 
 `tether` speaks three APIs through one canonical event stream
@@ -166,9 +215,11 @@ the skills index in its prompt.
   `@` prefix is preserved); `ui.path_completion` sets `false` to disable.
 - **Live turn feedback**: replies repaint as they stream (with a `▌` caret on
   the newest line), and a `✻ tether думает…` placeholder plus a spinner and
-  elapsed time in the status line cover the wait before the first token.
-- **Token usage** in the status line as `4.1k/32k (13%)` — used over budget,
-  colored by threshold (green → yellow at summarize threshold → red at 90%+).
+  elapsed time in the input box's top rule cover the wait before the first
+  token.
+- **Token usage** in the footer stats row as `4.1k/32k (13%)` — used over
+  budget, colored by threshold (green → yellow at summarize threshold → red
+  at 90%+).
 - **Mouse modes** (`ui.mouse` in `~/.tether/config.lua`):
   `"auto"` (default — mouse only over menus, native text selection works),
   `"on"` (always), `"off"` (never), `"selection"` (off + manual copy).
@@ -185,7 +236,14 @@ the skills index in its prompt.
   `/<name> ` into the input. Submitting `/<name>` sends it to the agent as a
   normal message; `/skills` no longer exists.
 - **`↓ +N` marker** on the newest visible transcript row while the user is
-  scrolled up; the status line shows the same `↓ +N` count.
+  scrolled up; the footer flag row shows the same `↓ +N` count.
+- **Retry and continuation notices** — a failed attempt that is about to be
+  retried drops the rows it already painted and leaves one dim
+  `↻ повтор N (ждём Xs): reason` row, with the pending retry also shown in the
+  input box's top rule; a truncated answer that is continued leaves a dim
+  `↻ продолжение (лимит вывода)` row, and an answer that stayed empty after its
+  nudge ends the turn with an error instead of silence. Ctrl+C still aborts,
+  including while the agent waits between attempts.
 
 ## Config keys
 
@@ -204,12 +262,33 @@ UI keys live under `ui = { ... }` in `~/.tether/config.lua`:
 - `ui.theme = "default"` — `default`, `solarized` or `mono`; every UI role,
   including syntax highlighting, follows the theme (`mono` emits no color).
 
+Retry behavior is a top-level `retry = { ... }` table, not a UI key:
+
+- `retry.base_delay_ms = 2000` — wait before the first retry.
+- `retry.max_delay_ms = 60000` — the cap the exponential wait grows to.
+- `retry.multiplier = 2` — how fast the wait grows; a value below 1 counts
+  as 1, and an invalid value falls back to the default.
+- `retry.max_failures_at_max_delay = 3` — failures at the capped wait allowed
+  before the turn gives up. The loop also stops immediately on a permanent
+  failure (invalid API key, model not found) or an exhausted quota / session
+  limit / budget; a connection error, a 429/5xx, a 400/413, stream exhaustion
+  or a credit error is retried.
+- `retry.max_attempts` — optional hard cap on the attempts in one turn. The
+  legacy top-level `retries = N` still does the same thing; there is no
+  default attempt cap.
+
+With the defaults the waits are 2s → 4s → 8s → 16s → 32s → 60s → 60s → 60s,
+so a turn makes at most nine attempts. A `Retry-After` from the server
+replaces the wait for the next attempt.
+
 ## Architecture
 
 - **C host** (`src/host/main.c`): embeds Lua 5.4.6, exports narrow syscall API — `tether.exec` (the only shell primitive, used by the `run` tool), `tether.getcwd`, `tether.realpath`, `tether.get_terminal_size`, `tether.is_tty`, `tether.write`, `tether.read_char`, `tether.sleep`, the filesystem primitives `tether.mkdirp`/`tether.fchmod`/`tether.readdir`/`tether.stat`, the krep grep backend `tether.krep_search`, and the in-process HTTP client `tether.http_stream`/`tether.http_get`. The binary is self-contained: `ldd ./tether` shows only `libc` and `libm`
 - **Lua modules** (`src/tether/`): loaded as globals via `lua_setglobal`
   - `config` — configuration loading, validation
   - `tools` — file I/O: `read`, `list`, `glob`, `grep`, `write`, `patch`, `run`
+  - `ask` — the `ask` tool's pure rules: question normalisation and bounds, the
+    answer payload, the transcript summary
   - `diff` — pure-Lua unified-diff engine (hunks, parsing, word pairing, meter)
   - `api` — SSE streaming to LLM via the in-process HTTPS transport
   - `agent` — tool dispatch loop, conversation history

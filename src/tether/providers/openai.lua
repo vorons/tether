@@ -20,6 +20,30 @@ assert(common, "openai provider: cannot load provider_common")
 local jesc = common.jesc
 local json_unescape = common.json_unescape
 
+-- Per-request state (streams are sequential — single agent loop — and the
+-- transport resets this per request). `stop_reason` is remembered because a
+-- terminator such as the `[DONE]` sentinel carries no reason of its own;
+-- `failure` is a provider error, which fails the attempt instead of being
+-- reported as a successful stream.
+local S = { stop_reason = nil, failure = nil }
+
+function M.reset_stream()
+    S.stop_reason = nil
+    S.failure = nil
+end
+
+-- Read by the transport after the stream: a non-nil table means the attempt
+-- failed with the provider's own message.
+function M.stream_failure()
+    return S.failure
+end
+
+-- Provider finish_reason -> canonical stop reason (see the api-client spec).
+local STOP_REASONS = {
+    stop = "stop", length = "length",
+    tool_calls = "tool_calls", ["function_call"] = "tool_calls",
+}
+
 local function encode_messages(messages)
     local items = {}
     for _, m in ipairs(messages) do
@@ -75,7 +99,7 @@ local function parse_sse_line(line, on_event)
     if line:sub(1, 6) ~= "data: " then return end
     local payload = line:sub(7)
     if payload == "[DONE]" then
-        on_event({ type = "done" })
+        on_event({ type = "done", reason = S.stop_reason or "other" })
         return
     end
 
@@ -117,10 +141,12 @@ local function parse_sse_line(line, on_event)
         end
     end
 
-    -- finish reason
+    -- finish reason: any reported reason closes the segment, and the value is
+    -- remembered so later terminators repeat it instead of clearing it
     local finish = payload:match('"finish_reason"[%s]*:[%s]*"([^"]+)"')
-    if finish == "stop" then
-        on_event({ type = "done" })
+    if finish then
+        S.stop_reason = STOP_REASONS[finish] or "other"
+        on_event({ type = "done", reason = S.stop_reason })
     end
 
     -- usage
@@ -132,11 +158,15 @@ local function parse_sse_line(line, on_event)
 
     -- error payloads: {"error":{"message":"...","status":429}}
     -- 3.4: detect the error from the payload (parse_json_str does not keep
-    -- nested objects, so obj.error was never set) and surface the real text.
+    -- nested objects, so obj.error was never set) and keep the real text.
+    -- add-retry-and-continuation: the attempt fails instead of succeeding, and
+    -- the policy classifies the message — the provider never emits `error`.
     if not content and payload:find('"error"', 1, true) then
         local msg = payload:match('"message"[%s]*:[%s]*"([^"]*)"')
         if msg then msg = json_unescape(msg) end
-        on_event({ type = "error", message = msg or "api error" })
+        local status = tonumber(payload:match('"status"[%s]*:[%s]*(%d+)'))
+            or tonumber(payload:match('"code"[%s]*:[%s]*"?([%d]+)"?'))
+        S.failure = { message = msg or "api error", status = status }
     end
 end
 

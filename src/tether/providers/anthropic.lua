@@ -15,16 +15,31 @@ assert(common, "anthropic provider: cannot load provider_common")
 local jesc = common.jesc
 local json_unescape = common.json_unescape
 
--- Per-stream state: content-block index -> { id, name }, plus the
--- message_start input token count. Streams are sequential (single agent
--- loop), so module-level state is safe; the transport resets it per
--- request via reset_stream().
-local S = { index_to_id = {}, input_tokens = nil }
+-- Per-stream state: content-block index -> { id, name }, the message_start
+-- input token count, the last stop reason (a terminator carries none of its
+-- own) and a provider error. Streams are sequential (single agent loop), so
+-- module-level state is safe; the transport resets it per request via
+-- reset_stream().
+local S = { index_to_id = {}, input_tokens = nil, stop_reason = nil, failure = nil }
 
 function M.reset_stream()
     S.index_to_id = {}
     S.input_tokens = nil
+    S.stop_reason = nil
+    S.failure = nil
 end
+
+-- Read by the transport after the stream: a non-nil table means the attempt
+-- failed with the provider's own message.
+function M.stream_failure()
+    return S.failure
+end
+
+-- Anthropic stop_reason -> canonical stop reason (see the api-client spec).
+local STOP_REASONS = {
+    end_turn = "stop", stop_sequence = "stop", max_tokens = "length",
+    tool_use = "tool_calls", refusal = "other",
+}
 
 -- Raw argument fragments are still-JSON-escaped: one unescape restores the
 -- JSON object for splicing. Anything that is not an object degrades to {}
@@ -150,14 +165,19 @@ local function parse_sse_line(line, on_event)
     if line:sub(1, 6) ~= "data: " then return end
     local payload = line:sub(7)
     if payload == "[DONE]" then
-        on_event({ type = "done" })
+        on_event({ type = "done", reason = S.stop_reason or "other" })
         return
     end
 
     local etype = payload:match('"type"[%s]*:[%s]*"([^"]+)"')
     if etype == "error" then
+        -- add-retry-and-continuation: record the failure for the transport
+        -- instead of emitting an event; the retry policy classifies it.
         local msg = payload:match('"message"[%s]*:[%s]*"(.-[^\\])"')
-        on_event({ type = "error", message = msg and json_unescape(msg) or "anthropic error" })
+        local status = tonumber(payload:match('"status"[%s]*:[%s]*(%d+)'))
+            or tonumber(payload:match('"code"[%s]*:[%s]*"?([%d]+)"?'))
+        S.failure = { message = msg and json_unescape(msg) or "anthropic error",
+                      status = status }
         return
     end
 
@@ -209,6 +229,9 @@ local function parse_sse_line(line, on_event)
     end
 
     if etype == "message_delta" then
+        -- the final delta carries the stop reason; remember it for message_stop
+        local reason = payload:match('"stop_reason"[%s]*:[%s]*"([^"]+)"')
+        if reason then S.stop_reason = STOP_REASONS[reason] or "other" end
         local out = tonumber(payload:match('"output_tokens"[%s]*:[%s]*(%d+)'))
         if out or S.input_tokens then
             on_event({ type = "usage", usage = {
@@ -220,7 +243,7 @@ local function parse_sse_line(line, on_event)
     end
 
     if etype == "message_stop" then
-        on_event({ type = "done" })
+        on_event({ type = "done", reason = S.stop_reason or "other" })
         return
     end
 end

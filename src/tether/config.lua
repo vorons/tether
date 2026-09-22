@@ -27,7 +27,16 @@ local function default_config()
         allow_outside_workspace = false,
         auto_approve = {},
         context = { max_tokens = 32768, summarize_at = 0.7 },
-        retries = 3,
+        -- add-retry-and-continuation: the retry policy reads this table.
+        -- There is deliberately no default attempt cap: the budget is the
+        -- cutoff in retry.max_failures_at_max_delay (see src/tether/retry.lua),
+        -- and a legacy top-level `retries` still caps the attempts.
+        retry = {
+            base_delay_ms = 2000,
+            max_delay_ms = 60000,
+            multiplier = 2,
+            max_failures_at_max_delay = 3,
+        },
         ui = {
             theme = "default",
             header = false,
@@ -39,6 +48,9 @@ local function default_config()
             wrap = true,
             collapse = { read = 20, list = 30, grep = 15 },
             input_max_lines = 8,
+            -- pi-style-input-and-footer: horizontal padding inside the input
+            -- box's rules (whole columns, 0..3, pi's editorPaddingX)
+            editor_padding_x = 0,
             alt_screen = true, -- T48: fullscreen TUI; "false" keeps native scrollback
             turn_separators = true, -- 2.x: dim dividers between user turns; set false to disable
             path_completion = true, -- 4.3: Tab completes workspace path tokens
@@ -101,6 +113,15 @@ function M.load(path, home)
         cfg.model = up.model or user_tbl.model
             or def_p.model or cfg.model
     end
+    -- add-retry-and-continuation: a legacy top-level `retries` was the hard
+    -- attempt cap. It still is — mapped onto the policy's attempt cap — so an
+    -- existing configuration keeps its budget. `retry.max_attempts` wins.
+    if type(cfg.retry) ~= "table" then cfg.retry = default_config().retry end
+    if cfg.retry.max_attempts == nil then
+        local legacy = tonumber(cfg.retries)
+        if legacy then cfg.retry.max_attempts = legacy end
+    end
+
     -- fix-audit-findings 2.1: merge the persisted [A] always patterns so a
     -- permanent approval survives a restart (written by agent.persist_auto_approve).
     local persisted = M.load_auto_approve(home or os.getenv("HOME"))

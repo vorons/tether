@@ -1,8 +1,12 @@
 -- tether api — provider dispatcher + shared transport.
 -- Per-provider request/SSE logic lives in src/tether/providers/*; this
 -- module owns what is identical for all providers: the in-process HTTP loop,
--- auth/body temp files, retry/backoff policy, and error surfacing.
+-- auth/body temp files, and per-attempt failure surfacing.
 -- agent.lua sees only canonical events and never branches on provider.
+--
+-- add-retry-and-continuation: one call = one attempt. The client does not
+-- sleep or repeat a request — it reports `ok, failure` and the agent's turn
+-- loop owns the backoff schedule, so no two budgets can interleave.
 local M = {}
 
 local PROVIDERS = {
@@ -57,32 +61,16 @@ function M.encode_messages(messages)
     return P.encode_messages(messages)
 end
 
--- T15: detect whether an HTTP response body is a retryable error (429 / 5xx).
--- curl-piped streams can't report the status code directly, so we infer it
--- from the body: OpenAI-compatible APIs return a plain JSON error body on
--- 4xx/5xx (not an SSE stream). Retry on empty bodies and retryable error JSON.
-local function is_retryable_body(body)
-    if body == nil or body == "" then return true, "empty response" end
-    local first = body:match("^[%s]*(%S)")
-    -- SSE streams start with "data:" — a non-SSE body on a streaming request
-    -- is an HTTP error JSON.
-    if first == "d" then return false, nil end
-    local status = tonumber(body:match('"status"[%s]*:[%s]*(%d+)'))
-        or tonumber(body:match('"code"[%s]*:[%s]*"?([%d]+)"?'))
-    if status and (status == 429 or status >= 500) then
-        return true, tostring(status)
-    end
-    if status and status >= 400 then
-        return false, "http " .. status
-    end
-    local lowered = body:lower()
-    if lowered:find("rate.?limit") or lowered:find("too many requests")
-        or lowered:find("overloaded") or lowered:find("internal server error")
-        or lowered:find("bad gateway") or lowered:find("service unavailable") then
-        return true, "rate limit / server error body"
-    end
-    return false, nil
-end
+-- add-retry-and-continuation: classification and the schedule live in
+-- src/tether/retry.lua (a global in the built binary, a loadfile fallback for
+-- development runs and the plain-lua tests). This module only asks it how a
+-- failure should be read.
+local retry = _G.retry
+    or (function()
+        local chunk = loadfile("src/tether/retry.lua")
+        return chunk and chunk()
+    end)()
+assert(retry, "api: cannot load retry")
 
 -- Extract a Retry-After / retry_after value from the body, if present.
 local function extract_retry_after(body)
@@ -125,19 +113,15 @@ local function header_file(lines)
     return path
 end
 
-local function http_request(cfg, api_key, messages, on_event, attempt)
-    attempt = attempt or 1
+local function http_request(cfg, api_key, messages, on_event)
     local _, P = provider_of(cfg)
-    local max_retries = (cfg.retries and tonumber(cfg.retries)) or 3
-    local backoffs = { 0.5, 1.0, 2.0 }
     local model = cfg.model
     local url = P.stream_url(cfg, model, api_key)
     local req = P.build_request(messages, model, nil)
 
     local hfile = header_file(P.header_lines(api_key))
     if not hfile then
-        on_event({ type = "error", message = "cannot write auth header file" })
-        return false
+        return false, retry.failure("permanent", "cannot write auth header file")
     end
 
     -- request body via stdin to avoid quoting issues entirely
@@ -145,8 +129,7 @@ local function http_request(cfg, api_key, messages, on_event, attempt)
     local bf = io.open(bfile, "w")
     if not bf then
         os.remove(hfile)
-        on_event({ type = "error", message = "cannot write request body file" })
-        return false
+        return false, retry.failure("permanent", "cannot write request body file")
     end
     bf:write(req)
     bf:close()
@@ -158,6 +141,7 @@ local function http_request(cfg, api_key, messages, on_event, attempt)
     local ok = true
     local got_data = false
     local parse_failed = false
+    local parse_error = nil
     local buf = {}
     local stream_ok, serr = tether.http_stream("POST", url,
         { "@" .. hfile, "Content-Type: application/json" },
@@ -174,7 +158,11 @@ local function http_request(cfg, api_key, messages, on_event, attempt)
                 if not ok2 then
                     parse_failed = true
                     ok = false
-                    on_event({ type = "error", message = "SSE parse: " .. tostring(err) })
+                    parse_error = "SSE parse: " .. tostring(err)
+                elseif P.stream_failure and P.stream_failure() then
+                    -- a provider error inside the stream fails the attempt;
+                    -- the rest of the stream is only drained
+                    parse_failed = true
                 end
             end
             return true
@@ -184,57 +172,63 @@ local function http_request(cfg, api_key, messages, on_event, attempt)
     os.remove(hfile)
     os.remove(bfile)
 
-    -- A transport that never delivered (connect/TLS failure) occupies the same
-    -- slot as the old "pipe never started" branch: retry, then surface it.
+    -- A transfer the user stopped (Ctrl+C during the stream: libcurl reports
+    -- an aborted-by-callback error). Distinct from a connection failure so it
+    -- can never be retried as one — the turn ends instead.
     if not stream_ok then
-        if attempt < max_retries then
-            pcall(tether.sleep, backoffs[math.min(attempt, #backoffs)])
-            return http_request(cfg, api_key, messages, on_event, attempt + 1)
+        local raw = tostring(serr or "connection error")
+        if retry.classify(raw) == "interrupted" then
+            return false, retry.failure("interrupted", retry.reason("interrupted"))
         end
-        on_event({ type = "error", message = "request failed: " .. tostring(serr) })
-        return false
+        local text = "request failed: " .. raw
+        return false, retry.failure(retry.classify(text), text)
+    end
+
+    if parse_error then
+        return false, retry.failure(retry.classify(parse_error), parse_error)
+    end
+
+    -- A provider error recorded while parsing (Anthropic `error`, an
+    -- OpenAI/Gemini `{"error":...}` payload) fails the attempt with the
+    -- provider's own text instead of being reported as a successful stream.
+    local pf = P.stream_failure and P.stream_failure()
+    if pf then
+        return false, retry.failure(retry.classify(pf.message, pf.status),
+            pf.message, pf.status)
+    end
+
+    local body = got_data and table.concat(buf, "\n") or ""
+
+    -- Nothing arrived.
+    if body == "" then
+        return false, retry.failure("empty", "empty response")
+    end
+
+    -- A non-SSE body is either the provider's REST fallback (Gemini
+    -- generateContent) or an HTTP error JSON.
+    if body:sub(1, 5) ~= "data:" then
+        if P.handle_non_sse and P.handle_non_sse(body, on_event) then
+            local rf = P.stream_failure and P.stream_failure()
+            if rf then
+                return false, retry.failure(retry.classify(rf.message, rf.status),
+                    rf.message, rf.status)
+            end
+            return true
+        end
+        -- M7/D5b: surface the HTTP error instead of returning success silently
+        -- (parse_sse_line skips a non-SSE body, so 'ok' stays true).
+        local status = tonumber(body:match('"status"[%s]*:[%s]*(%d+)'))
+            or tonumber(body:match('"code"[%s]*:[%s]*"?([%d]+)"?'))
+        local snippet = body:sub(1, 200):gsub("%s+", " ")
+        local text = "http " .. tostring(status or "?") .. ": " .. snippet
+        return false, retry.failure(retry.classify(text, status), text, status,
+            extract_retry_after(body))
     end
 
     if ok and P.stream_finished then
         pcall(P.stream_finished, on_event)
     end
-
-    -- Decide whether to retry based on the body content.
-    local body = table.concat(buf, "\n")
-    if not got_data then body = "" end
-    local retryable, reason = is_retryable_body(body)
-    if retryable and attempt < max_retries then
-        local delay = backoffs[math.min(attempt, #backoffs)]
-        local retry_after = extract_retry_after(body)
-        if retry_after then delay = retry_after end
-        pcall(tether.sleep, delay)
-        on_event({ type = "retry", attempt = attempt, delay = delay, reason = reason })
-        return http_request(cfg, api_key, messages, on_event, attempt + 1)
-    end
-
-    if retryable and attempt >= max_retries then
-        on_event({ type = "error", message = "API failed after " .. max_retries
-            .. " attempts: " .. tostring(reason or "empty response") })
-        return false
-    end
-
-    -- M7/D5b: a non-SSE, non-retryable body is an HTTP error (e.g. 401 JSON).
-    -- parse_sse_line silently skips it and 'ok' stays true -> the user sees
-    -- silence. Providers with a REST fallback (Gemini generateContent) may
-    -- consume the body into events first; otherwise surface it truncated.
-    if body ~= "" and body:sub(1, 5) ~= "data:" then
-        if P.handle_non_sse and P.handle_non_sse(body, on_event) then
-            return ok
-        end
-        local status = tonumber(body:match('"status"[%s]*:[%s]*(%d+)'))
-            or tonumber(body:match('"code"[%s]*:[%s]*"?([%d]+)"?'))
-        local snippet = body:sub(1, 200):gsub("%s+", " ")
-        on_event({ type = "error",
-                   message = "http " .. tostring(status or "?") .. ": " .. snippet })
-        return false
-    end
-
-    return ok
+    return true
 end
 
 function M.stream(cfg, api_key, messages, on_event)

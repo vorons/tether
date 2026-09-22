@@ -327,6 +327,67 @@ static pid_t start_test_server(int *out_port)
     return pid;
 }
 
+/* A server that streams one line and then pauses, repeatly, so a transfer stays
+   in flight while the test writes a Ctrl+C to its own stdin. */
+#define SLOW_SERVER_LINES 6
+#define SLOW_SERVER_NAP_MS 200
+
+static pid_t start_slow_server(int *out_port, const char *line, int lines)
+{
+    int srv = socket(AF_INET, SOCK_STREAM, 0);
+    if (srv < 0)
+        return -1;
+    int one = 1;
+    setsockopt(srv, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one));
+    struct sockaddr_in addr;
+    memset(&addr, 0, sizeof(addr));
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    addr.sin_port = 0;
+    if (bind(srv, (struct sockaddr *)&addr, sizeof(addr)) != 0 || listen(srv, 4) != 0) {
+        close(srv);
+        return -1;
+    }
+    socklen_t alen = sizeof(addr);
+    if (getsockname(srv, (struct sockaddr *)&addr, &alen) != 0) {
+        close(srv);
+        return -1;
+    }
+    *out_port = ntohs(addr.sin_port);
+
+    pid_t pid = fork();
+    if (pid < 0) {
+        close(srv);
+        return -1;
+    }
+    if (pid == 0) {
+        signal(SIGPIPE, SIG_IGN);
+        int c = accept(srv, NULL, NULL);
+        if (c >= 0) {
+            char req[2048];
+            ssize_t n = read(c, req, sizeof(req) - 1);
+            if (n < 0) n = 0;
+            (void)n;
+            char head[256];
+            int hlen = snprintf(head, sizeof(head),
+                "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\n"
+                "Content-Length: %zu\r\nConnection: close\r\n\r\n",
+                strlen(line) * (size_t)lines);
+            if (hlen > 0 && write(c, head, (size_t)hlen) < 0) { /* gone */ }
+            for (int i = 0; i < lines; i++) {
+                if (write(c, line, strlen(line)) < 0)
+                    break; /* the client aborted: stop streaming */
+                struct timespec nap = { 0, SLOW_SERVER_NAP_MS * 1000 * 1000 };
+                nanosleep(&nap, NULL);
+            }
+            close(c);
+        }
+        close(srv);
+        _exit(0);
+    }
+    return pid;
+}
+
 static int g_stream_lines;
 static char g_stream_first[256];
 static char g_stream_second[256];
@@ -559,6 +620,208 @@ static void test_tls_verification(lua_State *L)
     rm_rf(dir);
 }
 
+/* --- Ctrl+C while a turn blocks -------------------------------------------
+ * Raw mode clears ISIG, so an in-terminal Ctrl+C reaches the process as byte
+ * 0x03, and the UI reads stdin only between turns — exactly when no turn is
+ * running. These tests pin the host side of the fix: while a turn blocks the
+ * host watches stdin itself, 0x03 raises the interrupt, every other byte is
+ * queued for read_char, and tether.sleep returns as soon as the interrupt
+ * arrives instead of sleeping out the whole backoff. */
+
+static double now_seconds(void)
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (double)ts.tv_sec + (double)ts.tv_nsec / 1e9;
+}
+
+/* Call tether.<name>() with no arguments and return its first result. */
+static int call0(lua_State *L, const char *name)
+{
+    lua_getglobal(L, "tether");
+    lua_getfield(L, -1, name);
+    lua_remove(L, -2);
+    if (lua_pcall(L, 0, 1, 0) != LUA_OK) {
+        report_lua_error(L, name);
+        return 0;
+    }
+    return 1;
+}
+
+/* A Ctrl+C during an in-flight transfer must abort it: the progress callback
+   watches stdin, so the turn ends when the user asks rather than when the
+   provider's stream happens to finish. The server streams for ~1.2 s, so an
+   abort that is seen within ~0.5 s is unambiguous. */
+static void test_interrupt_aborts_transfer(lua_State *L)
+{
+    const char *line = "data: {\"x\":1}\n";
+    int port = 0;
+    pid_t server = start_slow_server(&port, line, SLOW_SERVER_LINES);
+    if (server <= 0) {
+        failures++;
+        fprintf(stderr, "FAIL: cannot start the slow HTTP test server\n");
+        return;
+    }
+
+    int fds[2];
+    if (pipe(fds) != 0 || dup2(fds[0], STDIN_FILENO) < 0) {
+        failures++;
+        fprintf(stderr, "FAIL: cannot point stdin at the interrupt test pipe\n");
+        return;
+    }
+    close(fds[0]);
+    g_interrupt = 0;
+    g_stdin_eof = 0;
+    g_pending_len = g_pending_pos = 0;
+
+    pid_t writer = fork();
+    if (writer == 0) {
+        struct timespec nap = { 0, 300 * 1000 * 1000 }; /* 300 ms */
+        nanosleep(&nap, NULL);
+        if (write(fds[1], "\003", 1) < 0) { /* parent already gone */ }
+        _exit(0);
+    }
+
+    char url[128];
+    snprintf(url, sizeof(url), "http://127.0.0.1:%d/stream", port);
+    g_stream_lines = 0;
+    double t0 = now_seconds();
+    lua_getglobal(L, "tether");
+    lua_getfield(L, -1, "http_stream");
+    lua_remove(L, -2);
+    lua_pushstring(L, "POST");
+    lua_pushstring(L, url);
+    lua_newtable(L);                    /* headers */
+    lua_pushnil(L);                     /* body */
+    lua_pushcfunction(L, on_line_stub); /* on_line */
+    lua_newtable(L);                    /* opts */
+    int rc = lua_pcall(L, 6, 2, 0);
+    double elapsed = now_seconds() - t0;
+    if (rc != LUA_OK) {
+        report_lua_error(L, "http_stream");
+    } else {
+        const char *err = lua_tostring(L, -1);
+        check(lua_isnil(L, -2), "an interrupted transfer delivers no success");
+        check(err != NULL, "an interrupted transfer reports an error");
+        lua_pop(L, 2);
+    }
+    check(elapsed < 1.0, "Ctrl+C aborts a transfer while it is in flight");
+    check(g_stream_lines < SLOW_SERVER_LINES,
+          "the aborted transfer stops delivering lines");
+
+    if (writer > 0) {
+        int status = 0;
+        waitpid(writer, &status, 0);
+    }
+    kill(server, SIGKILL);
+    int status = 0;
+    waitpid(server, &status, 0);
+    close(fds[1]);
+    if (call0(L, "clear_abort")) lua_pop(L, 1);
+    int devnull = open("/dev/null", O_RDONLY);
+    if (devnull >= 0) {
+        if (dup2(devnull, STDIN_FILENO) < 0) { /* best effort */ }
+        close(devnull);
+    }
+}
+
+static void test_interrupt_watch(lua_State *L)
+{
+    int fds[2];
+    if (pipe(fds) != 0) {
+        failures++;
+        fprintf(stderr, "FAIL: cannot create the interrupt test pipe\n");
+        return;
+    }
+    if (dup2(fds[0], STDIN_FILENO) < 0) {
+        failures++;
+        fprintf(stderr, "FAIL: cannot point stdin at the test pipe\n");
+        close(fds[0]);
+        close(fds[1]);
+        return;
+    }
+    close(fds[0]); /* the writer fd stays open: stdin must not hit EOF */
+
+    /* a byte stream with the Ctrl+C in the middle */
+    const char payload[] = { 'a', 'b', 3, 'c' };
+    if (write(fds[1], payload, sizeof(payload)) < 0) {
+        failures++;
+        fprintf(stderr, "FAIL: cannot write the interrupt payload\n");
+    }
+    g_interrupt = 0;
+    g_stdin_eof = 0;
+    g_pending_len = g_pending_pos = 0;
+
+    check(poll_interrupt() == 1, "the host watch notices Ctrl+C while a turn blocks");
+
+    unsigned char b = 0;
+    check(pending_take(&b) && b == 'a', "a keystroke typed during a turn is queued");
+    check(pending_take(&b) && b == 'b', "every ordinary byte is queued in order");
+    check(pending_take(&b) && b == 'c', "queued input survives the interrupt");
+    check(!pending_take(&b), "the Ctrl+C byte is not replayed as input");
+
+    /* The flag stays set until clear_abort: the same Ctrl+C keeps aborting an
+       in-flight transfer until the turn has actually stopped. */
+    if (call0(L, "abort_requested")) {
+        check(lua_toboolean(L, -1) == 1, "tether.abort_requested reports the Ctrl+C");
+        lua_pop(L, 1);
+    }
+    if (call0(L, "abort_requested")) {
+        check(lua_toboolean(L, -1) == 1,
+              "tether.abort_requested stays set until it is cleared");
+        lua_pop(L, 1);
+    }
+    if (call0(L, "clear_abort")) lua_pop(L, 1);
+    if (call0(L, "abort_requested")) {
+        check(lua_toboolean(L, -1) == 0, "tether.clear_abort clears the interrupt");
+        lua_pop(L, 1);
+    }
+
+    /* tether.sleep: a Ctrl+C mid-wait ends the wait instead of outlasting it */
+    pid_t writer = fork();
+    if (writer == 0) {
+        struct timespec nap = { 0, 200 * 1000 * 1000 }; /* 200 ms */
+        nanosleep(&nap, NULL);
+        if (write(fds[1], "\003", 1) < 0) { /* parent already gone */ }
+        _exit(0);
+    }
+    if (writer < 0) {
+        failures++;
+        fprintf(stderr, "FAIL: cannot fork the Ctrl+C writer\n");
+    } else {
+        double t0 = now_seconds();
+        lua_getglobal(L, "tether");
+        lua_getfield(L, -1, "sleep");
+        lua_remove(L, -2);
+        lua_pushnumber(L, 1.0);
+        if (lua_pcall(L, 1, 0, 0) != LUA_OK)
+            report_lua_error(L, "sleep");
+        double waited = now_seconds() - t0;
+        check(waited < 0.8, "tether.sleep wakes when Ctrl+C arrives mid-wait");
+        check(waited > 0.15, "tether.sleep still waits while nothing arrives");
+        if (call0(L, "abort_requested")) {
+            check(lua_toboolean(L, -1) == 1,
+                  "the interrupt survives the wait for the agent to read");
+            lua_pop(L, 1);
+        }
+        int status = 0;
+        waitpid(writer, &status, 0);
+    }
+
+    /* an interrupt delivered while nothing is waiting must not leak into the
+       next turn: clear_abort drops it */
+    g_interrupt = 1;
+    if (call0(L, "clear_abort")) lua_pop(L, 1);
+    check(g_interrupt == 0, "tether.clear_abort drops a stale interrupt");
+
+    close(fds[1]);
+    int devnull = open("/dev/null", O_RDONLY);
+    if (devnull >= 0) {
+        if (dup2(devnull, STDIN_FILENO) < 0) { /* best effort */ }
+        close(devnull);
+    }
+}
+
 int main(void)
 {
     char dir[256], nested[512], f1[512], f2[512];
@@ -653,6 +916,8 @@ int main(void)
     test_krep_search(L);
     test_http_transport(L);
     test_tls_verification(L);
+    test_interrupt_watch(L);
+    test_interrupt_aborts_transfer(L);
 
     lua_close(L);
 

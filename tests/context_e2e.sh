@@ -42,8 +42,11 @@ Available tools:
 - grep(pattern, path?, glob?, ignore_case?, max_results?) — search text in files
 - run(command, cwd?, timeout?) — run shell command via /bin/sh -c
 - patch(patch) — apply unified diff, strictly
+- ask(questions) — ask the user to choose: [{question, options:[{label, description?}], id?, description?, multi?, recommended?}]
 
-When the user asks you to inspect or edit code, use these tools.
+When a decision belongs to the user (which option, which scope, which
+constraint), ask instead of guessing. When the user asks you to inspect or edit
+code, use these tools.
 Work in the current directory.
 Outside workspace, write/patch/run require user confirmation.
 
@@ -61,8 +64,10 @@ Skills are markdown instruction files. When a task matches a skill's description
 EOF
 
 # --- provider stub ----------------------------------------------------------
-# Minimal HTTP server: for each POST, dump the body to $RECORD and reply 200
-# with a minimal chat-completion stream-less JSON so --print gets text.
+# Minimal HTTP server: for each POST, dump the body to $RECORD and reply with
+# an SSE chat-completion stream so --print gets text on the first attempt.
+# The reply must be a stream: tether posts "stream":true, and a non-SSE body is
+# an error it retries (add-retry-and-continuation), which would slow this check.
 cat > "$SB/server.py" <<'PYEOF'
 import http.server, json, sys, threading
 
@@ -76,10 +81,11 @@ class H(http.server.BaseHTTPRequestHandler):
         body = self.rfile.read(n).decode("utf-8", "replace")
         with open(OUT, "w") as f:
             f.write(body)
-        resp = json.dumps({"choices": [{"message": {"role": "assistant",
-            "content": "E2E-OK"}, "finish_reason": "stop"}]}).encode()
+        chunk = json.dumps({"choices": [{"delta": {"content": "E2E-OK"},
+            "finish_reason": "stop"}]})
+        resp = ("data: " + chunk + "\n\ndata: [DONE]\n\n").encode()
         self.send_response(200)
-        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Type", "text/event-stream")
         self.send_header("Content-Length", str(len(resp)))
         self.end_headers()
         self.wfile.write(resp)
@@ -111,6 +117,9 @@ return {
       model = "gpt-4o-mini",
     },
   },
+  -- A stub that answers wrongly must not turn this check into a two-minute
+  -- backoff: keep the retry budget to one short attempt.
+  retry = { base_delay_ms = 10, max_failures_at_max_delay = 1 },
 }
 CFGEOF
 
