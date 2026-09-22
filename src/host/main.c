@@ -1123,6 +1123,8 @@ int main(int argc, char **argv)
         { transcript_lua, "transcript" },
         /* commands: session lifecycle + slash side effects (src/tether/commands.lua) */
         { commands_lua, "commands" },
+        /* turn: control facade over agent; abort seam + busy reset (src/tether/turn.lua) */
+        { turn_lua, "turn" },
         { ui_lua,     "ui"     },
         { config_lua, "config" },
         { tools_lua,  "tools"  },

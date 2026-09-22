@@ -31,11 +31,11 @@
 
 ## 5. Cut 5 — turn facade
 
-- [ ] 5.1 Create `src/tether/turn.lua`: `start` / `confirm` / `answer` / `abort`; own busy/waiting/streaming reset; move `take_abort` / `ack_abort` seam — verify `luac -p`
-- [ ] 5.2 Wire embed (`Makefile` + `main.c mods[]`) — verify `make tether`
-- [ ] 5.3 Point UI commit/resolve paths at `turn.*`; remove `agent.abort_requested =` writes from `ui` — verify Ctrl+C abort still ends the turn and next turn is not pre-aborted
-- [ ] 5.4 Keep `agent.turn` / `agent.confirm` / `agent.answer_ask` / `agent.continue` for print mode — verify `--print` path still calls `agent.turn` and exits 0/1 per spec
-- [ ] 5.5 One logical commit for cut 5 — verify `make test` green
+- [x] 5.1 Create `src/tether/turn.lua`: `start` / `confirm` / `answer` / `abort`; own busy/waiting/streaming reset; move `take_abort` / `ack_abort` seam — verify `luac -p`
+- [x] 5.2 Wire embed (`Makefile` + `main.c mods[]`) — verify `make tether`
+- [x] 5.3 Point UI commit/resolve paths at `turn.*`; remove `agent.abort_requested =` writes from `ui` — verify Ctrl+C abort still ends the turn and next turn is not pre-aborted
+- [x] 5.4 Keep `agent.turn` / `agent.confirm` / `agent.answer_ask` / `agent.continue` for print mode — verify `--print` path still calls `agent.turn` and exits 0/1 per spec
+- [x] 5.5 One logical commit for cut 5 — verify `make test` green
 
 ## 6. Final verification
 

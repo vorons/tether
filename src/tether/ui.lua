@@ -853,6 +853,13 @@ if type(commands) ~= "table" then
     commands = (chunk and chunk()) or {}
 end
 
+-- turn: control facade over agent (abort seam + busy begin/finish).
+local turn = _G.turn
+if type(turn) ~= "table" then
+    local chunk = loadfile("src/tether/turn.lua")
+    turn = (chunk and chunk()) or {}
+end
+
 -- ============================================================
 -- State
 -- ============================================================
@@ -3182,22 +3189,13 @@ local function commit_input()
     S.scroll = 0
     S.user_scrolled = false
 
-    S.busy = true
-    S.busy_started_at = os.time() -- M8/R3: elapsed counter
-    -- A: turn feedback — the placeholder repaints immediately after Enter
-    S.waiting = true
-    S.streaming = false
+    -- turn owns busy/waiting/streaming begin+finish and the abort seam;
+    -- before_call paints the placeholder before the blocking agent call (T54).
+    local ok, err = turn.start(S, S.cfg, S.api_key or "", text, handle_agent_event, function()
+        sync_tail()
+        paint(true)
+    end)
     sync_tail()
-    agent.abort_requested = false
-    paint(true)
-    local ok, err = pcall(agent.turn, S.cfg, S.api_key or "", text, handle_agent_event)
-    S.busy = false
-    S.busy_started_at = nil
-    S.waiting = false
-    S.streaming = false
-    S.retry_wait = nil
-    sync_tail()
-    agent.abort_requested = false
     if not ok and err then
         S.error_banner = tostring(err)
     end
@@ -3536,26 +3534,17 @@ local function resolve_ask(cancelled)
         role = "system",
         text = "→ ask: " .. (cancelled and ask.CANCELLED_TEXT or ask.summary(questions, answers)),
     })
-    S.busy = false
-    S.waiting = false
-    S.streaming = false
-    S.retry_wait = nil
-    local ok, err = pcall(agent.answer_ask, a.id,
+    turn.finish(S)
+    local ok, err = turn.answer(a.id,
         cancelled and { cancelled = true } or answers, S.cfg, handle_agent_event)
     if not ok and err then S.error_banner = tostring(err) end
     bump_transcript()
     sync_tail()
 
-    S.busy = true
-    S.waiting = true
-    S.streaming = false
-    sync_tail()
-    paint(true)
-    local ok2, err2 = pcall(agent.continue, S.cfg, S.api_key or "", handle_agent_event)
-    S.busy = false
-    S.waiting = false
-    S.streaming = false
-    S.retry_wait = nil
+    local ok2, err2 = turn.continue(S, S.cfg, S.api_key or "", handle_agent_event, function()
+        sync_tail()
+        paint(true)
+    end)
     if not ok2 and err2 then S.error_banner = tostring(err2) end
     bump_transcript()
     sync_tail()
@@ -3733,7 +3722,7 @@ local function resolve_confirmation(decision)
             S.busy = false
             return
         end
-        local ok, err = pcall(agent.confirm, detail.id, decision, S.cfg, handle_agent_event)
+        local ok, err = turn.confirm(detail.id, decision, S.cfg, handle_agent_event)
         if not ok and err then S.error_banner = tostring(err) end
         transcript.append({
             role = "system",
@@ -3741,19 +3730,11 @@ local function resolve_confirmation(decision)
         })
         if decision == "cancel" then needs_resume = false end
         if needs_resume then
-            -- resume the agent loop after confirmation
-            S.busy = true
-            -- A: same turn feedback as commit_input — the continued turn also
-            -- streams in from inside this key handler
-            S.waiting = true
-            S.streaming = false
-            sync_tail()
-            paint(true)
-            local ok2, err2 = pcall(agent.continue, S.cfg, S.api_key or "", handle_agent_event)
-            S.busy = false
-            S.waiting = false
-            S.streaming = false
-            S.retry_wait = nil
+            -- resume the agent loop after confirmation; turn owns begin/finish
+            local ok2, err2 = turn.continue(S, S.cfg, S.api_key or "", handle_agent_event, function()
+                sync_tail()
+                paint(true)
+            end)
             if not ok2 and err2 then S.error_banner = tostring(err2) end
         end
     end
@@ -3995,8 +3976,9 @@ local function handle_key(k)
         if k.code == 17 then S.quit = true; return end         -- Ctrl+Q
         if k.code == 3 then                                     -- Ctrl+C
             if S.busy then
-                -- §6.6: first Ctrl+C aborts the stream, keeps received text
-                agent.abort_requested = true
+                -- §6.6: first Ctrl+C aborts the stream, keeps received text;
+                -- turn.abort() owns the flag — ui never assigns agent.abort_requested
+                turn.abort()
                 return
             end
             if S.palette_active then input_clear(); return end

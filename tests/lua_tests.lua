@@ -6209,6 +6209,79 @@ do
   print("T128 commands module: OK")
 end
 
+-- T129 (5.1/5.3): turn facade — abort seam, busy begin/finish, agent wrappers.
+do
+  local names = {"agent", "tether"}
+  local orig = {}
+  for _, n in ipairs(names) do orig[n] = _G[n] end
+
+  local clears = 0
+  local host_interrupt = false
+  local host_cleared = 0
+  local turn_calls = {}
+  _G.tether = {
+    abort_requested = function() return host_interrupt end,
+    clear_abort = function() host_cleared = host_cleared + 1; host_interrupt = false end,
+  }
+  _G.agent = {
+    abort_requested = false,
+    turn = function() turn_calls[#turn_calls + 1] = "turn"; return true end,
+    confirm = function() turn_calls[#turn_calls + 1] = "confirm"; return true end,
+    answer_ask = function() turn_calls[#turn_calls + 1] = "answer"; return true end,
+    continue = function() turn_calls[#turn_calls + 1] = "continue"; return true end,
+  }
+  local turn = assert(loadfile("src/tether/turn.lua"))()
+
+  -- abort seam: UI flag, host flag, ack clears both
+  _G.agent.abort_requested = true
+  assert_true(turn.take_abort(_G.agent), "T129 take_abort sees the UI flag")
+  turn.ack_abort(_G.agent)
+  assert_false(_G.agent.abort_requested, "T129 ack clears the UI flag")
+  host_interrupt = true
+  assert_true(turn.take_abort(_G.agent), "T129 take_abort sees the host flag")
+  turn.ack_abort(_G.agent)
+  assert_false(host_interrupt, "T129 ack clears the host flag")
+  assert_eq(host_cleared, 2, "T129 ack calls tether.clear_abort")
+
+  -- turn.abort sets the flag without ui touching agent.abort_requested directly
+  turn.abort()
+  assert_true(_G.agent.abort_requested, "T129 turn.abort raises the UI flag")
+  turn.ack_abort(_G.agent)
+
+  -- busy begin/finish is the single reset place
+  local S = { busy_started_at = 1, retry_wait = { attempt = 1 } }
+  turn.begin(S)
+  assert_true(S.busy, "T129 begin sets busy")
+  assert_true(S.waiting, "T129 begin sets waiting")
+  assert_false(S.streaming, "T129 begin clears streaming")
+  assert_notnil(S.busy_started_at, "T129 begin stamps busy_started_at")
+  turn.finish(S)
+  assert_false(S.busy, "T129 finish clears busy")
+  assert_false(S.waiting, "T129 finish clears waiting")
+  assert_eq(S.busy_started_at, nil, "T129 finish clears busy_started_at")
+  assert_eq(S.retry_wait, nil, "T129 finish clears retry_wait")
+
+  -- wrappers reach the agent entry points; start paints via before_call
+  local painted_before_turn = false
+  local S2 = {}
+  turn.start(S2, {}, "k", "hi", function() end, function()
+    painted_before_turn = S2.busy == true
+  end)
+  assert_eq(turn_calls[1], "turn", "T129 start calls agent.turn")
+  assert_true(painted_before_turn, "T129 before_call runs while busy (T54 placeholder)")
+  assert_false(S2.busy, "T129 start finishes busy")
+
+  turn.confirm("c1", "allow", {}, function() end)
+  turn.answer("a1", {}, {}, function() end)
+  turn.continue(S2, {}, "k", function() end)
+  assert_eq(turn_calls[2], "confirm", "T129 confirm calls agent.confirm")
+  assert_eq(turn_calls[3], "answer", "T129 answer calls agent.answer_ask")
+  assert_eq(turn_calls[4], "continue", "T129 continue calls agent.continue")
+
+  for _, n in ipairs(names) do _G[n] = orig[n] end
+  print("T129 turn facade: OK")
+end
+
 -- ============================================================
 -- pi-style-input-and-footer: dock layout, box, caret, footer
 -- ============================================================

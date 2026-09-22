@@ -50,6 +50,16 @@ local confirm_policy = _G.confirm_policy
     end)()
 assert(confirm_policy, "agent: cannot load confirm_policy")
 
+-- deepen-core-modules cut 5: turn facade owns the abort seam; agent keeps
+-- M.abort_requested as the flag storage and the four entry points for
+-- print mode / non-UI callers.
+local turn_mod = _G.turn
+    or (function()
+        local chunk = loadfile("src/tether/turn.lua")
+        return chunk and chunk()
+    end)()
+assert(turn_mod, "agent: cannot load turn")
+
 -- Bound on a projection's read of the previous content (same bound `read` uses).
 local PREVIEW_READ_MAX = 1024 * 1024
 
@@ -531,20 +541,16 @@ end
 -- The host flag stays set until ack_abort() clears it: the same Ctrl+C also
 -- aborts an in-flight transfer (the libcurl progress callback reads it), and
 -- only the turn knows when the abort has actually been handled.
+--
+-- Implementation lives in turn.lua (cut 5); these locals keep agent's internal
+-- call sites and the M._take_abort / M._ack_abort test seams working.
 local function take_abort()
-    if M.abort_requested then return true end
-    if tether and type(tether.abort_requested) == "function" then
-        return tether.abort_requested() and true or false
-    end
-    return false
+    return turn_mod.take_abort(M)
 end
 M._take_abort = take_abort
 
--- The loop has stopped for an interrupt: drop both flags so the next turn is
--- not aborted by the Ctrl+C that ended this one.
 local function ack_abort()
-    M.abort_requested = false
-    if tether and type(tether.clear_abort) == "function" then pcall(tether.clear_abort) end
+    turn_mod.ack_abort(M)
 end
 M._ack_abort = ack_abort
 
