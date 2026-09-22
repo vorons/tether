@@ -3566,14 +3566,16 @@ do
   _G.config = { get_system_prompt = function() return nil end }
   _G.api = { stream = function() return true end }
   local agent = assert(loadfile("src/tether/agent.lua"))()
+  local confirm_policy = _G.confirm_policy
+      or assert(loadfile("src/tether/confirm_policy.lua"))()
   local cfg = { workspace = "/ws", allow_outside_workspace = false }
-  assert_false(agent._should_confirm("patch",
+  assert_false(confirm_policy.should_confirm("patch",
     { patch = "--- a/src/a.lua\n+++ b/src/a.lua\n@@ -1 +1 @@\n-a\n+b\n" }, cfg),
     "T104 in-workspace patch: no confirmation")
-  assert_true(agent._should_confirm("patch",
+  assert_true(confirm_policy.should_confirm("patch",
     { patch = "--- a/../etc/hosts\n+++ b/../etc/hosts\n@@ -1 +1 @@\n-a\n+b\n" }, cfg),
     "T104 out-of-workspace patch: confirmation")
-  assert_true(agent._should_confirm("patch",
+  assert_true(confirm_policy.should_confirm("patch",
     { patch = "--- ../etc/hosts\n+++ ../etc/hosts\n@@ -1 +1 @@\n-a\n+b\n" }, cfg),
     "T104 prefix-less out-of-workspace patch: confirmation")
   local tools_real = assert(loadfile("src/tether/tools.lua"))()

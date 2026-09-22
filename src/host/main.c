@@ -1117,6 +1117,8 @@ int main(int argc, char **argv)
         { diff_lua,   "diff"   },
         /* ask: the structured-question rules ui/agent apply (src/tether/ask.lua) */
         { ask_lua,    "ask"    },
+        /* confirm_policy: pure should_confirm/approve_key policy (src/tether/confirm_policy.lua) */
+        { confirm_policy_lua, "confirm_policy" },
         /* transcript: visible conversation model; ui loads it before State */
         { transcript_lua, "transcript" },
         { ui_lua,     "ui"     },

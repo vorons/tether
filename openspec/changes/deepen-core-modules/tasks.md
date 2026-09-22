@@ -15,10 +15,10 @@
 
 ## 3. Cut 3 — confirm_policy module
 
-- [ ] 3.1 Create `src/tether/confirm_policy.lua` with `should_confirm`, `approve_key`, `check_auto_approve` (pure data-in/verdict-out; no I/O) — verify `luac -p`
-- [ ] 3.2 Wire embed (`Makefile` + `main.c mods[]`) and load from `agent` via `_G.confirm_policy or loadfile(...)` — verify `make tether`
-- [ ] 3.3 Replace in-file copies in `agent.lua`; keep projection / persist in `agent` — verify confirm-related tests pass against `confirm_policy` directly
-- [ ] 3.4 One logical commit for cut 3 — verify `make test` green
+- [x] 3.1 Create `src/tether/confirm_policy.lua` with `should_confirm`, `approve_key`, `check_auto_approve` (pure data-in/verdict-out; no I/O) — verify `luac -p`
+- [x] 3.2 Wire embed (`Makefile` + `main.c mods[]`) and load from `agent` via `_G.confirm_policy or loadfile(...)` — verify `make tether`
+- [x] 3.3 Replace in-file copies in `agent.lua`; keep projection / persist in `agent` — verify confirm-related tests pass against `confirm_policy` directly
+- [x] 3.4 One logical commit for cut 3 — verify `make test` green
 
 ## 4. Cut 4 — commands module (session lifecycle + slash side effects)
 

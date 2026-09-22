@@ -22,6 +22,34 @@ local diff_mod = _G.diff
         return chunk and chunk()
     end)()
 
+-- add-retry-and-continuation: the retry policy is a pure module — a global in
+-- the built binary and a loadfile fallback for development/plain-lua runs.
+local retry = _G.retry
+    or (function()
+        local chunk = loadfile("src/tether/retry.lua")
+        return chunk and chunk()
+    end)()
+assert(retry, "agent: cannot load retry")
+
+-- add-ask-tool: the structured-question rules (normalisation, answer payload,
+-- transcript summary) live in a pure module — a global in the built binary and
+-- a loadfile fallback for development/plain-lua runs.
+local ask = _G.ask
+    or (function()
+        local chunk = loadfile("src/tether/ask.lua")
+        return chunk and chunk()
+    end)()
+assert(ask, "agent: cannot load ask")
+
+-- deepen-core-modules cut 3: pure confirmation policy — a global in the built
+-- binary and a loadfile fallback for development/plain-lua runs.
+local confirm_policy = _G.confirm_policy
+    or (function()
+        local chunk = loadfile("src/tether/confirm_policy.lua")
+        return chunk and chunk()
+    end)()
+assert(confirm_policy, "agent: cannot load confirm_policy")
+
 -- Bound on a projection's read of the previous content (same bound `read` uses).
 local PREVIEW_READ_MAX = 1024 * 1024
 
@@ -41,8 +69,11 @@ Available tools:
 - grep(pattern, path?, glob?, ignore_case?, max_results?) — search text in files
 - run(command, cwd?, timeout?) — run shell command via /bin/sh -c
 - patch(patch) — apply unified diff, strictly
+- ask(questions) — ask the user to choose: [{question, options:[{label, description?}], id?, description?, multi?, recommended?}]
 
-When the user asks you to inspect or edit code, use these tools.
+When a decision belongs to the user (which option, which scope, which
+constraint), ask instead of guessing. When the user asks you to inspect or edit
+code, use these tools.
 Work in the current directory.
 Outside workspace, write/patch/run require user confirmation.
 ]==]
@@ -74,6 +105,7 @@ function M.clear()
     M.history = {}
     M.pending = nil
     M.session_approved = {}
+    M.retry_state = nil
 end
 
 -- --- session journal (design §10) -------------------------------------------
@@ -177,35 +209,8 @@ local function execute_tool(name, args, cfg)
     end
 end
 
-local function path_of(args)
-    return args.path or args.command or args.cwd or ""
-end
-
--- fix-audit-findings 1.2: patch arguments are the diff text, not a path;
--- the target has to come from the file headers before the containment check.
-local function patch_target_path(args)
-    local diff = args and args.patch or nil
-    if type(diff) ~= "string" then return nil end
-    -- same normalization as tools.patch: strip one leading a//b/ component,
-    -- skip /dev/null; accept both git-style and prefix-less headers
-    local function norm(p)
-        if not p or p == "/dev/null" then return nil end
-        return p:match("^[ab]/(.+)$") or p
-    end
-    for line in diff:gmatch("[^\n]*") do
-        local plus = line:match("^%+%+%+%s+([^%s]+)")
-        if plus then
-            local t = norm(plus)
-            if t then return t end
-        end
-        local minus = line:match("^%-%-%-%s+([^%s]+)")
-        if minus then
-            local t = norm(minus)
-            if t then return t end
-        end
-    end
-    return nil
-end
+local path_of = confirm_policy.path_of
+local patch_target_path = confirm_policy.patch_target_path
 
 -- pretty-transcript-rendering 2.2: a read-only projection of what a write or
 -- patch will change. Resolved through the tools helpers, inside the workspace,
@@ -259,44 +264,12 @@ local function projection_for(tool_name, args, cfg)
     return nil
 end
 
-local function should_confirm(tool_name, args, cfg)
-    if not cfg then return false end
-    if cfg.allow_outside_workspace == true then return false end
-    if tool_name ~= "write" and tool_name ~= "patch" and tool_name ~= "run" then
-        return false
-    end
-    if tool_name == "patch" then
-        local target = patch_target_path(args)
-        if not target then return false end
-        return not tools._within(tools._resolve(target, cfg), cfg)
-    end
-    local path = args.path or args.command or ""
-    if path == "" and tool_name == "run" then path = args.cwd or "" end
-    if tool_name == "write" or (tool_name == "patch" and args.path) or (tool_name == "run" and args.cwd) then
-        -- target path known: check membership
-        return not tools._within(tools._resolve(path, cfg), cfg)
-    end
-    -- run without cwd: executed in workspace root — allowed there
-    return false
-end
-
-local function approve_key(tool_name, args)
-    return tool_name .. ":" .. path_of(args)
-end
-
-local function check_auto_approve(tool_name, args, cfg)
-    if not cfg or not cfg.auto_approve then return false end
-    local key = approve_key(tool_name, args)
-    for _, pattern in ipairs(cfg.auto_approve) do
-        if type(pattern) == "string" and (key:match(pattern) or path_of(args):match(pattern)) then
-            return true
-        end
-    end
-    return false
-end
+local should_confirm = confirm_policy.should_confirm
+local approve_key = confirm_policy.approve_key
+local check_auto_approve = confirm_policy.check_auto_approve
 
 local function is_session_approved(tool_name, args)
-    return M.session_approved[approve_key(tool_name, args)] == true
+    return confirm_policy.is_session_approved(tool_name, args, M.session_approved)
 end
 
 -- Design §6.10: [A] always persists to config with a dated comment.
@@ -450,6 +423,29 @@ local function run_tool_call(cfg, on_event, id, name, args, projection)
     return res
 end
 
+-- add-ask-tool: report a tool result for a call the pending queue resolved
+-- itself — a non-interactive or malformed `ask`, or one the UI answered. The
+-- same three writes run_tool_call performs: history, journal, UI event.
+local function record_ask_result(cfg, on_event, call, payload, summary, is_error)
+    if is_error then
+        M.add_tool_result(call.id, { error = payload })
+    else
+        M.add_tool_result(call.id, { content = payload })
+    end
+    slog(cfg, {
+        ts = os.date(), type = "tool_result", tool_call_id = call.id, name = call.name,
+        result = is_error and { error = payload } or { summary = summary, body = payload },
+    })
+    if on_event then
+        on_event({
+            type = "tool_result", id = call.id, name = call.name,
+            error = is_error and payload or nil,
+            summary = is_error and ("✗ " .. payload) or summary,
+            body = payload,
+        })
+    end
+end
+
 -- Advance the pending confirmation queue: emit the next needed confirmation,
 -- execute everything that doesn't need one. Returns true when queue is empty.
 -- M7/D3: emission is idempotent — a call's confirmation is emitted at most
@@ -462,6 +458,33 @@ local function drive_pending(cfg, on_event)
         local call = p.calls[p.idx]
         if call.done then
             p.idx = p.idx + 1
+        elseif call.name == "ask" then
+            -- add-ask-tool: the question tool never executes locally. It parks
+            -- the turn for the user's answer, or degrades to an error result
+            -- when there is nobody to ask or nothing answerable.
+            local questions = call.questions
+            if not questions then
+                questions = ask.normalize(call.args)
+                call.questions = questions
+            end
+            if cfg and cfg.non_interactive then
+                record_ask_result(cfg, on_event, call, ask.NO_INTERACTIVE_USER, nil, true)
+                call.done = true
+                p.idx = p.idx + 1
+            elseif #questions == 0 then
+                record_ask_result(cfg, on_event, call, ask.NOTHING_ASKABLE, nil, true)
+                call.done = true
+                p.idx = p.idx + 1
+            elseif call.ask_emitted then
+                -- already waiting on the user for this call; stay parked
+                return false
+            else
+                call.ask_emitted = true
+                if on_event then
+                    on_event({ type = "ask", id = call.id, questions = questions })
+                end
+                return false
+            end
         elseif not should_confirm(call.name, call.args, cfg)
             or check_auto_approve(call.name, call.args, cfg)
             or is_session_approved(call.name, call.args) then
@@ -485,14 +508,229 @@ local function drive_pending(cfg, on_event)
     return true
 end
 
+-- --- retry, continuation and per-turn state (add-retry-and-continuation) ---
+-- The turn owns the backoff schedule: api.stream makes one attempt and
+-- reports a classified failure, and everything below decides what that
+-- means. See src/tether/retry.lua for the policy itself.
+
+-- Per-turn retry state. Created by M.turn and kept across M.continue so the
+-- budget and the continuation flags belong to one user turn.
+function M.reset_retry_state()
+    M.retry_state = retry.new_state()
+    M.retry_state.iterations = 0
+    return M.retry_state
+end
+
+-- True when the user asked to stop the turn. Two sources: the UI sets
+-- M.abort_requested when its key handler reads Ctrl+C, and the host reports one
+-- that arrived while the turn was blocked — during a turn the UI is not reading
+-- stdin at all, so the host watches it itself and hands the interrupt over
+-- through tether.abort_requested(). The host call also drains bytes typed
+-- during the turn, so nothing is lost.
+--
+-- The host flag stays set until ack_abort() clears it: the same Ctrl+C also
+-- aborts an in-flight transfer (the libcurl progress callback reads it), and
+-- only the turn knows when the abort has actually been handled.
+local function take_abort()
+    if M.abort_requested then return true end
+    if tether and type(tether.abort_requested) == "function" then
+        return tether.abort_requested() and true or false
+    end
+    return false
+end
+M._take_abort = take_abort
+
+-- The loop has stopped for an interrupt: drop both flags so the next turn is
+-- not aborted by the Ctrl+C that ended this one.
+local function ack_abort()
+    M.abort_requested = false
+    if tether and type(tether.clear_abort) == "function" then pcall(tether.clear_abort) end
+end
+M._ack_abort = ack_abort
+
+-- Sleep in slices so Ctrl+C is honored during a wait of up to a minute.
+-- Returns true when the wait was interrupted by an abort. tether.sleep itself
+-- returns as soon as input arrives, so the check below usually fires well
+-- before the slice elapses.
+local function interruptible_sleep(seconds)
+    local elapsed = 0
+    local total = tonumber(seconds) or 0
+    while elapsed < total do
+        local step = total - elapsed
+        if step > 0.25 then step = 0.25 end
+        pcall(tether.sleep, step)
+        elapsed = elapsed + step
+        if take_abort() then return true end
+    end
+    return false
+end
+
+-- Undo a continuation chain's hidden history edits: the folded nudge goes back
+-- to the user's original text, and the hidden assistant/continuation turns
+-- disappear so the answer can be stored as one assistant message.
+local function collapse_segments(pending)
+    if not pending then return end
+    if pending.restore then
+        local m = M.history[pending.restore.index]
+        if m then m.content = pending.restore.content end
+    end
+    for i = #M.history, pending.start + 1, -1 do
+        table.remove(M.history, i)
+    end
+end
+
+-- An answer interrupted mid-continuation: collapse it and journal the part
+-- that was produced, so a resume keeps it.
+local function collapse_partial_answer(cfg, pending, merged)
+    local text = table.concat(merged)
+    if not pending or text == "" then return end
+    collapse_segments(pending)
+    table.insert(M.history, { role = "assistant", content = text })
+    log_message(cfg, "assistant", text)
+end
+
+-- One provider attempt: stream, collect deltas and tool calls, remember why the
+-- model stopped. Deltas carry the attempt index so a renderer can drop exactly
+-- the rows of an attempt that gets retried.
+local function run_attempt(cfg, api_key, attempt, on_event)
+    local tool_calls, ordered, text_acc = {}, {}, {}
+    local stop_reason = "other"
+    local ok, failure = api.stream(cfg, api_key, M.history, function(ev)
+        if ev.type ~= "usage" and take_abort() then return end
+        if ev.type == "text_delta" then
+            text_acc[#text_acc + 1] = ev.text
+            if on_event then ev.attempt = attempt; on_event(ev) end
+        elseif ev.type == "reasoning_delta" then
+            if on_event then ev.attempt = attempt; on_event(ev) end
+        elseif ev.type == "usage" then
+            if on_event then on_event(ev) end
+        elseif ev.type == "done" then
+            -- the provider's last reported reason for this request
+            stop_reason = ev.reason or "other"
+        end
+        if ev.type == "tool_call_start" then
+            tool_calls[ev.id] = { id = ev.id, name = ev.name, arguments = "" }
+            ordered[#ordered + 1] = ev.id
+        elseif ev.type == "tool_call_delta" then
+            if tool_calls[ev.id] then
+                tool_calls[ev.id].arguments = tool_calls[ev.id].arguments .. (ev.arguments or "")
+            end
+        end
+    end)
+    return { text = table.concat(text_acc), tool_calls = tool_calls,
+             ordered = ordered, stop_reason = stop_reason }, ok, failure
+end
+
+-- Run attempts until this iteration's answer is complete: retry a failed
+-- attempt per the policy, continue a truncated answer, nudge an empty one.
+-- On success returns true plus { text, tool_calls, ordered, stop_reason }.
+-- Otherwise returns false plus the failure table or "aborted"/"empty".
+local function run_answer_segments(cfg, api_key, on_event, state, max_iterations)
+    local p = retry.policy(cfg)
+    local merged = {}
+    local pending = nil
+
+    while true do
+        if take_abort() then
+            ack_abort()
+            if on_event then on_event({ type = "aborted" }) end
+            return false, "aborted"
+        end
+
+        local result, ok, failure = run_attempt(cfg, api_key, state.attempt, on_event)
+
+        -- An abort during the transfer arrives as a failed attempt; stop here so
+        -- it is never mistaken for something worth retrying.
+        if not ok and take_abort() then
+            collapse_partial_answer(cfg, pending, merged)
+            ack_abort()
+            if on_event then on_event({ type = "aborted" }) end
+            return false, "aborted"
+        end
+
+        if ok then
+            if result.text ~= "" then merged[#merged + 1] = result.text end
+            local action = retry.continuation_action(state, result.stop_reason,
+                result.text ~= "", #result.ordered > 0)
+            -- a continuation costs one iteration, like a tool round
+            if action and state.iterations >= max_iterations then action = nil end
+            if action == "length" or action == "empty" then
+                if on_event then on_event({ type = "continuation", kind = action }) end
+                if not pending then pending = { start = #M.history } end
+                if action == "length" then
+                    -- the model needs its own partial answer to resume from
+                    if result.text ~= "" then
+                        table.insert(M.history,
+                            { role = "assistant", content = result.text })
+                    end
+                    table.insert(M.history,
+                        { role = "user", content = retry.continuation_text("length") })
+                else
+                    -- An empty answer left no assistant turn to follow, so the
+                    -- nudge is folded into the pending user message: providers
+                    -- reject two consecutive user-role turns (Anthropic).
+                    local prev = M.history[#M.history]
+                    if prev and prev.role == "user" and type(prev.content) == "string" then
+                        pending.restore = { index = #M.history, content = prev.content }
+                        prev.content = prev.content .. "\n\n" .. retry.continuation_text("empty")
+                    else
+                        table.insert(M.history,
+                            { role = "user", content = retry.continuation_text("empty") })
+                    end
+                end
+                state.iterations = state.iterations + 1
+                state.attempt = state.attempt + 1
+            elseif action == "empty_giveup" then
+                collapse_segments(pending)
+                if on_event then
+                    on_event({ type = "error", kind = "empty",
+                               message = retry.EMPTY_GIVEUP_MESSAGE })
+                end
+                return false, "empty"
+            else
+                -- the answer is complete: keep the hidden edits out of history
+                -- and let the caller store the single merged entry
+                collapse_segments(pending)
+                return true, { text = table.concat(merged),
+                               tool_calls = result.tool_calls,
+                               ordered = result.ordered,
+                               stop_reason = result.stop_reason }
+            end
+        else
+            -- A failed attempt contributes nothing to the conversation.
+            local verdict = retry.verdict(p, state, failure)
+            if verdict.action ~= "retry" then
+                collapse_partial_answer(cfg, pending, merged)
+                if on_event then
+                    on_event({ type = "error", kind = failure and failure.kind,
+                               message = retry.terminal_message(failure, state.attempt) })
+                end
+                return false, failure
+            end
+            if on_event then
+                on_event({ type = "retry", attempt = state.attempt, delay = verdict.delay,
+                           reason = verdict.reason or (failure and failure.reason),
+                           kind = verdict.kind })
+            end
+            if interruptible_sleep(verdict.delay) then
+                collapse_partial_answer(cfg, pending, merged)
+                ack_abort()
+                if on_event then on_event({ type = "aborted" }) end
+                return false, "aborted"
+            end
+            state.attempt = state.attempt + 1
+        end
+    end
+end
+
 local function main_loop(cfg, api_key, on_event)
     local max_iterations = 50
-    local iteration = 0
+    local state = M.retry_state or M.reset_retry_state()
 
-    while iteration < max_iterations do
-        iteration = iteration + 1
-        if M.abort_requested then
-            M.abort_requested = false
+    while state.iterations < max_iterations do
+        state.iterations = state.iterations + 1
+        if take_abort() then
+            ack_abort()
             if on_event then on_event({ type = "aborted" }) end
             return false
         end
@@ -502,44 +740,19 @@ local function main_loop(cfg, api_key, on_event)
             if on_event then on_event({ type = "context_compressed" }) end
         end
 
-        local tool_calls = {}
-        local ordered = {}
-
-        local text_acc = {}
-        local ok = api.stream(cfg, api_key, M.history, function(ev)
-            if M.abort_requested and ev.type ~= "usage" then return end
-            if ev.type == "text_delta" then
-                text_acc[#text_acc + 1] = ev.text
-                if on_event then on_event(ev) end
-            elseif ev.type == "reasoning_delta" then
-                if on_event then on_event(ev) end
-            elseif ev.type == "usage" then
-                if on_event then on_event(ev) end
-            elseif ev.type == "retry" then
-                if on_event then on_event(ev) end
-            elseif ev.type == "error" then
-                if on_event then on_event(ev) end
-            end
-            if ev.type == "tool_call_start" then
-                tool_calls[ev.id] = { id = ev.id, name = ev.name, arguments = "" }
-                ordered[#ordered + 1] = ev.id
-            elseif ev.type == "tool_call_delta" then
-                if tool_calls[ev.id] then
-                    tool_calls[ev.id].arguments = tool_calls[ev.id].arguments .. (ev.arguments or "")
-                end
-            end
-        end)
-
+        local ok, result = run_answer_segments(cfg, api_key, on_event, state, max_iterations)
         if not ok then
             return false
         end
 
+        local tool_calls = result.tool_calls
+        local ordered = result.ordered
+
         if next(tool_calls) == nil then
-            -- No tool calls: keep the streamed assistant text in history
-            if #text_acc > 0 then
-                local full = table.concat(text_acc)
-                M.add_assistant(full)
-                log_message(cfg, "assistant", full)
+            -- No tool calls: keep the assistant text in history
+            if result.text ~= "" then
+                M.add_assistant(result.text)
+                log_message(cfg, "assistant", result.text)
             end
             return true
         end
@@ -555,7 +768,7 @@ local function main_loop(cfg, api_key, on_event)
             }
         end
         -- 1.2: keep any text the model emitted alongside its tool calls
-        local assistant_text = #text_acc > 0 and table.concat(text_acc) or ""
+        local assistant_text = result.text or ""
         M.add_assistant({ tool_calls = tc_list, text = assistant_text })
         slog(cfg, { ts = os.date(), type = "message", role = "assistant",
                     content = assistant_text, tool_calls = tc_list })
@@ -610,6 +823,11 @@ function M.turn(cfg, api_key, user_text, on_event, skip_user)
         M.add_user(user_text)
         log_message(cfg, "user", user_text)
     end
+    -- a new user turn gets a fresh retry budget, continuation state and nudge
+    M.reset_retry_state()
+    -- and no leftover interrupt: a Ctrl+C delivered just as the turn started must
+    -- not abort this turn
+    ack_abort()
     return main_loop(cfg, api_key, on_event)
 end
 
@@ -658,6 +876,41 @@ function M.confirm(id, decision, cfg, on_event)
         return true
     end
     return drive_pending(cfg, on_event) == false -- false => another confirmation pending
+end
+
+-- add-ask-tool: resolve a parked `ask` call with the user's answer. `answer`
+-- is the UI's answer table — { [question index] = { selected = {<label>, ...},
+-- other = "<freeform>", notes = { [<option label>] = "<note>" } } } — or
+-- { cancelled = true } to cancel the whole batch. Records the call's tool
+-- result, drives the queue, and returns true when the queue drained (the UI
+-- then resumes with M.continue), false when another interaction is parked.
+function M.answer_ask(id, answer, cfg, on_event)
+    local p = M.pending
+    if not p then return false end
+    local cancelled = type(answer) == "table" and answer.cancelled == true
+    if cancelled then
+        -- Esc means "stop asking": every queued question of this step is
+        -- resolved, so the model cannot re-prompt with the next one.
+        local payload = ask.cancelled_payload()
+        for _, call in ipairs(p.calls) do
+            if call.name == "ask" and not call.done then
+                record_ask_result(cfg, on_event, call, payload, ask.CANCELLED_TEXT, false)
+                call.done = true
+            end
+        end
+    else
+        for _, call in ipairs(p.calls) do
+            if call.name == "ask" and call.id == id and not call.done then
+                local questions = call.questions or ask.normalize(call.args)
+                local payload = ask.encode(questions, answer)
+                record_ask_result(cfg, on_event, call, payload,
+                    ask.summary(questions, answer), false)
+                call.done = true
+                break
+            end
+        end
+    end
+    return drive_pending(cfg, on_event) == false
 end
 
 -- Continue the agent loop after confirmations are resolved,
