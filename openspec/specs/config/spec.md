@@ -7,21 +7,20 @@ Configuration: `~/.tether/config.lua` loading with defaults, deep
 merge, API key env resolution, system prompt resolution, and
 machine-managed auto-approve persistence.
 
-
 ## Requirements
 
 ### Requirement: Defaults
 
-A fresh install (no `~/.tether/config.lua`) SHALL run with defaults: provider openai, api_key_env OPENAI_API_KEY, base_url https://api.openai.com/v1, model gpt-4o-mini, providers table `{ openai = { api_key_env = "OPENAI_API_KEY", base_url = "https://api.openai.com/v1" }, anthropic = { api_key_env = "ANTHROPIC_API_KEY", base_url = "https://api.anthropic.com" }, gemini = { api_key_env = "GEMINI_API_KEY", base_url = "https://generativelanguage.googleapis.com" } }`, workspace nil (cwd at runtime), allow_outside_workspace false, auto_approve {}, context {max_tokens 32768, summarize_at 0.7}, retry {base_delay_ms 2000, max_delay_ms 60000, multiplier 2, max_failures_at_max_delay 3}, ui {theme default, header false, keyboard_protocol auto, mouse auto, thinking collapsed, ascii auto, wrap true, collapse {read 20, list 30, grep 15}, input_max_lines 8, editor_padding_x 0, alt_screen true, highlight auto, turn_separators true, path_completion true}, tools {run_shell {timeout 120}}, system_prompt nil, skills_dirs nil, agents_files {}, log_level info.
+A fresh install (no `~/.tether/config.lua`) SHALL run with defaults: provider openai, api_key_env OPENAI_API_KEY, base_url https://api.openai.com/v1, model gpt-4o-mini, providers table `{ openai = { api_key_env = "OPENAI_API_KEY", base_url = "https://api.openai.com/v1" }, anthropic = { api_key_env = "ANTHROPIC_API_KEY", base_url = "https://api.anthropic.com" }, gemini = { api_key_env = "GEMINI_API_KEY", base_url = "https://generativelanguage.googleapis.com" } }`, workspace nil (cwd at runtime), allow_outside_workspace false, auto_approve {}, context {max_tokens 32768, summarize_at 0.7, reserve_tokens 16384, keep_recent_messages 4}, retry {base_delay_ms 2000, max_delay_ms 60000, multiplier 2, max_failures_at_max_delay 3}, ui {theme default, header false, keyboard_protocol auto, mouse auto, thinking collapsed, ascii auto, wrap true, collapse {read 20, list 30, grep 15}, input_max_lines 8, editor_padding_x 0, alt_screen true, highlight auto, turn_separators true, path_completion true}, tools {run_shell {timeout 120}}, system_prompt nil, skills_dirs nil, agents_files {}, log_level info.
 
-The defaults SHALL NOT include a `retries` value or a
-`retry.max_attempts`: the default retry budget is the policy cutoff
-(eight attempts at most), not a fixed attempt count.
+The defaults SHALL NOT include a `retries` value or a `retry.max_attempts`: the default retry budget is the policy cutoff (eight attempts at most), not a fixed attempt count.
+
+`context.reserve_tokens` (default 16384) SHALL reserve headroom for the model's reply when deciding to compact; `context.keep_recent_messages` (default 4) SHALL size the unsummarized tail window. A missing or non-numeric value for either key SHALL fall back to its default without failing the session.
 
 #### Scenario: Missing config file
 
 - **WHEN** the config path does not exist
-- **THEN** loading succeeds silently with defaults, including `skills_dirs = nil` and `agents_files = {}`
+- **THEN** loading succeeds silently with defaults, including `skills_dirs = nil`, `agents_files = {}`, `context.reserve_tokens = 16384`, and `context.keep_recent_messages = 4`
 
 #### Scenario: TUI defaults present
 
@@ -42,6 +41,11 @@ The defaults SHALL NOT include a `retries` value or a
 
 - **WHEN** the config file is missing and the effective config is inspected
 - **THEN** `retry.base_delay_ms` is 2000, `retry.max_delay_ms` is 60000, `retry.multiplier` is 2, `retry.max_failures_at_max_delay` is 3, and neither `retries` nor `retry.max_attempts` is set
+
+#### Scenario: Malformed reserve_tokens falls back
+
+- **WHEN** the user sets `context.reserve_tokens = "lots"`
+- **THEN** loading succeeds and the effective reserve is 16384
 
 ### Requirement: Retry configuration resolution
 The retry policy SHALL be configured by a `retry` table in
@@ -102,15 +106,23 @@ fall back to defaults without crashing.
 - **THEN** a stderr warning is printed and defaults are used
 
 ### Requirement: API key from env
-The API key SHALL be resolved for the active provider: `cfg.providers[cfg.provider].api_key_env` when set, otherwise the legacy top-level `cfg.api_key_env` (default OPENAI_API_KEY); missing key SHALL yield the empty string, not an error. The resolved variable name is the only env var read.
+The credential for the active provider SHALL be resolved in this order: stored OAuth access token from `~/.tether/auth.json` when present and unexpired (refreshing once when expired and a refresh token exists), then stored `kind = "api_key"` entry, then `cfg.providers[cfg.provider].api_key_env` when set, otherwise the legacy top-level `cfg.api_key_env` (default OPENAI_API_KEY); missing key SHALL yield the empty string, not an error. The resolved variable name is the only env var read when the env path is taken. The store SHALL NOT be required: absence behaves exactly as today's env-only resolution.
 
 #### Scenario: Custom env var name
 - **WHEN** `api_key_env = "ANTHROPIC_API_KEY"`
-- **THEN** the key is read from that variable
+- **THEN** the key is read from that variable when no stored credential applies
 
 #### Scenario: Per-provider env resolution
 - **WHEN** `provider = "gemini"` and `providers.gemini.api_key_env = "GEMINI_API_KEY"`
 - **THEN** the key is read from `GEMINI_API_KEY` even when top-level `api_key_env` is `OPENAI_API_KEY`
+
+#### Scenario: Stored token wins over env
+- **WHEN** `auth.json` holds an unexpired oauth token for anthropic and env also has a key
+- **THEN** requests use the stored token
+
+#### Scenario: Store unreadable
+- **WHEN** `auth.json` exists but is corrupt JSON
+- **THEN** resolution falls back to env (or empty) without failing the session
 
 ### Requirement: System prompt resolution
 `get_system_prompt` SHALL resolve the base prompt: a multi-line `system_prompt` string (inline text); a string starting with `/` is treated as a file path to read; any other non-empty string is used as-is; otherwise nil (built-in prompt). The composed prompt returned to the agent SHALL be that base followed by the AGENTS.md and skills sections produced by context-injection rules, via `context.compose`; when no AGENTS.md file and no skills are discovered, the result SHALL be identical to the base.

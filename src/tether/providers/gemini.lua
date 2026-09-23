@@ -299,4 +299,31 @@ end
 M.parse_sse_line = parse_sse_line
 M.convert_contents = convert_contents
 
+-- add-provider-login 3.3: terminal OAuth (authorize URL + pasted redirect).
+-- Google endpoints are stable; client_id comes from
+-- cfg.providers.gemini.oauth_client_id (open config key — no secret here).
+function M.login_flow(cfg)
+    local p = (type(cfg) == "table" and type(cfg.providers) == "table"
+        and type(cfg.providers.gemini) == "table") and cfg.providers.gemini or {}
+    local cid = p.oauth_client_id
+    if type(cid) ~= "string" or cid == "" then return nil end
+    local flow = {
+        provider = "gemini",
+        client_id = cid,
+        client_secret = p.oauth_client_secret,
+        redirect_uri = p.oauth_redirect_uri or "http://localhost:1/",
+        scope = p.oauth_scope or "https://www.googleapis.com/auth/generativeai",
+        token_url = p.oauth_token_url or "https://oauth2.googleapis.com/token",
+    }
+    local authorize = p.oauth_authorize_url
+        or "https://accounts.google.com/o/oauth2/v2/auth"
+    flow.authorize_url = common.oauth_authorize_url(authorize, flow)
+    if not flow.authorize_url then return nil end
+    return flow
+end
+
+function M.token_exchange(post_json, flow, code, now)
+    return common.oauth_token_exchange(post_json, flow, code, now)
+end
+
 return M

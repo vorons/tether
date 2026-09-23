@@ -9,7 +9,7 @@ C host (src/host)          Lua core (src/tether)
 ─────────────────          ────────────────────
 termios / raw mode         app, ui, agent, api
 shell exec (tether.exec)   tools, session, config
-fs primitives, krep search markdown-lite, overlays
+fs primitives, krep search markdown-lite, palette modes
 HTTP(S) in-process         (vendored libcurl + mbedTLS)
 Lua embed (static arrays)
 ```
@@ -49,7 +49,7 @@ JSONL at `~/.tether/sessions/<id>.jsonl`. One event per line. `-r` picks latest 
 - **ASCII mode:** `NO_COLOR=1` or `TERM=dumb` strips ANSI codes, replaces Unicode glyphs with ASCII equivalents.
 - **Module resolution:** the C host loads each Lua module and exposes it as a global (`load_module` → `lua_setglobal`, no `package.preload`), so application code reaches modules as globals (`agent`, `session`, `config`, `api`, `context`, `tools`) and `require` is only a fallback for the plain-Lua test harness. A `require`-only lookup silently disables the feature it guards in the binary — that is how Tab path completion and the `/skills` palette were both dead in shipped builds while their stubbed tests passed. `path_complete_tab` reads the `tools` global, and `tools.path_complete` returns candidates qualified with the typed directory (`sub/inner.lua` for token `sub/in`) because the UI replaces the whole token with the chosen candidate.
 - **System prompt:** configurable via `config.system_prompt` (string or file path).
-- **Debug log:** `--debug` writes to `~/.tether/log/tether.log` (file only; no TUI overlay — M9).
+- **Debug log:** `--debug` writes to `~/.tether/log/tether.log` (file only; no TUI view — M9).
 - **UI collapse & tool rows:** `ui.collapse.read/list/grep` thresholds cap tool block display height. Tool rows lead with a `✓`/`✗`/pending marker and a one-line summary; a failed call carries its first error line clipped to the row, the full error behind expansion. `Ctrl+O` toggles the newest visible tool entry, `Ctrl+Shift+O` toggles all (plain terminals keep `Ctrl+O` = all), and a left click toggles an entry when `ui.mouse = "on"`.
 - **Diff rendering:** `src/tether/diff.lua` is a pure-Lua unified-diff engine (`unified`/`parse`/`pair_words`/`meter`). `write`/`patch` bodies become the applied diff (computed from the projection's before-content, no second read) and render with old/new line numbers, add/remove roles, path-keyed syntax highlighting and word-level emphasis. The row summary reports `+N −M` with a proportional meter; a pending `write`/`patch` previews the agent-supplied read-only projection (inside workspace, ≤ 1 MiB, no write/history), replaced by the result or dropped on deny/cancel/abort.
 - **Tool output sanitization:** transcript rendering strips every control sequence except SGR (cursor moves, erase, `\r`, OSC/DCS) and collapses blank-line runs; display-only, so the model/journal/`/copy` bodies stay raw. SGR survives only while colour is on.
@@ -60,7 +60,8 @@ JSONL at `~/.tether/sessions/<id>.jsonl`. One event per line. `-r` picks latest 
   assembled string — chunk boundaries may split escape sequences.
 - **Confirmation idempotency (M7):** `drive_pending` emits each call's
   confirmation at most once (`call.confirm_emitted`); repeated `agent.continue`
-  never re-shows a menu. `[d] details` keeps the menu alive under the overlay.
+  never re-shows a menu. The menu offers allow/session/always/deny/cancel
+  (digits 1..5); projected diffs stay on pending tool-rows.
 - **Resume (M7):** `-r` and `/resume` restore `role=="tool"` messages via
   `agent.add_tool_result` — otherwise the API rejects the first turn (400).
 - **Print exit codes (M7):** `--print` exits 1 on error OR empty response;

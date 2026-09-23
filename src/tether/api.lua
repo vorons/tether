@@ -235,6 +235,30 @@ function M.stream(cfg, api_key, messages, on_event)
     return http_request(cfg, api_key, messages, on_event)
 end
 
+-- add-llm-compaction: one-shot summary request. Reuses the provider adapter
+-- and transport, accumulates text_delta, and allows at most one automatic
+-- retry for a transient (retryable, non-interrupted) failure. Empty output or
+-- a permanent failure returns nil so the caller can fall back to truncation.
+function M.summarize(cfg, api_key, messages)
+    local function attempt()
+        local acc = {}
+        local ok, failure = M.stream(cfg, api_key, messages, function(ev)
+            if ev.type == "text_delta" and type(ev.text) == "string" then
+                acc[#acc + 1] = ev.text
+            end
+        end)
+        local text = table.concat(acc):match("^%s*(.-)%s*$") or ""
+        return ok, failure, text
+    end
+    local ok, failure, text = attempt()
+    if ok and text ~= "" then return text end
+    if not ok and failure and failure.retryable and failure.kind ~= "interrupted" then
+        ok, failure, text = attempt()
+        if ok and text ~= "" then return text end
+    end
+    return nil, failure
+end
+
 -- 3.5 test seam: expose the private header-file writer so tests can assert
 -- the mode is 600 before the key is written.
 M._header_file = header_file

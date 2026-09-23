@@ -345,16 +345,28 @@ local function estimate_tokens(history)
 end
 
 local function should_summarize(history, cfg)
-    local max_tokens = (cfg.context and cfg.context.max_tokens) or 32768
-    local threshold  = (cfg.context and cfg.context.summarize_at) or 0.7
-    return estimate_tokens(history) > threshold * max_tokens
+    local ctx = (cfg and cfg.context) or {}
+    local max_tokens = tonumber(ctx.max_tokens) or 32768
+    local fraction = tonumber(ctx.summarize_at)
+    if not fraction or fraction <= 0 or fraction >= 1 then fraction = 0.7 end
+    local reserve = tonumber(ctx.reserve_tokens)
+    if not reserve or reserve < 0 then reserve = 16384 end
+    local est = estimate_tokens(history)
+    -- OR of two thresholds: fraction of the budget, or the reply reserve.
+    -- A large reserve can fire first; that is intentional (safety net).
+    return est > fraction * max_tokens or est > max_tokens - reserve
 end
 
--- Compress old history: keep system + last N messages, summarize the rest
-local function compress_history(history)
-    local N = 4
-    if #history <= N + 1 then return history end
-    local system = history[1]
+local function keep_recent_of(cfg)
+    local n = cfg and cfg.context and tonumber(cfg.context.keep_recent_messages)
+    if not n or n < 0 then return 4 end
+    return math.floor(n)
+end
+
+-- Split history into system + old span + keep window (walks back over leading
+-- tool messages so a tool result is not orphaned from its call).
+local function split_span(history, N)
+    if #history <= N + 1 then return history[1], {}, {} end
     local keep_from = math.max(2, #history - N + 1)
     while keep_from > 2 and history[keep_from].role == "tool" do
         keep_from = keep_from - 1
@@ -363,6 +375,10 @@ local function compress_history(history)
     for i = 2, keep_from - 1 do old[#old + 1] = history[i] end
     local keep = {}
     for i = keep_from, #history do keep[#keep + 1] = history[i] end
+    return history[1], old, keep
+end
+
+local function truncation_body(old)
     local parts = {}
     for _, m in ipairs(old) do
         local c = m.content
@@ -370,11 +386,93 @@ local function compress_history(history)
             parts[#parts + 1] = m.role .. ": " .. (c:sub(1, 200) .. (c:len() > 200 and "…" or ""))
         end
     end
-    local summary = table.concat(parts, "\n")
+    return table.concat(parts, "\n")
+end
+
+local SUMMARY_MARKER = "── summary ──"
+local SUMMARY_SPAN_MAX = 2000
+
+-- Role-prefixed span for the summary request; tool results / long bodies are
+-- bounded so one file read cannot blow the compaction request.
+local function serialize_span(old)
+    local parts = {}
+    for _, m in ipairs(old) do
+        local c = m.content
+        if type(c) == "string" then
+            local body = c
+            if #body > SUMMARY_SPAN_MAX then
+                body = body:sub(1, SUMMARY_SPAN_MAX) .. "…"
+            end
+            parts[#parts + 1] = m.role .. ": " .. body
+        elseif type(c) == "table" then
+            parts[#parts + 1] = m.role .. ": [tool_calls]"
+        end
+    end
+    return table.concat(parts, "\n")
+end
+
+local function build_summary_messages(old, focus)
+    local prompt = table.concat({
+        "Summarize the conversation for a coding agent that will continue.",
+        "Cover exactly these sections:",
+        "- Goal",
+        "- Constraints",
+        "- Progress",
+        "- Key decisions",
+        "- Next steps",
+        "Be dense and factual. Use only information present in the history.",
+    }, "\n")
+    if type(focus) == "string" and focus ~= "" then
+        prompt = prompt .. "\n\nFocus instructions:\n" .. focus
+    end
+    return {
+        { role = "system", content = prompt },
+        { role = "user", content = "Conversation history:\n" .. serialize_span(old) },
+    }
+end
+
+-- Compress old history: keep system + last N messages, summarize the rest.
+-- Truncation-only entry kept for tests / callers that do not need the LLM path.
+local function compress_history(history, cfg)
+    local N = keep_recent_of(cfg)
+    local system, old, keep = split_span(history, N)
+    if #old == 0 then return history end
     local new_history = { system }
-    new_history[#new_history + 1] = { role = "system", content = "── summary ──\n" .. summary }
+    new_history[#new_history + 1] =
+        { role = "system", content = SUMMARY_MARKER .. "\n" .. truncation_body(old) }
     for _, m in ipairs(keep) do new_history[#new_history + 1] = m end
     return new_history
+end
+
+-- add-llm-compaction: full compact path. force=true bypasses the threshold
+-- (manual /compact). Returns (new_history, summary_text, mode) where mode is
+-- "llm" | "truncation" | "noop". Never mutates the input table.
+local function compact_history(history, cfg, api_key, focus, force)
+    history = history or M.history
+    cfg = cfg or {}
+    if not force and not should_summarize(history, cfg) then
+        return history, "", "noop"
+    end
+    local N = keep_recent_of(cfg)
+    local system, old, keep = split_span(history, N)
+    if #old == 0 then return history, "", "noop" end
+
+    local body, mode
+    if type(api_key) == "string" and api_key ~= ""
+        and api and api.summarize then
+        local ok, text = pcall(api.summarize, cfg, api_key,
+            build_summary_messages(old, focus))
+        if ok and type(text) == "string" and text ~= "" then
+            body, mode = text, "llm"
+        end
+    end
+    if not body then
+        body, mode = truncation_body(old), "truncation"
+    end
+    local summary_msg = SUMMARY_MARKER .. "\n" .. body
+    local new_history = { system, { role = "system", content = summary_msg } }
+    for _, m in ipairs(keep) do new_history[#new_history + 1] = m end
+    return new_history, summary_msg, mode
 end
 
 -- Run one tool call: execute, log, report to UI. Returns result table or {error=...}.
@@ -552,6 +650,31 @@ local function ack_abort()
     turn_mod.ack_abort(M)
 end
 
+-- add-steering-input: pull-based steer source provided by the UI. The agent
+-- takes one message only at a segment boundary (after tools / before the next
+-- LLM call) — never between retry attempts of the same segment.
+local steer_source = nil
+function M.set_steer_source(fn)
+    steer_source = fn
+end
+
+local function take_steer()
+    if not steer_source then return nil end
+    local ok, text = pcall(steer_source)
+    if not ok or type(text) ~= "string" or text == "" then return nil end
+    return text
+end
+
+-- Inject one steering message as a user turn entry + journal line. Returns
+-- true when a message was injected so main_loop can run another segment.
+local function inject_steer(cfg)
+    local text = take_steer()
+    if not text then return false end
+    M.add_user(text)
+    log_message(cfg, "user", text)
+    return true
+end
+
 -- Sleep in slices so Ctrl+C is honored during a wait of up to a minute.
 -- Returns true when the wait was interrupted by an abort. tether.sleep itself
 -- returns as soon as input arrives, so the check below usually fires well
@@ -702,7 +825,52 @@ local function run_answer_segments(cfg, api_key, on_event, state, max_iterations
             end
         else
             -- A failed attempt contributes nothing to the conversation.
+            -- add-provider-login: one refresh on classified auth failure when
+            -- a stored refresh_token exists — runs before permanent stop so
+            -- a 401 never dead-ends before the token can be renewed.
+            local should_auth_refresh = false
+            if failure and failure.kind == "permanent" then
+                local auth_mod = rawget(_G, "auth")
+                if not auth_mod then
+                    local chunk = loadfile("src/tether/auth.lua")
+                    auth_mod = chunk and chunk() or nil
+                end
+                local provider = (cfg and cfg.provider) or "openai"
+                local home = cfg and cfg._auth_home
+                if auth_mod and auth_mod.load and auth_mod.refresh_token then
+                    local store = auth_mod.load(home)
+                    local entry = store and store[provider]
+                    if type(entry) == "table" and type(entry.refresh_token) == "string"
+                        and entry.refresh_token ~= "" then
+                        entry.provider = provider
+                        local post = auth_mod._post_json
+                        if auth_mod.refresh_token(provider, entry, post, os.time()) then
+                            auth_mod.save(home, store)
+                            should_auth_refresh = true
+                            -- new key for the immediate retry of this attempt
+                            api_key = entry.access_token
+                        else
+                            if on_event then
+                                on_event({
+                                    type = "error",
+                                    kind = "permanent",
+                                    message = (failure.message or "auth failed")
+                                        .. " — run /login to refresh credentials",
+                                })
+                            end
+                            collapse_partial_answer(cfg, pending, merged)
+                            return false, failure
+                        end
+                    end
+                end
+            end
             local verdict = retry.verdict(p, state, failure)
+            if should_auth_refresh then
+                -- refresh already renewed the token: retry this attempt once
+                -- without consuming a user-visible backoff wait
+                state.attempt = state.attempt + 1
+                goto continue_attempt
+            end
             if verdict.action ~= "retry" then
                 collapse_partial_answer(cfg, pending, merged)
                 if on_event then
@@ -723,6 +891,7 @@ local function run_answer_segments(cfg, api_key, on_event, state, max_iterations
                 return false, "aborted"
             end
             state.attempt = state.attempt + 1
+            ::continue_attempt::
         end
     end
 end
@@ -740,8 +909,18 @@ local function main_loop(cfg, api_key, on_event)
         end
 
         if should_summarize(M.history, cfg) then
-            M.history = compress_history(M.history)
-            if on_event then on_event({ type = "context_compressed" }) end
+            local compressed, summary, mode =
+                compact_history(M.history, cfg, api_key, nil, true)
+            if mode ~= "noop" then
+                M.history = compressed
+                if on_event then
+                    on_event({
+                        type = "context_compressed",
+                        mode = mode,
+                        summary = mode == "llm" and summary or nil,
+                    })
+                end
+            end
         end
 
         local ok, result = run_answer_segments(cfg, api_key, on_event, state, max_iterations)
@@ -758,8 +937,14 @@ local function main_loop(cfg, api_key, on_event)
                 M.add_assistant(result.text)
                 log_message(cfg, "assistant", result.text)
             end
-            return true
-        end
+            -- add-steering-input: segment ended with no tools — inject a
+            -- pending steer (if any) and run one more LLM segment.
+            if inject_steer(cfg) then
+                -- fall through to the next main_loop iteration
+            else
+                return true
+            end
+        else
 
         -- Assistant message with tool_calls goes to history BEFORE results (OpenAI contract)
         local tc_list = {}
@@ -798,11 +983,14 @@ local function main_loop(cfg, api_key, on_event)
         M.pending = { calls = calls, idx = 1 }
         local all_done = drive_pending(cfg, on_event)
         if all_done then
-            -- everything executed; loop back to the LLM
+            -- everything executed; inject a pending steer before the next LLM
+            inject_steer(cfg)
+            -- loop back to the LLM
         else
             -- waiting for the user; ui resumes us via M.continue
             return true
         end
+        end -- tool_calls present
     end
     return true
 end
@@ -931,8 +1119,12 @@ M._should_confirm = should_confirm
 M._patch_target_path = patch_target_path
 M._projection_for = projection_for
 M.compress_history = compress_history
+M.compact_history = compact_history
 M.should_summarize = should_summarize
 M.parse_args = parse_args
 M.json_parse = json_parse
+M.SUMMARY_MARKER = SUMMARY_MARKER
+M._inject_steer = inject_steer
+M._take_steer = take_steer
 
 return M

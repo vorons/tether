@@ -242,7 +242,13 @@ function M.handle(ev)
         M.bump()
         return true
     elseif t == "context_compressed" then
-        M.append({ role = "system", text = "── summary ──" })
+        -- add-llm-compaction: llm mode shows the generated body when present;
+        -- truncation / missing mode keeps the stable marker (ASCII-clean).
+        local text = "── summary ──"
+        if ev.mode == "llm" and type(ev.summary) == "string" and ev.summary ~= "" then
+            text = ev.summary
+        end
+        M.append({ role = "system", text = text })
         M.bump()
         return false
     elseif t == "retry" then

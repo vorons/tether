@@ -1119,6 +1119,8 @@ int main(int argc, char **argv)
         { ask_lua,    "ask"    },
         /* confirm_policy: pure should_confirm/approve_key policy (src/tether/confirm_policy.lua) */
         { confirm_policy_lua, "confirm_policy" },
+        /* auth: OAuth/API-key store for /login /logout (src/tether/auth.lua) */
+        { auth_lua, "auth" },
         /* transcript: visible conversation model; ui loads it before State */
         { transcript_lua, "transcript" },
         /* commands: session lifecycle + slash side effects (src/tether/commands.lua) */

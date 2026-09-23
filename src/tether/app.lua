@@ -57,6 +57,17 @@ local function parse_args()
     return opts
 end
 
+-- add-provider-login: --print cannot run interactive slash flows. Returns an
+-- error string for /login /logout prompts, nil otherwise (T161).
+function M._print_prompt_error(prompt)
+    if type(prompt) ~= "string" then return nil end
+    local head = prompt:match("^%s*(%S+)")
+    if head == "/login" or head == "/logout" then
+        return (head:sub(2)) .. " is interactive only"
+    end
+    return nil
+end
+
 local function run_inner()
     local opts = parse_args()
     if version then print("tether 0.1.0"); os.exit(0) end
@@ -92,6 +103,11 @@ local function run_inner()
         end
         if not prompt or prompt:match("^%s*$") then
             io.stderr:write("tether: --print requires a prompt argument or stdin input\n")
+            os.exit(1)
+        end
+        local interactive_err = M._print_prompt_error(prompt)
+        if interactive_err then
+            io.stderr:write("tether: " .. interactive_err .. "\n")
             os.exit(1)
         end
 

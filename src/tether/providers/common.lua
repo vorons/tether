@@ -217,4 +217,77 @@ function M.tools_schema()
     }
 end
 
+-- Percent-encode for OAuth authorize URLs and form bodies (RFC 3986).
+function M.url_encode(s)
+    return (tostring(s):gsub("[^%w%.%-_~]", function(c)
+        return string.format("%%%02X", string.byte(c))
+    end))
+end
+
+function M.url_decode(s)
+    return (tostring(s):gsub("%%(%x%x)", function(h)
+        return string.char(tonumber(h, 16))
+    end))
+end
+
+-- Standard OAuth authorization-code exchange body shared by provider adapters
+-- (design.md: login_flow / token_exchange hooks keep OAuth out of auth.lua).
+-- `post_json(url, body_table)` must return (body_string) or (nil, err).
+function M.oauth_token_exchange(post_json, flow, code, now)
+    if type(post_json) ~= "function" then return nil end
+    if type(flow) ~= "table" or type(code) ~= "string" or code == "" then
+        return nil
+    end
+    if type(flow.token_url) ~= "string" or flow.token_url == "" then return nil end
+    local body = {
+        grant_type = "authorization_code",
+        code = code,
+        redirect_uri = flow.redirect_uri or "",
+        client_id = flow.client_id or "",
+    }
+    if type(flow.client_secret) == "string" and flow.client_secret ~= "" then
+        body.client_secret = flow.client_secret
+    end
+    local ok, res = pcall(post_json, flow.token_url, body)
+    if not ok or type(res) ~= "string" or res == "" then return nil end
+    local pok, parsed = pcall(M.json_decode, res)
+    if not pok or type(parsed) ~= "table" then return nil end
+    local access = parsed.access_token
+    if type(access) ~= "string" or access == "" then return nil end
+    local entry = {
+        kind = "oauth",
+        access_token = access,
+        refresh_url = flow.token_url,
+        provider = flow.provider,
+    }
+    if type(parsed.refresh_token) == "string" and parsed.refresh_token ~= "" then
+        entry.refresh_token = parsed.refresh_token
+    end
+    if parsed.expires_in ~= nil then
+        entry.expires_at = (tonumber(now) or os.time())
+            + (tonumber(parsed.expires_in) or 0)
+    end
+    if type(parsed.token_type) == "string" then
+        entry.token_type = parsed.token_type
+    end
+    if type(parsed.scope) == "string" then
+        entry.scope = parsed.scope
+    end
+    return entry
+end
+
+-- Build the authorize URL from a flow table (query-safe encoding).
+function M.oauth_authorize_url(base, flow)
+    if type(base) ~= "string" or base == "" then return nil end
+    local sep = base:find("?", 1, true) and "&" or "?"
+    local url = base .. sep
+        .. "client_id=" .. M.url_encode(flow.client_id or "")
+        .. "&redirect_uri=" .. M.url_encode(flow.redirect_uri or "")
+        .. "&response_type=code"
+    if type(flow.scope) == "string" and flow.scope ~= "" then
+        url = url .. "&scope=" .. M.url_encode(flow.scope)
+    end
+    return url
+end
+
 return M

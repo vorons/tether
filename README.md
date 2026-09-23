@@ -161,12 +161,57 @@ active provider; an unknown `provider` warns on stderr and behaves as
 `chmod 600` header file (`x-api-key` for Anthropic), Gemini uses the
 `?key=` query convention without logging the command line.
 
-```sh
+### Credentials: env, `/login`, `/logout`
+
+Credentials resolve in one place (`config.api_key`) for both the TUI and
+`--print`:
+
+1. stored OAuth access token in `~/.tether/auth.json` (unexpired; one
+   refresh attempt when expired and a `refresh_token` is present)
+2. stored `kind = "api_key"` entry from the same file
+3. env `api_key_env` for the active provider (then the legacy top-level
+   name)
+4. empty string
+
+`/login` with no argument opens a provider picker in the shared palette
+(same dropdown as the slash menu); `/login <provider>`
+starts a masked credential dialog (secret is never typed into the chat
+input or shown in the transcript). Paste an API key / access token and
+Enter to store it; if the provider has an OAuth app configured
+(`providers.<name>.oauth_client_id` plus authorize/token URLs — Gemini
+ships Google defaults), the dialog shows the authorize URL, tries to open
+a browser, and exchanges a pasted redirect URL / code for refreshable
+tokens. `/logout [provider]` removes only that provider's stored entry
+(env keys are untouched). Confirmations never echo token material.
+
+**Security note.** `~/.tether/auth.json` is created with mode `0600`
+before any secret is written (same discipline as the API header temp
+file). The file holds live OAuth tokens and pasted keys in plaintext
+under your home directory: do not copy it into backups, dotfile repos,
+or bug reports; treat a leak the same as a leaked API key and rotate the
+credential. A missing or corrupt store simply falls through to env —
+startup never fails on it.
+
+Optional OAuth app keys (non-secret client id; secret only if your
+provider issues one):
+
+```lua
+-- ~/.tether/config.lua (excerpt)
+return {
+  providers = {
+    gemini = {
+      oauth_client_id = "your-google-oauth-client-id",
+      -- oauth_client_secret / oauth_authorize_url / oauth_token_url /
+      -- oauth_redirect_uri / oauth_scope override the Google defaults
+    },
+    -- openai/anthropic also need oauth_authorize_url + oauth_token_url
+  },
+}
 ```
 
 ## Slash commands
 
-`/clear /compact /model /resume /new /quit /copy`
+`/clear /compact /model /resume /new /quit /copy /login /logout`
 
 Typing `/` opens one palette listing those commands followed by every
 discovered skill as `/skill-name`. Filtering is a case-insensitive
@@ -182,10 +227,10 @@ the skills index in its prompt.
 - `/clear` clears the transcript display only — the agent keeps its
   history, so the next turn still sees the full context. `/new`
   starts a truly fresh session (history and transcript are dropped).
-- `/resume` opens a picker of the last 10 sessions for the workspace.
+- `/resume` opens a palette of recent sessions for the workspace.
 - Confirmation menu for `write`/`patch`/`run` outside workspace: `[y] once`,
   `[a] session`, `[A] always` (persists to `~/.tether/auto_approve.lua`),
-  `[d] details`, `[n] deny`, `Esc` cancels the turn. Digits `1..6` work too.
+  `[n] deny`, `Esc` cancels the turn. Digits `1..5` work too.
 
 ## TUI features
 
@@ -293,7 +338,7 @@ replaces the wait for the next attempt.
   - `api` — SSE streaming to LLM via the in-process HTTPS transport
   - `agent` — tool dispatch loop, conversation history
   - `session` — JSONL journal, auto-save, resume by workspace
-  - `ui` — TUI rendering, input handling, confirmation/diff overlays
+  - `ui` — TUI rendering, input handling, confirmation menu, error banner, palette modes, masked login secret
   - `app` — CLI argument parsing, session lifecycle, error handling
 
 ## Key Design Decisions
@@ -301,7 +346,7 @@ replaces the wait for the next attempt.
 - **In-process HTTPS**: `api.lua` uses `tether.http_stream` (per-line callback) and `tether.http_get`, backed by vendored libcurl + mbedTLS + zlib — no `curl` subprocess, no external CLI tools (grep runs the vendored krep engine)
 - **Lua-only logic**: All agent logic lives in Lua; C host has zero AI knowledge
 - **No `load`**: all JSON parsing is hand-rolled recursive descent or gmatch patterns (see `docs/decisions/2026-09-17-lua-json-parser.md`)
-- **Secrets**: the API key is passed to the HTTP client via a private header file (`tether.fchmod` 600), never in argv or in the environment
+- **Secrets**: the API key is passed to the HTTP client via a private header file (`tether.fchmod` 600), never in argv or in the environment; `/login` stores credentials in `~/.tether/auth.json` (also 0600 from creation) — see the security note under Providers
 - **Shell injection**: `tools.run` uses `env TETHER_WORKSPACE=<dir> sh -c` with `timeout`
 
 ## Testing

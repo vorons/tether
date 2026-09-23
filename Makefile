@@ -2,7 +2,7 @@ CC      ?= cc
 CFLAGS  ?= -std=c11 -Wall -Wextra -Werror -O2 -D_POSIX_C_SOURCE=200809L
 LUA_DIR = vendor/lua-5.4.6/src
 EMBED_OUT = src/host/embed.c
-LUA_MODS = src/tether/app.lua src/tether/ui.lua src/tether/transcript.lua src/tether/commands.lua src/tether/turn.lua src/tether/config.lua src/tether/session.lua src/tether/api.lua src/tether/agent.lua src/tether/tools.lua src/tether/diff.lua src/tether/retry.lua src/tether/ask.lua src/tether/confirm_policy.lua src/tether/providers/common.lua src/tether/providers/openai.lua src/tether/providers/anthropic.lua src/tether/providers/gemini.lua
+LUA_MODS = src/tether/app.lua src/tether/ui.lua src/tether/transcript.lua src/tether/commands.lua src/tether/turn.lua src/tether/config.lua src/tether/session.lua src/tether/api.lua src/tether/agent.lua src/tether/tools.lua src/tether/diff.lua src/tether/retry.lua src/tether/ask.lua src/tether/confirm_policy.lua src/tether/auth.lua src/tether/providers/common.lua src/tether/providers/openai.lua src/tether/providers/anthropic.lua src/tether/providers/gemini.lua
 
 LUA_SRCS = lapi.c lauxlib.c lbaselib.c lcode.c lcorolib.c lctype.c \
            ldblib.c ldebug.c ldo.c ldump.c lfunc.c lgc.c linit.c \
@@ -94,6 +94,7 @@ $(EMBED_OUT): $(LUA_MODS) tools/embed.lua
 		retry_lua src/tether/retry.lua \
 		ask_lua src/tether/ask.lua \
 		confirm_policy_lua src/tether/confirm_policy.lua \
+		auth_lua src/tether/auth.lua \
 		context_lua src/tether/context.lua \
 		agent_lua src/tether/agent.lua \
 		tools_lua src/tether/tools.lua \
@@ -116,6 +117,7 @@ test: tether
 	@luac -p src/tether/retry.lua
 	@luac -p src/tether/ask.lua
 	@luac -p src/tether/confirm_policy.lua
+	@luac -p src/tether/auth.lua
 	@luac -p src/tether/context.lua
 	@luac -p src/tether/tools.lua
 	@luac -p src/tether/diff.lua

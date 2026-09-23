@@ -4,8 +4,9 @@
 
 The interactive terminal UI: screen layout regions, markdown-lite
 transcript rendering, mouse tracking, slash-command palette, input
-history, status line, themes, ASCII fallback, and overlays.
-
+history, status line, themes, ASCII fallback, confirmation menu,
+error banner, and masked login secret mode. The palette is the only
+list/selection surface; there is no full-screen overlay mechanism.
 
 ## Requirements
 
@@ -104,12 +105,10 @@ the agent history, not on screen):
   session's messages are shown
 
 ### Requirement: Session commands transcript semantics
-- `/new` SHALL drop both the agent history and the visible
-  transcript, leaving only a new-session banner.
-- `/clear` SHALL clear the transcript display only; the agent
-  keeps its history, so the next turn still sees full context.
-- `/compact` SHALL append a summary line to the transcript
-  after compressing the agent history.
+- `/new` SHALL drop both the agent history and the visible transcript, leaving only a new-session banner.
+- `/clear` SHALL clear the transcript display only; the agent keeps its history, so the next turn still sees full context.
+- `/compact` SHALL force an immediate compaction (ignoring the threshold) and append a summary line to the transcript. Optional free text after `/compact` SHALL be passed to the summary request as focus instructions. On LLM success the row SHALL show the generated summary (or its stable marker when empty); on fallback the existing `── summary ──` row behavior applies.
+- `/login [provider]` and `/logout [provider]` SHALL be registered as built-in slash commands: `/login` with a named provider starts the login flow for that provider; `/login` with no argument opens a provider picker in the shared palette (same mechanism as the slash menu / `/copy` — never a full-screen overlay, never a silent default). Selecting a provider enters login secret mode (`S.login_secret = { buf }`): the secret buffer owns the keyboard while open, is masked on screen, and never appears in `S.input` or a transcript row (see Login secret mode). `/logout` clears the stored credential for the named or active provider. Neither command SHALL print token material to the transcript. Unknown provider names SHALL show an error banner. The palette listing SHALL include both commands with short descriptions.
 
 #### Scenario: New session starts clean
 - **WHEN** the user runs `/new` with a non-empty transcript
@@ -117,8 +116,23 @@ the agent history, not on screen):
 
 #### Scenario: Clear keeps agent context
 - **WHEN** the user runs `/clear` and then sends a message
-- **THEN** the agent answers with full prior history while the
-  screen shows only the new exchange
+- **THEN** the agent answers with full prior history while the screen shows only the new exchange
+
+#### Scenario: Login appears in palette
+- **WHEN** the user opens the slash palette
+- **THEN** `/login` and `/logout` are listed among the built-in commands
+
+#### Scenario: Logout line has no secrets
+- **WHEN** the user runs `/logout`
+- **THEN** a confirmation line appears and contains no token, refresh token, or key text
+
+#### Scenario: Compact with focus instructions
+- **WHEN** the user runs `/compact keep the API contract details`
+- **THEN** compaction runs immediately, the summary request includes that focus text, and the transcript gains a summary row
+
+#### Scenario: Compact reports fallback
+- **WHEN** `/compact` runs and the summary request fails
+- **THEN** the transcript still gains a `── summary ──` row (truncation fallback) and no error banner is raised for the summary failure alone
 
 ### Requirement: Scroll position indicator
 When the user scrolled up, the TUI SHALL report how many transcript
@@ -176,12 +190,28 @@ so those modes keep native text selection.
 
 ### Requirement: Confirmation menu
 Out-of-workspace tool calls SHALL show a menu: `[y] once`,
-`[a] session`, `[A] always`, `[d] details`, `[n] deny`, `Esc`
-cancel; digits 1..6 SHALL map to the same actions in order.
+`[a] session`, `[A] always`, `[n] deny`, `Esc` cancel; digits 1..5
+SHALL map to the same actions in order (`1..5` = allow, session,
+always, deny, cancel). There SHALL be no `details` option, no `[d]`
+binding, and no separate diff view: the projected diff is the pending
+tool-row in the transcript, and the result body is available through
+expansion. Every decision (including Esc) SHALL clear the menu.
 
 #### Scenario: Digit shortcut
 - **WHEN** the user presses `3` on the menu
 - **THEN** the `always` decision is taken
+
+#### Scenario: Digit 4 is deny, not details
+- **WHEN** the user presses `4` on the menu
+- **THEN** the `deny` decision is taken and no overlay or details pane opens
+
+#### Scenario: d is unbound
+- **WHEN** the user presses `d` on the menu
+- **THEN** the menu stays open and no details view opens
+
+#### Scenario: Esc cancels
+- **WHEN** the user presses Esc on the menu
+- **THEN** the turn is cancelled and the menu is gone
 
 ### Requirement: Palette
 Typing `/` as the first non-blank character of the first input line
@@ -368,13 +398,16 @@ at least one column. The rules SHALL be dim in every theme, including
 `mono` (they are static glyph rows, not colored roles). In ASCII mode
 the rules SHALL use `-` instead of `─`.
 
+While secret mode is open, the input box SHALL render the masked secret
+label instead of `S.input` (see Login secret mode).
+
 The caret SHALL be drawn as a reverse-video block: when the cursor
 sits on a character, that character SHALL be painted in reverse video
 and no other cell SHALL be; when the cursor sits at the end of a row, a
 reverse-video space SHALL be painted after the text. The block SHALL be
 painted in the TUI's own frame and SHALL be the only caret shown while
-the input has focus; the hardware terminal cursor SHALL stay hidden,
-except while an overlay needs it. In ASCII mode the block SHALL still
+the input has focus; the hardware terminal cursor SHALL stay hidden
+for the whole session. In ASCII mode the block SHALL still
 be used, since it is a video attribute and not a glyph.
 
 The input SHALL show at most `ui.input_max_lines` rows at a time,
@@ -451,14 +484,15 @@ History navigation SHALL work as follows:
 - **WHEN** the user types a line and clears it without Enter
 - **THEN** it never appears in subsequent recall
 
-### Requirement: Error banner and overlay
+### Requirement: Error banner
 On an agent or API error the TUI SHALL show a one-line error banner
-above the input. Pressing Enter on the banner SHALL open the full
-error overlay; Esc or Enter in that overlay SHALL dismiss it and
-clear it, after which the input field SHALL accept a new message
-immediately without further steps. While the overlay is open,
-other input is routed to the overlay (modal); it SHALL NOT block
-sending a new message once dismissed.
+above the input. Enter or Esc on the banner SHALL clear it and
+return the input to normal use immediately; neither key SHALL open a
+modal view. The full error text SHALL go to the debug log when
+`--debug` / `cfg.debug` is enabled and SHALL NOT be written to a
+transcript row. While the banner is visible it does not own the
+keyboard beyond Enter/Esc clearing it: a subsequent Enter (after the
+banner is dismissed) SHALL submit normally.
 
 An `aborted` turn is not an error: it SHALL append the dim
 `⏹ прервано (Ctrl+C)` transcript row (ASCII `[x] прервано (Ctrl+C)`)
@@ -466,14 +500,30 @@ instead of raising the banner, and SHALL clear the waiting, streaming and
 pending-retry indicators so no stale spinner or backoff stays on screen.
 
 #### Scenario: Dismiss and send
-- **WHEN** an error occurred, the user opens the overlay, presses
-  Esc, types a new message, and presses Enter
+- **WHEN** an error occurred, the user clears the banner with Enter
+  or Esc, types a new message, and presses Enter
 - **THEN** the new message is sent to the agent
+
+#### Scenario: Enter clears the banner
+- **WHEN** an error banner is showing and the user presses Enter
+- **THEN** the banner is cleared and no overlay opens
+
+#### Scenario: Esc clears the banner
+- **WHEN** an error banner is showing and the user presses Esc
+- **THEN** the banner is cleared and no overlay opens
+
+#### Scenario: Full error text reaches the debug log
+- **WHEN** `cfg.debug` is on and an `error` event arrives with full text
+- **THEN** the debug log contains that text and the transcript gains no row carrying it
+
+#### Scenario: Full error text never reaches the transcript
+- **WHEN** an `error` event arrives
+- **THEN** no transcript row is appended for the error message body
 
 #### Scenario: Banner persists until next submit
 - **WHEN** an error banner is showing and the user submits a new
-  message without opening the overlay
-- **THEN** the banner clears as part of the submit
+  message without first clearing the banner
+- **THEN** the banner clears as part of the submit (or Enter on the banner itself)
 
 #### Scenario: An abort shows no banner
 - **WHEN** a turn ends with an `aborted` event
@@ -502,30 +552,7 @@ fall back to modifyOtherKeys / xterm fallback sequences.
   CSI u encoding
 
 ### Requirement: Live turn feedback
-The TUI SHALL show turn progress while the agent works, without
-waiting for the turn to finish. On submit it SHALL paint the waiting
-state immediately: the newest transcript row SHALL carry a
-`✻ tether думает…` placeholder with a spinner frame, and the input
-box's top rule SHALL carry the same spinner with the elapsed seconds of
-the turn. The
-placeholder SHALL disappear with the first `text_delta` or
-`reasoning_delta` and SHALL give way to a caret `▌` (ASCII `|`) at
-the end of the newest line while deltas keep arriving; the caret
-SHALL NOT be drawn while the user has scrolled up or while an
-overlay is open. Text and tool progress SHALL become visible during
-the turn: the TUI SHALL repaint while the turn is running, throttled
-by a bounded number of skipped deltas, and SHALL repaint immediately
-on state transitions (tool call start, tool result, error, abort,
-confirmation). No background timer SHALL be required: repaints
-driven by events and keypresses are sufficient, and the spinner
-advances only when the TUI repaints. The waiting placeholder, caret
-and elapsed field SHALL be cleared when the turn ends — after a
-reply, on error, on abort, and when a confirmation menu is raised
-(the turn is then waiting on the user) — and SHALL apply equally to a
-turn resumed after a confirmation decision. The elapsed counter
-SHALL reset at the start of each turn. In ASCII mode the spinner
-SHALL use ASCII frames (the caret is `|`) and no non-ASCII glyph
-SHALL be introduced by this feedback.
+The TUI SHALL show turn progress while the agent works, without waiting for the turn to finish. On submit it SHALL paint the waiting state immediately: the newest transcript row SHALL carry a `✻ tether думает…` placeholder with a spinner frame, and the input box's top rule SHALL carry the same spinner with the elapsed seconds of the turn. The placeholder SHALL disappear with the first `text_delta` or `reasoning_delta` and SHALL give way to a caret `▌` (ASCII `|`) at the end of the newest line while deltas keep arriving; the caret SHALL NOT be drawn while the user has scrolled up or while the palette, confirmation menu, ask block, or login secret mode owns the keyboard. Text and tool progress SHALL become visible during the turn: the TUI SHALL repaint while the turn is running, throttled by a bounded number of skipped deltas, and SHALL repaint immediately on state transitions (tool call start, tool result, error, abort, confirmation). No background timer SHALL be required: repaints driven by events and keypresses are sufficient, and the spinner advances only when the TUI repaints. While busy, the TUI SHALL additionally pump non-blocking key reads on each paint/event tick so Enter / Alt+Enter / Escape are handled mid-turn (steering capability); the pump SHALL NOT block for input and SHALL NOT run while a confirmation menu, ask block, or login secret mode owns the keyboard. The waiting placeholder, caret and elapsed field SHALL be cleared when the turn ends — after a reply, on error, on abort, and when a confirmation menu is raised (the turn is then waiting on the user) — and SHALL apply equally to a turn resumed after a confirmation decision. The elapsed counter SHALL reset at the start of each turn. In ASCII mode the spinner SHALL use ASCII frames (the caret is `|`) and no non-ASCII glyph SHALL be introduced by this feedback.
 
 #### Scenario: Placeholder before the first token
 - **WHEN** the user submits a message and no token has arrived yet
@@ -555,6 +582,10 @@ SHALL be introduced by this feedback.
 - **WHEN** the user has scrolled up while deltas are still arriving
 - **THEN** no caret is drawn on the newest visible row
 
+#### Scenario: Caret is not drawn while a modal surface owns the keyboard
+- **WHEN** the palette, confirmation menu, ask block, or login secret mode is open while deltas arrive
+- **THEN** no caret is drawn on the newest visible row
+
 #### Scenario: ASCII mode
 - **WHEN** ASCII mode is active during a turn
 - **THEN** the spinner uses ASCII frames, the caret is `|`, and no non-ASCII glyph is emitted by the feedback
@@ -562,6 +593,14 @@ SHALL be introduced by this feedback.
 #### Scenario: No repaint is required while nothing happens
 - **WHEN** a tool runs for a long time without producing stream events
 - **THEN** the TUI is not required to repaint and the last painted frame stays on screen
+
+#### Scenario: Busy pump handles Enter mid-stream
+- **WHEN** the user presses Enter with text while deltas are streaming
+- **THEN** the steering queue accepts the message without waiting for the turn to end and without starting a second turn
+
+#### Scenario: Confirmation blocks the pump
+- **WHEN** a confirmation menu is open and the user presses Enter
+- **THEN** only the confirmation handler acts; no steering message is queued
 
 ### Requirement: Retry and continuation notices
 While a turn is being retried or continued the TUI SHALL keep the user
@@ -1388,3 +1427,72 @@ banner, and the turn continues.
 - **WHEN** the user presses `Esc` in the option list
 - **THEN** the block is gone, a dim row records the cancellation, and the turn continues without an error banner
 
+### Requirement: Session lists are palette modes
+`/resume` SHALL open the shared palette with
+`palette_mode = "resume"` and items from the session listing (never a
+full-screen overlay). Enter SHALL resume the selected session, replace
+the visible transcript via transcript seed, and append a resumed-session
+marker; Esc SHALL close the palette with no side effects; arrows and
+mouse selection SHALL behave as for `/copy`. `/model` SHALL open the
+shared palette with `palette_mode = "model"` and items from the model
+listing; Enter SHALL set `S.model_name` (and `S.cfg.model`) and append a
+`→ модель: …` system row; Esc SHALL close without changing the model.
+Neither mode SHALL set `S.overlay`.
+
+#### Scenario: Resume opens a palette
+- **WHEN** the user runs `/resume` with at least one session on disk
+- **THEN** `palette_mode` is `resume`, the palette is active, items are non-empty, and no overlay is open
+
+#### Scenario: Resume Enter picks a session
+- **WHEN** the resume palette is open and the user presses Enter on a session
+- **THEN** the palette closes, `S.session_id` updates, and the transcript is replaced with the picked session plus a marker
+
+#### Scenario: Resume Esc is a no-op
+- **WHEN** the resume palette is open and the user presses Esc
+- **THEN** the palette closes and no session is resumed
+
+#### Scenario: Model opens a palette
+- **WHEN** the user runs `/model`
+- **THEN** `palette_mode` is `model`, the palette is active with model items, and no overlay is open
+
+#### Scenario: Model Enter changes the model
+- **WHEN** the model palette is open and the user presses Enter on a model
+- **THEN** `S.model_name` is that model and a system row `→ модель: …` is appended
+
+#### Scenario: Model Esc does not change the model
+- **WHEN** the model palette is open and the user presses Esc
+- **THEN** `S.model_name` is unchanged and the palette closes
+
+### Requirement: Login secret mode
+Bare `/login` SHALL open the provider picker as
+`palette_mode = "login"` (shared palette, never an overlay). Selecting a
+provider SHALL enter secret mode: `S.login_secret = { buf = "" }` (a
+dedicated buffer, never `S.input`), `S.overlay` SHALL stay unset, and the
+provider picker SHALL close. While secret mode is open it owns the
+keyboard: text/paste append to `buf`, backspace edits `buf`, Enter runs
+`submit_login_secret(buf)` (store per auth rules, then clear secret mode),
+Esc runs `cancel_login()` (clear secret mode, store nothing).
+`render_input` SHALL paint a masked line `login <provider>: *…` (length
+only); the plaintext secret SHALL NOT appear in the painted frame, in
+`S.input`, or in any transcript row. OAuth failure that re-opens secret
+mode SHALL NOT set an overlay.
+
+#### Scenario: Picker Enter enters secret mode
+- **WHEN** the user opens bare `/login`, selects a provider, and presses Enter
+- **THEN** `S.login_secret` is non-nil, the palette is closed, and `S.overlay` is unset
+
+#### Scenario: Secret never enters main input
+- **WHEN** the user pastes a key while secret mode is open
+- **THEN** `S.login_secret.buf` holds the text and `S.input` is unchanged
+
+#### Scenario: Frame masks the secret
+- **WHEN** secret mode has buffered text and a frame is painted
+- **THEN** the frame contains mask characters and does not contain the plaintext
+
+#### Scenario: Esc cancels without store
+- **WHEN** secret mode is open and the user presses Esc
+- **THEN** `S.login_secret` is cleared, nothing is stored, and no overlay is open
+
+#### Scenario: Enter stores and clears
+- **WHEN** secret mode has a non-empty `buf` and the user presses Enter
+- **THEN** the credential is stored per auth rules, secret mode is cleared, and no overlay is open

@@ -26,7 +26,13 @@ local function default_config()
         workspace = nil,
         allow_outside_workspace = false,
         auto_approve = {},
-        context = { max_tokens = 32768, summarize_at = 0.7 },
+        context = {
+            max_tokens = 32768,
+            summarize_at = 0.7,
+            -- add-llm-compaction: reply headroom + keep-window size
+            reserve_tokens = 16384,
+            keep_recent_messages = 4,
+        },
         -- add-retry-and-continuation: the retry policy reads this table.
         -- There is deliberately no default attempt cap: the budget is the
         -- cutoff in retry.max_failures_at_max_delay (see src/tether/retry.lua),
@@ -74,6 +80,14 @@ local function deep_merge(a, b)
     return a
 end
 
+-- add-llm-compaction: non-numeric / negative values fall back to the default
+-- without failing the session (spec: malformed reserve falls back).
+local function coerce_nonneg(v, default)
+    local n = tonumber(v)
+    if not n or n < 0 then return default end
+    return math.floor(n)
+end
+
 function M.load(path, home)
     local cfg = default_config()
     -- M7/N4: loadfile returns nil+err when the file is missing — the old code
@@ -113,6 +127,23 @@ function M.load(path, home)
         cfg.model = up.model or user_tbl.model
             or def_p.model or cfg.model
     end
+    if type(cfg.context) ~= "table" then
+        cfg.context = default_config().context
+    else
+        local def_ctx = default_config().context
+        for k, dv in pairs(def_ctx) do
+            if cfg.context[k] == nil then cfg.context[k] = dv end
+        end
+        cfg.context.reserve_tokens = coerce_nonneg(cfg.context.reserve_tokens,
+            def_ctx.reserve_tokens)
+        cfg.context.keep_recent_messages = coerce_nonneg(
+            cfg.context.keep_recent_messages, def_ctx.keep_recent_messages)
+        local sat = tonumber(cfg.context.summarize_at)
+        if not sat or sat <= 0 or sat >= 1 then cfg.context.summarize_at = def_ctx.summarize_at end
+        local mt = tonumber(cfg.context.max_tokens)
+        if not mt or mt <= 0 then cfg.context.max_tokens = def_ctx.max_tokens end
+    end
+
     -- add-retry-and-continuation: a legacy top-level `retries` was the hard
     -- attempt cap. It still is — mapped onto the policy's attempt cap — so an
     -- existing configuration keeps its budget. `retry.max_attempts` wins.
@@ -152,7 +183,41 @@ function M.load_auto_approve(home)
 end
 
 function M.api_key(cfg)
-    return os.getenv(cfg.api_key_env or "OPENAI_API_KEY") or ""
+    -- add-provider-login: resolution chain — stored OAuth (unexpired, or
+    -- refreshed once when expired) → stored api_key → env → "".
+    -- Single resolver shared by TUI and --print (spec: config API key).
+    local auth_mod = rawget(_G, "auth")
+    if not auth_mod and type(cfg) == "table" and cfg._auth_home then
+        local chunk = loadfile("src/tether/auth.lua")
+        auth_mod = chunk and chunk() or nil
+    end
+    if auth_mod and auth_mod.resolve_entry then
+        local provider = (cfg and cfg.provider) or "openai"
+        local home = (cfg and cfg._auth_home) or nil
+        local store = auth_mod.load(home)
+        local entry = store and store[provider]
+        if type(entry) == "table" then
+            entry.provider = provider
+            local post = nil
+            if auth_mod._post_json then post = auth_mod._post_json end
+            local tok = auth_mod.resolve_entry(entry, post, os.time())
+            if type(tok) == "string" and tok ~= "" then return tok end
+        end
+    end
+    if type(cfg) ~= "table" then return "" end
+    -- load() already folds providers[p].api_key_env into the top-level
+    -- api_key_env for the active provider (see M.load lines 123–124). Prefer
+    -- that resolved name; only a raw table that never went through load()
+    -- needs the providers-table fallback (spec: per-provider env wins).
+    local env_name = cfg.api_key_env
+    if env_name == nil or env_name == "" then
+        local p = cfg.provider
+        if type(cfg.providers) == "table" and type(cfg.providers[p]) == "table"
+            and cfg.providers[p].api_key_env then
+            env_name = cfg.providers[p].api_key_env
+        end
+    end
+    return os.getenv(env_name or "OPENAI_API_KEY") or ""
 end
 
 -- Design §5: system prompt can be overridden by config.system_prompt

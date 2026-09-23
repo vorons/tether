@@ -715,8 +715,8 @@ M.trunc = trunc -- export (M9/T39)
 -- ============================================================
 -- Constants
 -- ============================================================
--- M8/R3: digit shortcuts for the confirmation menu (1..6)
-local CONFIRM_DIGITS = { "allow", "session", "always", "details", "deny", "cancel" }
+-- palette-only T2: digit shortcuts for the confirmation menu (1..5)
+local CONFIRM_DIGITS = { "allow", "session", "always", "deny", "cancel" }
 M.CONFIRM_DIGITS = CONFIRM_DIGITS
 
 -- §6.6: spinner frames for the "thinking" placeholder and the busy status
@@ -736,6 +736,9 @@ local SLASH_COMMANDS = {
     { label = "/new",     desc = "начать новую сессию",              cmd = "new" },
     { label = "/quit",    desc = "выход",                            cmd = "quit" },
     { label = "/copy",    desc = "копировать из транскрипта",        cmd = "copy" },
+    -- add-provider-login: OAuth/API-key store
+    { label = "/login",   desc = "войти у провайдера (API key/OAuth)", cmd = "login" },
+    { label = "/logout",  desc = "выйти у провайдера (удалить ключ)",  cmd = "logout" },
     -- unified-slash-palette: /skills removed — skills are entries of this list
 }
 M.SLASH_COMMANDS = SLASH_COMMANDS
@@ -785,7 +788,7 @@ end
 
 -- M10: keymap as data (idea from terminal.lua input.keymap) — the single
 -- source of truth for keyboard bindings. Consumed by docs/tests; the help
--- overlay is gone (M9), so this table is where bindings stay documented.
+-- screen is gone (M9), so this table is where bindings stay documented.
 local KEYMAP = {
     ["enter"]      = "send",
     ["ctrl+j"]     = "newline",
@@ -814,13 +817,11 @@ local KEYMAP = {
     ["1"]          = "confirm allow",
     ["2"]          = "confirm session",
     ["3"]          = "confirm always",
-    ["4"]          = "confirm details",
-    ["5"]          = "confirm deny",
-    ["6"]          = "confirm cancel",
+    ["4"]          = "confirm deny",
+    ["5"]          = "confirm cancel",
     ["y"]          = "confirm allow",
     ["a"]          = "confirm session",
     ["A"]          = "confirm always",
-    ["d"]          = "confirm details",
     ["n"]          = "confirm deny",
 }
 M.KEYMAP = KEYMAP
@@ -867,6 +868,22 @@ if type(turn) ~= "table" then
     turn = (chunk and chunk()) or {}
 end
 
+-- tools: same pattern as turn/commands — global in the host, loadfile fallback
+-- for tests/dev. Captured as a local so bang path survives global restore in
+-- the test harness (run_ui_with snapshots/restores _G after load). Call sites
+-- prefer _G.tools when the host (or a test) has installed it after load.
+local tools = _G.tools
+if type(tools) ~= "table" then
+    local chunk = loadfile("src/tether/tools.lua")
+    tools = (chunk and chunk()) or {}
+end
+M._tools = tools
+local function tools_mod()
+    local g = rawget(_G, "tools")
+    if type(g) == "table" then return g end
+    return tools
+end
+
 -- ============================================================
 -- State
 -- ============================================================
@@ -877,9 +894,23 @@ local S
 -- guards let callers pcall through instead of crashing module load.
 M._get_state = function() return S end
 M._set_error_banner = function(v) if S then S.error_banner = v end end
-M._set_overlay = function(ov, data) if S then S.overlay = ov; S.overlay_data = data end end
+
+-- add-steering-input: pure FIFO push with a hard cap. Returns false when full
+-- (caller raises the one-shot banner); never drops silently.
+local QUEUE_CAP = 8
+local function queue_push(q, text)
+    if #q >= QUEUE_CAP then return false end
+    q[#q + 1] = text
+    return true
+end
+M._queue_push = queue_push
 local debug_log_fh = nil
+M._debug_capture = nil -- test seam: append every logged line when set
 local function debug_log(msg)
+    if S and S.debug then
+        local cap = M._debug_capture
+        if cap then cap[#cap + 1] = msg end
+    end
     if not debug_log_fh then return end
     pcall(function() debug_log_fh:write(os.date("[%H:%M:%S] ") .. msg .. "\n") end)
 end
@@ -936,6 +967,9 @@ local function new_state()
         palette_sel = 1,
         palette_skills = nil,    -- 1.3: skill rows, resolved once per palette open
         _in_copy_palette = nil,  -- 5.2: set when the /copy palette is open
+        _in_login_palette = nil, -- add-provider-login: bare /login provider picker
+        _in_resume_palette = nil, -- palette-only: /resume session list
+        _in_model_palette = nil,  -- palette-only: /model list
 
         -- 5.4: one-shot confirmation; cleared on the next keypress in handle_key
         toast = nil,
@@ -947,15 +981,19 @@ local function new_state()
         confirmation = nil,
         confirmation_sel = 1,
 
-        overlay = nil,
-        overlay_data = nil,
-
         mouse_enabled = nil, -- M8/R8: last emitted tracking state
         last_transcript_top = nil, -- M9/M10: viewport invalidation for scroll repaint
         last_transcript_w = nil,   -- M10: width guard for scroll-region reuse
 
         history = {},
         history_pos = 0,
+
+        -- add-steering-input: FIFO queues for mid-turn submits (max 8 each;
+        -- pure push helper is M._queue_push). bang_context carries !cmd output
+        -- to the next user/steering message.
+        steer_queue = {},
+        followup_queue = {},
+        bang_context = nil,
 
         scroll = 0,
         user_scrolled = false,
@@ -1258,6 +1296,9 @@ end
 
 palette_sync = function()
     if S._in_copy_palette then return end -- 5.2: copy palette is set explicitly
+    if S._in_login_palette then return end -- add-provider-login: same for picker
+    if S._in_resume_palette then return end -- palette-only: /resume list is explicit
+    if S._in_model_palette then return end  -- palette-only: /model list is explicit
     local first = S.input
     local nl = first:find("\n", 1, true)
     if nl then first = first:sub(1, nl - 1) end
@@ -1346,7 +1387,7 @@ local function path_complete_tab()
     -- lookup has to read the global; require() only resolves in the plain-Lua
     -- harness, which is why it stays as a fallback.
     local tools_mod = M._tools_stub
-        or tools
+        or tools_mod()
         or (pcall(require, "tools") and package.loaded.tools)
         or nil
     if tools_mod == nil or tools_mod.path_complete == nil then return end
@@ -1452,11 +1493,12 @@ end
 local function input_clear()
     S.input = ""
     S.cursor = 0
-    -- 6.1: palette modes set explicitly (copy/skills) survive input_clear;
+    -- 6.1: palette modes set explicitly (copy/skills/login) survive input_clear;
     -- palette_sync is a no-op for them via the _in_*_palette flags.
-    -- 5.2: the copy palette sets its items explicitly; palette_sync is a no-op
-    -- for it via the _in_copy_palette flag (the palette is otherwise derived).
-    if not S._in_copy_palette then palette_sync() end
+    if not S._in_copy_palette and not S._in_login_palette
+        and not S._in_resume_palette and not S._in_model_palette then
+        palette_sync()
+    end
 end
 
 local function cursor_line_col()
@@ -2342,6 +2384,23 @@ end
 M._turn_status = turn_status
 
 local function render_input(L)
+    -- palette-only R5: secret mode paints a masked line in the input box —
+    -- never the plaintext, never S.input.
+    if S.login_secret then
+        local pad = box_padding(L.w)
+        local content_w = math.max(1, L.w - pad * 2)
+        local side = string.rep(" ", pad)
+        local label = "login " .. tostring(S.login_provider or "")
+        local mask = string.rep("*", #(S.login_secret.buf or ""))
+        local text = label .. ": " .. mask
+        set_row(L.rule_top_row, rule_row(L.w, turn_status(), nil))
+        set_row(L.input_row, side .. input_row_text(text, #text, content_w) .. side)
+        for i = 2, L.input_h do
+            set_row(L.input_row + i - 1, side .. string.rep(" ", content_w) .. side)
+        end
+        set_row(L.rule_bottom_row, rule_row(L.w, nil, nil))
+        return
+    end
     local lines = input_lines()
     local total = #lines
     local shown = L.input_h
@@ -2591,70 +2650,6 @@ local function render_footer(L)
 end
 
 -- ============================================================
--- Overlays
--- ============================================================
-local function overlay_full(title, body, footer)
-    local L = layout()
-    for r = 1, L.h do set_row(r, "") end
-    local inner = math.max(L.w - 2, 1)
-    local head = "┌ " .. title .. " "
-    local pad = inner - ulen(head) + 1
-    if pad < 1 then pad = 1 end
-    set_row(1, dim(head .. string.rep("─", pad) .. "┐"))
-    local maxi = L.h - 3
-    for i = 1, maxi do
-        local line = body[i] or ""
-        set_row(1 + i, dim("│") .. " " .. trunc(line, inner))
-    end
-    set_row(L.h - 1, dim("└" .. string.rep("─", inner) .. "┘"))
-    set_row(L.h, dim(footer or "Esc закрыть"))
-end
-
-local function render_overlay()
-    local ov = S.overlay
-    -- M9: help/status/log overlays removed per user request
-    if ov == "diff" then
-        local src = (S.overlay_data and S.overlay_data.text) or ""
-        local lines = {}
-        for _, l in ipairs(wrap(src, math.max(S.w - 4, 1))) do
-            if l:sub(1, 1) == "+" then lines[#lines + 1] = green(l)
-            elseif l:sub(1, 1) == "-" then lines[#lines + 1] = red(l)
-            else lines[#lines + 1] = dim(l) end
-        end
-        overlay_full("diff", lines, "Esc закрыть")
-    elseif ov == "resume" then
-        local d = S.overlay_data or {}
-        local items = d.items or {}
-        local lines = {}
-        for i, it in ipairs(items) do
-            local t = it.label or ""
-            lines[#lines + 1] = (i == (d.sel or 1)) and rev(t) or t
-        end
-        if #lines == 0 then lines[1] = "(сессий нет)" end
-        overlay_full("возобновить сессию", lines, "↑↓ выбрать · Enter · Esc")
-    elseif ov == "model" then
-        local d = S.overlay_data or {}
-        local items = d.items or {}
-        local lines = {}
-        for i, it in ipairs(items) do
-            local cur = (it.label == (d.current or S.model_name)) and "● " or "  "
-            local t = cur .. (it.label or "")
-            lines[#lines + 1] = (i == (d.sel or 1)) and rev(t) or t
-        end
-        if #lines == 0 then lines[1] = "(модели не найдены)" end
-        overlay_full("выбрать модель", lines, "↑↓ выбрать · Enter · Esc")
-    elseif ov == "error" then
-        -- M8/R3: full error text; banner shows one truncated line, this the rest
-        local src = (S.overlay_data and S.overlay_data.text) or S.error_banner or ""
-        local lines = {}
-        for _, l in ipairs(wrap(src, math.max(S.w - 4, 1))) do
-            lines[#lines + 1] = red(l)
-        end
-        overlay_full("ошибка", lines, "Esc закрыть")
-    end
-end
-
--- ============================================================
 -- Cursor & redraw
 -- ============================================================
 -- pi-style-input-and-footer: the caret is painted inside the input box by
@@ -2672,15 +2667,11 @@ local function redraw()
         S.last_w, S.last_h = L.w, L.h
     end
 
-    if S.overlay then
-        render_overlay()
-    else
-        render_transcript(L)
-        render_error_banner(L)
-        render_input(L)
-        render_palette(L)
-        render_footer(L)
-    end
+    render_transcript(L)
+    render_error_banner(L)
+    render_input(L)
+    render_palette(L)
+    render_footer(L)
 
     frame_flush()
 end
@@ -2720,7 +2711,7 @@ M._paint = paint
 --   { kind = "alt",   code = number }
 --   { kind = "special", name = string, ctrl = bool?, shift = bool? }
 --   { kind = "mouse", name = string, col = number, row = number, button = number }
--- No layout, palette, overlay, or mode knowledge lives here — decode is pure
+-- No layout, palette, or mode knowledge lives here — decode is pure
 -- bytes → event. Terminal quirks (kitty CSI-u, modifyOtherKeys, X11 copy
 -- chords) are normalized into the typed fields above before return.
 
@@ -2752,8 +2743,12 @@ local function decode_modified_key(code, mods)
     if code == 27 then return { kind = "esc" } end
     if code == 13 then
         -- Enter stays legacy when unmodified; any modifier means the terminal
-        -- sends it here (Shift/Ctrl/Alt+Enter insert a newline).
-        if mods.shift or mods.ctrl or mods.alt then return { kind = "newline" } end
+        -- sends it here (Shift/Ctrl/Alt+Enter insert a newline). Alt is kept
+        -- on the event so the busy pump can tell Alt+Enter (follow-up) from
+        -- Shift/Ctrl+Enter (plain newline).
+        if mods.shift or mods.ctrl or mods.alt then
+            return { kind = "newline", alt = mods.alt or nil }
+        end
         return { kind = "enter" }
     end
     if code == 9 then return { kind = "tab" } end
@@ -2796,11 +2791,10 @@ local function legacy_csi_mods(p)
     return m and decode_mods(tonumber(m) - 1) or nil
 end
 
-local function read_key()
-    local b = tether.read_char()
-    if b == nil or b == -1 then return nil end
-    local c = b & 0xFF
-
+-- Decode one already-read first byte; continuation bytes come from
+-- read_char_nb (and the paste body from read_char). Shared by read_key and
+-- read_key_nb so blocking and non-blocking paths stay identical.
+local function decode_first_byte(c)
     if c == 27 then
         local b2 = tether.read_char_nb()
         if b2 == nil then return { kind = "esc" } end
@@ -2919,6 +2913,21 @@ local function read_key()
     end
 end
 
+local function read_key()
+    local b = tether.read_char()
+    if b == nil or b == -1 then return nil end
+    return decode_first_byte(b & 0xFF)
+end
+
+-- Non-blocking variant for the busy pump: first byte via read_char_nb so a
+-- silent turn never stalls on input. Incomplete escape sequences surface as
+-- esc (same as a short blocking read); the pump never blocks.
+local function read_key_nb()
+    local b = tether.read_char_nb()
+    if b == nil or b == -1 then return nil end
+    return decode_first_byte(b & 0xFF)
+end
+
 -- ============================================================
 -- Command execution
 -- ============================================================
@@ -2933,9 +2942,195 @@ local function start_new_session(banner)
     reset_transcript({ { role = "system", text = banner or "↻ Новая сессия" } })
 end
 
--- M9: load_log_overlay removed together with the /log command
+-- M9: /log command (and its view) removed
 
-local function execute_command(cmd)
+-- add-provider-login: interactive credential entry (masked secret mode) and
+-- bare-/login provider picker (Pi OAuthSelector). Secrets live only in
+-- S.login_secret.buf — never S.input, never a transcript row.
+local KNOWN_PROVIDERS = { "openai", "anthropic", "gemini" }
+
+local function provider_mod(name)
+    local glob = rawget(_G, "provider_" .. name)
+    if glob then return glob end
+    local chunk = loadfile("src/tether/providers/" .. name .. ".lua")
+    return chunk and chunk() or nil
+end
+
+local function begin_login(provider)
+    if S.cfg and S.cfg.non_interactive then
+        S.error_banner = "login is interactive only"
+        return false
+    end
+    local pmod = provider_mod(provider)
+    local flow = (pmod and pmod.login_flow and pmod.login_flow(S.cfg)) or nil
+    S.error_banner = nil
+    S.login_provider = provider
+    S.login_flow = flow
+    -- palette-only R5: secret entry is a masked input mode, never a dialog.
+    -- buf is a dedicated buffer — never S.input, never a transcript row.
+    S.login_secret = { buf = "" }
+    -- Best-effort browser open (never blocks login on failure). URL itself
+    S.palette_active = false
+    S.palette_mode = "command"
+    S.palette_items = {}
+    S.palette_sel = 1
+    S._in_login_palette = nil
+    -- Best-effort browser open (never blocks login on failure). URL itself
+    -- stays in the hints / dialog, not the transcript.
+    if flow and flow.authorize_url and tether and tether.exec then
+        local q = "'" .. flow.authorize_url:gsub("'", "'\\''") .. "'"
+        pcall(function()
+            local ok = tether.exec("xdg-open " .. q .. " >/dev/null 2>&1")
+            if not ok then
+                tether.exec("open " .. q .. " >/dev/null 2>&1")
+            end
+        end)
+    end
+    return true
+end
+
+local function cancel_login()
+    S.login_provider = nil
+    S.login_flow = nil
+    S.login_secret = nil
+    -- leave secret-hint palette: back to command mode
+    S.palette_active = false
+    S.palette_mode = "command"
+    S.palette_items = {}
+    S.palette_sel = 1
+    S._in_login_palette = nil
+end
+
+-- Shared store path for secret-mode Enter: OAuth code/redirect vs bare API key.
+local function submit_login_secret(raw)
+    local value = (type(raw) == "string" and raw:match("^%s*(.-)%s*$")) or ""
+    if value == "" then return false end
+    local provider = S.login_provider
+    local flow = S.login_flow
+    if not provider then return false end
+    S.login_provider = nil
+    S.login_flow = nil
+    S.login_secret = nil
+    S.palette_active = false
+    S.palette_mode = "command"
+    S.palette_items = {}
+    S.palette_sel = 1
+    S._in_login_palette = nil
+
+    local auth_mod = rawget(_G, "auth")
+    if not auth_mod then
+        local chunk = loadfile("src/tether/auth.lua")
+        auth_mod = chunk and chunk() or nil
+    end
+
+    local code = nil
+    if flow then
+        code = value:match("[?&]code=([^&%s]+)")
+        if not code and not value:match("^https?://") then
+            local looks_key = value:match("^sk[%-%_]")
+                or value:match("^AIza")
+                or value:match("^xai")
+                or value:match("^gsk_")
+            if not looks_key and #value >= 4 and #value <= 512
+                and not value:find("%s") then
+                code = value
+            end
+        end
+    end
+
+    if code and flow then
+        local ccommon = rawget(_G, "provider_common")
+        if not ccommon then
+            local chunk = loadfile("src/tether/providers/common.lua")
+            ccommon = chunk and chunk() or nil
+        end
+        if ccommon and ccommon.url_decode then
+            code = ccommon.url_decode(code)
+        end
+        local pmod = provider_mod(provider)
+        local post = auth_mod and auth_mod._post_json
+        local entry = (pmod and pmod.token_exchange)
+            and pmod.token_exchange(post, flow, code, os.time())
+        if not entry then
+            S.error_banner = "oauth exchange failed"
+            S.login_provider = provider
+            S.login_flow = flow
+            -- re-enter secret mode (palette-only)
+            S.login_secret = { buf = "" }
+            return false
+        end
+        local ok = auth_mod and auth_mod.set and auth_mod.set(nil, provider, entry)
+        if not ok then
+            S.error_banner = "login store failed"
+            return false
+        end
+        if S.cfg and ((S.cfg.provider or "openai") == provider) then
+            S.api_key = entry.access_token
+            S.cfg.api_key = entry.access_token
+        end
+        transcript.append({
+            role = "system",
+            text = "→ login " .. provider .. ": oauth token stored",
+        })
+        bump_transcript()
+        S.error_banner = nil
+        return true
+    end
+
+    local ok = auth_mod and auth_mod.set and auth_mod.set(nil, provider, {
+        kind = "api_key",
+        access_token = value,
+    })
+    if not ok then
+        S.error_banner = "login store failed"
+        return false
+    end
+    if S.cfg and ((S.cfg.provider or "openai") == provider) then
+        S.api_key = value
+        S.cfg.api_key = value
+    end
+    transcript.append({
+        role = "system",
+        text = "→ login " .. provider .. ": credential stored",
+    })
+    bump_transcript()
+    S.error_banner = nil
+    return true
+end
+
+-- palette-only R2: Enter/mouse actions for picked resume/model rows.
+-- One local (file is at the 200-local limit).
+local pick = {}
+function pick.resume(id)
+    if not id then return end
+    -- §6.8 /resume: actually load the picked session
+    local sid, messages = commands.resume(id)
+    if sid then
+        S.session_id = sid
+        if S.cfg then S.cfg._session_id = sid end
+        -- pi-style-input-and-footer: a resumed session starts its
+        -- counters over; the old session's totals are not this one's
+        S.tokens_in, S.tokens_out = 0, 0
+        -- the picked session replaces the visible transcript;
+        -- appending would mix two conversations on one screen
+        transcript.seed(messages or {})
+        transcript.append(
+            { role = "system", text = "↻ сессия " .. tostring(sid):sub(1, 8) .. " возобновлена" })
+        bump_transcript()
+    end
+end
+function pick.model(label)
+    if not label then return end
+    local model_id = label:match("^model_set:(.*)$") or label
+    S.model_name = model_id
+    if S.cfg then S.cfg.model = model_id end
+    transcript.append({ role = "system", text = "→ модель: " .. model_id })
+    bump_transcript()
+end
+
+-- add-llm-compaction: `rest` is the free text after the command word
+-- (e.g. focus instructions for /compact).
+local function execute_command(cmd, rest)
     input_clear()
     debug_log("command: " .. tostring(cmd))
     if cmd == "quit" then S.quit = true; return end
@@ -2947,10 +3142,14 @@ local function execute_command(cmd)
         return
     end
     if cmd == "compact" then
-        -- §6.8: force summarization of old messages, report as ── summary ──
-        local summary = commands.compact()
+        -- force summarization (threshold bypassed); optional focus text
+        local focus = (type(rest) == "string" and rest:match("^%s*(.-)%s*$")) or ""
+        if focus == "" then focus = nil end
+        local summary = commands.compact(S.cfg, S.api_key or "", focus)
         if summary ~= nil then
-            transcript.append({ role = "system", text = summary ~= "" and summary or "── summary ──" })
+            local row = (type(summary) == "string" and summary ~= "")
+                and summary or "── summary ──"
+            transcript.append({ role = "system", text = row })
         end
         if agent and agent.estimate_tokens then
             S.tokens_used = agent.estimate_tokens(agent.get_history())
@@ -2987,8 +3186,13 @@ local function execute_command(cmd)
                 desc = m.name or m.id or "",
             }
         end
-        S.overlay = "model"
-        S.overlay_data = { items = items, sel = 1, current = S.model_name }
+        -- palette-only R2: model list is a palette under the input
+        S.error_banner = nil
+        S.palette_mode = "model"
+        S.palette_active = true
+        S.palette_items = items
+        S.palette_sel = 1
+        S._in_model_palette = true
         return
     end
     if cmd == "resume" then
@@ -3002,11 +3206,76 @@ local function execute_command(cmd)
                 id = f.id,
             }
         end
-        S.overlay = "resume"
-        S.overlay_data = { items = items, sel = 1 }
+        -- palette-only R2: session list is a palette under the input
+        S.error_banner = nil
+        S.palette_mode = "resume"
+        S.palette_active = true
+        S.palette_items = items
+        S.palette_sel = 1
+        S._in_resume_palette = true
+        return
+    end
+    -- add-provider-login: interactive credential flow / store clear
+    if cmd == "login" then
+        local provider = (type(rest) == "string" and rest:match("^%s*(.-)%s*$")) or ""
+        if S.cfg and S.cfg.non_interactive then
+            S.error_banner = "login is interactive only"
+            return
+        end
+        -- Bare /login → shared palette in login mode (same mechanism as
+        -- /copy/slash menu); never a silent default to the active provider.
+        if provider == "" then
+            local active = (S.cfg and S.cfg.provider) or KNOWN_PROVIDERS[1]
+            local items = {}
+            for _, name in ipairs(KNOWN_PROVIDERS) do
+                items[#items + 1] = {
+                    label = name,
+                    desc = (name == active) and "active" or "",
+                }
+            end
+            S.error_banner = nil
+            S.palette_mode = "login"
+            S.palette_active = true
+            S.palette_items = items
+            S.palette_sel = 1
+            S._in_login_palette = true
+            return
+        end
+        local known = { openai = true, anthropic = true, gemini = true }
+        if not known[provider:lower()] then
+            S.error_banner = "unknown provider: " .. provider
+            return
+        end
+        provider = provider:lower()
+        begin_login(provider)
+        return
+    end
+    if cmd == "logout" then
+        local provider = (type(rest) == "string" and rest:match("^%s*(.-)%s*$")) or ""
+        if provider == "" then provider = S.cfg and S.cfg.provider or "openai" end
+        local known = { openai = true, anthropic = true, gemini = true }
+        if not known[provider:lower()] then
+            S.error_banner = "unknown provider: " .. provider
+            return
+        end
+        provider = provider:lower()
+        S.login_provider = nil
+        S.login_flow = nil
+        local auth_mod = _G.auth
+        if auth_mod and auth_mod.delete then
+            auth_mod.delete(nil, provider)
+        end
+        -- confirmation line: provider name only — never token material
+        transcript.append({
+            role = "system",
+            text = "→ logout " .. provider .. ": stored credential removed",
+        })
+        bump_transcript()
         return
     end
 end
+-- Test seam: drive slash dispatch without going through the byte pump.
+M._execute_command = function(cmd, rest) if S then execute_command(cmd, rest) end end
 
 -- ============================================================
 -- Agent integration
@@ -3027,8 +3296,16 @@ local function transcript_entries(messages)
 end
 M.transcript_entries = transcript_entries
 
+-- Forward decls: handle_agent_event (above) calls pump_keys; pump_keys calls
+-- handle_key. Both are assigned below — must be locals in scope first.
+local handle_key
+local pump_keys
+
 local function handle_agent_event(ev)
     if not ev or not ev.type then return end
+    -- add-steering-input: drain mid-turn keys on every event tick so Enter /
+    -- Alt+Enter / Escape work while the agent is busy (no second turn).
+    pump_keys()
     -- A: remember the tail-decoration state so a transition (placeholder ->
     -- caret, or caret -> nothing) repaints at once instead of waiting out the
     -- delta throttle.
@@ -3047,6 +3324,9 @@ local function handle_agent_event(ev)
         S.streaming = false
     elseif ev.type == "error" then
         S.error_banner = ev.message or "ошибка"
+        -- palette-only R4: full text only to the debug log (when on), never
+        -- a modal palette and never a transcript row.
+        debug_log("error: " .. tostring(ev.message or "ошибка"))
         S.retry_wait = nil -- a terminal failure ends the backoff wait
     elseif ev.type == "aborted" then
         S.waiting = false
@@ -3105,9 +3385,8 @@ local function handle_agent_event(ev)
             local options = {"[1/y] once     разрешить один раз",
                              "[2/a] session  разрешить до конца сессии",
                              "[3/A] always   сохранить в auto_approve",
-                             "[4/d] details  показать diff/аргументы",
-                             "[5/n] deny     отклонить",
-                             "[6/Esc] cancel прервать ход агента"}
+                             "[4/n] deny     отклонить",
+                             "[5/Esc] cancel прервать ход агента"}
             S.confirmation = {
                 label = label,
                 body = body,
@@ -3158,6 +3437,198 @@ end
 -- go to transcript.handle. Row-only tests use M._transcript.* directly (D8).
 M._handle_agent_event = handle_agent_event
 
+-- ============================================================
+-- add-steering-input: busy pump, queues, Escape restore, bang
+-- ============================================================
+
+-- Called from handle_agent_event while S.busy: drain non-blocking keys so
+-- Enter / Alt+Enter / Escape work mid-turn without a second concurrent turn.
+-- Confirmation/ask/secret own the keyboard first — pump is a no-op then.
+-- Drains everything available in one tick (not one key per event).
+pump_keys = function()
+    if not S or not S.busy then return end
+    if S.confirmation or S.ask or S.login_secret then return end
+    while true do
+        local k = read_key_nb()
+        if not k then break end
+        handle_key(k)
+        if not S or not S.busy then break end
+        if S.confirmation or S.ask or S.login_secret then break end
+    end
+end
+M._pump_keys = function() if S then pump_keys() end end
+
+-- Shared submit path for Enter / Alt+Enter while busy: user row now, queue
+-- FIFO, clear input. Does not start a turn.
+local function enqueue_busy(kind)
+    local text = S.input
+    if text:match("^%s*$") then return end
+    local q = kind == "followup" and S.followup_queue or S.steer_queue
+    if not queue_push(q, text) then
+        S.error_banner = "queue full (" .. QUEUE_CAP .. ")"
+        return
+    end
+    push_history(text)
+    transcript.append({ role = "user", text = text })
+    bump_transcript()
+    input_clear()
+    S.error_banner = nil
+    S.scroll = 0
+    S.user_scrolled = false
+end
+M._enqueue_busy = function(kind) if S then enqueue_busy(kind) end end
+
+-- Escape while busy with a non-empty queue: steers first, then follow-ups,
+-- one per line (submission order across both queues is not tracked — the
+-- spec fixes steering-first order). Empty queues: leave the input alone
+-- (handle_key's esc branch clears / no-ops as before).
+local function restore_queues()
+    if not S then return end
+    local parts = {}
+    for _, t in ipairs(S.steer_queue or {}) do parts[#parts + 1] = t end
+    for _, t in ipairs(S.followup_queue or {}) do parts[#parts + 1] = t end
+    S.steer_queue = {}
+    S.followup_queue = {}
+    if #parts == 0 then
+        input_clear()
+        return
+    end
+    S.input = table.concat(parts, "\n")
+    S.cursor = #S.input
+    palette_sync()
+end
+M._restore_queues = function() if S then restore_queues() end end
+
+-- ! / !! parser: nil = not a bang; "empty" = bang with no command;
+-- ("bang"|"double", cmd) = runnable.
+local function parse_bang(s)
+    if type(s) ~= "string" or s:sub(1, 1) ~= "!" then return nil end
+    local double = s:sub(2, 2) == "!"
+    local cmd = double and s:sub(3) or s:sub(2)
+    cmd = cmd:match("^%s*(.-)%s*$") or ""
+    if cmd == "" then return "empty" end
+    return double and "double" or "bang", cmd
+end
+M._parse_bang = parse_bang
+
+-- Run a bang line through the shared run-tool path (workspace, timeout, env).
+-- Renders a tool-style row; ! stores a bounded excerpt for the next message;
+-- !! never touches history or bang_context.
+local function run_bang(s)
+    local kind, cmd = parse_bang(s)
+    if not kind then return false end
+    if kind == "empty" then
+        S.error_banner = "missing command"
+        return true
+    end
+    local tm = tools_mod()
+    if not (tm and tm.run) then
+        S.error_banner = "shell unavailable"
+        return true
+    end
+    local res = tm.run({ command = cmd }, S.cfg)
+    if not res then
+        S.error_banner = "command failed to start"
+        return true
+    end
+    local exit_n = res.exit_code or 0
+    local out = res.output or ""
+    -- same bound as the run tool's UI body
+    if #out > 16 * 1024 then out = out:sub(1, 16 * 1024) .. "\n…(truncated)" end
+    local elapsed = res.elapsed_ms
+    local summary = "exit " .. tostring(exit_n)
+        .. (elapsed and (", " .. (elapsed < 1000 and (elapsed .. " ms")
+            or string.format("%.1f s", elapsed / 1000))) or "")
+    transcript.append({
+        role = "tool",
+        id = "bang_" .. tostring(os.time()) .. "_" .. tostring(math.random(1000, 9999)),
+        started_at = os.time(),
+        name = "run",
+        status = exit_n == 0 and "ok" or "error",
+        summary = summary,
+        body = out,
+        args = { command = cmd },
+        path = nil,
+        projection = nil,
+    })
+    bump_transcript()
+    if kind == "bang" then
+        S.bang_context = out
+    end
+    input_clear()
+    S.error_banner = nil
+    return true
+end
+M._run_bang = function(s) if S then return run_bang(s) end return false end
+
+-- Fold a pending !cmd excerpt into the next outbound message (turn start,
+-- steer injection, follow-up). Cleared on use.
+local function take_bang_context()
+    local ctx = S and S.bang_context
+    if ctx and ctx ~= "" then
+        S.bang_context = nil
+        return "\n\n[bang]\n" .. ctx
+    end
+    return ""
+end
+
+-- Pull one steering message for the agent (segment boundary). Returns nil
+-- when the queue is empty so main_loop can settle.
+local function take_steer()
+    if not S or not S.steer_queue or #S.steer_queue == 0 then return nil end
+    return table.remove(S.steer_queue, 1)
+end
+
+-- Wire agent → UI steer source once state exists.
+local function wire_steer_source()
+    if agent and type(agent.set_steer_source) == "function" then
+        agent.set_steer_source(function()
+            local t = take_steer()
+            if not t then return nil end
+            return t .. take_bang_context()
+        end)
+    end
+end
+M._wire_steer_source = wire_steer_source
+
+-- After a turn fully settles: drain follow-ups in order as fresh turns.
+-- Stops on error banner, parked confirmation/ask, or pending steers.
+local turn_hook = nil -- test seam: replaces turn.start during drain
+M._set_turn_hook = function(fn) turn_hook = fn end
+
+local function drain_followups()
+    if not S then return end
+    if S.error_banner or S.confirmation or S.ask then return end
+    if S.steer_queue and #S.steer_queue > 0 then return end
+    while S.followup_queue and #S.followup_queue > 0 do
+        if S.error_banner or S.confirmation or S.ask then return end
+        if S.steer_queue and #S.steer_queue > 0 then return end
+        local msg = table.remove(S.followup_queue, 1)
+        local payload = msg .. take_bang_context()
+        local ok, err
+        if turn_hook then
+            ok, err = turn_hook(payload)
+        else
+            ok, err = turn.start(S, S.cfg, S.api_key or "", payload,
+                handle_agent_event, function()
+                    sync_tail()
+                    paint(true)
+                end)
+        end
+        sync_tail()
+        if not ok and err then
+            S.error_banner = tostring(err)
+            return
+        end
+    end
+end
+M._drain_followups = function() if S then drain_followups() end end
+
+-- After commit_input / confirmation resume: settle then drain.
+local function after_turn_settle()
+    drain_followups()
+end
+
 local function commit_input()
     local text = S.input
     if text:match("^%s*$") then
@@ -3166,7 +3637,8 @@ local function commit_input()
     end
     local trimmed = text:match("^%s*(.-)%s*$")
     if trimmed:sub(1, 1) == "/" then
-        local word = trimmed:match("^/(%w+)")
+        -- add-llm-compaction: capture free text after the command word
+        local word, rest = trimmed:match("^/(%w+)%s*(.*)$")
         if word then
             -- unified-slash-palette 4.2: names compare without regard to case.
             -- A built-in command runs (so /CLEAR behaves like /clear); a name
@@ -3175,14 +3647,20 @@ local function commit_input()
             -- anything else keeps the old command path.
             local name = word:lower()
             if command_set()[name] then
-                execute_command(name)
+                execute_command(name, rest)
                 return
             end
             if not palette_skill_named(name) then
-                execute_command(word)
+                execute_command(word, rest)
                 return
             end
         end
+    end
+    -- add-steering-input: bang runs after slash resolution, never to the model
+    local bang = parse_bang(trimmed)
+    if bang then
+        run_bang(trimmed)
+        return
     end
     push_history(text)
     -- Turn separators (tui: Turn separators): one dim timestamp row per new turn,
@@ -3200,7 +3678,9 @@ local function commit_input()
 
     -- turn owns busy/waiting/streaming begin+finish and the abort seam;
     -- before_call paints the placeholder before the blocking agent call (T54).
-    local ok, err = turn.start(S, S.cfg, S.api_key or "", text, handle_agent_event, function()
+    wire_steer_source()
+    local send = text .. take_bang_context()
+    local ok, err = turn.start(S, S.cfg, S.api_key or "", send, handle_agent_event, function()
         sync_tail()
         paint(true)
     end)
@@ -3208,6 +3688,7 @@ local function commit_input()
     if not ok and err then
         S.error_banner = tostring(err)
     end
+    after_turn_settle()
 end
 
 -- M8/R8: emit ?1000h/?1006h only on state transitions (not every frame)
@@ -3555,6 +4036,7 @@ local function resolve_ask(cancelled)
     if not ok2 and err2 then S.error_banner = tostring(err2) end
     bump_transcript()
     sync_tail()
+    after_turn_settle()
 end
 
 -- The current question is answered: move to the next one, or hand the whole
@@ -3711,24 +4193,11 @@ end
 
 local function resolve_confirmation(decision)
     local detail = S.confirmation and S.confirmation.detail
-    if decision ~= "details" then
-        -- M7/D3b: [d] details must keep the menu alive — Esc from the diff
-        -- overlay returns to an intact confirmation, not an empty one where
-        -- Enter (= allow) executes the tool by surprise.
-        S.confirmation = nil
-        S.confirmation_sel = 1
-    end
+    -- palette-only R3/R6: every decision clears the menu.
+    S.confirmation = nil
+    S.confirmation_sel = 1
     if detail and agent then
         local needs_resume = true
-        if decision == "details" then
-            -- §6.10 [d]: show the full args/diff; menu stays as-is underneath
-            local args = detail.args or {}
-            S.overlay = "diff"
-            S.overlay_data = { text = args.patch or args.command or
-                (args.content and ("write → " .. tostring(args.path) .. "\n" .. args.content) or "") }
-            S.busy = false
-            return
-        end
         local ok, err = turn.confirm(detail.id, decision, S.cfg, handle_agent_event)
         if not ok and err then S.error_banner = tostring(err) end
         transcript.append({
@@ -3744,6 +4213,7 @@ local function resolve_confirmation(decision)
             end)
             if not ok2 and err2 then S.error_banner = tostring(err2) end
         end
+        after_turn_settle()
     end
     bump_transcript() -- the decision line appended above
     sync_tail()       -- menu gone (or the placeholder is back for the resume)
@@ -3756,14 +4226,14 @@ local function handle_confirmation_key(k)
     end
     if k.kind == "enter" then
         local sel = S.confirmation_sel
-        -- 6 options; [d] does not resolve the confirmation
-        local dec = { [1]="allow", [2]="session", [3]="always", [4]="details", [5]="deny", [6]="cancel" }
+        -- 5 options (palette-only)
+        local dec = { [1]="allow", [2]="session", [3]="always", [4]="deny", [5]="cancel" }
         resolve_confirmation(dec[sel] or "deny")
         return
     end
     if k.kind == "text" then
         local c = k.char
-        -- M8/R3: digit shortcuts 1..6 (plus legacy y/a/A/d/n)
+        -- palette-only T2: digit shortcuts 1..5 (plus legacy y/a/A/n)
         local digit = tonumber(c)
         if digit and CONFIRM_DIGITS[digit] then
             resolve_confirmation(CONFIRM_DIGITS[digit])
@@ -3771,7 +4241,6 @@ local function handle_confirmation_key(k)
         elseif c == "n" then resolve_confirmation("deny")
         elseif c == "a" then resolve_confirmation("session")
         elseif c == "A" then resolve_confirmation("always")
-        elseif c == "d" then resolve_confirmation("details")
         end
         return
     end
@@ -3808,11 +4277,9 @@ local function handle_confirmation_key(k)
                 for i, opt in ipairs(c.options) do
                     if text:find(opt:sub(1, 10), 1, true) then
                         S.confirmation_sel = i
-                        if i == 4 then resolve_confirmation("details")
-                        else
-                            local dec = { [1]="allow", [2]="session", [3]="always", [5]="deny" }
-                            resolve_confirmation(dec[i] or "deny")
-                        end
+                        local dec = { [1]="allow", [2]="session", [3]="always",
+                                      [4]="deny", [5]="cancel" }
+                        resolve_confirmation(dec[i] or "deny")
                         break
                     end
                 end
@@ -3821,103 +4288,49 @@ local function handle_confirmation_key(k)
     end
 end
 
-local function handle_overlay_key(k)
-    local ov = S.overlay
-    if k.kind == "esc" then
-        S.overlay = nil; S.overlay_data = nil
-        -- M7/D3b: after [d] details, S.confirmation was never cleared —
-        -- closing the overlay returns to the intact confirmation menu.
-        bump_transcript()
-        return
-    end
-    -- M9: "?" binding removed with the help overlay; plain q inside overlays
-    -- is no longer a close key (it was ambiguous while typing "q")
-    if k.kind == "text" and k.char == "q" and ov == "diff" then
-        S.overlay = nil; S.overlay_data = nil
-        bump_transcript()
-        return
-    end
-    -- Error overlay: Esc OR Enter dismisses. commit_input clears
-    -- S.error_banner, so after dismissal a new message can be sent.
-    if ov == "error" then
-        if k.kind == "enter" then
-            S.overlay = nil; S.overlay_data = nil
-            bump_transcript()
-        end
-        return
-    end
-    if ov == "resume" then
-        local d = S.overlay_data or {}
-        if k.kind == "special" then
-            if k.name == "up" then
-                d.sel = math.max(1, (d.sel or 1) - 1)
-                bump_transcript()
-            elseif k.name == "down" then
-                d.sel = math.min(#(d.items or {}), (d.sel or 1) + 1)
-                bump_transcript()
-            end
-        elseif k.kind == "enter" then
-            local it = (d.items or {})[d.sel or 1]
-            if it and it.id then
-                S.overlay = nil; S.overlay_data = nil
-                -- §6.8 /resume: actually load the picked session
-                local sid, messages = commands.resume(it.id)
-                if sid then
-                    S.session_id = sid
-                    if S.cfg then S.cfg._session_id = sid end
-                    -- pi-style-input-and-footer: a resumed session starts its
-                    -- counters over; the old session's totals are not this one's
-                    S.tokens_in, S.tokens_out = 0, 0
-                    -- the picked session replaces the visible transcript;
-                    -- appending would mix two conversations on one screen
-                    transcript.seed(messages or {})
-                    transcript.append(
-                        { role = "system", text = "↻ сессия " .. tostring(sid):sub(1, 8) .. " возобновлена" })
-                    bump_transcript()
-                end
-            end
-        end
-    elseif ov == "model" then
-        local d = S.overlay_data or {}
-        if k.kind == "special" then
-            if k.name == "up" then
-                d.sel = math.max(1, (d.sel or 1) - 1)
-                bump_transcript()
-            elseif k.name == "down" then
-                local n = #(d.items or {})
-                if n > 0 then d.sel = math.min(n, (d.sel or 1) + 1) end
-                bump_transcript()
-            end
-        elseif k.kind == "enter" then
-            local it = (d.items or {})[d.sel or 1]
-            if it then
-                local model_id = it.label:match("^model_set:(.*)$") or it.label
-                S.model_name = model_id
-                S.cfg.model = model_id
-                S.overlay = nil; S.overlay_data = nil
-                transcript.append(
-                    { role = "system", text = "→ модель: " .. model_id })
-                bump_transcript()
-            end
-        end
-    end
-end
-
-local function handle_key(k)
+handle_key = function(k)
     if not k then return end
 
     -- 5.4: one-shot toast — cleared by any keypress, no timer
     if S.toast then S.toast = nil end
 
-    if S.overlay then handle_overlay_key(k); return end
+    -- palette-only R5: secret entry owns the keyboard while active
+    -- (before confirmation/palette — S.login_secret is the mode flag).
+    if S.login_secret then
+        if k.kind == "esc" then
+            cancel_login()
+            bump_transcript()
+            return
+        end
+        if k.kind == "enter" then
+            submit_login_secret(S.login_secret.buf or "")
+            bump_transcript()
+            return
+        end
+        if k.kind == "backspace" then
+            local s = S.login_secret.buf or ""
+            S.login_secret.buf = s:sub(1, math.max(0, #s - 1))
+            return
+        end
+        if k.kind == "text" then
+            S.login_secret.buf = (S.login_secret.buf or "") .. (k.char or "")
+            return
+        end
+        if k.kind == "paste" then
+            S.login_secret.buf = (S.login_secret.buf or "") .. (k.text or "")
+            return
+        end
+        return -- swallow everything else while secret mode is open
+    end
+
     if S.confirmation then handle_confirmation_key(k); return end
     -- add-ask-tool: the question block owns the keyboard while it is open
     if S.ask then handle_ask_key(k); return end
 
-    -- M8/R3: Enter on an active error banner opens the full error overlay
-    if k.kind == "enter" and S.error_banner then
-        S.overlay = "error"
-        S.overlay_data = { text = S.error_banner }
+    -- palette-only R4: Enter/Esc dismiss the one-line error banner.
+    -- A later Enter submits normally; full text lives in the debug log.
+    if (k.kind == "enter" or k.kind == "esc") and S.error_banner then
+        S.error_banner = nil
         return
     end
 
@@ -3947,6 +4360,30 @@ local function handle_key(k)
                             palette_pick_skill(it)
                         elseif it.cmd then
                             execute_command(it.cmd)
+                        elseif S.palette_mode == "login" and it.label then
+                            S.palette_active = false
+                            S.palette_mode = "command"
+                            S.palette_items = {}
+                            S.palette_sel = 1
+                            S._in_login_palette = nil
+                            begin_login(it.label)
+                            bump_transcript()
+                        elseif S.palette_mode == "resume" and it.id then
+                            S.palette_active = false
+                            S.palette_mode = "command"
+                            S.palette_items = {}
+                            S.palette_sel = 1
+                            S._in_resume_palette = nil
+                            pick.resume(it.id)
+                            bump_transcript()
+                        elseif S.palette_mode == "model" and it.label then
+                            S.palette_active = false
+                            S.palette_mode = "command"
+                            S.palette_items = {}
+                            S.palette_sel = 1
+                            S._in_model_palette = nil
+                            pick.model(it.label)
+                            bump_transcript()
                         end
                     end
                     return
@@ -4033,6 +4470,97 @@ local function handle_key(k)
                 S.palette_items = {}
                 S.palette_sel = 1
                 S._in_copy_palette = nil
+                return
+            elseif k.kind == "special" then
+                local n = #S.palette_items
+                if k.name == "up" then
+                    S.palette_sel = math.max(1, S.palette_sel - 1)
+                elseif k.name == "down" and n > 0 then
+                    S.palette_sel = math.min(n, S.palette_sel + 1)
+                end
+                return
+            end
+            return
+        elseif S.palette_mode == "resume" then
+            -- palette-only R2: session list — Enter resumes, Esc closes;
+            -- no fall-through for text (list is modal while active).
+            local function close_resume_palette()
+                S.palette_active = false
+                S.palette_mode = "command"
+                S.palette_items = {}
+                S.palette_sel = 1
+                S._in_resume_palette = nil
+            end
+            if k.kind == "enter" then
+                local it = S.palette_items[S.palette_sel]
+                close_resume_palette()
+                if it and it.id then
+                    pick.resume(it.id)
+                end
+                return
+            elseif k.kind == "esc" then
+                close_resume_palette()
+                return
+            elseif k.kind == "special" then
+                local n = #S.palette_items
+                if k.name == "up" then
+                    S.palette_sel = math.max(1, S.palette_sel - 1)
+                elseif k.name == "down" and n > 0 then
+                    S.palette_sel = math.min(n, S.palette_sel + 1)
+                end
+                return
+            end
+            return
+        elseif S.palette_mode == "model" then
+            -- palette-only R2: model list — Enter applies, Esc closes;
+            -- no fall-through for text (list is modal while active).
+            local function close_model_palette()
+                S.palette_active = false
+                S.palette_mode = "command"
+                S.palette_items = {}
+                S.palette_sel = 1
+                S._in_model_palette = nil
+            end
+            if k.kind == "enter" then
+                local it = S.palette_items[S.palette_sel]
+                close_model_palette()
+                if it and it.label then
+                    pick.model(it.label)
+                end
+                return
+            elseif k.kind == "esc" then
+                close_model_palette()
+                return
+            elseif k.kind == "special" then
+                local n = #S.palette_items
+                if k.name == "up" then
+                    S.palette_sel = math.max(1, S.palette_sel - 1)
+                elseif k.name == "down" and n > 0 then
+                    S.palette_sel = math.min(n, S.palette_sel + 1)
+                end
+                return
+            end
+            return
+        elseif S.palette_mode == "login" then
+            -- add-provider-login: bare /login provider picker — same palette
+            -- mechanism as the slash menu / /copy; Enter starts the dialog.
+            local function close_login_palette()
+                S.palette_active = false
+                S.palette_mode = "command"
+                S.palette_items = {}
+                S.palette_sel = 1
+                S._in_login_palette = nil
+            end
+            if k.kind == "enter" then
+                local it = S.palette_items[S.palette_sel]
+                close_login_palette()
+                if it and it.label then
+                    begin_login(it.label)
+                    bump_transcript()
+                end
+                return
+            elseif k.kind == "esc" then
+                close_login_palette()
                 return
             elseif k.kind == "special" then
                 local n = #S.palette_items
@@ -4139,10 +4667,27 @@ local function handle_key(k)
         end
         S.cursor = #S.input
     elseif k.kind == "text" then input_insert(k.char)
-    elseif k.kind == "enter" then commit_input()
-    elseif k.kind == "newline" then input_insert("\n")
+    elseif k.kind == "enter" then
+        if S.busy and not S.confirmation and not S.ask then
+            enqueue_busy("steer")
+        else
+            commit_input()
+        end
+    elseif k.kind == "newline" then
+        if S.busy and k.alt and not S.confirmation and not S.ask then
+            enqueue_busy("followup")
+        else
+            input_insert("\n")
+        end
     elseif k.kind == "backspace" then input_backspace()
-    elseif k.kind == "esc" then input_clear()
+    elseif k.kind == "esc" then
+        if S.busy and ((S.steer_queue and #S.steer_queue > 0)
+            or (S.followup_queue and #S.followup_queue > 0)) then
+            turn.abort()
+            restore_queues()
+        else
+            input_clear()
+        end
     elseif k.kind == "ctrl" then handle_ctrl(k.code, k.shift)
     elseif k.kind == "special" then handle_special(k)
     end

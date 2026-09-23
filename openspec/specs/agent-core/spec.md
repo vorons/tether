@@ -8,7 +8,6 @@ calls through a confirmation policy, journal to the session, and
 manage context growth. The externally visible contract between the UI
 and the model is this module.
 
-
 ## Requirements
 
 ### Requirement: Agent turn installs the system prompt
@@ -27,12 +26,19 @@ The agent SHALL place a system-prompt message at the head of history before the 
 - **THEN** `history[1]` is a system message containing the tool description, the `AGENTS.md` content, and the two-skill index
 
 ### Requirement: User message is journaled
-The agent SHALL append the user text to history and SHALL write a
-`message` event (role user) to the session journal before the LLM call.
+The agent SHALL append the user text to history and SHALL WRITE a `message` event (role user) to the session journal before the LLM call. A steering message injected at a segment boundary and a follow-up message starting a new turn after settle SHALL be journaled the same way at the moment they enter history. Steering injection SHALL NOT re-add the original turn's user text and SHALL NOT insert a second system prompt.
 
 #### Scenario: Turn with user text
 - **WHEN** `agent.turn(cfg, key, "hi", ...)` runs
 - **THEN** the session journal contains a `{type:"message", role:"user", content:"hi"}` event
+
+#### Scenario: Steering message is journaled once
+- **WHEN** a steering message is injected after a tool step
+- **THEN** the journal has exactly one user `message` event for that text and history contains it once
+
+#### Scenario: No double system prompt on steer
+- **WHEN** steering injects a user message mid-turn
+- **THEN** history still has exactly one system message at index 1
 
 ### Requirement: Turn-level retry applies the retry policy
 Each provider attempt SHALL be one call to the streaming entry point,
@@ -383,19 +389,28 @@ long reply interrupted near its end is not thrown away.
 - **THEN** one assistant message with `Hello` is stored and journaled
 
 ### Requirement: Context compression at threshold
-Before each LLM call, the agent SHALL estimate history tokens
-(length-of-content divided by 4, ceiled). When the estimate exceeds
-`summarize_at × max_tokens` (defaults 0.7 × 32768), the agent SHALL
-compress: keep the system message and the last 4 messages (walking
-back over leading tool messages so a tool result is not orphaned
-from its call), replace the rest with a single system message whose
-content is the truncated (200 chars each) list of old messages, and
-emit `context_compressed`.
+Before each LLM call, the agent SHALL estimate history tokens (length-of-content divided by 4, ceiled). When the estimate exceeds `summarize_at × max_tokens` (defaults 0.7 × 32768) **or** exceeds `max_tokens − reserve_tokens` (default reserve 16384), whichever fires first, the agent SHALL compact: keep the system message and the last `keep_recent_messages` messages (default 4, walking back over leading tool messages so a tool result is not orphaned from its call), replace the rest with a single system message whose content is an LLM-generated structured summary (goal, constraints, progress, key decisions, next steps) obtained through the active provider in a one-shot request isolated from the main turn's retry budget. On summary-request failure or empty output the agent SHALL fall back to the previous truncation summary (200 chars per old message) and SHALL still emit `context_compressed`. The event SHALL carry `mode` (`"llm"` or `"truncation"`). Journal entries SHALL NOT be rewritten.
 
 #### Scenario: Threshold crossed
 - **WHEN** estimated tokens exceed 0.7 × max_tokens
 - **THEN** the history is rewritten as described and the UI receives
   a `context_compressed` event
+
+#### Scenario: Threshold crossed with successful summary
+- **WHEN** estimated tokens exceed 0.7 × max_tokens and the summary request returns text
+- **THEN** the history is rewritten with the LLM summary as a marked system message, the UI receives `context_compressed` with `mode = "llm"`, and the keep window preserves tool-call/result pairing
+
+#### Scenario: Threshold crossed with failed summary
+- **WHEN** estimated tokens exceed the threshold and the summary request fails
+- **THEN** history is rewritten with the truncation fallback, `context_compressed` carries `mode = "truncation"`, no `error` event is emitted for the summary failure, and the turn continues
+
+#### Scenario: Reserve threshold fires
+- **WHEN** estimated tokens exceed `max_tokens − reserve_tokens` while still at or below `summarize_at × max_tokens`
+- **THEN** compaction runs the same as when the fraction threshold fires
+
+#### Scenario: No compression between main attempts
+- **WHEN** an attempt fails retryably and the history is over the summarization threshold
+- **THEN** the retry re-sends the same conversation, uncompressed (the summary request is not inserted between attempts)
 
 ### Requirement: Iteration cap
 The agent turn loop SHALL run at most 50 LLM iterations; exceeding

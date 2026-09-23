@@ -232,4 +232,35 @@ M.parse_sse_line = parse_sse_line
 M.encode_messages = encode_messages
 M.tools_schema = common.tools_schema
 
+-- add-provider-login 3.3: terminal OAuth hooks. Endpoints are not invented —
+-- both authorize and token URLs must come from config (see design.md: paste
+-- remains the universal fallback when no OAuth app is registered).
+function M.login_flow(cfg)
+    local p = (type(cfg) == "table" and type(cfg.providers) == "table"
+        and type(cfg.providers.openai) == "table") and cfg.providers.openai or {}
+    local cid = p.oauth_client_id
+    if type(cid) ~= "string" or cid == "" then return nil end
+    if type(p.oauth_token_url) ~= "string" or p.oauth_token_url == "" then
+        return nil
+    end
+    if type(p.oauth_authorize_url) ~= "string" or p.oauth_authorize_url == "" then
+        return nil
+    end
+    local flow = {
+        provider = "openai",
+        client_id = cid,
+        client_secret = p.oauth_client_secret,
+        redirect_uri = p.oauth_redirect_uri or "http://localhost:7/",
+        scope = p.oauth_scope,
+        token_url = p.oauth_token_url,
+    }
+    flow.authorize_url = common.oauth_authorize_url(p.oauth_authorize_url, flow)
+    if not flow.authorize_url then return nil end
+    return flow
+end
+
+function M.token_exchange(post_json, flow, code, now)
+    return common.oauth_token_exchange(post_json, flow, code, now)
+end
+
 return M

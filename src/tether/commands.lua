@@ -54,14 +54,26 @@ function M.new(workspace, model)
     return sid
 end
 
--- Compress the agent history in place; returns the summary text (possibly ""),
--- or nil when compression is unavailable. Token estimation stays in ui.
-function M.compact()
+-- Force-compress the agent history (threshold bypassed). Optional free-text
+-- `focus` is passed to the summary request. Returns (summary_text, mode) or
+-- nil when compaction is unavailable. mode: "llm" | "truncation" | "noop".
+function M.compact(cfg, api_key, focus)
+    if agent and agent.compact_history and agent.get_history then
+        local h = agent.get_history()
+        local compressed, summary, mode =
+            agent.compact_history(h, cfg, api_key, focus, true)
+        if mode ~= "noop" then
+            for i = #h, 1, -1 do table.remove(h) end
+            for _, m in ipairs(compressed) do h[#h + 1] = m end
+        end
+        if mode == "noop" then return "", mode end
+        return summary, mode
+    end
     if not (agent and agent.compress_history and agent.get_history) then
         return nil
     end
     local h = agent.get_history()
-    local compressed = agent.compress_history(h)
+    local compressed = agent.compress_history(h, cfg)
     for i = #h, 1, -1 do table.remove(h) end
     for _, m in ipairs(compressed) do h[#h + 1] = m end
     local summary = ""
@@ -70,7 +82,7 @@ function M.compact()
             summary = tostring(m.content)
         end
     end
-    return summary
+    return summary, "truncation"
 end
 
 -- Live model list with the provider's static fallback.
