@@ -28,7 +28,8 @@ function M.resume(id, workspace)
             elseif msg.role == "assistant" then
                 if msg.tool_calls then
                     if agent.add_assistant then
-                        agent.add_assistant({ tool_calls = msg.tool_calls })
+                        agent.add_assistant({ tool_calls = msg.tool_calls,
+                            text = msg.content or "" })
                     end
                 else
                     if agent.add_assistant then agent.add_assistant(msg.content) end
@@ -192,11 +193,14 @@ function M.list_models(cfg, api_key)
     -- from the cached reason instead of hammering the endpoint.
     local attempted = type(entry) == "table" and tonumber(entry.checked_at)
         and (now - entry.checked_at) < MODELS_CACHE_TTL
-    if #display == 0 and attempted then
+    if attempted then
         local e = (type(entry) == "table" and entry.err) or nil
         if e == nil and (not api_key or api_key == "") then
             e = keyless_err(cfg, provider)
         end
+        -- Audit: the cooldown applies regardless of what is on display.
+        -- Gating on #display == 0 let native providers (non-empty static
+        -- list) re-hit the endpoint on every /model open inside the TTL.
         return display, nil, e
     end
     if not api_key or api_key == "" then
@@ -262,6 +266,9 @@ function M.list_models(cfg, api_key)
         if #display == 0 then
             return display, nil, ferr
         end
+        -- non-empty display (static fallback): the failure reason still
+        -- belongs to the cache entry so the cooldown diagnostics can use it.
+        return display, nil, ferr
     end
     return display
 end

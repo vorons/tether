@@ -384,17 +384,31 @@ function M.load(path, home)
         end
     end
     -- config-file-persist-settings: one-time model.lua migration. Applies
-    -- only when the user file carries no non-default provider/model (a
-    -- bootstrapped file always has the keys, so explicitness means
-    -- differing from defaults); writes through to config.lua and removes
-    -- the side file after a verified write. The migrated values re-merge
-    -- below as explicit values, so provider resolution treats them exactly
-    -- like hand-written ones.
+    -- only when the user file carries no explicit provider/model: absent
+    -- keys count, a hand-written value (even equal to the default) is
+    -- explicit and wins over the side file (spec: Hand-written default is
+    -- explicit). Writes through to config.lua and removes the side file
+    -- after a verified write. The migrated values re-merge below as
+    -- explicit values, so provider resolution treats them exactly like
+    -- hand-written ones.
     do
         local eu0 = user_tbl or {}
-        local def0 = default_config()
-        if (eu0.provider == nil or eu0.provider == def0.provider)
-            and (eu0.model == nil or eu0.model == def0.model) then
+        -- NB: bootstrap writes real `provider`/`model` key lines, but load()
+        -- has already deep-merged them into cfg — they are NOT in user_tbl's
+        -- own fields. user_tbl reflects only what the user actually wrote.
+        -- The bootstrap emits them as literal lines, so its user_tbl carries
+        -- them too; distinguish "file came from the bootstrap" by the header
+        -- comment rather than the field values.
+        local is_bootstrap_file = false
+        if user_tbl then
+            local fhdr = io.open(cfgpath, "r")
+            if fhdr then
+                local head = fhdr:read(120) or ""
+                fhdr:close()
+                is_bootstrap_file = head:find("created with defaults", 1, true) ~= nil
+            end
+        end
+        if is_bootstrap_file or (eu0.provider == nil and eu0.model == nil) then
             local sdir = home or os.getenv("HOME") or "."
             local spath = sdir .. "/.tether/model.lua"
             local schunk = loadfile(spath)
@@ -553,6 +567,9 @@ function M.api_key(cfg)
         end
     end
     -- Vertex ambient ADC: mint an access token when project+location exist.
+    -- Both ADC forms (authorized_user refresh-token and service_account JWT)
+    -- mint through _post_json; resolve_adc_token covers the service_account
+    -- form that used to be discarded (audit).
     if provider == "google-vertex" and auth_mod and auth_mod.read_adc
         and auth_mod._post_json then
         local penv = cfg.provider_env or {}
@@ -562,11 +579,17 @@ function M.api_key(cfg)
         if project and project ~= "" and location and location ~= "" then
             local adc = auth_mod.read_adc()
             if adc then
-                local entry = { kind = "oauth", provider = provider,
-                    refresh_token = adc.refresh_token,
-                    client_id = adc.client_id, client_secret = adc.client_secret,
-                    refresh_url = "https://oauth2.googleapis.com/token" }
-                local tok = auth_mod.resolve_entry(entry, auth_mod._post_json, os.time())
+                local tok = nil
+                if adc.service_account then
+                    tok = auth_mod.resolve_adc_token
+                        and auth_mod.resolve_adc_token(adc, auth_mod._post_json, os.time())
+                else
+                    local entry = { kind = "oauth", provider = provider,
+                        refresh_token = adc.refresh_token,
+                        client_id = adc.client_id, client_secret = adc.client_secret,
+                        refresh_url = "https://oauth2.googleapis.com/token" }
+                    tok = auth_mod.resolve_entry(entry, auth_mod._post_json, os.time())
+                end
                 if type(tok) == "string" and tok ~= "" then
                     cfg._auth_style = "bearer"
                     return tok, "bearer"
@@ -585,6 +608,21 @@ function M.api_key(cfg)
         if type(cfg.providers) == "table" and type(cfg.providers[p]) == "table"
             and cfg.providers[p].api_key_env then
             env_name = cfg.providers[p].api_key_env
+        end
+    end
+    -- Compound-credential providers (Cloudflare, Bedrock, Vertex): the key
+    -- may come from the stored auth.json `env` object or the process env,
+    -- both folded into cfg.provider_env by load()/for_provider. api_key_env
+    -- os.getenv below cannot see the stored copy (audit: partial auth header
+    -- — cf-aig-authorization: Bearer <empty> with ids filled).
+    local penv = (type(cfg) == "table" and type(cfg.provider_env) == "table")
+        and cfg.provider_env or nil
+    if penv and provider == "cloudflare-workers-ai"
+        or provider == "cloudflare-ai-gateway" then
+        local k = penv.CLOUDFLARE_API_KEY
+        if type(k) == "string" and k ~= "" then
+            cfg._auth_style = nil
+            return k
         end
     end
     cfg._auth_style = nil

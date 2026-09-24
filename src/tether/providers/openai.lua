@@ -93,6 +93,78 @@ local function parse_json_str(s)
     return next(obj) and obj or nil
 end
 
+-- The [...] array following "tool_calls", via a string-aware scan: the
+-- envelope's own "id" (chatcmpl-*) must never match the id patterns below
+-- (it keyed every start/delta under the wrong id), and brackets inside
+-- argument strings must not end the segment early. A chunk split mid-string
+-- yields the payload rest, still parseable by the unterminated fallbacks.
+local function tool_calls_segment(payload)
+    local _, e = payload:find('"tool_calls"%s*:%s*%[', 1)
+    if not e then return nil end
+    local depth, instr, esc = 1, false, false
+    local i = e + 1
+    while i <= #payload do
+        local c = payload:sub(i, i)
+        if instr then
+            if esc then esc = false
+            elseif c == "\\" then esc = true
+            elseif c == '"' then instr = false end
+        elseif c == '"' then instr = true
+        elseif c == "[" or c == "{" then depth = depth + 1
+        elseif c == "]" or c == "}" then
+            depth = depth - 1
+            if depth == 0 then return payload:sub(e, i) end
+        end
+        i = i + 1
+    end
+    return payload:sub(e)
+end
+
+-- Top-level {...} elements of a tool_calls array segment, order-free.
+-- A chunk split mid-element yields a partial tail element (still parsed by
+-- the unterminated fallback); brackets inside strings never confuse it.
+local function tc_elements(seg)
+    local els = {}
+    local i = 2 -- seg starts with '['
+    while i <= #seg do
+        if seg:sub(i, i) == "{" then
+            local depth, instr, esc, j = 1, false, false, i + 1
+            while j <= #seg do
+                local d = seg:sub(j, j)
+                if instr then
+                    if esc then esc = false
+                    elseif d == "\\" then esc = true
+                    elseif d == '"' then instr = false end
+                elseif d == '"' then instr = true
+                elseif d == "{" then depth = depth + 1
+                elseif d == "}" then
+                    depth = depth - 1
+                    if depth == 0 then break end
+                end
+                j = j + 1
+            end
+            els[#els + 1] = seg:sub(i, j)
+            i = j + 1
+        else
+            i = i + 1
+        end
+    end
+    return els
+end
+
+-- Cut s at the first unescaped `"` (or return it whole): an unterminated
+-- fragment's chunk simply ends mid-string.
+local function cut_unescaped(s)
+    local i = 1
+    while i <= #s do
+        local c = s:sub(i, i)
+        if c == "\\" then i = i + 2
+        elseif c == '"' then return s:sub(1, i - 1)
+        else i = i + 1 end
+    end
+    return s
+end
+
 -- Extract the choices[0].delta / finish_reason from an SSE chunk without a full
 -- JSON parser: locate "choices" and scan the first array element heuristically.
 local function parse_sse_line(line, on_event)
@@ -128,18 +200,47 @@ local function parse_sse_line(line, on_event)
     -- before the closing quote). The classic '(\\.|[^"\\])*' does NOT work in Lua:
     -- patterns don't backtrack into alternation+star, so escaped quotes fail.
     if payload:find('"tool_calls"', 1, true) then
-        for id, name in payload:gmatch('"id"[%s]*:[%s]*"([%w_%-]+)"[^%]]-"function"[%s]*:[%s]*%{[^}]-"name"[%s]*:[%s]*"([%w_.%-]+)"') do
-            on_event({ type = "tool_call_start", name = name, id = id })
-        end
-        -- Arguments are emitted RAW (still JSON-escaped): a chunk boundary can
-        -- split an escape sequence (\ at the end of one chunk, " at the start
-        -- of the next), so unescaping happens exactly once in agent.parse_args
-        -- over the full assembled string.
-        for id, args in payload:gmatch('"id"[%s]*:[%s]*"([%w_%-]+)"[^%]]-"function"[%s]*:[%s]*%{.-"arguments"[%s]*:[%s]*"(.-[^\\])"') do
-            on_event({ type = "tool_call_delta", id = id, arguments = args })
-        end
-        for idx, args in payload:gmatch('"index"[%s]*:[%s]*(%d+)[%s]*,[%s]*"function"[%s]*:[%s]*%{[^}]-"arguments"[%s]*:[%s]*"(.-[^\\])"') do
-            on_event({ type = "tool_call_delta", index = tonumber(idx), arguments = args })
+        local seg = tool_calls_segment(payload)
+        if seg then
+            -- Per-element scan: gateways order fields freely (Agnes sends
+            -- {"function":{...},"type":...,"index":N} with id only in the
+            -- first chunk, or omits id/name in continuations). Field order
+            -- between elements must never matter.
+            for _, el in ipairs(tc_elements(seg)) do
+                local idx = el:match('"index"%s*:%s*(%d+)')
+                if idx then idx = tonumber(idx) end
+                local id = el:match('"id"%s*:%s*"([%w_%-]+)"')
+                local name = el:match('"name"%s*:%s*"([%w_.%-]+)"')
+                if name and id then
+                    on_event({ type = "tool_call_start", name = name, id = id })
+                end
+                -- Arguments are emitted RAW (still JSON-escaped): unescaping
+                -- happens exactly once in agent.parse_args over the full
+                -- assembled string (a chunk boundary can split an escape).
+                local args = nil
+                local _, ae = el:find('"arguments"%s*:%s*"', 1)
+                if ae then
+                    if el:sub(ae + 1, ae + 1) == '"' then
+                        -- empty value (""): a lazy (.-[^\\])" pattern would
+                        -- eat the closing quote as content and match into
+                        -- the next field (","), corrupting the echo.
+                        args = ""
+                    else
+                        args = el:match('^(.-[^\\])"', ae + 1)
+                        if args == nil then
+                            -- unterminated: the chunk split mid-string, no
+                            -- closing quote here (also covers a value ending
+                            -- in an escaped backslash, where the terminated
+                            -- pattern cannot match).
+                            args = cut_unescaped(el:sub(ae + 1))
+                        end
+                    end
+                end
+                if args ~= nil and args ~= "" then
+                    on_event({ type = "tool_call_delta", id = id,
+                               index = idx, arguments = args })
+                end
+            end
         end
     end
 

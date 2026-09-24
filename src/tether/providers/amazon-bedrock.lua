@@ -142,12 +142,20 @@ local function signed_lines(creds, region, method, url, body, has_ct)
     return lines
 end
 
+local function creds_of(ctx)
+    local a = auth()
+    if not (a and a.aws_creds) then return nil end
+    ctx = (type(ctx) == "table" and ctx) or {}
+    -- stored-profile merge: cfg.provider_env carries auth.json `env` keys
+    -- (AWS_PROFILE and friends) alongside the process env (audit fix).
+    return a.aws_creds(false, ctx.provider_env)
+end
+
 function M.header_lines(api_key, ctx)
     if api_key and api_key ~= "" then
         return { "Authorization: Bearer " .. api_key }
     end
-    local a = auth()
-    local creds = a and a.aws_creds and a.aws_creds()
+    local creds = creds_of(ctx)
     if creds and creds.mode == "bearer" then
         return { "Authorization: Bearer " .. creds.token }
     end
@@ -164,8 +172,7 @@ end
 
 function M.preflight(cfg, api_key, _url, _name)
     if api_key and api_key ~= "" then return nil end
-    local a = auth()
-    local creds = a and a.aws_creds and a.aws_creds()
+    local creds = creds_of({ cfg = cfg })
     if creds then return nil end
     return "amazon-bedrock: no AWS credentials "
         .. "(AWS_BEARER_TOKEN_BEDROCK, AWS_PROFILE, or access keys)"
@@ -301,8 +308,7 @@ function M.models_headers(api_key, ctx)
         return { "Authorization: Bearer " .. api_key }
     end
     -- Sign the GET with SigV4 (no content-type in the signature).
-    local a = auth()
-    local creds = a and a.aws_creds and a.aws_creds()
+    local creds = creds_of(ctx)
     if not (creds and creds.mode == "sigv4") then return {} end
     ctx = (type(ctx) == "table" and ctx) or {}
     local cfg = ctx.cfg

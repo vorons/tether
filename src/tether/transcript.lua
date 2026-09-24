@@ -12,6 +12,13 @@ local entries = {}
 local ver = 0
 local known_count = 0
 
+-- Rows dropped by the retry branch (below): a failed attempt's partial
+-- output is hidden while the turn continues, but when the turn ends with
+-- no replacement (terminal error, abort) the text is genuine partial
+-- content and is restored instead of staying lost. Fresh deltas supersede
+-- the stash; a new turn or a reset discards it.
+local dropped_stash = {}
+
 -- Virtualized transcript model: per-entry row caches plus a prefix-sum height.
 local index_w = nil
 local index_start = {}
@@ -107,6 +114,7 @@ end
 -- The whole list was replaced (/, /new, /resume, /clear).
 function M.reset(list)
     entries = list or {}
+    dropped_stash = {}
     known_count = 0
     index_dirty_from = 1
     visible_lo, visible_hi = 0, -1
@@ -117,7 +125,8 @@ function M.reset(list)
 end
 
 -- Seed from display rows (already {role, text}) or agent-history messages
--- ({role, content}); only user text and assistant text are shown.
+-- ({role, content}). User text, assistant text (including the text riding
+-- alongside tool_calls) and tool rows are shown; nothing else survives.
 function M.seed(messages)
     local out = {}
     for _, m in ipairs(messages or {}) do
@@ -127,6 +136,19 @@ function M.seed(messages)
             out[#out + 1] = { role = "user", text = tostring(m.content or "") }
         elseif m.role == "assistant" and type(m.content) == "string" then
             out[#out + 1] = { role = "assistant", text = m.content }
+        elseif m.role == "assistant" and type(m.content) == "table"
+            and type(m.content.text) == "string"
+            and m.content.text:match("%S") then
+            out[#out + 1] = { role = "assistant", text = m.content.text }
+        elseif m.role == "tool" then
+            local content = tostring(m.content or "")
+            local summary = m.summary
+            if (summary == nil or summary == "") and content ~= "" then
+                summary = content:match("^[^\n]*") or ""
+            end
+            out[#out + 1] = { role = "tool", id = m.tool_call_id,
+                name = m.name, status = m.error and "error" or "ok",
+                summary = summary or "", body = content }
         end
     end
     M.reset(out)
@@ -135,6 +157,7 @@ end
 
 function M.clear()
     entries = {}
+    dropped_stash = {}
     ver = 0
     known_count = 0
     index_w = nil
@@ -173,7 +196,22 @@ end
 -- continuations (turn.continue) keep their tags. No version bumps:
 -- attempt tags are never rendered, only matched by the retry drop.
 function M.new_turn()
+    dropped_stash = {}
     for _, e in ipairs(entries) do e.attempt = nil end
+end
+
+-- Re-append stashed rows dropped by a failed attempt. They become permanent
+-- transcript content (attempt tags cleared), in their original order.
+local function restore_dropped()
+    if #dropped_stash == 0 then return false end
+    for _, e in ipairs(dropped_stash) do
+        e.attempt = nil
+        entries[#entries + 1] = e
+    end
+    dropped_stash = {}
+    M.invalidate()
+    M.bump()
+    return true
 end
 
 -- Row mutations for one canonical agent event. Mode flags, tokens,
@@ -185,7 +223,9 @@ function M.handle(ev)
     if t == "text_delta" then
         -- A delta belongs to the attempt that produced it: a retried attempt's
         -- rows have already been dropped, and a fresh attempt never appends to
-        -- the previous attempt's row.
+        -- the previous attempt's row. Fresh output also supersedes anything
+        -- stashed by an earlier drop.
+        dropped_stash = {}
         local last = entries[#entries]
         local stale = ev.attempt and last and last.attempt and last.attempt ~= ev.attempt
         if not last or last.role ~= "assistant" or stale then
@@ -196,6 +236,7 @@ function M.handle(ev)
         M.touch(last)
         return true
     elseif t == "reasoning_delta" then
+        dropped_stash = {}
         local last = entries[#entries]
         local stale = ev.attempt and last and last.attempt and last.attempt ~= ev.attempt
         if not last or last.role ~= "thinking" or stale then
@@ -236,6 +277,9 @@ function M.handle(ev)
         M.touch(target)
         return false
     elseif t == "aborted" then
+        -- the turn ends with no replacement: bring back partial output
+        -- dropped by earlier retries before marking pending tools.
+        restore_dropped()
         for _, e in ipairs(entries) do
             if e.role == "tool" and e.status == "pending" then
                 e.projection = nil
@@ -247,12 +291,13 @@ function M.handle(ev)
         return true
     elseif t == "context_compressed" then
         -- add-llm-compaction: llm mode shows the generated body when present;
-        -- truncation / missing mode keeps the stable marker (ASCII-clean).
-        local text = "── summary ──"
+        -- truncation / missing mode keeps the stable marker, styled like the
+        -- turn separators (dim rule across the width, not a short caption).
         if ev.mode == "llm" and type(ev.summary) == "string" and ev.summary ~= "" then
-            text = ev.summary
+            M.append({ role = "system", text = ev.summary })
+        else
+            M.append({ role = "separator", text = "summary" })
         end
-        M.append({ role = "system", text = text })
         M.bump()
         return false
     elseif t == "retry" then
@@ -265,20 +310,35 @@ function M.handle(ev)
         local failed = ev.attempt
         local removed = false
         if failed then
+            dropped_stash = {}
             for i = #entries, 1, -1 do
                 if entries[i].attempt == failed then
-                    table.remove(entries, i)
+                    table.insert(dropped_stash, 1, table.remove(entries, i))
                     removed = true
                 end
             end
         end
         if removed then M.invalidate() end
+        -- detail is the provider's own error text (truncated to one
+        -- line): without it every 400 prints a useless "bad request".
+        local detail = ""
+        if type(ev.detail) == "string" and ev.detail ~= "" then
+            detail = ev.detail:gsub("%s+", " ")
+            if #detail > 180 then detail = detail:sub(1, 180) .. "…" end
+            detail = " — " .. detail
+        end
         M.append({
             role = "system",
-            text = string.format("↻ повтор %d (ждём %.1fs): %s",
-                ev.attempt or 1, ev.delay or 0.5, ev.reason or ""),
+            text = string.format("↻ повтор %d (ждём %.1fs): %s%s",
+                ev.attempt or 1, ev.delay or 0.5, ev.reason or "", detail),
         })
         M.bump()
+        return false
+    elseif t == "error" then
+        -- terminal failure: the turn ends with no replacement, so partial
+        -- output dropped by earlier retries comes back instead of staying
+        -- lost (only user rows and tool rows would remain otherwise).
+        restore_dropped()
         return false
     elseif t == "continuation" then
         M.append({

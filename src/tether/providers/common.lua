@@ -3,7 +3,15 @@
 local M = {}
 
 function M.jesc(s)
-    s = s:gsub("\\", "\\\\"):gsub('"', '\\"'):gsub("\n", "\\n"):gsub("\r", "\\r"):gsub("\t", "\\t")
+    s = s:gsub("\\", "\\\\"):gsub('"', '\\"')
+    -- every other C0 control left raw is invalid JSON: tool outputs
+    -- routinely carry ESC (ANSI colors), \b (progress), \0 (binary reads).
+    -- A single 400 "bad request" after any tool call traced exactly to this.
+    local short = { ["\n"] = "\\n", ["\r"] = "\\r", ["\t"] = "\\t",
+                    ["\b"] = "\\b", ["\f"] = "\\f" }
+    s = s:gsub("[%z\1-\31]", function(c)
+        return short[c] or string.format("\\u%04x", c:byte())
+    end)
     return s
 end
 
@@ -228,6 +236,41 @@ function M.url_decode(s)
     return (tostring(s):gsub("%%(%x%x)", function(h)
         return string.char(tonumber(h, 16))
     end))
+end
+
+-- base64url (no padding) over raw bytes. Used by the service-account ADC
+-- JWT (auth.resolve_adc_token); kept here so the crypto helpers stay together.
+function M.b64url_encode(s)
+    local alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+    local out = {}
+    for i = 1, #s, 3 do
+        local a, b, c = s:byte(i, i + 2)
+        local n = a * 65536 + (b or 0) * 256 + (c or 0)
+        out[#out + 1] = alphabet:sub(math.floor(n / 262144) % 64 + 1,
+                                     math.floor(n / 262144) % 64 + 1)
+        out[#out + 1] = alphabet:sub(math.floor(n / 4096) % 64 + 1,
+                                     math.floor(n / 4096) % 64 + 1)
+        if b then
+            out[#out + 1] = alphabet:sub(math.floor(n / 64) % 64 + 1,
+                                         math.floor(n / 64) % 64 + 1)
+        end
+        if c then
+            out[#out + 1] = alphabet:sub(n % 64 + 1, n % 64 + 1)
+        end
+    end
+    return table.concat(out)
+end
+
+-- RS256 signature (PKCS#1 v1.5 over SHA-256) with a PEM private key. The C
+-- host (mbedtls-backed tether.rs256_sign) does the number theory. Returns the
+-- base64url signature or nil when no backend is available.
+function M.rs256_sign(pem_private_key, msg)
+    if rawget(_G, "tether") ~= nil and rawget(_G, "tether").rs256_sign then
+        local ok, sig = pcall(rawget(_G, "tether").rs256_sign,
+            pem_private_key, msg)
+        if ok and type(sig) == "string" and sig ~= "" then return sig end
+    end
+    return nil
 end
 
 -- Standard OAuth authorization-code exchange body shared by provider adapters

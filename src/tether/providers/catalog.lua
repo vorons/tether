@@ -169,6 +169,9 @@ function M.login_flow(cfg, id)
     local cid = p.oauth_client_id
     if type(cid) ~= "string" or cid == "" then return nil end
     if type(p.oauth_device_url) == "string" and p.oauth_device_url ~= "" then
+        -- provider-auth: a full device flow needs the token endpoint too
+        -- (the TUI polls it while the user authorizes). Without it the flow
+        -- degrades to device-URL + paste-token (the pre-device-flow path).
         return {
             provider = id,
             device = true,
@@ -176,6 +179,7 @@ function M.login_flow(cfg, id)
             scope = p.oauth_scope,
             authorize_url = p.oauth_device_url,
             device_url = p.oauth_device_url,
+            device_token_url = p.oauth_token_url,
         }
     end
     if type(p.oauth_token_url) ~= "string" or p.oauth_token_url == "" then

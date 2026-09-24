@@ -134,19 +134,25 @@ local function list_session_files(workspace)
         local last = events[#events]
         if last and last.meta and last.meta.workspace then ws = last.meta.workspace end
         if ws == workspace then
-            local first_line = ""
+            local first_line, has_message = "", false
             for _, ev in ipairs(events) do
-                if ev.type == "message" and ev.role == "user" and ev.content then
-                    first_line = ev.content
-                    break
+                if ev.type == "message" then
+                    has_message = true
+                    if first_line == "" and ev.role == "user" and ev.content then
+                        first_line = ev.content
+                    end
                 end
             end
-            files[#files + 1] = {
-                id = id,
-                mtime = rank,
-                first_line = first_line,
-                ts = first and first.ts or "",
-            }
+            -- resuming an empty session restores nothing: a run that never
+            -- produced a message only buries the real latest session.
+            if has_message then
+                files[#files + 1] = {
+                    id = id,
+                    mtime = rank,
+                    first_line = first_line,
+                    ts = first and first.ts or "",
+                }
+            end
         end
     end
     return files
@@ -194,15 +200,23 @@ function M.resume(id)
     for _, ev in ipairs(events) do
         if ev.type == "message" then
             if ev.role == "assistant" and ev.tool_calls then
-                messages[#messages + 1] = { role = "assistant", tool_calls = ev.tool_calls }
+                messages[#messages + 1] = { role = "assistant",
+                    tool_calls = ev.tool_calls, content = ev.content }
             else
                 messages[#messages + 1] = { role = ev.role, content = ev.content }
             end
         elseif ev.type == "tool_result" then
+            local res = (type(ev.result) == "table" and ev.result) or {}
             messages[#messages + 1] = {
                 role = "tool",
                 tool_call_id = ev.tool_call_id,
-                content = ev.result and ev.result.summary or (ev.content or ""),
+                name = ev.name,
+                summary = res.summary,
+                error = res.error,
+                -- full body first (model context), then error, then summary;
+                -- old journals carry summary only and degrade gracefully.
+                content = res.body or res.error or res.summary
+                    or ev.content or "",
             }
         end
     end

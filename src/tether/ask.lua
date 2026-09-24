@@ -74,6 +74,17 @@ function M.normalize(args)
     local raw = args
     if type(raw) == "table" and type(raw.questions) == "table" then
         raw = raw.questions
+    elseif type(raw) == "table" and type(raw.questions) == "string" then
+        -- the model double-encoded the array as a JSON string instead of
+        -- sending an array ("questions":"[{...}]"): decode one layer.
+        local ok, decoded = pcall(common.json_decode, raw.questions)
+        if ok and type(decoded) == "table" then raw = decoded end
+    elseif type(raw) == "string" then
+        local ok, decoded = pcall(common.json_decode, raw)
+        if ok and type(decoded) == "table" then raw = decoded end
+    end
+    if type(raw) == "table" and type(raw.questions) == "table" then
+        raw = raw.questions
     end
     if type(raw) ~= "table" then return {} end
 

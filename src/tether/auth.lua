@@ -228,8 +228,12 @@ function M.provider_env(provider, home)
     return out
 end
 
--- Read Google Application Default Credentials (user refresh-token form).
--- Returns { refresh_token, client_id, client_secret } or nil.
+-- Read Google Application Default Credentials. Two forms (audit: the
+-- service_account form — the typical GOOGLE_APPLICATION_CREDENTIALS case —
+-- used to be discarded):
+--   authorized_user  -> { refresh_token, client_id, client_secret }
+--   service_account  -> { service_account = < decoded json > } (token minted
+--                        lazily by M.resolve_adc_token via _post_json)
 function M.read_adc()
     local p = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
     if not (p and p ~= "") then
@@ -241,10 +245,49 @@ function M.read_adc()
     f:close()
     local ok, t = pcall(common.json_decode, data or "")
     if not ok or type(t) ~= "table" then return nil end
-    if t.type ~= "authorized_user" then return nil end
-    if type(t.refresh_token) ~= "string" or t.refresh_token == "" then return nil end
-    return { refresh_token = t.refresh_token,
-             client_id = t.client_id, client_secret = t.client_secret }
+    if t.type == "authorized_user" then
+        if type(t.refresh_token) ~= "string" or t.refresh_token == "" then return nil end
+        return { refresh_token = t.refresh_token,
+                 client_id = t.client_id, client_secret = t.client_secret }
+    end
+    if t.type == "service_account" then
+        if type(t.client_email) ~= "string" or t.client_email == ""
+            or type(t.private_key) ~= "string" or t.private_key == "" then
+            return nil
+        end
+        return { service_account = t }
+    end
+    return nil
+end
+
+-- Mint an access token from a service-account ADC (JWT bearer grant,
+-- RS256 signed with the file's private key). post(url, form_table) -> body
+-- string | nil, err (same seam as _post_json). Returns token string or nil.
+function M.resolve_adc_token(adc, post, now)
+    if type(adc) ~= "table" or type(adc.service_account) ~= "table" then return nil end
+    if type(post) ~= "function" then return nil end
+    local sa = adc.service_account
+    local header = common.b64url_encode(common.json_encode(
+        { alg = "RS256", typ = "JWT" }))
+    local now = now or os.time()
+    local claims = common.json_encode({
+        iss = sa.client_email,
+        scope = "https://www.googleapis.com/auth/cloud-platform",
+        aud = "https://oauth2.googleapis.com/token",
+        iat = now,
+        exp = now + 3600,
+    })
+    local sig = common.rs256_sign(sa.private_key, header .. "." .. claims)
+    if not sig then return nil end
+    local res = post("https://oauth2.googleapis.com/token", {
+        grant_type = "urn:ietf:params:oauth:grant-type:jwt-bearer",
+        assertion = header .. "." .. claims .. "." .. sig,
+    })
+    if type(res) == "table" and type(res.access_token) == "string"
+        and res.access_token ~= "" then
+        return res.access_token
+    end
+    return nil
 end
 
 -- AWS credential chain for Bedrock (pi bedrockAuth resolve order):
@@ -287,23 +330,31 @@ local function http_collect(method, url, headers, body)
     return table.concat(lines, "\n")
 end
 
-function M.aws_creds(no_network)
-    local bearer = os.getenv("AWS_BEARER_TOKEN_BEDROCK")
+function M.aws_creds(no_network, penv)
+    local function penv_get(k)
+        local v = (type(penv) == "table" and penv[k]) or nil
+        if v ~= nil and v ~= "" then return v end
+        return os.getenv(k)
+    end
+    local bearer = penv_get("AWS_BEARER_TOKEN_BEDROCK")
     if bearer and bearer ~= "" then
         return { mode = "bearer", token = bearer }
     end
-    local key, secret = os.getenv("AWS_ACCESS_KEY_ID"), os.getenv("AWS_SECRET_ACCESS_KEY")
+    local key, secret = penv_get("AWS_ACCESS_KEY_ID"), penv_get("AWS_SECRET_ACCESS_KEY")
     if key and key ~= "" and secret and secret ~= "" then
         return { mode = "sigv4", key = key, secret = secret,
-                 session = os.getenv("AWS_SESSION_TOKEN") }
+                 session = penv_get("AWS_SESSION_TOKEN") }
     end
-    local profile = os.getenv("AWS_PROFILE")
+    -- stored-profile choice: a saved AWS_PROFILE (auth.json env object)
+    -- selects the credentials file profile even when the process env is bare
+    -- (audit: stored-profile was dead — os.getenv only).
+    local profile = penv_get("AWS_PROFILE")
     if profile and profile ~= "" then
         local c = read_aws_profile(profile) or read_aws_profile("default")
         if c then
             return { mode = "sigv4", key = c.key, secret = c.secret, session = c.session }
         end
-    elseif os.getenv("AWS_PROFILE") == nil then
+    elseif profile == nil then
         -- no explicit profile: default profile still applies when present
         local c = read_aws_profile("default")
         if c then
@@ -356,6 +407,75 @@ function M.aws_creds(no_network)
         end
     end
     return nil
+end
+
+-- OAuth device flow (R-AUTH-3): request a device/user code pair from the
+-- provider's device endpoint, then poll the token endpoint until the user
+-- authorizes. Both requests ride the same form-urlencoded POST seam as the
+-- refresh/exchange paths. device_request returns the full grant response
+-- (device_code, user_code, verification_uri, interval) or nil, err.
+function M.device_request(device_url, client_id, scope)
+    if type(device_url) ~= "string" or device_url == "" then
+        return nil, "bad device url"
+    end
+    if type(client_id) ~= "string" or client_id == "" then
+        return nil, "bad client id"
+    end
+    local body = { client_id = client_id,
+        grant_type = "urn:ietf:params:oauth:grant-type:device_code" }
+    if type(scope) == "string" and scope ~= "" then body.scope = scope end
+    local ok, res = pcall(M._post_json, device_url, body)
+    if not ok or type(res) ~= "string" or res == "" then return nil, res end
+    local pok, parsed = pcall(common.json_decode, res)
+    if not pok or type(parsed) ~= "table" then return nil, "bad device response" end
+    if type(parsed.error) == "string" and parsed.error ~= "" then
+        return nil, parsed.error
+    end
+    if type(parsed.device_code) ~= "string" or parsed.device_code == ""
+        or type(parsed.user_code) ~= "string" or parsed.user_code == "" then
+        return nil, "incomplete device response"
+    end
+    parsed.verification_uri = parsed.verification_uri or parsed.verification_url
+    return parsed
+end
+
+-- One device-flow token poll. Returns the parsed token response as a table
+-- (with .error set when the user has not authorized yet), or nil, err on a
+-- transport failure. The caller loops with its own pacing.
+function M.device_poll(token_url, client_id, device_code)
+    if type(token_url) ~= "string" or token_url == ""
+        or type(device_code) ~= "string" or device_code == "" then
+        return nil, "bad device poll arguments"
+    end
+    local ok, res = pcall(M._post_json, token_url, {
+        client_id = client_id,
+        device_code = device_code,
+        grant_type = "urn:ietf:params:oauth:grant-type:device_code",
+    })
+    if not ok or type(res) ~= "string" or res == "" then return nil, res end
+    local pok, parsed = pcall(common.json_decode, res)
+    if not pok or type(parsed) ~= "table" then return nil, "bad token response" end
+    return parsed
+end
+
+-- Convert a successful device-flow token response into a store entry
+-- (same shape the code-flow exchange produces).
+function M.device_entry(parsed, provider, now)
+    if type(parsed) ~= "table" or type(parsed.access_token) ~= "string"
+        or parsed.access_token == "" then
+        return nil
+    end
+    local entry = { kind = "oauth", access_token = parsed.access_token,
+        provider = provider }
+    if type(parsed.refresh_token) == "string" and parsed.refresh_token ~= "" then
+        entry.refresh_token = parsed.refresh_token
+    end
+    if parsed.expires_in ~= nil then
+        entry.expires_at = (tonumber(now) or os.time())
+            + (tonumber(parsed.expires_in) or 0)
+    end
+    if type(parsed.token_type) == "string" then entry.token_type = parsed.token_type end
+    return entry
 end
 
 return M
