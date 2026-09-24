@@ -599,7 +599,7 @@ fall back to modifyOtherKeys / xterm fallback sequences.
 
 ### Requirement: Live turn feedback
 
-The TUI SHALL show turn progress while the agent works, without waiting for the turn to finish. On submit it SHALL paint the waiting state immediately: the input box's top rule status SHALL show a leading space, the spinner frame, and `Working...`, advancing on repaints while the turn runs. The transcript SHALL carry no waiting placeholder — only real entries (user, assistant, thinking, tool, system rows) plus the caret `▌` (ASCII `|`) at the end of the newest line while deltas keep arriving; the caret SHALL NOT be drawn while the user has scrolled up or while the palette, confirmation menu, ask block, or login secret mode owns the keyboard. Thinking rows SHALL render as `thinking · Ns` with the live elapsed seconds of the reasoning so far. Assistant rows SHALL use the `•` marker (ASCII `-`). Text and tool progress SHALL become visible during the turn: the TUI SHALL repaint while the turn is running, throttled by a bounded number of skipped deltas, and SHALL repaint immediately on state transitions (tool call start, tool result, error, abort, confirmation). No background timer SHALL be required: repaints driven by events and keypresses are sufficient, and the spinner advances only when the TUI repaints. While busy, the TUI SHALL additionally pump non-blocking key reads on each paint/event tick so Enter / Alt+Enter / Escape are handled mid-turn (steering capability); the pump SHALL NOT block for input and SHALL NOT run while a confirmation menu, ask block, or login secret mode owns the keyboard. The input-box indicator, caret and elapsed fields SHALL be cleared when the turn ends — after a reply, on error, on abort, and when a confirmation menu is raised (the turn is then waiting on the user) — and SHALL apply equally to a turn resumed after a confirmation decision. The elapsed counter SHALL reset at the start of each turn. In ASCII mode the spinner SHALL use ASCII frames (the caret is `|`, the assistant marker is `-`) and no non-ASCII glyph SHALL be introduced by this feedback.
+The TUI SHALL show turn progress while the agent works, without waiting for the turn to finish. On submit it SHALL paint the waiting state immediately: the input box's top rule status SHALL show a leading space, the spinner frame, and `Working...`, advancing on repaints while the turn runs. The transcript SHALL carry no waiting placeholder — only real entries (user, assistant, thinking, tool, system rows) plus the caret `▌` (ASCII `|`) at the end of the newest line while deltas keep arriving; the caret SHALL NOT be drawn while the user has scrolled up or while the palette, confirmation menu, ask block, or login secret mode owns the keyboard. Thinking rows SHALL render as `thinking · Ns` with the live elapsed seconds of the reasoning so far. Assistant rows SHALL use the `•` marker (ASCII `-`). Text and tool progress SHALL become visible during the turn: the TUI SHALL repaint while the turn is running, throttled by a bounded number of skipped deltas, and SHALL repaint immediately on state transitions (tool call start, tool result, error, abort, confirmation). Repaints are driven by reactor ticks: the spinner advances on tick cadence even with no stream events, and a tick that dispatched input SHALL repaint at once instead of waiting out the delta throttle. Input is live by construction while busy — keys, wheel and resize dispatch on the tick they arrive, so Enter / Alt+Enter / Escape are handled mid-turn (steering capability) without waiting for the next model or tool event; dispatch SHALL NOT block for input and SHALL NOT run while a confirmation menu, ask block, or login secret mode owns the keyboard. An escape sequence split across ticks SHALL be buffered and retried whole and SHALL NEVER reach the input line as text. The input-box indicator, caret and elapsed fields SHALL be cleared when the turn ends — after a reply, on error, on abort, and when a confirmation menu is raised (the turn is then waiting on the user) — and SHALL apply equally to a turn resumed after a confirmation decision. The elapsed counter SHALL reset at the start of each turn. In ASCII mode the spinner SHALL use ASCII frames (the caret is `|`, the assistant marker is `-`) and no non-ASCII glyph SHALL be introduced by this feedback.
 
 #### Scenario: Working indicator in the top rule
 
@@ -653,7 +653,7 @@ The TUI SHALL show turn progress while the agent works, without waiting for the 
 
 #### Scenario: No repaint is required while nothing happens
 
-- **WHEN** a tool runs for a long time without producing stream events
+- **WHEN** no turn is running and no key arrives
 - **THEN** the TUI is not required to repaint and the last painted frame stays on screen
 
 #### Scenario: Busy pump handles Enter mid-stream
@@ -661,11 +661,20 @@ The TUI SHALL show turn progress while the agent works, without waiting for the 
 - **WHEN** the user presses Enter with text while deltas are streaming
 - **THEN** the steering queue accepts the message without waiting for the turn to end and without starting a second turn
 
+#### Scenario: Scroll applies on a silent tick
+
+- **WHEN** the user scrolls while the turn waits with no stream events in flight
+- **THEN** the viewport moves and repaints within one tick quantum, without waiting for the next model or tool event
+
+#### Scenario: Fragmented sequence never leaks
+
+- **WHEN** a mouse sequence arrives split across two ticks mid-turn
+- **THEN** the input line stays unchanged and the completed sequence dispatches as one mouse event
+
 #### Scenario: Confirmation blocks the pump
 
 - **WHEN** a confirmation menu is open and the user presses Enter
 - **THEN** only the confirmation handler acts; no steering message is queued
-
 ### Requirement: Retry and continuation notices
 While a turn is being retried or continued the TUI SHALL keep the user
 informed with dim system rows, painted as the events arrive and without
