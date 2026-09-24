@@ -146,6 +146,9 @@ function M.refresh_token(provider, entry, post_json, now)
     local ok, body = pcall(post_json, url, {
         grant_type = "refresh_token",
         refresh_token = rt,
+        -- ADC-style entries carry the OAuth client (Google requires it).
+        client_id = entry.client_id,
+        client_secret = entry.client_secret,
     })
     if not ok or type(body) ~= "string" or body == "" then return false end
     local parsed_ok, parsed = pcall(common.json_decode, body)
@@ -177,11 +180,180 @@ function M.resolve_entry(entry, post_json, now)
             -- expired + unrefreshable → fall through (caller may use env)
             return nil
         end
+        -- expand-provider-catalog: no access token yet (e.g. Vertex ADC
+        -- import) but a refresh token exists → mint one now.
+        if M.refresh_token(entry.provider or "", entry, post_json, now) then
+            return entry.access_token
+        end
         return nil
     end
     if entry.kind == "api_key" and type(entry.access_token) == "string"
         and entry.access_token ~= "" then
         return entry.access_token
+    end
+    return nil
+end
+
+-- expand-provider-catalog: compound credential pieces (Cloudflare account /
+-- gateway ids, Vertex project/location, AWS selectors). Per-field merge —
+-- stored entry env wins, ambient process env fills the rest (pi
+-- resolveCloudflareEnv). Never fails: missing pieces yield {}.
+local COMPOUND_KEYS = {
+    ["cloudflare-workers-ai"] = { "CLOUDFLARE_API_KEY", "CLOUDFLARE_ACCOUNT_ID" },
+    ["cloudflare-ai-gateway"] = { "CLOUDFLARE_API_KEY", "CLOUDFLARE_ACCOUNT_ID",
+                                  "CLOUDFLARE_GATEWAY_ID" },
+    ["google-vertex"] = { "GOOGLE_CLOUD_API_KEY", "GOOGLE_CLOUD_PROJECT",
+                          "GCLOUD_PROJECT", "GOOGLE_CLOUD_LOCATION",
+                          "GOOGLE_APPLICATION_CREDENTIALS" },
+    ["amazon-bedrock"] = { "AWS_BEARER_TOKEN_BEDROCK", "AWS_PROFILE",
+                           "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY",
+                           "AWS_SESSION_TOKEN", "AWS_REGION", "AWS_DEFAULT_REGION" },
+}
+
+function M.provider_env(provider, home)
+    local keys = COMPOUND_KEYS[provider]
+    if not keys then return {} end
+    local out = {}
+    for _, k in ipairs(keys) do
+        local v = os.getenv(k)
+        if v ~= nil and v ~= "" then out[k] = v end
+    end
+    local store = M.load(home)
+    local e = store and store[provider]
+    if type(e) == "table" and type(e.env) == "table" then
+        for _, k in ipairs(keys) do
+            if e.env[k] ~= nil and e.env[k] ~= "" then out[k] = e.env[k] end
+        end
+    end
+    return out
+end
+
+-- Read Google Application Default Credentials (user refresh-token form).
+-- Returns { refresh_token, client_id, client_secret } or nil.
+function M.read_adc()
+    local p = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+    if not (p and p ~= "") then
+        p = (os.getenv("HOME") or ".") .. "/.config/gcloud/application_default_credentials.json"
+    end
+    local f = io.open(p, "r")
+    if not f then return nil end
+    local data = f:read("*a")
+    f:close()
+    local ok, t = pcall(common.json_decode, data or "")
+    if not ok or type(t) ~= "table" then return nil end
+    if t.type ~= "authorized_user" then return nil end
+    if type(t.refresh_token) ~= "string" or t.refresh_token == "" then return nil end
+    return { refresh_token = t.refresh_token,
+             client_id = t.client_id, client_secret = t.client_secret }
+end
+
+-- AWS credential chain for Bedrock (pi bedrockAuth resolve order):
+-- stored bearer is handled by the caller; here ambient sources only.
+-- Returns { mode="bearer", token } | { mode="sigv4", key, secret, session, region } | nil.
+local function read_aws_profile(name)
+    local p = (os.getenv("HOME") or ".") .. "/.aws/credentials"
+    local f = io.open(p, "r")
+    if not f then return nil end
+    local data = f:read("*a")
+    f:close()
+    local section = nil
+    local out = {}
+    for line in (data or ""):gmatch("[^\r\n]+") do
+        local sec = line:match("^%s*%[([^%]]+)%]%s*$")
+        if sec then
+            section = (sec:gsub("^profile%s+", ""))
+        elseif section == name then
+            local k, v = line:match("^%s*([A-Za-z_]+)%s*=%s*(.-)%s*$")
+            if k and v then out[k:lower()] = v end
+        end
+    end
+    if out.aws_access_key_id and out.aws_access_key_id ~= ""
+        and out.aws_secret_access_key and out.aws_secret_access_key ~= "" then
+        return { key = out.aws_access_key_id, secret = out.aws_secret_access_key,
+                 session = out.aws_session_token }
+    end
+    return nil
+end
+
+local function http_collect(method, url, headers, body)
+    if not (tether and tether.http_stream) then return nil end
+    local lines = {}
+    local ok = tether.http_stream(method, url, headers or {}, body or "",
+        function(line)
+            lines[#lines + 1] = line
+            return true
+        end, { timeout_s = 10 })
+    if not ok then return nil end
+    return table.concat(lines, "\n")
+end
+
+function M.aws_creds(no_network)
+    local bearer = os.getenv("AWS_BEARER_TOKEN_BEDROCK")
+    if bearer and bearer ~= "" then
+        return { mode = "bearer", token = bearer }
+    end
+    local key, secret = os.getenv("AWS_ACCESS_KEY_ID"), os.getenv("AWS_SECRET_ACCESS_KEY")
+    if key and key ~= "" and secret and secret ~= "" then
+        return { mode = "sigv4", key = key, secret = secret,
+                 session = os.getenv("AWS_SESSION_TOKEN") }
+    end
+    local profile = os.getenv("AWS_PROFILE")
+    if profile and profile ~= "" then
+        local c = read_aws_profile(profile) or read_aws_profile("default")
+        if c then
+            return { mode = "sigv4", key = c.key, secret = c.secret, session = c.session }
+        end
+    elseif os.getenv("AWS_PROFILE") == nil then
+        -- no explicit profile: default profile still applies when present
+        local c = read_aws_profile("default")
+        if c then
+            return { mode = "sigv4", key = c.key, secret = c.secret, session = c.session }
+        end
+    end
+    -- no_network: availability probes must stay side-effect free (no HTTP).
+    if no_network then return nil end
+    -- ECS task role (relative or full URI), best-effort over the transport.
+    local rel = os.getenv("AWS_CONTAINER_CREDENTIALS_RELATIVE_URI")
+    local full = os.getenv("AWS_CONTAINER_CREDENTIALS_FULL_URI")
+    local ecs_url = full or (rel and ("http://169.254.170.2" .. rel)) or nil
+    if ecs_url then
+        local body = http_collect("GET", ecs_url)
+        if body then
+            local ok, t = pcall(common.json_decode, body)
+            if ok and type(t) == "table"
+                and type(t.AccessKeyId) == "string" and t.AccessKeyId ~= ""
+                and type(t.SecretAccessKey) == "string" then
+                return { mode = "sigv4", key = t.AccessKeyId,
+                         secret = t.SecretAccessKey, session = t.Token }
+            end
+        end
+    end
+    -- IRSA (web identity token file + STS), best-effort.
+    local token_file = os.getenv("AWS_WEB_IDENTITY_TOKEN_FILE")
+    local role = os.getenv("AWS_ROLE_ARN")
+    if token_file and token_file ~= "" and role and role ~= "" then
+        local f = io.open(token_file, "r")
+        local token = f and f:read("*a")
+        if f then f:close() end
+        if token and token:match("%S") then
+            local region = os.getenv("AWS_REGION") or os.getenv("AWS_DEFAULT_REGION")
+                or "us-east-1"
+            local body = http_collect("POST",
+                "https://sts." .. region .. ".amazonaws.com/",
+                { "Content-Type: application/x-www-form-urlencoded" },
+                "Action=AssumeRoleWithWebIdentity&Version=2011-06-15"
+                    .. "&RoleArn=" .. common.url_encode(role)
+                    .. "&RoleSessionName=tether"
+                    .. "&WebIdentityToken=" .. common.url_encode(token:match("^%s*(.-)%s*$")))
+            if body then
+                local ak = body:match("<AccessKeyId>(.-)</AccessKeyId>")
+                local sk = body:match("<SecretAccessKey>(.-)</SecretAccessKey>")
+                local st = body:match("<SessionToken>(.-)</SessionToken>")
+                if ak and ak ~= "" and sk and sk ~= "" then
+                    return { mode = "sigv4", key = ak, secret = sk, session = st }
+                end
+            end
+        end
     end
     return nil
 end

@@ -290,4 +290,121 @@ function M.oauth_authorize_url(base, flow)
     return url
 end
 
+-- expand-provider-catalog: pure-Lua SHA-256 / HMAC-SHA-256 (Bedrock SigV4).
+-- Lua 5.4 integers make this exact; bodies are kilobytes, speed is fine.
+local SHA_K = {
+    0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1,
+    0x923f82a4, 0xab1c5ed5, 0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3,
+    0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174, 0xe49b69c1, 0xefbe4786,
+    0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+    0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147,
+    0x06ca6351, 0x14292967, 0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13,
+    0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85, 0xa2bfe8a1, 0xa81a664b,
+    0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+    0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a,
+    0x5b9cca4f, 0x682e6ff3, 0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208,
+    0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
+}
+
+local function sha256_words(msg)
+    local len = #msg
+    local bitlen_hi = math.floor(len * 8 / 2^32)
+    local bitlen_lo = (len * 8) % 2^32
+    msg = msg .. "\128"
+    local pad = (56 - (#msg % 64)) % 64
+    msg = msg .. string.rep("\0", pad)
+        .. string.char(
+            math.floor(bitlen_hi / 2^24) % 256, math.floor(bitlen_hi / 2^16) % 256,
+            math.floor(bitlen_hi / 2^8) % 256, bitlen_hi % 256,
+            math.floor(bitlen_lo / 2^24) % 256, math.floor(bitlen_lo / 2^16) % 256,
+            math.floor(bitlen_lo / 2^8) % 256, bitlen_lo % 256)
+    local h = { 0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
+                0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19 }
+    local w = {}
+    for off = 1, #msg, 64 do
+        for i = 0, 15 do
+            local b1, b2, b3, b4 = msg:byte(off + i * 4, off + i * 4 + 3)
+            w[i + 1] = ((b1 * 256 + b2) * 256 + b3) * 256 + b4
+        end
+        for i = 16, 63 do
+            local s0 = (w[i - 15 + 1] >> 7 | w[i - 15 + 1] << 25)
+                ~ (w[i - 15 + 1] >> 18 | w[i - 15 + 1] << 14)
+                ~ (w[i - 15 + 1] >> 3)
+            local s1 = (w[i - 2 + 1] >> 17 | w[i - 2 + 1] << 15)
+                ~ (w[i - 2 + 1] >> 19 | w[i - 2 + 1] << 13)
+                ~ (w[i - 2 + 1] >> 10)
+            w[i + 1] = (w[i - 16 + 1] + s0 + w[i - 7 + 1] + s1) & 0xFFFFFFFF
+        end
+        local a, b, c, d, e, f, g, hh =
+            h[1], h[2], h[3], h[4], h[5], h[6], h[7], h[8]
+        for i = 1, 64 do
+            local S1 = (e >> 6 | e << 26) ~ (e >> 11 | e << 21) ~ (e >> 25 | e << 7)
+            local ch = (e & f) ~ ((~e) & g)
+            local t1 = (hh + S1 + ch + SHA_K[i] + w[i]) & 0xFFFFFFFF
+            local S0 = (a >> 2 | a << 30) ~ (a >> 13 | a << 19) ~ (a >> 22 | a << 10)
+            local maj = (a & b) ~ (a & c) ~ (b & c)
+            local t2 = (S0 + maj) & 0xFFFFFFFF
+            hh, g, f, e, d, c, b, a =
+                g, f, e, (d + t1) & 0xFFFFFFFF, c, b, a, (t1 + t2) & 0xFFFFFFFF
+        end
+        h[1] = (h[1] + a) & 0xFFFFFFFF
+        h[2] = (h[2] + b) & 0xFFFFFFFF
+        h[3] = (h[3] + c) & 0xFFFFFFFF
+        h[4] = (h[4] + d) & 0xFFFFFFFF
+        h[5] = (h[5] + e) & 0xFFFFFFFF
+        h[6] = (h[6] + f) & 0xFFFFFFFF
+        h[7] = (h[7] + g) & 0xFFFFFFFF
+        h[8] = (h[8] + hh) & 0xFFFFFFFF
+    end
+    return h
+end
+
+function M.sha256hex(msg)
+    local h = sha256_words(msg or "")
+    local out = {}
+    for i = 1, 8 do out[i] = string.format("%08x", h[i]) end
+    return table.concat(out)
+end
+
+local function hmac_bytes(key, msg)
+    if #key > 64 then
+        local h = sha256_words(key)
+        local parts = {}
+        for i = 1, 8 do
+            local v = h[i]
+            parts[i] = string.char(
+                math.floor(v / 2^24) % 256, math.floor(v / 2^16) % 256,
+                math.floor(v / 2^8) % 256, v % 256)
+        end
+        key = table.concat(parts)
+    end
+    key = key .. string.rep("\0", 64 - #key)
+    local function xor_pad(byte)
+        local t = {}
+        for i = 1, 64 do t[i] = string.char(key:byte(i) ~ byte) end
+        return table.concat(t)
+    end
+    local inner = sha256_words(xor_pad(0x36) .. msg)
+    local parts = {}
+    for i = 1, 8 do
+        local v = inner[i]
+        parts[i] = string.char(
+            math.floor(v / 2^24) % 256, math.floor(v / 2^16) % 256,
+            math.floor(v / 2^8) % 256, v % 256)
+    end
+    return xor_pad(0x5c) .. table.concat(parts)
+end
+
+function M.hmac_sha256hex(key, msg)
+    local h = sha256_words(hmac_bytes(key or "", msg or ""))
+    local out = {}
+    for i = 1, 8 do out[i] = string.format("%08x", h[i]) end
+    return table.concat(out)
+end
+
+-- Raw 32-byte HMAC-SHA-256 (SigV4 key derivation needs binary chaining).
+function M.hmac_sha256_raw(key, msg)
+    return hmac_bytes(key or "", msg or "")
+end
+
 return M

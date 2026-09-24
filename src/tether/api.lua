@@ -9,13 +9,22 @@
 -- loop owns the backoff schedule, so no two budgets can interleave.
 local M = {}
 
-local PROVIDERS = {
+-- expand-provider-catalog: preset catalog (Tier-A aliases + Tier-B adapter
+-- ids). The catalog is data only; wire modules stay the three native ones
+-- plus one adapter module per Tier-B id (src/tether/providers/<wire>.lua).
+local catalog = _G.provider_catalog
+    or (function()
+        local chunk = loadfile("src/tether/providers/catalog.lua")
+        return chunk and chunk()
+    end)()
+
+local WIRE_MODULES = {
     openai    = { global = "provider_openai",    path = "src/tether/providers/openai.lua" },
     anthropic = { global = "provider_anthropic", path = "src/tether/providers/anthropic.lua" },
     gemini    = { global = "provider_gemini",    path = "src/tether/providers/gemini.lua" },
 }
 
-local function load_provider(spec)
+local function load_module(spec)
     if _G[spec.global] then return _G[spec.global] end
     -- Dev/test fallback: embedded binary has no source files on disk,
     -- but there the C host preloads the globals above.
@@ -29,18 +38,44 @@ end
 
 local warned_unknown = false
 
+local function warn_unknown(name)
+    if not warned_unknown then
+        warned_unknown = true
+        io.stderr:write('tether: unknown provider "' .. tostring(name)
+            .. '", falling back to "openai"\n')
+    end
+end
+
+local function wire_spec(wire)
+    if WIRE_MODULES[wire] then return WIRE_MODULES[wire] end
+    -- Tier-B adapter: module id doubles as the file/global name.
+    return {
+        global = "provider_" .. wire:gsub("-", "_"),
+        path = "src/tether/providers/" .. wire .. ".lua",
+    }
+end
+
 local function provider_of(cfg)
     local name = (cfg and cfg.provider) or "openai"
-    if not PROVIDERS[name] then
-        if not warned_unknown then
-            warned_unknown = true
-            io.stderr:write('tether: unknown provider "' .. tostring(name)
-                .. '", falling back to "openai"\n')
-        end
+    local entry = catalog and catalog.get(name)
+    if not entry then
+        warn_unknown(name)
         name = "openai"
+        entry = catalog and catalog.get("openai")
     end
-    local mod = load_provider(PROVIDERS[name])
+    local wire = (entry and entry.wire) or "openai"
+    if not catalog then
+        -- catalog failed to load: legacy 1:1 behavior (wire id == provider id)
+        if not WIRE_MODULES[name] then
+            warn_unknown(name)
+            name = "openai"
+        end
+        wire = name
+    end
+    local mod = load_module(wire_spec(wire))
     assert(mod, "tether: cannot load provider " .. name)
+    -- The catalog id is the provider identity (logs, store keys, warnings);
+    -- the wire module is shared and MUST NOT be inferred from the module.
     return name, mod
 end
 
@@ -48,6 +83,29 @@ end
 function M._provider_of(cfg)
     local name, _ = provider_of(cfg)
     return name
+end
+
+-- Test seam: the wire module an id resolves to (alias proof).
+function M._wire_module(cfg)
+    local _, mod = provider_of(cfg)
+    return mod
+end
+
+-- Test seam: catalog entry for an id (nil when unknown).
+function M._catalog_entry(id)
+    if not catalog then return nil end
+    return catalog.get(id)
+end
+
+-- Ambient credentials without a key string (Bedrock AWS chain): live
+-- listing may proceed with an empty key, the adapter signs the request.
+function M._has_ambient(cfg)
+    local _, P = provider_of(cfg)
+    if P.ambient then
+        local ok, res = pcall(P.ambient, cfg)
+        if ok and res then return true end
+    end
+    return false
 end
 
 -- Re-exported for unit tests (M7) and session/resume encoding checks.
@@ -113,13 +171,90 @@ local function header_file(lines)
     return path
 end
 
-local function http_request(cfg, api_key, messages, on_event)
+-- expand-provider-catalog: {VAR} placeholders in catalog url_template
+-- entries (Cloudflare account/gateway ids). Resolved from
+-- cfg.provider_env (stored-entry merge, see config) then process env.
+-- Unresolved placeholders are left intact so preflight can name them.
+local function expand_url(url, cfg)
+    if type(url) ~= "string" or not url:find("{", 1, true) then return url end
+    return (url:gsub("{([A-Za-z_][A-Za-z0-9_]*)}", function(var)
+        local v = nil
+        if type(cfg) == "table" and type(cfg.provider_env) == "table" then
+            v = cfg.provider_env[var]
+        end
+        if v == nil or v == "" then v = os.getenv(var) end
+        if v == nil or v == "" then return "{" .. var .. "}" end
+        return v
+    end))
+end
+
+-- Test seam: parse a models body through the active adapter.
+function M._parse_models(cfg, body)
     local _, P = provider_of(cfg)
+    if type(body) ~= "string" or body == "" then return nil end
+    if body:match("^FETCH_FAILED") then return nil end
+    local ok, res = pcall(P.models_parse, body)
+    if not ok or type(res) ~= "table" or #res == 0 then return nil end
+    return res
+end
+
+-- Fire-and-forget live refresh into outpath (background child, picked up
+-- by commands.poll_models_refresh). Returns true when a fetch was spawned.
+-- Nil without tether.fetch_bg (plain-lua tests/dev) so the caller can fall
+-- back to a short sync attempt instead.
+function M.refresh_models_bg(cfg, api_key, outpath)
+    if not cfg or not api_key or api_key == "" then return nil end
+    if type(outpath) ~= "string" or outpath == "" then return nil end
+    if not (tether and tether.fetch_bg) then return nil end
+    local pname, P = provider_of(cfg)
+    local url = expand_url(P.models_url(cfg, api_key), cfg)
+    if P.preflight then
+        if P.preflight(cfg, api_key, url, pname) then return nil end
+    end
+    if url:match("{([A-Za-z_][A-Za-z0-9_]*)}") then return nil end
+    local hfile = header_file(P.models_headers(api_key,
+        { provider = pname, cfg = cfg, auth_style = cfg._auth_style }))
+    if not hfile then return nil end
+    -- the C layer reads @file headers before fork and unlinks them.
+    local ok = tether.fetch_bg(url, { "@" .. hfile }, outpath, 20)
+    if not ok then os.remove(hfile) end
+    return ok or nil
+end
+
+local function http_request(cfg, api_key, messages, on_event)
+    local pname, P = provider_of(cfg)
     local model = cfg.model
-    local url = P.stream_url(cfg, model, api_key)
+    local url = expand_url(P.stream_url(cfg, model, api_key), cfg)
     local req = P.build_request(messages, model, nil)
 
-    local hfile = header_file(P.header_lines(api_key))
+    -- Optional adapter preflight (missing compound credentials, unexpanded
+    -- URL placeholders): fails the attempt before any request is issued.
+    if P.preflight then
+        local perr = P.preflight(cfg, api_key, url, pname)
+        if perr then
+            return false, retry.failure("permanent", perr)
+        end
+    end
+    -- A {VAR} left in the URL means a required credential piece is missing
+    -- (Cloudflare account/gateway id): never issue the request.
+    local missing_var = url:match("{([A-Za-z_][A-Za-z0-9_]*)}")
+    if missing_var then
+        return false, retry.failure("permanent", "missing " .. missing_var)
+    end
+
+    -- expand-provider-catalog: request context for header_lines. Wire
+    -- modules that predate it keep working (extra arg ignored).
+    local hctx = {
+        session_id = cfg._session_id,
+        provider = pname,
+        messages = messages,
+        url = url,
+        body = req,
+        auth_style = cfg._auth_style,
+        provider_env = cfg.provider_env,
+        cfg = cfg,
+    }
+    local hfile = header_file(P.header_lines(api_key, hctx))
     if not hfile then
         return false, retry.failure("permanent", "cannot write auth header file")
     end
@@ -263,21 +398,46 @@ end
 -- the mode is 600 before the key is written.
 M._header_file = header_file
 
+local NATIVE_WIRES = { openai = true, anthropic = true, gemini = true }
+
 function M.list_models(cfg)
-    local _, P = provider_of(cfg)
+    local pname, P = provider_of(cfg)
+    local entry = M._catalog_entry(pname)
+    -- expand-provider-catalog: alias presets resolve live /models only —
+    -- the shared wire module's static list belongs to another provider.
+    -- Native ids and Tier-B adapters use their own static_models().
+    if entry and NATIVE_WIRES[entry.wire] and pname ~= entry.wire then
+        return {}
+    end
     return P.static_models()
 end
 
-function M.list_models_live(cfg, api_key)
-    if not cfg or not api_key or api_key == "" then
-        return nil, "no api key"
+function M.list_models_live(cfg, api_key, timeout_s)
+    if not cfg then return nil, "no api key" end
+    local pname, P = provider_of(cfg)
+    if not api_key or api_key == "" then
+        -- expand-provider-catalog: ambient credentials (Bedrock AWS chain)
+        -- count as a key; the adapter signs without a bearer token.
+        if P.ambient and P.ambient(cfg) then
+            api_key = ""
+        else
+            return nil, "no api key"
+        end
     end
-    local _, P = provider_of(cfg)
-    local url = P.models_url(cfg, api_key)
-    local hfile = header_file(P.models_headers(api_key))
+    local url = expand_url(P.models_url(cfg, api_key), cfg)
+    if P.preflight then
+        local perr = P.preflight(cfg, api_key, url, pname)
+        if perr then return nil, perr end
+    end
+    local missing_var = url:match("{([A-Za-z_][A-Za-z0-9_]*)}")
+    if missing_var then return nil, "missing " .. missing_var end
+    -- ctx carries cfg for adapters that sign the models call (bedrock).
+    local hfile = header_file(P.models_headers(api_key,
+        { provider = pname, cfg = cfg, auth_style = cfg._auth_style }))
     if not hfile then return nil, "cannot write header file" end
     -- 4.2: in-process GET; the return format (list | nil, reason) is unchanged.
-    local body, err = tether.http_get(url, { "@" .. hfile }, 30)
+    -- timeout_s caps interactive freeze (pi uses 4s for catalog refresh).
+    local body, err = tether.http_get(url, { "@" .. hfile }, timeout_s or 30)
     os.remove(hfile)
     if not body then return nil, err end
     -- minimal JSON: extract model ids via the provider's own parser

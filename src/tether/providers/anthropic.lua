@@ -122,7 +122,13 @@ function M.stream_url(cfg, _model, _api_key)
     return (cfg.base_url or "") .. "/v1/messages"
 end
 
-function M.header_lines(api_key)
+function M.header_lines(api_key, ctx)
+    -- expand-provider-catalog: ANTHROPIC_AUTH_TOKEN (and stored OAuth) use
+    -- Bearer auth (pi providers/anthropic.ts); plain keys use x-api-key.
+    -- ctx.auth_style comes from config.api_key via cfg._auth_style.
+    if type(ctx) == "table" and ctx.auth_style == "bearer" then
+        return { "Authorization: Bearer " .. (api_key or "") }
+    end
     return {
         "x-api-key: " .. (api_key or ""),
         "anthropic-version: 2023-06-01",
@@ -137,8 +143,8 @@ function M.models_url(cfg, _api_key)
     return (cfg.base_url or "") .. "/v1/models"
 end
 
-function M.models_headers(api_key)
-    return M.header_lines(api_key)
+function M.models_headers(api_key, ctx)
+    return M.header_lines(api_key, ctx)
 end
 
 function M.models_parse(body)
@@ -202,8 +208,9 @@ local function parse_sse_line(line, on_event)
     if etype == "content_block_delta" then
         local idx = tonumber(payload:match('"index"[%s]*:[%s]*(%d+)'))
         if payload:find('"text_delta"', 1, true) then
-            local text = payload:match('"text"[%s]*:[%s]*"(.-[^\\])"')
-                or payload:match('"text"[%s]*:[%s]*""')
+            -- empty value yields "" (no event): never a second match without
+            -- captures (it would return the whole `"text":""` fragment as text).
+            local text = payload:match('"text"[%s]*:[%s]*"(.-[^\\])"') or ""
             if text and text ~= "" then
                 text = json_unescape(text)
                 if text ~= "" then

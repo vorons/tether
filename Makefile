@@ -2,7 +2,7 @@ CC      ?= cc
 CFLAGS  ?= -std=c11 -Wall -Wextra -Werror -O2 -D_POSIX_C_SOURCE=200809L
 LUA_DIR = vendor/lua-5.4.6/src
 EMBED_OUT = src/host/embed.c
-LUA_MODS = src/tether/app.lua src/tether/ui.lua src/tether/transcript.lua src/tether/commands.lua src/tether/turn.lua src/tether/config.lua src/tether/session.lua src/tether/api.lua src/tether/agent.lua src/tether/tools.lua src/tether/diff.lua src/tether/retry.lua src/tether/ask.lua src/tether/confirm_policy.lua src/tether/auth.lua src/tether/providers/common.lua src/tether/providers/openai.lua src/tether/providers/anthropic.lua src/tether/providers/gemini.lua
+LUA_MODS = src/tether/app.lua src/tether/ui.lua src/tether/transcript.lua src/tether/commands.lua src/tether/turn.lua src/tether/config.lua src/tether/session.lua src/tether/api.lua src/tether/agent.lua src/tether/tools.lua src/tether/diff.lua src/tether/retry.lua src/tether/ask.lua src/tether/confirm_policy.lua src/tether/auth.lua src/tether/providers/common.lua src/tether/providers/catalog.lua src/tether/providers/openai.lua src/tether/providers/anthropic.lua src/tether/providers/gemini.lua src/tether/providers/azure-openai.lua src/tether/providers/amazon-bedrock.lua src/tether/providers/google-vertex.lua src/tether/providers/cloudflare-ai-gateway.lua src/tether/providers/radius.lua src/tether/providers/openai-codex.lua
 
 LUA_SRCS = lapi.c lauxlib.c lbaselib.c lcode.c lcorolib.c lctype.c \
            ldblib.c ldebug.c ldo.c ldump.c lfunc.c lgc.c linit.c \
@@ -87,9 +87,16 @@ $(EMBED_OUT): $(LUA_MODS) tools/embed.lua
 		config_lua src/tether/config.lua \
 		session_lua src/tether/session.lua \
 		provider_common_lua src/tether/providers/common.lua \
+		provider_catalog_lua src/tether/providers/catalog.lua \
 		provider_openai_lua src/tether/providers/openai.lua \
 		provider_anthropic_lua src/tether/providers/anthropic.lua \
 		provider_gemini_lua src/tether/providers/gemini.lua \
+		provider_azure_openai_lua src/tether/providers/azure-openai.lua \
+		provider_amazon_bedrock_lua src/tether/providers/amazon-bedrock.lua \
+		provider_google_vertex_lua src/tether/providers/google-vertex.lua \
+		provider_cloudflare_ai_gateway_lua src/tether/providers/cloudflare-ai-gateway.lua \
+		provider_radius_lua src/tether/providers/radius.lua \
+		provider_openai_codex_lua src/tether/providers/openai-codex.lua \
 		api_lua src/tether/api.lua \
 		retry_lua src/tether/retry.lua \
 		ask_lua src/tether/ask.lua \
@@ -110,9 +117,16 @@ test: tether
 	@luac -p src/tether/session.lua
 	@luac -p src/tether/api.lua
 	@luac -p src/tether/providers/common.lua
+	@luac -p src/tether/providers/catalog.lua
 	@luac -p src/tether/providers/openai.lua
 	@luac -p src/tether/providers/anthropic.lua
 	@luac -p src/tether/providers/gemini.lua
+	@luac -p src/tether/providers/azure-openai.lua
+	@luac -p src/tether/providers/amazon-bedrock.lua
+	@luac -p src/tether/providers/google-vertex.lua
+	@luac -p src/tether/providers/cloudflare-ai-gateway.lua
+	@luac -p src/tether/providers/radius.lua
+	@luac -p src/tether/providers/openai-codex.lua
 	@luac -p src/tether/agent.lua
 	@luac -p src/tether/retry.lua
 	@luac -p src/tether/ask.lua

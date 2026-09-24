@@ -49,7 +49,7 @@ C-хост даёт Lua узкий syscall-API: raw mode, `ioctl(TIOCGWINSZ)`, `
 
 **agent** — цикл LLM → tool calls → выполнение → tool results → LLM. Лимит итераций — 50, жёстко (не настраивается); исчерпание лимита — нормальное завершение хода. Системный промпт: канонический coding-agent, переопределяется `system_prompt` в конфиге (строка или путь к файлу) и дополняется `AGENTS.md`/skills (§15.5).
 
-**api** — диспетчер провайдеров (`src/tether/providers/`): `stream(cfg, key, messages, on_event)` и `list_models*()`; модули `openai`, `anthropic`, `gemini`, выбор по `cfg.provider` (неизвестное значение → warning и `openai`). Канонические события: `text_delta`, `reasoning_delta`, `tool_call_start`, `tool_call_delta`, `usage`, `retry`, `error`, `done`; агент добавляет свои — `confirmation`, `aborted`, `context_compressed`. Набор событий одинаков для всех провайдеров, поэтому `agent.lua` не ветвится по провайдеру. OpenAI-адаптер маппит `reasoning_summary` на reasoning-события; модели без reasoning их не шлют.
+**api** — диспетчер провайдеров (`src/tether/providers/`): `stream(cfg, key, messages, on_event)` и `list_models*()`; три wire-модуля `openai`, `anthropic`, `gemini` + каталог пресетов `providers/catalog.lua` (42 id: alias на wire-модуль либо Tier-B адаптер `azure-openai`, `amazon-bedrock`, `google-vertex`, `cloudflare-ai-gateway`, `radius`, `openai-codex`), выбор по `cfg.provider` (неизвестное значение → warning и `openai`). `header_lines(api_key, ctx)` несёт `{session_id, provider, messages, url, body, auth_style, provider_env, cfg}` для per-preset заголовков (`x-opencode-session`, Copilot, `cf-aig-authorization`); attribution-заголовки не шлются. Канонические события: `text_delta`, `reasoning_delta`, `tool_call_start`, `tool_call_delta`, `usage`, `retry`, `error`, `done`; агент добавляет свои — `confirmation`, `aborted`, `context_compressed`. Набор событий одинаков для всех провайдеров, поэтому `agent.lua` не ветвится по провайдеру. OpenAI-адаптер маппит `reasoning_summary` на reasoning-события; модели без reasoning их не шлют. Пресеты резолвят модели только live через `/models` (static fallback пуст); Bedrock ходит нестриминговым Converse (eventstream несовместим с построчным транспортом) с SigV4 на чистом Lua.
 
 **tools** — read, write, list, glob, grep, run, patch (§7).
 
@@ -294,7 +294,7 @@ follow-режим и убирает индикатор.
 - Под полем ввода — dim-разделитель `─` на всю ширину (1 строка; в ASCII `-`), под ним footer (§6.13). Разделитель есть всегда, в том числе при однострочном вводе.
 - Бюджет футера резервируется снизу вверх, до раздачи строк транскрипту: `input_h + palette_h + error_h + 1` (разделитель) `+ 1` (footer), где `input_h` — число видимых строк ввода (`min(строк, ui.input_max_lines)`, но не меньше 1), `error_h` = 1 при видимом баннере ошибки, `palette_h` = 0 без палитры. Транскрипт получает все остальные строки, поэтому строки ввода строго выше разделителя, разделитель — строго выше footer, и регионы никогда не перекрываются: рост ввода на 1 строку уменьшает транскрипт ровно на 1 строку.
 - `Enter` — отправить; `Ctrl+J` — новая строка; `Shift+Enter` — новая строка при Kitty/modifyOtherKeys.
-- `↑`/`↓` при пустом вводе — прокрутка транскрипта; при непустом — перемещение курсора по строкам (и прокрутка на краю). История — на `Ctrl+↑`/`Ctrl+↓` (§6.12).
+- `↑`/`↓` — история ввода (§6.12); в многострочном вводе — перемещение курсора по строкам, `Shift+↑`/`Shift+↓` — явное перемещение. Прокрутка транскрипта — `PgUp`/`PgDn`. `Ctrl+↑`/`Ctrl+↓` — тоже история.
 - `Ctrl+A/E/U/W/K` — readline-подобные.
 - `Ctrl+V` — bracketed paste; многострочная вставка сохраняет переводы строк.
 - Ввод блокируется при открытом confirmation и на время выполнения инструмента без стрима.
@@ -341,7 +341,7 @@ discovery деградирует к списку команд. Клик мыши
 
 - `/clear` — очищает транскрипт в памяти; подтверждения нет; сессия на диске не трогается, агент сохраняет всю историю.
 - `/compact` — принудительное сжатие старых сообщений; в транскрипт добавляется системная строка со сводкой (заголовок `── summary ──`).
-- `/model` — палитра со списком моделей (`palette_mode = "model"`): живой список `list_models_live()`, иначе статический список текущего провайдера; выбор меняет модель сессии (не конфига).
+- `/model` — палитра со списком моделей (`palette_mode = "model"`): модели всех провайдеров с ключами (активный первым, строки с тегом провайдера) из свежего дискового кэша мгновенно, протухшие — фоном; выбор чужой модели переключает провайдера сессии и перерезолвит ключ; без ключей — пусто с подсказкой `/login`.
 - `/resume` — палитра последних сессий текущего workspace (`palette_mode = "resume"`, §6.9); то же делает `Ctrl+R`.
 - `/new` — новая сессия; старая остаётся на диске с `session_end`; транскрипт и история агента сбрасываются.
 - `/quit` — выход; как `Ctrl+Q` / двойной `Ctrl+C`; подтверждения при активном стриме нет.
@@ -409,8 +409,11 @@ workspace). Это не overlay, а строка в хвосте транскр�
 
 Запись добавляется при отправке сообщения агенту; файл один на машину и не
 обрезается. В памяти TUI держатся последние 200 записей текущего workspace (без
-подряд идущих дублей) — их и листают `Ctrl+↑` / `Ctrl+↓`. `↑`/`↓` при пустом
-вводе прокручивают транскрипт, а не историю (§6.7).
+подряд идущих дублей) — их и листают `↑` / `↓` (и `Ctrl+↑` / `Ctrl+↓`):
+`↑` открывает новейшую запись, `↓` ниже новейшей очищает ввод. Внутри
+многострочного ввода `↑`/`↓` перемещают курсор по строкам, историю они
+подмешивают только на границе многострочности; явное перемещение —
+`Shift+↑`/`Shift+↓`. Прокрутка транскрипта — на `PgUp`/`PgDn` (§6.7).
 
 ### 6.13 Footer (одна строка)
 
@@ -502,18 +505,21 @@ ASCII включается по окружению: `NO_COLOR=1` или `TERM=du
 `CSI <code> ; <mods> u` (модификаторы — битовая маска + 1) и xterm
 `CSI 27 ; <mods> ; <code> ~` дают одно и то же представление клавиши. Поэтому
 `Shift+Enter`/`Ctrl+Enter` вставляют новую строку, `Ctrl+Shift+C` копирует
-последний ответ, `Ctrl+↑`/`Ctrl+↓` листают историю, а `Esc` больше не путается
-с началом escape-последовательности. Определённый протокол больше не
+последний ответ, `↑`/`↓` и `Ctrl+↑`/`Ctrl+↓` листают историю, а `Esc` больше не
+путается с началом escape-последовательности. Определённый протокол больше не
 отображается в footer (`⌨ kitty` / `⌨ xterm` убраны), но по-прежнему
 включает модификатор Shift для `Ctrl+Shift+O` (§6.5).
 
 **Mouse.** `ui.mouse = "auto" | "on" | "off" | "selection"`. SGR mouse
 (`CSI ? 1006 h` + `CSI ? 1000 h`), включается только при смене состояния.
-`auto` (дефолт) — мышь перехватывается только над интерактивными целями
-(меню подтверждения, палитра), поэтому нативное выделение текста работает;
-`on` — всегда; `off` и `selection` — никогда. Колесо прокручивает транскрипт,
-клик выбирает пункт меню/палитры. `Shift+мышь` всегда отдаёт выделение
-терминалу. In-app drag-selection отсутствует (отдельного ключа
+`auto` (дефолт) — трекинг включён постоянно: колесо должно прокручивать
+транскрипт. Без перехвата терминалы (kitty, iTerm, Windows Terminal)
+преобразуют колесо в стрелки ↑/↓ — а те теперь листают историю ввода, так что
+тик колеса вставлял историю в поле. Нативное выделение текста — через
+`Shift+мышь` (или `ui.mouse = "selection"`). `on` — всегда; `off` и
+`selection` — никогда. Колесо вверх прокручивает к старым строкам (`S.scroll`
+растёт), вниз — к низу (при `S.scroll = 0` — follow-режим); клик выбирает
+пункт меню/палитры. In-app drag-selection отсутствует (отдельного ключа
 `ui.mouse_selection` нет).
 
 **Clipboard.** OSC 52 (`ESC ] 52 ; c ; <base64> BEL`) без внешних утилит
@@ -577,13 +583,15 @@ return {
   workspace = nil,
   allow_outside_workspace = false,
   auto_approve = {},
-  providers = {                     -- per-provider api_key_env/base_url/model
+  providers = {                     -- per-provider api_key_env/base_url/model,
+                                    -- дефолты из providers/catalog.lua (42 id)
     openai    = { api_key_env = "OPENAI_API_KEY", base_url = "https://api.openai.com/v1" },
     anthropic = { api_key_env = "ANTHROPIC_API_KEY", base_url = "https://api.anthropic.com",
                   model = "claude-sonnet-4-20250514" },
     gemini    = { api_key_env = "GEMINI_API_KEY",
                   base_url = "https://generativelanguage.googleapis.com",
                   model = "gemini-2.5-flash" },
+    -- deepseek/groq/cerebras/xai/openrouter/… — см. catalog.lua и README
   },
   context = { max_tokens = 32768, summarize_at = 0.7 },
   retries = 3,
@@ -612,7 +620,14 @@ return {
 
 Ключи `providers`/`base_url`/`model` резолвятся так: `providers[<активный
 провайдер>].<ключ>` побеждает, иначе legacy-ключ верхнего уровня (он же и
-дефолт `openai`), иначе дефолт провайдера. Секреты — только через env.
+дефолт `openai`), иначе дефолт провайдера из каталога. Секреты — только через env.
+Составные credentials (`auth.provider_env`: Cloudflare account/gateway,
+Vertex project/location, AWS-селекторы) мерджатся stored-entry `env` поверх
+окружения; `config.api_key` возвращает стиль (`bearer` для OAuth,
+`ANTHROPIC_AUTH_TOKEN`, минченных Vertex-токенов) через `cfg._auth_style`.
+`ANTHROPIC_OAUTH_TOKEN` резолвится как ключ; Vertex ADC минтится через
+`oauth2.googleapis.com/token` (client из ADC-файла); Bedrock ambient chain —
+static keys → `AWS_PROFILE`/`~/.aws/credentials` → ECS → IRSA.
 
 ## 11. Сборка
 

@@ -127,12 +127,25 @@ The argument is an array of questions:
 
 ## Providers
 
-`tether` speaks three APIs through one canonical event stream
-(`src/tether/providers/`): `openai` (default, any OpenAI-compatible
-`/chat/completions` endpoint), `anthropic` (Claude Messages API) and
-`gemini` (Google `streamGenerateContent` with `generateContent`
-fallback). The agent loop, tools and confirmations are identical on
-all providers.
+`tether` speaks three wire protocols plus dedicated adapters through one
+canonical event stream (`src/tether/providers/`): `openai` (default, any
+OpenAI-compatible `/chat/completions` endpoint), `anthropic` (Claude
+Messages API) and `gemini` (Google `streamGenerateContent` with
+`generateContent` fallback). Most providers are **presets**: a catalog
+entry (`src/tether/providers/catalog.lua`) that reuses one of the three
+wire modules with its own base URL, key env var and default model — no
+new code per provider. Six providers have their own adapters:
+`azure-openai`, `amazon-bedrock` (Converse + SigV4/bearer),
+`google-vertex` (ADC/API key), `cloudflare-ai-gateway`
+(`cf-aig-authorization`), `radius`, `openai-codex` (ChatGPT backend).
+The agent loop, tools and confirmations are identical on all
+providers. Presets resolve model lists live via `/models` (no static
+fallback); the big three keep theirs. `/model` lists models of every
+provider holding a credential (active first, each tagged with its
+provider) from a fresh disk cache instantly, refreshing stale lists in a
+background child (no TUI freeze); picking another provider's model
+switches the provider and re-resolves the key. With no keys anywhere the
+list is empty with a `/login` hint. No attribution headers are sent.
 
 ```lua
 -- ~/.tether/config.lua
@@ -158,8 +171,78 @@ wins, otherwise the legacy top-level `api_key_env`/`base_url`/`model`
 keep working untouched). `--model/-m` and `/model` operate on the
 active provider; an unknown `provider` warns on stderr and behaves as
 `openai`. Keys never appear in argv: OpenAI/Anthropic go through a
-`chmod 600` header file (`x-api-key` for Anthropic), Gemini uses the
+`chmod 600` header file (`x-api-key` for Anthropic, `Authorization:
+Bearer` for OAuth/`ANTHROPIC_AUTH_TOKEN`), Gemini uses the
 `?key=` query convention without logging the command line.
+
+### Provider catalog
+
+`wire` is the protocol module (`openai`/`anthropic`/`gemini` shared,
+otherwise a dedicated adapter). `{VAR}` placeholders resolve from
+stored-entry env, then process env.
+
+| id | wire | key env | base URL |
+|---|---|---|---|
+| `openai` | openai | `OPENAI_API_KEY` | `https://api.openai.com/v1` |
+| `anthropic` | anthropic | `ANTHROPIC_API_KEY` | `https://api.anthropic.com` |
+| `gemini` | gemini | `GEMINI_API_KEY` | `https://generativelanguage.googleapis.com` |
+| `amazon-bedrock` | amazon-bedrock | `AWS_BEARER_TOKEN_BEDROCK` | `` |
+| `agnes` | openai | `AGNES_API_KEY` | `https://apihub.agnes-ai.com/v1` |
+| `agnes-cn` | openai | `AGNES_CN_API_KEY` | `https://api.agnes-ai.cn/v1` |
+| `ant-ling` | openai | `ANT_LING_API_KEY` | `https://api.ant-ling.com/v1` |
+| `azure-openai` | azure-openai | `AZURE_OPENAI_API_KEY` | `` |
+| `baseten` | openai | `BASETEN_API_KEY` | `https://inference.baseten.co/v1` |
+| `cerebras` | openai | `CEREBRAS_API_KEY` | `https://api.cerebras.ai/v1` |
+| `cloudflare-ai-gateway` | cloudflare-ai-gateway | `CLOUDFLARE_API_KEY` | `https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/openai` |
+| `cloudflare-workers-ai` | openai | `CLOUDFLARE_API_KEY` | `https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOUNT_ID}/ai/v1` |
+| `deepseek` | openai | `DEEPSEEK_API_KEY` | `https://api.deepseek.com` |
+| `fireworks` | openai | `FIREWORKS_API_KEY` | `https://api.fireworks.ai/inference` |
+| `github-copilot` | openai | `COPILOT_GITHUB_TOKEN` | `https://api.individual.githubcopilot.com` |
+| `google-vertex` | google-vertex | `GOOGLE_CLOUD_API_KEY` | `` |
+| `groq` | openai | `GROQ_API_KEY` | `https://api.groq.com/openai/v1` |
+| `huggingface` | openai | `HF_TOKEN` | `https://router.huggingface.co/v1` |
+| `kimi-coding` | anthropic | `KIMI_API_KEY` | `https://api.kimi.com/coding` |
+| `llama` | openai | `LLAMA_API_KEY` | `http://127.0.0.1:8080/v1` |
+| `meta` | openai | `META_API_KEY` | `https://api.meta.ai/v1` |
+| `minimax` | anthropic | `MINIMAX_API_KEY` | `https://api.minimax.io/anthropic` |
+| `minimax-cn` | anthropic | `MINIMAX_CN_API_KEY` | `https://api.minimaxi.com/anthropic` |
+| `mistral` | openai | `MISTRAL_API_KEY` | `https://api.mistral.ai/v1` |
+| `moonshotai` | openai | `MOONSHOT_API_KEY` | `https://api.moonshot.ai/v1` |
+| `moonshotai-cn` | openai | `MOONSHOT_API_KEY` | `https://api.moonshot.cn/v1` |
+| `nvidia` | openai | `NVIDIA_API_KEY` | `https://integrate.api.nvidia.com/v1` |
+| `openai-codex` | openai-codex | `(OAuth/store)` | `https://chatgpt.com/backend-api` |
+| `opencode` | openai | `OPENCODE_API_KEY` | `https://opencode.ai/zen/v1` |
+| `opencode-go` | openai | `OPENCODE_API_KEY` | `https://opencode.ai/zen/go/v1` |
+| `openrouter` | openai | `OPENROUTER_API_KEY` | `https://openrouter.ai/api/v1` |
+| `qwen-token-plan` | openai | `QWEN_TOKEN_PLAN_API_KEY` | `https://token-plan.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1` |
+| `qwen-token-plan-cn` | openai | `QWEN_TOKEN_PLAN_CN_API_KEY` | `https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1` |
+| `qwen-token-plan-individual` | openai | `QWEN_TOKEN_PLAN_API_KEY` | `https://token-plan.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1` |
+| `radius` | radius | `RADIUS_API_KEY` | `https://radius.pi.dev` |
+| `together` | openai | `TOGETHER_API_KEY` | `https://api.together.ai/v1` |
+| `vercel-ai-gateway` | anthropic | `AI_GATEWAY_API_KEY` | `https://ai-gateway.vercel.sh` |
+| `xai` | openai | `XAI_API_KEY` | `https://api.x.ai/v1` |
+| `xiaomi` | openai | `XIAOMI_API_KEY` | `https://api.xiaomimimo.com/v1` |
+| `xiaomi-token-plan-ams` | openai | `XIAOMI_TOKEN_PLAN_AMS_API_KEY` | `https://token-plan-ams.xiaomimimo.com/v1` |
+| `xiaomi-token-plan-cn` | openai | `XIAOMI_TOKEN_PLAN_CN_API_KEY` | `https://token-plan-cn.xiaomimimo.com/v1` |
+| `xiaomi-token-plan-sgp` | openai | `XIAOMI_TOKEN_PLAN_SGP_API_KEY` | `https://token-plan-sgp.xiaomimimo.com/v1` |
+| `zai` | openai | `ZAI_API_KEY` | `https://api.z.ai/api/coding/paas/v4` |
+| `zai-coding-cn` | openai | `ZAI_CODING_CN_API_KEY` | `https://open.bigmodel.cn/api/coding/paas/v4` |
+
+Compound credentials: `cloudflare-*` additionally need
+`CLOUDFLARE_ACCOUNT_ID` (+ `CLOUDFLARE_GATEWAY_ID` for the gateway),
+from the stored entry `env` or process env. `google-vertex` accepts
+`GOOGLE_CLOUD_API_KEY` or ADC (`GOOGLE_APPLICATION_CREDENTIALS` or
+`~/.config/gcloud/application_default_credentials.json`) plus
+`GOOGLE_CLOUD_PROJECT`/`GOOGLE_CLOUD_LOCATION` (project also as
+`GCLOUD_PROJECT`). `amazon-bedrock` accepts a bearer token, static
+`AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` (+`AWS_SESSION_TOKEN`),
+`AWS_PROFILE`, or ECS/IRSA ambient sources (region via `AWS_REGION` /
+`AWS_DEFAULT_REGION`, default `us-east-1`). Anthropic additionally
+recognizes `ANTHROPIC_AUTH_TOKEN` (Bearer) and `ANTHROPIC_OAUTH_TOKEN`.
+`opencode`/`opencode-go` require a session (`x-opencode-session` is sent
+automatically). `meta` over chat-completions is best-effort (upstream
+serves Responses). `llama` targets a local llama.cpp router in OpenAI
+mode — pick the loaded model via `/model`.
 
 ### Credentials: env, `/login`, `/logout`
 
@@ -234,6 +317,14 @@ the skills index in its prompt.
 
 ## TUI features
 
+- **Input history**: `↑`/`↓` recall previously submitted messages — the
+  newest entry first, `↓` past it clears the input (`Ctrl+↑`/`Ctrl+↓` do the
+  same). History is stored per project folder: entries are saved to
+  `~/.tether/history.jsonl` with the workspace path and only that folder's
+  entries are recalled. Inside a multi-line input `↑`/`↓` move the caret
+  instead (`Shift+↑`/`Shift+↓` is the explicit caret navigation).
+- **Transcript scrolling** on `PgUp`/`PgDn` and the mouse wheel (the `↓ +N`
+  footer indicator shows how many rows are hidden above).
 - **Markdown-lite rendering** of assistant replies: code blocks in a frame,
   inline code, bold/italic, lists, headings.
 - **Syntax highlighting** in fenced code blocks: lua, c, sh, python, js, go,
@@ -266,9 +357,12 @@ the skills index in its prompt.
   budget, colored by threshold (green → yellow at summarize threshold → red
   at 90%+).
 - **Mouse modes** (`ui.mouse` in `~/.tether/config.lua`):
-  `"auto"` (default — mouse only over menus, native text selection works),
+  `"auto"` (default — mouse tracking is always on so the wheel scrolls the
+  transcript; without capture, terminals translate wheel ticks into Up/Down
+  arrow keys, which would recall input history into the field),
   `"on"` (always), `"off"` (never), `"selection"` (off + manual copy).
-  With mouse on, hold `Shift` while dragging to use terminal-native selection.
+  Wheel up scrolls to older rows, wheel down returns to the bottom. Hold
+  `Shift` while dragging to use terminal-native selection.
 - **Alt-screen** by default (`ui.alt_screen = true`): the TUI repaints in the
   alternate screen buffer, so shell scrollback stays intact behind it;
   `false` opts back into in-place rendering.
@@ -281,7 +375,7 @@ the skills index in its prompt.
   `/<name> ` into the input. Submitting `/<name>` sends it to the agent as a
   normal message; `/skills` no longer exists.
 - **`↓ +N` scroll indicator** on the single footer row while the user is
-  scrolled up; no in-transcript marker.
+  scrolled up (scrolled via `PgUp`/`PgDn`); no in-transcript marker.
 - **Retry and continuation notices** — a failed attempt that is about to be
   retried drops the rows it already painted and leaves one dim
   `↻ повтор N (ждём Xs): reason` row, with the pending retry also shown in the

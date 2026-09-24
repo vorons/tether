@@ -23,10 +23,9 @@ local use_counter = 0
 local visible_lo = 0
 local visible_hi = -1
 
--- Synthetic tail entries (confirmation menu, ask block, waiting placeholder).
+-- Synthetic tail entries (confirmation menu, ask block).
 local confirm_entry = nil
 local ask_entry = nil
-local placeholder_entry = nil
 
 -- Injected by ui once render_entry and the viewport height are in scope.
 local render_fn = nil
@@ -47,7 +46,7 @@ function M.count()
 end
 
 function M.tails()
-    return confirm_entry, ask_entry, placeholder_entry
+    return confirm_entry, ask_entry
 end
 
 -- Structural change by appending (new turn, new tool entry, system line):
@@ -145,13 +144,13 @@ function M.clear()
     cached_rows = 0
     use_counter = 0
     visible_lo, visible_hi = 0, -1
-    confirm_entry, ask_entry, placeholder_entry = nil, nil, nil
+    confirm_entry, ask_entry = nil, nil
 end
 
 -- Keep synthetic tail entries in sync with ui mode flags; invalidates from
 -- the tail (cheap — they sit last). A fresh confirm/ask entry bumps its
 -- version so the menu/block rows re-render.
-function M.sync_tail(has_confirm, has_ask, has_waiting)
+function M.sync_tail(has_confirm, has_ask)
     if has_confirm then
         confirm_entry = confirm_entry or { virt = "confirm", ver = 0 }
         confirm_entry.ver = (confirm_entry.ver or 0) + 1
@@ -164,13 +163,17 @@ function M.sync_tail(has_confirm, has_ask, has_waiting)
     else
         ask_entry = nil
     end
-    if has_waiting then
-        placeholder_entry = placeholder_entry or { virt = "placeholder", ver = 0 }
-    else
-        placeholder_entry = nil
-    end
     local n = #entries + 1
     if not index_dirty_from or index_dirty_from > n then index_dirty_from = n end
+end
+
+-- A fresh turn restarts attempt numbering at 1 (agent reset_retry_state),
+-- so stale tags from previous turns must go first: otherwise a retry of
+-- attempt N drops previous turns' answers tagged N. Same-turn
+-- continuations (turn.continue) keep their tags. No version bumps:
+-- attempt tags are never rendered, only matched by the retry drop.
+function M.new_turn()
+    for _, e in ipairs(entries) do e.attempt = nil end
 end
 
 -- Row mutations for one canonical agent event. Mode flags, tokens,
@@ -196,7 +199,8 @@ function M.handle(ev)
         local last = entries[#entries]
         local stale = ev.attempt and last and last.attempt and last.attempt ~= ev.attempt
         if not last or last.role ~= "thinking" or stale then
-            last = M.append({ role = "thinking", text = "" })
+            -- started_at once: later deltas must not reset the elapsed clock
+            last = M.append({ role = "thinking", text = "", started_at = os.time() })
         end
         last.text = (last.text or "") .. (ev.text or "")
         last.attempt = ev.attempt or last.attempt
@@ -255,6 +259,9 @@ function M.handle(ev)
         -- The attempt that failed is dropped before its retry row, so the
         -- transcript never shows output from an attempt the model may answer
         -- differently. Removal invalidates every position after it.
+        -- Scope note: attempt tags only live within a turn (ui clears them
+        -- on every fresh turn via new_turn), so this never touches previous
+        -- turns' answers even though numbering restarts at 1 each turn.
         local failed = ev.attempt
         local removed = false
         if failed then
@@ -293,7 +300,6 @@ function M.visible_count()
     local n = #entries
     if confirm_entry then n = n + 1 end
     if ask_entry then n = n + 1 end
-    if placeholder_entry then n = n + 1 end
     return n
 end
 
@@ -305,11 +311,7 @@ function M.entry_at(i)
         if k == 1 then return confirm_entry end
         k = k - 1
     end
-    if ask_entry then
-        if k == 1 then return ask_entry end
-        k = k - 1
-    end
-    if placeholder_entry and k == 1 then return placeholder_entry end
+    if ask_entry and k == 1 then return ask_entry end
     return nil
 end
 

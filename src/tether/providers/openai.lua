@@ -106,9 +106,11 @@ local function parse_sse_line(line, on_event)
     local obj = parse_json_str(payload)
     if not obj then return end
 
-    -- content delta: "content":"..." — unescaped once, here (SSE string layer)
-    local content = payload:match('"content"[%s]*:[%s]*"(.-[^\\])"')
-        or payload:match('"content"[%s]*:[%s]*""')
+    -- content delta: "content":"..." — unescaped once, here (SSE string layer).
+    -- An empty value yields "" (no event): the fallback must NOT be a second
+    -- match without captures — string.match would return the whole key
+    -- fragment ("content":"") and it would leak into the answer as text.
+    local content = payload:match('"content"[%s]*:[%s]*"(.-[^\\])"') or ""
     if content and content ~= "" then
         content = json_unescape(content)
         if content ~= "" then
@@ -161,7 +163,8 @@ local function parse_sse_line(line, on_event)
     -- nested objects, so obj.error was never set) and keep the real text.
     -- add-retry-and-continuation: the attempt fails instead of succeeding, and
     -- the policy classifies the message — the provider never emits `error`.
-    if not content and payload:find('"error"', 1, true) then
+    -- (content == "" means no delta: empty string is truthy in Lua.)
+    if (not content or content == "") and payload:find('"error"', 1, true) then
         local msg = payload:match('"message"[%s]*:[%s]*"([^"]*)"')
         if msg then msg = json_unescape(msg) end
         local status = tonumber(payload:match('"status"[%s]*:[%s]*(%d+)'))
@@ -193,8 +196,32 @@ function M.stream_url(cfg, _model, _api_key)
     return (cfg.base_url or "") .. "/chat/completions"
 end
 
-function M.header_lines(api_key)
-    return { "Authorization: Bearer " .. (api_key or "") }
+function M.header_lines(api_key, ctx)
+    local lines = { "Authorization: Bearer " .. (api_key or "") }
+    -- expand-provider-catalog: per-preset required headers (pi sources).
+    -- No attribution headers are ever sent (HTTP-Referer, X-Title, ...).
+    local provider = (type(ctx) == "table" and ctx.provider) or nil
+    if provider == "opencode" or provider == "opencode-go" then
+        -- pi providers/opencode-headers.ts: required per-conversation
+        -- routing header; omitted (never empty) when no session id.
+        local sid = (type(ctx) == "table" and ctx.session_id) or nil
+        if type(sid) == "string" and sid ~= "" then
+            lines[#lines + 1] = "x-opencode-session: " .. sid
+        end
+    elseif provider == "github-copilot" then
+        -- pi api/github-copilot-headers.ts + COPILOT_STATIC_HEADERS.
+        -- Copilot-Vision-Request is omitted: tether history is text-only.
+        lines[#lines + 1] = "User-Agent: GitHubCopilotChat/0.35.0"
+        lines[#lines + 1] = "Editor-Version: vscode/1.107.0"
+        lines[#lines + 1] = "Editor-Plugin-Version: copilot-chat/0.35.0"
+        lines[#lines + 1] = "Copilot-Integration-Id: vscode-chat"
+        local msgs = (type(ctx) == "table" and ctx.messages) or {}
+        local initiator = "user"
+        if #msgs > 0 and msgs[#msgs].role ~= "user" then initiator = "agent" end
+        lines[#lines + 1] = "X-Initiator: " .. initiator
+        lines[#lines + 1] = "Openai-Intent: conversation-edits"
+    end
+    return lines
 end
 
 function M.handle_non_sse(_body, _on_event)
@@ -205,8 +232,8 @@ function M.models_url(cfg, _api_key)
     return (cfg.base_url or "") .. "/models"
 end
 
-function M.models_headers(api_key)
-    return M.header_lines(api_key)
+function M.models_headers(api_key, ctx)
+    return M.header_lines(api_key, ctx)
 end
 
 function M.models_parse(body)
