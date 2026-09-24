@@ -37,7 +37,7 @@ A catalog entry whose `wire` is `openai`, `anthropic`, or `gemini` SHALL reuse t
 
 ### Requirement: Catalog coverage
 
-The catalog SHALL contain an entry for every pi builtin provider that maps to a supported wire protocol (Tier-A, ~35 ids), plus Tier-B adapter entries (amazon-bedrock, google-vertex, azure-openai, cloudflare-ai-gateway, radius, openai-codex). The `/login` picker list SHALL be derived from the catalog keys, so the picker and the dispatcher can never disagree.
+The catalog SHALL contain an entry for every provider id listed in the Defaults requirement below (Tier-A, 41 ids at the time of writing — pi parity where an id exists in pi), plus Tier-B adapter entries (amazon-bedrock, google-vertex, azure-openai, cloudflare-ai-gateway, radius, openai-codex). The `/login` picker list SHALL be derived from the catalog keys, so the picker and the dispatcher can never disagree. The authoritative id list is `src/tether/providers/catalog.lua`; this spec's Defaults requirement mirrors it and both are updated together.
 
 #### Scenario: Picker matches dispatcher
 

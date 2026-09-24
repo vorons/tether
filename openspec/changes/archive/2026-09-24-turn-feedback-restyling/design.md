@@ -15,7 +15,7 @@ See proposal.md (Why). Current state (observed):
 
 ## Decisions
 
-1. **Top-rule status owns the busy state.** `turn_status()` returns only the live spinner frame plus `Working...` while `S.busy` (retry/backoff leg unchanged). Rationale: single obvious place; the input box stays usable and untouched.
+1. **Top-rule status owns the busy state.** `turn_status()` returns only the live spinner frame plus `Working...` while `S.busy`. Rationale: single obvious place; the input box stays usable and untouched. (Post-audit decision: the pending-retry top-rule leg of the earlier retry/continuation change is deliberately retired — the retry notice lives in the transcript row only; the top rule always shows the turn spinner while the turn is running.)
 2. **Remove the placeholder tail, keep the flag.** `transcript` drops `placeholder_entry` (third tail); `sync_tail` no longer takes a waiting leg; `S.waiting` transitions stay (tests and tail logic reference the flag, rows are gone). render_entry's placeholder branch and the live-tail spinner append are deleted. Rationale: row-level removal kills all placeholder assertions at the source; flag retention keeps the diff small.
 3. **Thinking elapsed via `started_at`.** `transcript.handle` stamps `started_at = os.time()` when a thinking entry is created (not per delta, else elapsed resets); render prints `think · %.1fs` reusing the pending-tool convention (integer seconds render as `N.0s`). Collapsed one-liner keeps the toggle hint.
 4. **Assistant marker `·` with ASCII twin.** Prefix selected by the same ascii branch as list bullets (`·` vs `-`); add `·`→`-` to GLYPH_MAP so `to_ascii` paths stay pure ASCII.

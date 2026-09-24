@@ -11,7 +11,7 @@ machine-managed auto-approve persistence.
 
 ### Requirement: Defaults
 
-A fresh install (no `~/.tether/config.lua`) SHALL run with defaults: provider openai, api_key_env OPENAI_API_KEY, base_url https://api.openai.com/v1, model gpt-4o-mini, providers table with per-provider `api_key_env` / `base_url` / `model` for every catalog id, plus workspace nil (cwd at runtime), allow_outside_workspace false, auto_approve {}, context {max_tokens 32768, summarize_at 0.7, reserve_tokens 16384, keep_recent_messages 4}, retry {base_delay_ms 2000, max_delay_ms 60000, multiplier 2, max_failures_at_max_delay 3}, ui {theme default, header false, keyboard_protocol auto, mouse auto, thinking collapsed, ascii auto, wrap true, collapse {read 20, list 30, grep 15}, input_max_lines 8, editor_padding_x 0, alt_screen true, highlight auto, turn_separators true, path_completion true}, tools {run_shell {timeout 120}}, system_prompt nil, skills_dirs nil, agents_files {}, log_level info.
+A fresh install (no `~/.tether/config.lua`) SHALL run with defaults: provider openai, api_key_env OPENAI_API_KEY, base_url https://api.openai.com/v1, model gpt-4o-mini, providers table with per-provider `api_key_env` / `base_url` / `model` for every catalog id (the defaults cover the full Tier-A list including `agnes`, `agnes-cn`, `llama` at `http://127.0.0.1:8080/v1`, and the moonshot/qwen/xiaomi regional variants — the catalog file is the source of truth for per-id values), plus workspace nil (cwd at runtime), allow_outside_workspace false, auto_approve {}, context {max_tokens 32768, summarize_at 0.7, reserve_tokens 16384, keep_recent_messages 4}, retry {base_delay_ms 2000, max_delay_ms 60000, multiplier 2, max_failures_at_max_delay 3}, ui {theme default, header false, keyboard_protocol auto, mouse auto, thinking collapsed, ascii auto, wrap true, collapse {read 20, list 30, grep 15}, input_max_lines 8, editor_padding_x 0, alt_screen true, highlight auto, turn_separators true, path_completion true}, tools {run_shell {timeout 120}}, system_prompt nil, skills_dirs nil, agents_files {}, log_level info.
 
 The defaults SHALL NOT include a `retries` value or a `retry.max_attempts`: the default retry budget is the policy cutoff (eight attempts at most), not a fixed attempt count.
 
@@ -215,9 +215,9 @@ When `~/.tether/config.lua` does not exist, the first load SHALL create it (incl
 
 ### Requirement: Model persistence in config file
 
-The `/model` picker SHALL persist the picked `provider` and `model` into `~/.tether/config.lua`, so a restart restores them. The write SHALL update only those two keys and preserve everything else in the file byte-for-byte (comments, unknown keys, user logic). Only `provider` and `model` are ever machine-written; secrets SHALL never be written to `config.lua`. A failed write SHALL NOT fail the pick: the in-memory selection still applies for the session.
+The `/model` picker SHALL persist the picked `provider` and `model` into `~/.tether/config.lua`, so a restart restores them. The write SHALL update only those two keys and preserve everything else in the file byte-for-byte (comments, unknown keys, user logic). Only `provider` and `model` are ever machine-written; secrets SHALL never be written to `config.lua`. A failed write SHALL NOT fail the pick: the in-memory selection still applies for the session. Persistence and migration apply to recognizable files only — a file the rewriter cannot safely re-emit (e.g. a hand-minified one-liner or exotic Lua) fails closed: the write is skipped, the in-memory pick still applies, and no data is lost.
 
-The retired `~/.tether/model.lua` side file SHALL be migrated once: when it exists and `config.lua` carries no non-default `provider`/`model` (a bootstrapped file holds defaults, which count as non-explicit), its value moves into `config.lua` on load and the side file is removed.
+The retired `~/.tether/model.lua` side file SHALL be migrated once: when it exists and `config.lua` carries no explicit `provider`/`model` — a key that is absent or holds the bootstrap default counts as non-explicit, so a hand-written pick in the config (even one matching the default) always wins over the side file — its value moves into `config.lua` on load and the side file is removed.
 
 #### Scenario: Pick survives restart
 
@@ -238,3 +238,13 @@ The retired `~/.tether/model.lua` side file SHALL be migrated once: when it exis
 
 - **WHEN** `~/.tether/model.lua` holds a pick and `config.lua` has no explicit `provider`/`model`
 - **THEN** the first load applies the pick, writes it into `config.lua`, and removes `model.lua`
+
+#### Scenario: Hand-written default is explicit
+
+- **WHEN** `config.lua` hand-writes `model = "gpt-4o-mini"` (equal to the bootstrap default) and `model.lua` holds another pick
+- **THEN** the migration does not run: the explicit config value wins and `model.lua` stays on disk
+
+#### Scenario: Unrecognizable config fails closed
+
+- **WHEN** `config.lua` is a one-liner the rewriter cannot re-emit and the user picks a model
+- **THEN** the pick applies for the session, the file is left untouched, and no error is raised

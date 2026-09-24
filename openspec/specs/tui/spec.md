@@ -450,10 +450,16 @@ History navigation SHALL work as follows:
 - Up/Down SHALL recall previously sent messages one entry per press,
   most-recent first, continuing past the most recent entry on repeated
   presses. Down below the newest entry SHALL clear the input.
-- Ctrl+Up / Ctrl+Down SHALL recall history exactly like Up/Down.
+- Ctrl+Up / Ctrl+Down SHALL recall history exactly like Up/Down (at a
+  multi-line edge this discards nothing: recall starts from the
+  committed history, and the in-progress draft is not preserved —
+  accepted behavior; move the cursor with Shift+Up/Shift+Down instead).
 - Inside a multi-line input Up/Down SHALL move the cursor between input
   lines instead of recalling history; Shift+Up/Shift+Down SHALL move the
-  cursor explicitly.
+  cursor explicitly. On terminals without kitty keyboard protocol or
+  modifyOtherKeys the terminal reports Shift+Up/Shift+Down as plain
+  Up/Down — indistinguishable and accepted; the recall behavior of
+  plain Up/Down applies.
 - Transcript scrolling SHALL live on PgUp/PgDn, never on Up/Down.
 - The recall list SHALL contain only messages that were committed
   to the agent; text typed and discarded without submission SHALL
@@ -593,17 +599,17 @@ fall back to modifyOtherKeys / xterm fallback sequences.
 
 ### Requirement: Live turn feedback
 
-The TUI SHALL show turn progress while the agent works, without waiting for the turn to finish. On submit it SHALL paint the waiting state immediately: the input box's top rule status SHALL show only the spinner frame plus `Working...`, advancing on repaints while the turn runs. The transcript SHALL carry no waiting placeholder — only real entries (user, assistant, thinking, tool, system rows) plus the caret `▌` (ASCII `|`) at the end of the newest line while deltas keep arriving; the caret SHALL NOT be drawn while the user has scrolled up or while the palette, confirmation menu, ask block, or login secret mode owns the keyboard. Thinking rows SHALL render as `think · Ns` with the live elapsed seconds of the reasoning so far. Assistant rows SHALL use the `·` marker (ASCII `-`). Text and tool progress SHALL become visible during the turn: the TUI SHALL repaint while the turn is running, throttled by a bounded number of skipped deltas, and SHALL repaint immediately on state transitions (tool call start, tool result, error, abort, confirmation). No background timer SHALL be required: repaints driven by events and keypresses are sufficient, and the spinner advances only when the TUI repaints. While busy, the TUI SHALL additionally pump non-blocking key reads on each paint/event tick so Enter / Alt+Enter / Escape are handled mid-turn (steering capability); the pump SHALL NOT block for input and SHALL NOT run while a confirmation menu, ask block, or login secret mode owns the keyboard. The input-box indicator, caret and elapsed fields SHALL be cleared when the turn ends — after a reply, on error, on abort, and when a confirmation menu is raised (the turn is then waiting on the user) — and SHALL apply equally to a turn resumed after a confirmation decision. The elapsed counter SHALL reset at the start of each turn. In ASCII mode the spinner SHALL use ASCII frames (the caret is `|`, the assistant marker is `-`) and no non-ASCII glyph SHALL be introduced by this feedback.
+The TUI SHALL show turn progress while the agent works, without waiting for the turn to finish. On submit it SHALL paint the waiting state immediately: the input box's top rule status SHALL show a leading space, the spinner frame, and `Working...`, advancing on repaints while the turn runs. The transcript SHALL carry no waiting placeholder — only real entries (user, assistant, thinking, tool, system rows) plus the caret `▌` (ASCII `|`) at the end of the newest line while deltas keep arriving; the caret SHALL NOT be drawn while the user has scrolled up or while the palette, confirmation menu, ask block, or login secret mode owns the keyboard. Thinking rows SHALL render as `thinking · Ns` with the live elapsed seconds of the reasoning so far. Assistant rows SHALL use the `•` marker (ASCII `-`). Text and tool progress SHALL become visible during the turn: the TUI SHALL repaint while the turn is running, throttled by a bounded number of skipped deltas, and SHALL repaint immediately on state transitions (tool call start, tool result, error, abort, confirmation). No background timer SHALL be required: repaints driven by events and keypresses are sufficient, and the spinner advances only when the TUI repaints. While busy, the TUI SHALL additionally pump non-blocking key reads on each paint/event tick so Enter / Alt+Enter / Escape are handled mid-turn (steering capability); the pump SHALL NOT block for input and SHALL NOT run while a confirmation menu, ask block, or login secret mode owns the keyboard. The input-box indicator, caret and elapsed fields SHALL be cleared when the turn ends — after a reply, on error, on abort, and when a confirmation menu is raised (the turn is then waiting on the user) — and SHALL apply equally to a turn resumed after a confirmation decision. The elapsed counter SHALL reset at the start of each turn. In ASCII mode the spinner SHALL use ASCII frames (the caret is `|`, the assistant marker is `-`) and no non-ASCII glyph SHALL be introduced by this feedback.
 
 #### Scenario: Placeholder before the first token
 
 - **WHEN** the user submits a message and no token has arrived yet
-- **THEN** the input box's top rule status shows only the spinner frame plus `Working...` and the transcript carries no placeholder row
+- **THEN** the input box's top rule status shows a leading space, the spinner frame plus `Working...` and the transcript carries no placeholder row
 
 #### Scenario: Working indicator in the top rule
 
 - **WHEN** the user submits a message and no token has arrived yet
-- **THEN** the input box's top rule status shows only the spinner frame plus `Working...` and the transcript carries no placeholder row
+- **THEN** the input box's top rule status shows a leading space, the spinner frame plus `Working...` and the transcript carries no placeholder row
 
 #### Scenario: First delta replaces the placeholder
 
@@ -618,12 +624,12 @@ The TUI SHALL show turn progress while the agent works, without waiting for the 
 #### Scenario: Thinking shows elapsed time
 
 - **WHEN** reasoning streams for several seconds
-- **THEN** the thinking row reads `think · Ns` with the elapsed seconds
+- **THEN** the thinking row reads `thinking · Ns` with the elapsed seconds
 
 #### Scenario: Text appears before the turn returns
 
 - **WHEN** the model streams an answer
-- **THEN** frames painted while the turn is still running already contain the streamed text prefixed with `·`
+- **THEN** frames painted while the turn is still running already contain the streamed text prefixed with `•`
 
 #### Scenario: Transitions repaint immediately
 
@@ -686,12 +692,11 @@ On a `continuation` event the TUI SHALL append one dim row naming what
 was continued, so an answer that was stitched together is visibly
 stitched.
 
-While the TUI waits between attempts the input box's top rule SHALL
-show the pending retry — the attempt number and the wait in seconds —
-in place of the turn's own indicator; the ordinary indicator SHALL
-return once the next attempt starts. The wait shown SHALL be the fixed
-duration carried by the event, not a live countdown, so no background
-timer is required.
+While the TUI waits between attempts the transcript carries the retry
+row; the input box's top rule keeps showing the ordinary turn indicator
+(a post-audit decision: the pending-retry top-rule leg is retired — the
+retry explanation lives in the transcript row only, and the top rule
+always shows the turn spinner while the turn is running).
 
 These rows SHALL behave as transcript rows for scrolling and the
 transcript height, SHALL NOT be sent to the agent, and SHALL NOT be
@@ -718,9 +723,8 @@ and SHALL NOT introduce a non-ASCII glyph.
 
 #### Scenario: Status line during the wait
 - **WHEN** the TUI waits 60 seconds before the next attempt
-- **THEN** the input box's top rule shows the attempt number and the
-  60-second wait, and returns to the ordinary turn indicator when the
-  next attempt starts
+- **THEN** the retry row names the 60-second wait and the input box's
+  top rule keeps showing the ordinary turn indicator
 
 #### Scenario: Painted without a keypress
 - **WHEN** a retry or continuation event arrives
@@ -1296,15 +1300,17 @@ The TUI SHALL render the footer as a single dim row below the input
 box and SHALL NOT use a reverse-video row for it. The footer SHALL
 occupy exactly one row regardless of active indicators.
 
-That row SHALL carry, left to right: the workspace path with a
-leading `$HOME` abbreviated to `~`; on the left side joined by a
-single space the session's accumulated input tokens as `↑<count>`,
-its accumulated output tokens as `↓<count>` (each omitted while
-zero), and the context cell `used/max (pct%)`; any active transient
-flags joined by a single space (the one-shot toast and the scroll
-indicator only — no mouse-mode or keyboard-protocol icons); and the
-model name right-aligned on the same row, at least two columns away
-from the left side. Counts SHALL use the compact form: plain below
+That row SHALL carry, left to right, its blocks joined by a dim ` · `
+separator: the workspace path with a leading `$HOME` abbreviated to
+`~`; the session's accumulated input tokens as `↑<count>`, its
+accumulated output tokens as `↓<count>` (each omitted while zero,
+joined to each other by one space); the context cell
+`used/max (pct%)`; any active transient flags joined by a single
+space (the one-shot toast and the scroll indicator only — no
+mouse-mode or keyboard-protocol icons); and the model cell
+`provider/model` (provider omitted when unknown) right-aligned on
+the same row, at least two columns away from the left side. No `≈`
+or other estimate marker SHALL precede the context cell. Counts SHALL use the compact form: plain below
 1000, one decimal with `k` below 10000, a rounded `k` below 1000000,
 and `M` above. The model name SHALL end in the row's last column
 whenever both sides fit; when they cannot both fit, the model name
