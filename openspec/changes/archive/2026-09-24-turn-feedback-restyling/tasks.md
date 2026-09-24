@@ -3,7 +3,7 @@
 ## 1. Transcript
 
 - [x] 1.1 Drop `placeholder_entry` from `transcript.lua` (third tail in `tails`/`visible_count`/`entry_at`/`sync_tail`/`clear`); verify `lua tests/lua_tests.lua` still parses (failing placeholder tests expected — reworked in 3.1)
-- [ ] 1.2 Stamp `started_at` when a thinking entry is created in `transcript.handle`; verify a `reasoning_delta` entry carries `started_at` and later deltas do not reset it
+- [x] 1.2 Stamp `started_at` when a thinking entry is created in `transcript.handle`; verify a `reasoning_delta` entry carries `started_at` and later deltas do not reset it
 
 ## 2. Rendering
 

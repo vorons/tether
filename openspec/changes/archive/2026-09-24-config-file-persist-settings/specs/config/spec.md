@@ -10,6 +10,11 @@ The defaults SHALL NOT include a `retries` value or a `retry.max_attempts`: the 
 
 `context.reserve_tokens` (default 16384) SHALL reserve headroom for the model's reply when deciding to compact; `context.keep_recent_messages` (default 4) SHALL size the unsummarized tail window. A missing or non-numeric value for either key SHALL fall back to its default without failing the session.
 
+#### Scenario: Missing config file
+
+- **WHEN** the config path does not exist
+- **THEN** loading succeeds silently with defaults, including `skills_dirs = nil`, `agents_files = {}`, `context.reserve_tokens = 16384`, and `context.keep_recent_messages = 4`
+
 #### Scenario: Missing config file is bootstrapped
 
 - **WHEN** the config path does not exist at startup
