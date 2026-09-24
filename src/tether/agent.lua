@@ -679,6 +679,9 @@ end
 -- Returns true when the wait was interrupted by an abort. tether.sleep itself
 -- returns as soon as input arrives, so the check below usually fires well
 -- before the slice elapses.
+-- TW2: the wake also runs the busy-pump hook (set by ui.lua) so wheel scrolls
+-- and other keys apply during silent stretches instead of queueing until the
+-- turn ends. Agent never imports ui: the hook is an optional global.
 local function interruptible_sleep(seconds)
     local elapsed = 0
     local total = tonumber(seconds) or 0
@@ -687,6 +690,8 @@ local function interruptible_sleep(seconds)
         if step > 0.25 then step = 0.25 end
         pcall(tether.sleep, step)
         elapsed = elapsed + step
+        local pump = _G.pump_busy_hook
+        if pump then pcall(pump) end
         if take_abort() then return true end
     end
     return false

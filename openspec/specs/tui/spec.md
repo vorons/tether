@@ -168,17 +168,29 @@ expansion toggles, `/clear`, `/new`, and resize.
 - **THEN** the reported hidden-row count equals the difference between the new transcript height and the viewport bottom
 
 ### Requirement: Mouse tracking
-When `ui.mouse` is on the TUI SHALL enable SGR mouse reporting
-(1006) and interpret clicks and wheel events on the transcript and
-palette/confirmation items. A click on a tool row SHALL toggle that entry's
-expanded state where the mode delivers transcript clicks (`ui.mouse = "on"`);
-in the `auto`, `off` and `selection` modes no transcript click is delivered,
-so those modes keep native text selection.
+When `ui.mouse` is `on` — or `auto` (the default) — the TUI SHALL enable SGR
+mouse reporting (1006) continuously and interpret clicks and wheel events on
+the transcript and palette/confirmation items. The always-on capture in `auto`
+exists because the wheel must scroll the transcript: with tracking off,
+terminals translate wheel ticks into Up/Down arrow keys, which recall input
+history into the field. Transcript click-to-expand is still delivered only
+where the mode says so (`ui.mouse = "on"`); `off` and `selection` disable
+tracking entirely and keep native text selection.
 
 #### Scenario: Wheel scroll
 - **WHEN** the mouse wheel is turned over the transcript
-- **THEN** the transcript scrolls and follow mode is disabled on
-  upward motion
+- **THEN** the transcript scrolls — upward toward older rows, downward back
+  toward the bottom — and follow mode is disabled on upward motion
+
+#### Scenario: Wheel capture in auto mode
+- **WHEN** `ui.mouse = "auto"` (default) and the wheel is turned with no menu or palette open
+- **THEN** the transcript scrolls and no input-history text is inserted into the field
+
+#### Scenario: Wheel scroll while the agent is busy
+- **WHEN** a turn is running (streaming or a silent wait such as a retry backoff)
+  and the wheel is turned
+- **THEN** the transcript scrolls during the turn; the running turn is not
+  affected and the input is not modified
 
 #### Scenario: Click on a tool row
 - **WHEN** `ui.mouse = "on"` and the user clicks a collapsed tool row
@@ -420,15 +432,29 @@ is too narrow to hold it without losing the rule's own glyphs.
 
 The input field SHALL support multi-line editing up to
 `ui.input_max_lines` (default 8) with UTF-8-aware cursor movement.
+Editing keys SHALL operate on whole characters, never single bytes:
+- Left SHALL move the caret back one character; Right SHALL move it
+  forward one character.
+- Backspace SHALL delete the whole character before the caret.
+- Delete SHALL delete the whole character after the caret.
+- The cursor position SHALL always sit on a character boundary (a
+  leading byte or the end of the text), never on a continuation byte:
+  vertical cursor moves that carry the byte column to a line where it
+  lands inside a multi-byte character SHALL snap the column to the
+  nearest character boundary on that line.
+- None of these keys SHALL raise an error on a mid-character cursor
+  position (which can arise from a kill, paste, or completion restore):
+  Left/Backspace SHALL treat the cursor as sitting inside the character
+  containing it and step/delete from that character's boundary.
 History navigation SHALL work as follows:
-- Up/Down with a non-empty input moves the cursor between input
-  lines, or scrolls the transcript when at a cursor edge.
-- Up/Down with an empty input SHALL scroll the transcript (Up
-  scrolls up, Down scrolls down and re-enters follow mode at the
-  bottom).
-- An explicit history key (Ctrl+Up / Ctrl+Down) SHALL recall
-  previously sent messages one entry per press, most-recent first,
-  continuing past the most recent entry on repeated presses.
+- Up/Down SHALL recall previously sent messages one entry per press,
+  most-recent first, continuing past the most recent entry on repeated
+  presses. Down below the newest entry SHALL clear the input.
+- Ctrl+Up / Ctrl+Down SHALL recall history exactly like Up/Down.
+- Inside a multi-line input Up/Down SHALL move the cursor between input
+  lines instead of recalling history; Shift+Up/Shift+Down SHALL move the
+  cursor explicitly.
+- Transcript scrolling SHALL live on PgUp/PgDn, never on Up/Down.
 - The recall list SHALL contain only messages that were committed
   to the agent; text typed and discarded without submission SHALL
   not enter the list.
@@ -444,6 +470,22 @@ History navigation SHALL work as follows:
 #### Scenario: End-of-line caret
 - **WHEN** the cursor is at the end of the row's text
 - **THEN** a reverse-video space is painted directly after the last character
+
+#### Scenario: Backspace deletes a whole multi-byte character
+- **WHEN** the input holds `привет` with the cursor at the end and the user presses Backspace
+- **THEN** the input becomes `приве` and the cursor sits before the (removed) `т`'s position, with both bytes of the 2-byte character removed
+
+#### Scenario: Delete removes the character after the caret
+- **WHEN** the input holds `привет` with the cursor at the start and the user presses Delete
+- **THEN** the input becomes `ривет` with the cursor still at the start, both bytes of the 2-byte `п` removed
+
+#### Scenario: Vertical move snaps the column to a character boundary
+- **WHEN** a multi-line input holds `abc` then `привет` on the next line, the cursor sits after `c` on the first line, and the user presses Up
+- **THEN** the cursor snaps to a character boundary on the `привет` line (after `п`'s character boundary nearest to the carried column), never onto a continuation byte
+
+#### Scenario: Editing keys survive a mid-character cursor
+- **WHEN** the cursor sits on a continuation byte of a multi-byte character and the user presses Left, Backspace, or Delete
+- **THEN** the editor does not raise or crash: Left/Backspace act from that character's start boundary and Delete removes the character containing the cursor byte
 
 #### Scenario: Hardware cursor stays hidden
 - **WHEN** any frame is painted while the input has focus
@@ -461,24 +503,22 @@ History navigation SHALL work as follows:
 - **WHEN** the terminal is narrower than the label needs
 - **THEN** the rule renders as an unbroken run of its glyph with no label
 
-#### Scenario: Scroll with empty input
-- **WHEN** the input is empty and Up is pressed
-- **THEN** the transcript scrolls up one line; no history text is
-  inserted
+#### Scenario: Scroll with PgUp
+- **WHEN** the transcript is scrolled up and PgUp is pressed
+- **THEN** the transcript scrolls further up; no history text is inserted
+
+#### Scenario: Up recalls the newest entry
+- **WHEN** the user previously sent a message and the input is empty
+- **THEN** Up inserts the most recent history entry; PgUp scrolls the transcript
+
+#### Scenario: Down below the newest entry clears the input
+- **WHEN** the input shows the newest history entry and Down is pressed
+- **THEN** the input is cleared and a further Up recalls the newest entry again
 
 #### Scenario: Recall walks the list
-- **WHEN** Ctrl+Up is pressed three times with five committed
+- **WHEN** Up is pressed three times with five committed
   messages
 - **THEN** the input holds the 3rd-most-recent message
-
-#### Scenario: Up with empty input no longer recalls
-- **WHEN** the input is empty and Up is pressed
-- **THEN** the transcript scrolls up; no history text is inserted
-
-#### Scenario: Up recalls last prompt (superseded)
-- **WHEN** the user previously sent a message and the input is empty
-- **THEN** Up scrolls the transcript instead of inserting the last
-  history text; recall moved to the explicit history key
 
 #### Scenario: Discarded text not recorded
 - **WHEN** the user types a line and clears it without Enter
@@ -1496,3 +1536,11 @@ mode SHALL NOT set an overlay.
 #### Scenario: Enter stores and clears
 - **WHEN** secret mode has a non-empty `buf` and the user presses Enter
 - **THEN** the credential is stored per auth rules, secret mode is cleared, and no overlay is open
+
+### Requirement: Login picker lists full catalog
+
+The bare-`/login` provider picker SHALL list every provider-catalog id (not a hardcoded triple), derived from the same catalog the dispatcher uses, so picker and dispatcher can never disagree.
+
+#### Scenario: New preset appears in picker
+- **WHEN** the catalog contains `deepseek`
+- **THEN** bare `/login` lists `deepseek` and selecting it enters secret mode for `deepseek`

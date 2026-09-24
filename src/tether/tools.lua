@@ -17,6 +17,16 @@ local function sq(s)
     return "'" .. s:gsub("'", "'\\''") .. "'"
 end
 
+-- TW3: the model may omit `path` (or arguments may fail to decode — parse_args
+-- returns {} on bad JSON). A nil/empty path must surface as a tool error the
+-- model can correct, not a Lua crash ("attempt to index a nil value") that
+-- kills the turn.
+local function require_path(args)
+    local p = args and args.path
+    if type(p) == "string" and p ~= "" then return p end
+    return nil, "missing path argument"
+end
+
 local function resolve(path, cfg)
     if path:find("^/") then return path end
     return current_workspace(cfg) .. "/" .. path
@@ -49,7 +59,9 @@ function M._to_rel(path, cfg) return to_rel(path, cfg) end
 function M._within(path, cfg) return within_workspace(path, cfg) end
 
 function M.read(args, cfg)
-    local path = resolve(args.path, cfg)
+    local path, perr = require_path(args)
+    if not path then return nil, perr end
+    path = resolve(path, cfg)
     local f = io.open(path, "rb")
     if not f then
         return nil, string.format("cannot open %s", to_rel(args.path, cfg))
@@ -273,7 +285,9 @@ local function atomic_write(path, content)
 end
 
 function M.write(args, cfg)
-    local path = resolve(args.path, cfg)
+    local path, perr = require_path(args)
+    if not path then return nil, perr end
+    path = resolve(path, cfg)
     if not within_workspace(path, cfg) then
         return nil, "write outside workspace requires confirmation"
     end

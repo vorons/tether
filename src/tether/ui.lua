@@ -80,11 +80,12 @@ end
 -- The spec promises TERM=dumb renders pure ASCII; the old code only stripped
 -- ANSI colors, leaving box-drawing and emoji-width glyphs to break layout.
 local GLYPH_MAP = {
-    ["●"] = "*", ["⚙"] = "[t]", ["›"] = ">", ["✗"] = "[x]", ["✓"] = "[ok]", ["✻"] = "*",
+    ["●"] = "*", ["•"] = "*", ["⚙"] = "[t]", ["›"] = ">", ["✗"] = "[x]", ["✓"] = "[ok]", ["✻"] = "*",
     ["↻"] = "[r]", ["⏹"] = "[x]", ["⚠"] = "!", ["▸"] = ">", ["▾"] = "v",
     ["┌"] = "+", ["┐"] = "+", ["└"] = "+", ["┘"] = "+", ["─"] = "-",
     ["│"] = "|", ["•"] = "-", ["…"] = "...", ["▓"] = "#", ["░"] = "-", ["━"] = "#",
     ["↑"] = "^", ["↓"] = "v", ["←"] = "<", ["→"] = ">",
+    ["·"] = "-",
     -- add-ask-tool: the question block's glyphs (note marker, quoted freeform)
     ["↳"] = "->", ["«"] = '"', ["»"] = '"',
 }
@@ -227,6 +228,45 @@ local function char_width(cp)
 end
 M.char_width = char_width
 
+-- T176: one UTF-8 step that never raises. Returns the byte index after the
+-- char at i and its display width. Structurally valid sequences (checked
+-- continuation bytes, no overlongs/surrogates/out-of-range) decode to
+-- char_width(cp); stray bytes degrade to a single width-1 step instead of
+-- raising like utf8.codes/offset/codepoint do ("invalid UTF-8 code").
+-- M-field (not a chunk local): ui.lua already sits at Lua's 200-locals
+-- limit for the main chunk.
+function M._step_char(s, i)
+    local b = s:byte(i)
+    local clen = 1
+    if b >= 0xF0 and b <= 0xF4 then clen = 4
+    elseif b >= 0xE0 then clen = 3
+    elseif b >= 0xC2 then clen = 2 end
+    if clen > 1 and i + clen - 1 <= #s then
+        local c1 = s:byte(i + 1)
+        local ok = c1 >= 0x80 and c1 <= 0xBF
+        local cp = nil
+        if ok and clen == 2 then
+            cp = (b - 0xC0) * 64 + (c1 - 0x80)
+            if cp < 0x80 then cp = nil end -- overlong
+        elseif ok then
+            local c2 = s:byte(i + 2)
+            ok = c2 >= 0x80 and c2 <= 0xBF
+            if ok and clen == 3 then
+                cp = (b - 0xE0) * 4096 + (c1 - 0x80) * 64 + (c2 - 0x80)
+                if cp < 0x800 or (cp >= 0xD800 and cp <= 0xDFFF) then cp = nil end
+            elseif ok then
+                local c3 = s:byte(i + 3)
+                if c3 >= 0x80 and c3 <= 0xBF then
+                    cp = (b - 0xF0) * 262144 + (c1 - 0x80) * 4096
+                        + (c2 - 0x80) * 64 + (c3 - 0x80)
+                    if cp < 0x10000 or cp > 0x10FFFF then cp = nil end
+                end
+            end
+        end
+        if cp then return i + clen, char_width(cp) end
+    end
+    return i + 1, char_width(b)
+end
 -- Display width of a string: strips ANSI SGR, sums per-codepoint widths.
 -- (ulen counted escape bytes and gave CJK 1 column — both produced the
 -- stray-character artifacts seen while scrolling.)
@@ -234,22 +274,34 @@ local function vlen(s)
     if not s or s == "" then return 0 end
     s = s:gsub("\27%[[0-9;?]*[a-zA-Z]", "")
     local w = 0
-    for _, cp in utf8.codes(s) do
-        w = w + char_width(cp)
+    local i = 1
+    while i <= #s do
+        local ni, cw = M._step_char(s, i)
+        w = w + cw
+        i = ni
     end
     return w
 end
 -- M8 fix: utf8.sub does NOT exist in the Lua 5.4 stdlib (it worked only
 -- inside the embedded binary if it defined one; plain lua crashed).
--- Build char-index slicing on utf8.offset instead.
+-- Build char-index slicing on char boundaries instead. T176: step_char-based
+-- so a stray byte can never raise "invalid UTF-8 code" (utf8.offset does).
 local function usub(s, i, j)
     j = j or -1
-    if i < 0 then i = ulen(s) + i + 1 end
-    if j < 0 then j = ulen(s) + j + 1 end
-    local start = utf8.offset(s, i)
-    if not start then return "" end
-    local stop = utf8.offset(s, j + 1)
-    if stop then stop = stop - 1 else stop = #s end
+    local bounds = {}
+    local k = 1
+    while k <= #s do
+        bounds[#bounds + 1] = k
+        k = M._step_char(s, k)
+    end
+    local n = #bounds
+    if i < 0 then i = n + i + 1 end
+    if j < 0 then j = n + j + 1 end
+    if i < 1 then i = 1 end
+    if j > n then j = n end
+    if i > j or n == 0 then return "" end
+    local start = bounds[i]
+    local stop = (j + 1 <= n) and (bounds[j + 1] - 1) or #s
     return s:sub(start, stop)
 end
 
@@ -697,10 +749,13 @@ local function trunc(s, maxw)
         if finish then
             i = finish + 1
         else
-            local w = char_width(utf8.codepoint(s, i))
+            -- T176: step_char never raises on stray bytes (utf8.codepoint /
+            -- utf8.offset do), so truncating a split sequence degrades
+            -- instead of crashing the frame.
+            local ni, w = M._step_char(s, i)
             if width + w > budget then break end
             width = width + w
-            i = utf8.offset(s, 2, i) or (#s + 1)
+            i = ni
         end
     end
     return s:sub(1, i - 1) .. ell .. ESC .. "[0m"
@@ -719,7 +774,7 @@ M.trunc = trunc -- export (M9/T39)
 local CONFIRM_DIGITS = { "allow", "session", "always", "deny", "cancel" }
 M.CONFIRM_DIGITS = CONFIRM_DIGITS
 
--- §6.6: spinner frames for the "thinking" placeholder and the busy status
+-- §6.6: spinner frames for the busy status indicator and thinking rows
 -- field. ASCII variant for TERM=dumb / NO_COLOR (M8/R1). Declared here (not
 -- next to their first use) so both the transcript tail and the status line
 -- can reach them as upvalues.
@@ -807,8 +862,8 @@ local KEYMAP = {
     ["ctrl+k"]     = "kill to end",
     ["ctrl+up"]    = "history prev",
     ["ctrl+down"]  = "history next",
-    ["up"]         = "scroll up / cursor up",
-    ["down"]       = "scroll down / cursor down",
+    ["up"]         = "history prev / cursor up (multi-line, Shift+)",
+    ["down"]       = "history next / cursor down (multi-line, Shift+)",
     ["pgup"]       = "scroll up",
     ["pgdn"]       = "scroll down",
     ["home"]       = "jump to top (input empty)",
@@ -946,8 +1001,8 @@ local function new_state()
         busy = false,
         quit = false,
 
-        -- A: turn feedback. waiting = request sent, no token yet (placeholder
-        -- row); streaming = deltas arriving (caret on the newest line).
+        -- A: turn feedback. waiting = request sent, no token yet (Working
+        -- indicator shows in the input box); streaming = deltas arriving.
         waiting = false,
         streaming = false,
 
@@ -1034,14 +1089,28 @@ end
 M._touch_entry = touch_entry
 M._invalidate_all = invalidate_all
 
--- A: spinner frame for this repaint (paint() advances S.spinner_frame).
--- Nil-safe like the other seams: callers may run before run() created S.
+-- A: spinner frame. TW2 regression: the frame advanced once per paint(), so
+-- the glyph changed per event batch — a slideshow whose speed depended on how
+-- fast tokens arrived (idle = frozen, burst = blur). Like pi's Loader (80 ms
+-- interval), the frame is derived from elapsed wall-clock time since the turn
+-- started. Nil-safe like the other seams: callers may run before run() created S.
+local SPINNER_INTERVAL_MS = 80
 local function spinner_glyph()
     local frames = (M._ascii_mode or M._env_ascii or _ascii) and SPINNER_ASCII or SPINNER
-    local frame = (S and S.spinner_frame) or 0
-    return frames[(frame % #frames) + 1]
+    local ms = 0
+    if S and S.busy_started_at_ms then
+        local now = (tether.monotonic_ms and tether.monotonic_ms()) or 0
+        ms = now - S.busy_started_at_ms
+    end
+    return frames[(math.floor(ms / SPINNER_INTERVAL_MS) % #frames) + 1]
 end
 M.spinner_glyph = spinner_glyph
+M._spinner_interval_ms = SPINNER_INTERVAL_MS
+-- TW2 test seam: glyph for a given elapsed-ms (pure, no S dependency)
+M._spinner_glyph_at = function(ms)
+    local frames = (M._ascii_mode or M._env_ascii or _ascii) and SPINNER_ASCII or SPINNER
+    return frames[(math.floor(ms / SPINNER_INTERVAL_MS) % #frames) + 1]
+end
 
 -- A: caret marking the tail of text that is still arriving.
 local function caret_glyph()
@@ -1473,10 +1542,38 @@ local function input_insert(s)
     palette_sync()
 end
 
+-- UTF-8 helpers for the 0-based byte cursor. utf8.offset RAISES when its
+-- init lands on a continuation byte (possible after move_cursor_up/down carry
+-- the byte column to another line, or after a kill), so every handler either
+-- uses pcall or walks bytes explicitly. A leading byte's high bits give the
+-- character length directly — no offset() needed.
+-- char_len_at(s, pos): length (1..4) of the character at 1-based byte pos.
+-- pos is walked to the next leading byte first (skips continuation bytes).
+local function char_len_at(s, pos)
+    while pos <= #s do
+        local b = s:byte(pos)
+        if b < 0x80 then return pos, 1
+        elseif b >= 0xC0 then return pos, b < 0xE0 and 2 or b < 0xF0 and 3 or 4
+        end
+        pos = pos + 1 -- continuation byte: not a character start
+    end
+    return nil, 0
+end
+
 local function input_backspace()
     if S.cursor <= 0 then return end
-    local prev = utf8.offset(S.input, -1, S.cursor + 1)
-    if not prev then return end
+    -- find the start of the character BEFORE the cursor; a mid-char cursor
+    -- snaps to the start of the character containing the cursor byte.
+    local ok, prev = pcall(utf8.offset, S.input, -1, S.cursor + 1)
+    if not ok or not prev then
+        -- walk back over continuation bytes to the character's first byte
+        local pos = S.cursor
+        while pos > 0 and S.input:byte(pos) and S.input:byte(pos) >= 0x80
+            and S.input:byte(pos) < 0xC0 do
+            pos = pos - 1
+        end
+        prev = pos
+    end
     S.input = S.input:sub(1, prev - 1) .. S.input:sub(S.cursor + 1)
     S.cursor = prev - 1
     palette_sync()
@@ -1484,9 +1581,13 @@ end
 
 local function input_delete()
     if S.cursor >= #S.input then return end
-    local nxt = utf8.offset(S.input, 1, S.cursor + 1)
-    if not nxt then return end
-    S.input = S.input:sub(1, S.cursor) .. S.input:sub(nxt)
+    -- remove the WHOLE character after the caret. The old code used
+    -- utf8.offset(s, 1, cursor + 1) as the removal end — but that is the
+    -- START of the character at cursor+1, i.e. cursor+1 itself, so the
+    -- removed range was empty and Delete was a hard no-op for every input.
+    local start, len = char_len_at(S.input, S.cursor + 1)
+    if not start then return end
+    S.input = S.input:sub(1, S.cursor) .. S.input:sub(start + len)
     palette_sync()
 end
 
@@ -1519,7 +1620,15 @@ local function set_cursor(li, col)
     local ln = lines[li]
     if col < 0 then col = 0 end
     if col > #ln.text then col = #ln.text end
-    S.cursor = ln.from + col
+    -- snap to a character boundary: a byte column carried from another line
+    -- (Up/Down keep the column) can land inside a multi-byte char, and every
+    -- later cursor op raises on a continuation-byte position.
+    local pos = col
+    while pos > 0 and ln.text:byte(pos + 1)
+        and ln.text:byte(pos + 1) >= 0x80 and ln.text:byte(pos + 1) < 0xC0 do
+        pos = pos - 1
+    end
+    S.cursor = ln.from + pos
 end
 
 local function move_cursor_up()
@@ -1582,17 +1691,40 @@ end
 -- ============================================================
 -- History (§6.13: persisted to ~/.tether/history.jsonl, workspace filter)
 -- ============================================================
+-- TH1 test seam: tests redirect the history file (env HOME is not
+-- rebindable from Lua); production reads the default path.
+M._history_file = nil
+M._load_history = nil
+
+-- provider_common supplies the shared JSON decoder (same discipline as
+-- session.lua); loadfile keeps plain-Lua test runs working.
+M._provider_common = _G.provider_common
+if type(M._provider_common) ~= "table" then
+    local chunk = loadfile("src/tether/providers/common.lua")
+    M._provider_common = (chunk and chunk()) or nil
+end
+
+local function history_file()
+    return M._history_file
+        or (os.getenv("HOME") or "") .. "/.tether/history.jsonl"
+end
+
 local function load_history()
-    local home = os.getenv("HOME") or ""
-    local f = io.open(home .. "/.tether/history.jsonl", "r")
+    local pc = M._provider_common
+    if not (pc and pc.json_decode) then return end
+    local f = io.open(history_file(), "r")
     if not f then return end
     local seen_last = nil
     for line in f:lines() do
-        local ts = line:match('"ts":"([^"]*)"')
-        local wsp = line:match('"workspace":"([^"]*)"')
-        local text = line:match('"text":"(.*)"')
-        if text then
-            text = text:gsub('\\"', '"'):gsub("\\\\", "\\"):gsub("\\n", "\n"):gsub("\\t", "\t")
+        -- TH1 regression: the previous regex extraction ("text":"(.*)") was a
+        -- greedy match to the LAST quote. session.add_history's json_encode
+        -- emits fields in arbitrary pairs() order, so with `text` not last the
+        -- recall inserted the raw JSON tail instead of the message. Decode the
+        -- line as JSON and read typed fields.
+        local obj = pc.json_decode(line)
+        if type(obj) == "table" and type(obj.text) == "string" and obj.text ~= "" then
+            local text = obj.text
+            local wsp = obj.workspace
             -- N4: filter by workspace FIRST, then dedupe consecutive entries —
             -- deduping before the filter merged duplicates across workspaces.
             if not wsp or wsp == S.workspace then
@@ -1607,6 +1739,7 @@ local function load_history()
     -- keep last 200 for this workspace
     while #S.history > 200 do table.remove(S.history, 1) end
 end
+M._load_history = load_history
 
 local function push_history(text)
     if not text or text == "" then return end
@@ -1980,8 +2113,10 @@ local function render_entry(e, width)
         return render_ask(width)
     end
     if e.virt == "placeholder" then
-        -- the spinner frame is painted on this row by render_transcript
-        return { "", dim("✻ tether думает…") }
+        -- turn-feedback-restyling: no waiting row in the transcript (the
+        -- input box carries the Working indicator); kept as a no-op for any
+        -- stale tail reference.
+        return {}
     end
     if e.virt == "confirm" then
         local c = S.confirmation
@@ -2010,12 +2145,16 @@ local function render_entry(e, width)
         if (e.text or "") == "" then return {} end
         -- M8/R4: markdown-lite render; md_render handles wrap/width itself
         local body = md_render(e.text, math.max(width - 2, 1))
-        return with_prefix("● ", 2, body)
+        local marker = M.ascii_active(S.cfg and S.cfg.ui and S.cfg.ui.ascii)
+            and "- " or "· "
+        return with_prefix(marker, 2, body)
     elseif role == "thinking" then
         if not S.thinking_visible then
-            return { dim("✻ thinking ▸ (Ctrl+T)") }
+            return { dim("think ▸ (Ctrl+T)") }
         end
-        local out = { dim(italic("✻ thinking ▾")) }
+        local secs = os.time() - (e.started_at or os.time())
+        if secs < 0 then secs = 0 end
+        local out = { dim(italic(string.format("thinking · %.1fs ▾", secs))) }
         for _, l in ipairs(wrap(e.text or "", math.max(width - 2, 1))) do
             out[#out + 1] = "  " .. dim(l)
         end
@@ -2106,7 +2245,7 @@ end
 -- Called whenever S.confirmation or S.waiting changes: keeps the synthetic
 -- tail entries in sync (owned by transcript).
 local function sync_tail()
-    transcript.sync_tail(S and S.confirmation, S and S.ask, S and S.waiting)
+    transcript.sync_tail(S and S.confirmation, S and S.ask)
 end
 M._sync_tail = sync_tail
 
@@ -2229,13 +2368,12 @@ local function render_transcript(L)
         S.last_transcript_top = top
         S.last_transcript_w = L.w
     end
-    -- A: live tail — the newest line carries the spinner while no token has
-    -- arrived yet, and the caret while deltas are still streaming. Applied at
-    -- paint time so the wrapped-line cache stays untouched.
+    -- A: live tail — the caret while deltas are still streaming (the waiting
+    -- spinner moved to the input box: the transcript carries no placeholder).
+    -- Applied at paint time so the wrapped-line cache stays untouched.
     local tail = ""
     if not S.user_scrolled and total > 0 then
-        if S.waiting then tail = " " .. spinner_glyph()
-        elseif S.streaming then tail = caret_glyph() end
+        if S.streaming then tail = caret_glyph() end
     end
     local last_painted = math.min(total, bottom)
     local lo = entry_of_row(top, L.w) or 0
@@ -2367,17 +2505,10 @@ local function rule_row(width, status, label)
     return dim(fill(width))
 end
 
--- The turn's status for the box's top rule: the pending retry while the agent
--- waits between attempts, otherwise the spinner with the turn's elapsed time.
+-- The turn's status for the box's top rule: the spinner with Working... while busy.
 local function turn_status()
-    if S.retry_wait then
-        local g = (M._ascii_mode or M._env_ascii or _ascii) and "[r]" or "↻"
-        return yellow(g) .. dim(string.format(" повтор %d · %.1fs",
-            S.retry_wait.attempt or 1, S.retry_wait.delay or 0))
-    end
     if S.busy then
-        local secs = S.busy_started_at and (os.time() - S.busy_started_at) or 0
-        return cyan(spinner_glyph()) .. dim(" tether думает… " .. secs .. "s")
+        return " " .. cyan(spinner_glyph()) .. dim(" Working...")
     end
     return nil
 end
@@ -2390,7 +2521,25 @@ local function render_input(L)
         local pad = box_padding(L.w)
         local content_w = math.max(1, L.w - pad * 2)
         local side = string.rep(" ", pad)
-        local label = "login " .. tostring(S.login_provider or "")
+        -- the secret line names what to paste: env var when the provider
+        -- takes an API key, device URL for device flows, auth code otherwise.
+        local hint = "paste API key"
+        if S.cfg and S.cfg.providers and S.cfg.providers[S.login_provider]
+            and S.cfg.providers[S.login_provider].api_key_env
+            and S.cfg.providers[S.login_provider].api_key_env ~= "" then
+            hint = hint .. " (" .. S.cfg.providers[S.login_provider].api_key_env .. ")"
+        elseif M._provider_catalog and M._provider_catalog.get then
+            local entry = M._provider_catalog.get(S.login_provider or "")
+            if entry and entry.api_key_env and entry.api_key_env ~= "" then
+                hint = hint .. " (" .. entry.api_key_env .. ")"
+            end
+        end
+        if S.login_flow and S.login_flow.device and S.login_flow.device_url then
+            hint = "open " .. S.login_flow.device_url .. ", paste token"
+        elseif S.login_flow and S.login_flow.authorize_url then
+            hint = hint .. " or auth code"
+        end
+        local label = "login " .. tostring(S.login_provider or "") .. ": " .. hint
         local mask = string.rep("*", #(S.login_secret.buf or ""))
         local text = label .. ": " .. mask
         set_row(L.rule_top_row, rule_row(L.w, turn_status(), nil))
@@ -2584,7 +2733,7 @@ local function render_footer(L)
     end
     if S.tokens_max and S.tokens_max > 0 then
         local summarize_at = (S.cfg.context and S.cfg.context.summarize_at) or 0.7
-        stats[#stats + 1] = dim(S.tokens_estimated and "≈" or "") ..
+        stats[#stats + 1] = dim(S.tokens_estimated and "· " or "") ..
             M.token_usage(S.tokens_used, S.tokens_max, summarize_at)
     end
     local stats_str = table.concat(stats, " ")
@@ -2684,18 +2833,18 @@ end
 -- time, and state transitions pass force=true.
 local PAINT_INTERVAL = 0.05
 local PAINT_MIN_DELTAS = 12
-local last_paint = 0
-local skipped = 0
+M._paint_skipped = 0
+M._paint_count = 0 -- TW2: repaint counter (spinner frame is time-based now)
 local function paint(force)
     if not S then return end
-    skipped = skipped + 1
+    M._paint_skipped = M._paint_skipped + 1
     local now = os.clock()
-    if not force and skipped < PAINT_MIN_DELTAS and (now - last_paint) < PAINT_INTERVAL then
+    if not force and M._paint_skipped < PAINT_MIN_DELTAS and (now - last_paint) < PAINT_INTERVAL then
         return
     end
     last_paint = now
-    skipped = 0
-    S.spinner_frame = (S.spinner_frame or 0) + 1
+    M._paint_skipped = 0
+    M._paint_count = M._paint_count + 1
     redraw()
 end
 M._paint = paint
@@ -2791,12 +2940,49 @@ local function legacy_csi_mods(p)
     return m and decode_mods(tonumber(m) - 1) or nil
 end
 
+-- T176: non-ASCII keys arrive as multibyte UTF-8, but decode_first_byte
+-- only owns one byte — the rest of the keypress is already queued behind it.
+-- A lead byte pulls its continuation bytes (non-blocking: they arrive
+-- atomically with the keypress) and emits ONE text event. A peeked byte that
+-- is not a valid continuation starts the next event and is stashed for the
+-- next read; a truncated tail emits what arrived (display code degrades it
+-- instead of raising). Previously every byte became its own text event, so
+-- S.input filled with invalid UTF-8 fragments and vlen raised
+-- "invalid UTF-8 code" on any Russian input.
+-- M-fields (not chunk locals): ui.lua already sits at Lua's 200-locals
+-- limit for the main chunk.
+M._byte_stash = {}
+function M._read_nb()
+    if #M._byte_stash > 0 then return table.remove(M._byte_stash, 1) end
+    return tether.read_char_nb()
+end
+
+function M._read_utf8_char(first)
+    local need
+    if first >= 0xC2 and first <= 0xDF then need = 1
+    elseif first >= 0xE0 and first <= 0xEF then need = 2
+    elseif first >= 0xF0 and first <= 0xF4 then need = 3
+    else return string.char(first) end
+    local parts = { string.char(first) }
+    for _ = 1, need do
+        local b = tether.read_char_nb()
+        if b == nil then break end -- truncated arrival: emit what we have
+        b = b & 0xFF
+        if b < 0x80 or b > 0xBF then
+            M._byte_stash[#M._byte_stash + 1] = b
+            break
+        end
+        parts[#parts + 1] = string.char(b)
+    end
+    return table.concat(parts)
+end
+
 -- Decode one already-read first byte; continuation bytes come from
 -- read_char_nb (and the paste body from read_char). Shared by read_key and
 -- read_key_nb so blocking and non-blocking paths stay identical.
 local function decode_first_byte(c)
     if c == 27 then
-        local b2 = tether.read_char_nb()
+        local b2 = M._read_nb()
         if b2 == nil then return { kind = "esc" } end
         local c2 = b2 & 0xFF
         if c2 ~= 91 and c2 ~= 79 then
@@ -2804,7 +2990,7 @@ local function decode_first_byte(c)
         end
         local params = {}
         while true do
-            local b3 = tether.read_char_nb()
+            local b3 = M._read_nb()
             if b3 == nil then return { kind = "esc" } end
             local c3 = b3 & 0xFF
             -- digits, ';', ':', '<', '>': ':' carries kitty alternate-key
@@ -2820,20 +3006,26 @@ local function decode_first_byte(c)
                         if ch == nil or ch == -1 then break end
                         local cc = ch & 0xFF
                         if cc == 27 then
-                            local b4 = tether.read_char_nb()
-                            if b4 and (b4 & 0xFF) == 91 then
-                                local b5 = tether.read_char_nb()
-                                if b5 and (b5 & 0xFF) == 50 then
-                                    local b6 = tether.read_char_nb()
-                                    if b6 and (b6 & 0xFF) == 49 then
-                                        local b7 = tether.read_char_nb()
-                                        if b7 and (b7 & 0xFF) == 126 then
-                                            return { kind = "paste", text = table.concat(buf) }
-                                        end
-                                    end
-                                end
+                            -- paste terminator is ESC [ 2 0 1 ~. Match it
+                            -- incrementally: a stray ESC (or split arrival)
+                            -- flushes as content and can never eat a real
+                            -- terminator that starts later.
+                            local target = "[201~"
+                            local cand = {}
+                            local b0 = M._read_nb()
+                            if b0 then cand[#cand + 1] = string.char(b0 & 0xFF) end
+                            while #cand > 0
+                                and target:sub(1, #cand) == table.concat(cand)
+                                and #cand < #target do
+                                local b = tether.read_char()
+                                if b == nil or b == -1 then break end
+                                cand[#cand + 1] = string.char(b & 0xFF)
+                            end
+                            if table.concat(cand) == target then
+                                return { kind = "paste", text = table.concat(buf) }
                             end
                             buf[#buf + 1] = string.char(cc)
+                            for _, s in ipairs(cand) do buf[#buf + 1] = s end
                         elseif cc >= 32 or cc == 10 then
                             buf[#buf + 1] = string.char(cc)
                         end
@@ -2886,16 +3078,22 @@ local function decode_first_byte(c)
                 -- ESC[13~ / ESC[14~ for F3/Shift+F3 on xterm; match by params
                 if c3 == 126 and p == "13" then return { kind = "special", name = "f3" } end
                 if c3 == 126 and p == "14" then return { kind = "special", name = "sf3" } end
-                -- T17: mouse SGR (1006) — final byte M (press) / m (release),
-                -- params = col;row;code (audit: was col/row swapped).
+                -- T17/TW1: mouse SGR (1006) — final byte M (press) / m
+                -- (release). Per xterm the params are code;col;row (button
+                -- code first: 0 press, 32 release, 64 wheel up, 65 wheel
+                -- down; the '<' SGR prefix lands in p and the pattern skips
+                -- it). The old col;row;code read the button code from the
+                -- last field: every wheel tick decoded as button 5 = unknown,
+                -- so the wheel never scrolled and the terminal's arrow
+                -- fallback fed history into the input.
                 if c3 == 77 or c3 == 109 then
-                    local col, row, code = p:match("(%d+);(%d+);(%d+)")
-                    col, row, code = tonumber(col), tonumber(row), tonumber(code)
+                    local code, col, row = p:match("(%d+);(%d+);(%d+)")
+                    code, col, row = tonumber(code), tonumber(col), tonumber(row)
                     local name
-                    if code == 32 then name = "press"
-                    elseif code == 33 then name = "release"
-                    elseif code == 64 then name = "scroll_down"
-                    elseif code == 65 then name = "scroll_up"
+                    if code == 0 then name = "press"
+                    elseif code == 32 then name = "release"
+                    elseif code == 64 then name = "scroll_up"
+                    elseif code == 65 then name = "scroll_down"
                     else name = "unknown" end
                     return { kind = "mouse", name = name,
                              col = col, row = row, button = code }
@@ -2908,13 +3106,19 @@ local function decode_first_byte(c)
     elseif c == 127 or c == 8 then return { kind = "backspace" }
     elseif c == 9 then return { kind = "tab" }
     elseif c < 32 then return { kind = "ctrl", code = c }
+    elseif c >= 0x80 then
+        return { kind = "text", char = M._read_utf8_char(c) }
     else
         return { kind = "text", char = string.char(c) }
     end
 end
 
 local function read_key()
-    local b = tether.read_char()
+    -- Blocking: wait on read_char directly when the stash is empty, so no
+    -- poll timeout delays the keypress; a stashed lookahead byte goes first.
+    local b
+    if #M._byte_stash > 0 then b = table.remove(M._byte_stash, 1)
+    else b = tether.read_char() end
     if b == nil or b == -1 then return nil end
     return decode_first_byte(b & 0xFF)
 end
@@ -2923,7 +3127,7 @@ end
 -- silent turn never stalls on input. Incomplete escape sequences surface as
 -- esc (same as a short blocking read); the pump never blocks.
 local function read_key_nb()
-    local b = tether.read_char_nb()
+    local b = M._read_nb()
     if b == nil or b == -1 then return nil end
     return decode_first_byte(b & 0xFF)
 end
@@ -2947,7 +3151,31 @@ end
 -- add-provider-login: interactive credential entry (masked secret mode) and
 -- bare-/login provider picker (Pi OAuthSelector). Secrets live only in
 -- S.login_secret.buf — never S.input, never a transcript row.
-local KNOWN_PROVIDERS = { "openai", "anthropic", "gemini" }
+-- expand-provider-catalog: the picker and the /login//logout name checks
+-- read the preset catalog (single source with api.lua dispatch) — the big
+-- three stay pinned first.
+-- provider_catalog on M (200-locals discipline): the module was at the cap,
+-- every new top-level local pushes main-chunk compiles over the limit.
+M._provider_catalog = _G.provider_catalog
+if type(M._provider_catalog) ~= "table" then
+    local chunk = loadfile("src/tether/providers/catalog.lua")
+    M._provider_catalog = (chunk and chunk()) or nil
+end
+
+local function known_providers()
+    if M._provider_catalog and M._provider_catalog.ids then
+        return M._provider_catalog.ids()
+    end
+    return { "openai", "anthropic", "gemini" }
+end
+
+local function is_known_provider(name)
+    if type(name) ~= "string" then return false end
+    if M._provider_catalog and M._provider_catalog.get then
+        return M._provider_catalog.get(name:lower()) ~= nil
+    end
+    return name == "openai" or name == "anthropic" or name == "gemini"
+end
 
 local function provider_mod(name)
     local glob = rawget(_G, "provider_" .. name)
@@ -2963,6 +3191,12 @@ local function begin_login(provider)
     end
     local pmod = provider_mod(provider)
     local flow = (pmod and pmod.login_flow and pmod.login_flow(S.cfg)) or nil
+    -- expand-provider-catalog: presets without their own adapter module get
+    -- the generic catalog flow (config-sourced OAuth/device, else nil →
+    -- API-key paste). Endpoints are never invented.
+    if not flow and M._provider_catalog and M._provider_catalog.login_flow then
+        flow = M._provider_catalog.login_flow(S.cfg, provider)
+    end
     S.error_banner = nil
     S.login_provider = provider
     S.login_flow = flow
@@ -3024,7 +3258,7 @@ local function submit_login_secret(raw)
     end
 
     local code = nil
-    if flow then
+    if flow and not flow.device then
         code = value:match("[?&]code=([^&%s]+)")
         if not code and not value:match("^https?://") then
             local looks_key = value:match("^sk[%-%_]")
@@ -3038,6 +3272,30 @@ local function submit_login_secret(raw)
         end
     end
 
+    -- expand-provider-catalog: device flow — the pasted value IS the access
+    -- token (authorized out-of-band at flow.device_url); no exchange.
+    if flow and flow.device then
+        local okd = auth_mod and auth_mod.set and auth_mod.set(nil, provider, {
+            kind = "oauth",
+            access_token = value,
+        })
+        if not okd then
+            S.error_banner = "login store failed"
+            return false
+        end
+        if S.cfg and ((S.cfg.provider or "openai") == provider) then
+            S.api_key = value
+            S.cfg.api_key = value
+        end
+        transcript.append({
+            role = "system",
+            text = "→ login " .. provider .. ": oauth token stored",
+        })
+        bump_transcript()
+        S.error_banner = nil
+        return true
+    end
+
     if code and flow then
         local ccommon = rawget(_G, "provider_common")
         if not ccommon then
@@ -3049,8 +3307,11 @@ local function submit_login_secret(raw)
         end
         local pmod = provider_mod(provider)
         local post = auth_mod and auth_mod._post_json
-        local entry = (pmod and pmod.token_exchange)
-            and pmod.token_exchange(post, flow, code, os.time())
+        -- expand-provider-catalog: presets without their own module share
+        -- the generic OAuth exchange.
+        local exchange = (pmod and pmod.token_exchange)
+            or (ccommon and ccommon.oauth_token_exchange)
+        local entry = exchange and exchange(post, flow, code, os.time())
         if not entry then
             S.error_banner = "oauth exchange failed"
             S.login_provider = provider
@@ -3119,12 +3380,46 @@ function pick.resume(id)
         bump_transcript()
     end
 end
-function pick.model(label)
+function pick.model(item, provider)
+    local label = (type(item) == "table" and item.label) or item
     if not label then return end
     local model_id = label:match("^model_set:(.*)$") or label
+    local prov = provider
+    if prov == nil and type(item) == "table" then prov = item.provider end
+    if type(prov) == "string" and prov ~= "" and S.cfg
+        and S.cfg.provider ~= prov then
+        -- picking another provider's model switches provider and
+        -- re-resolves the key, so the next turn authenticates correctly.
+        S.cfg.provider = prov
+        S.cfg._auth_style = nil
+        local cfgmod = rawget(_G, "config")
+        if cfgmod and cfgmod.api_key then
+            local ok, key = pcall(cfgmod.api_key, S.cfg)
+            S.api_key = (ok and type(key) == "string" and key) or ""
+            S.cfg.api_key = S.api_key
+        else
+            S.api_key = ""
+        end
+    end
     S.model_name = model_id
     if S.cfg then S.cfg.model = model_id end
-    transcript.append({ role = "system", text = "→ модель: " .. model_id })
+    -- T177: persist the pick to the machine-managed side file so a restart
+    -- reloads it via config.load. Best-effort (pcall): the in-memory state
+    -- above already applies for this session.
+    do
+        local cfgmod = rawget(_G, "config")
+        if type(cfgmod) ~= "table" or type(cfgmod.persist_keys) ~= "function" then
+            local chunk = loadfile("src/tether/config.lua")
+            cfgmod = (chunk and chunk()) or nil
+        end
+        if cfgmod and cfgmod.persist_keys then
+            local home = (S.cfg and S.cfg._auth_home) or os.getenv("HOME") or ""
+            local prov = (S.cfg and S.cfg.provider) or "openai"
+            pcall(cfgmod.persist_keys, home, { provider = prov, model = model_id })
+        end
+    end
+    local where = (type(prov) == "string" and prov ~= "") and (prov .. "/") or ""
+    transcript.append({ role = "system", text = "→ модель: " .. where .. model_id })
     bump_transcript()
 end
 
@@ -3177,22 +3472,47 @@ local function execute_command(cmd, rest)
     end
     -- unified-slash-palette: /skills removed — skills are entries of the one
     -- palette, so the separate palette mode and the [skill: …] reference are gone
-    if cmd == "model" then
-        local models = commands.list_models(S.cfg, S.api_key or "")
+    -- expand-provider-catalog: model items builder, reused when a background
+    -- refresh lands while the palette is open (module field: file-local
+    -- budget is reserved for state).
+    function M._build_model_items(models)
         local items = {}
-        for _, m in ipairs(models) do
+        for _, m in ipairs(models or {}) do
+            local desc = m.name or m.id or ""
+            if m.provider then desc = m.provider .. " • " .. desc end
             items[#items + 1] = {
                 label = m.id or m,
-                desc = m.name or m.id or "",
+                desc = desc,
+                provider = m.provider,
             }
+        end
+        return items
+    end
+    if cmd == "model" then
+        -- all keyed providers (active first); legacy single-provider path
+        -- when the commands surface predates list_models_all (tests).
+        local models, bg, merr = nil, nil, nil
+        if commands.list_models_all then
+            local ok, m, b, e = pcall(commands.list_models_all, S.cfg)
+            if ok then models, bg, merr = m, b, e end
+        end
+        if models == nil then
+            models, bg, merr = commands.list_models(S.cfg, S.api_key or "")
+        end
+        if bg then
+            S._models_bg = { provider = (S.cfg and S.cfg.provider) or "openai",
+                started = os.time() }
         end
         -- palette-only R2: model list is a palette under the input
         S.error_banner = nil
         S.palette_mode = "model"
         S.palette_active = true
-        S.palette_items = items
+        S.palette_items = M._build_model_items(models)
         S.palette_sel = 1
         S._in_model_palette = true
+        -- an empty palette explains itself (no key, dead endpoint, ...).
+        S._models_err = (#S.palette_items == 0) and merr or nil
+        if S._models_err then S.error_banner = S._models_err end
         return
     end
     if cmd == "resume" then
@@ -3225,9 +3545,9 @@ local function execute_command(cmd, rest)
         -- Bare /login → shared palette in login mode (same mechanism as
         -- /copy/slash menu); never a silent default to the active provider.
         if provider == "" then
-            local active = (S.cfg and S.cfg.provider) or KNOWN_PROVIDERS[1]
+            local active = (S.cfg and S.cfg.provider) or "openai"
             local items = {}
-            for _, name in ipairs(KNOWN_PROVIDERS) do
+            for _, name in ipairs(known_providers()) do
                 items[#items + 1] = {
                     label = name,
                     desc = (name == active) and "active" or "",
@@ -3241,8 +3561,7 @@ local function execute_command(cmd, rest)
             S._in_login_palette = true
             return
         end
-        local known = { openai = true, anthropic = true, gemini = true }
-        if not known[provider:lower()] then
+        if not is_known_provider(provider) then
             S.error_banner = "unknown provider: " .. provider
             return
         end
@@ -3253,8 +3572,7 @@ local function execute_command(cmd, rest)
     if cmd == "logout" then
         local provider = (type(rest) == "string" and rest:match("^%s*(.-)%s*$")) or ""
         if provider == "" then provider = S.cfg and S.cfg.provider or "openai" end
-        local known = { openai = true, anthropic = true, gemini = true }
-        if not known[provider:lower()] then
+        if not is_known_provider(provider) then
             S.error_banner = "unknown provider: " .. provider
             return
         end
@@ -3306,7 +3624,7 @@ local function handle_agent_event(ev)
     -- add-steering-input: drain mid-turn keys on every event tick so Enter /
     -- Alt+Enter / Escape work while the agent is busy (no second turn).
     pump_keys()
-    -- A: remember the tail-decoration state so a transition (placeholder ->
+    -- A: remember the tail-decoration state so a transition (waiting ->
     -- caret, or caret -> nothing) repaints at once instead of waiting out the
     -- delta throttle.
     local was_waiting, was_streaming = S.waiting, S.streaming
@@ -3397,12 +3715,12 @@ local function handle_agent_event(ev)
             S.busy = false
             S.waiting = false
             S.streaming = false
-            -- the menu replaces the placeholder: both are synthetic tail entries
+            -- the menu replaces the working state: both are synthetic tail entries
             sync_tail()
         end
     end
     if ev.type == "ask" then
-        -- add-ask-tool: the question block replaces the placeholder, exactly as
+        -- add-ask-tool: the question block replaces the working state, exactly as
         -- the confirmation menu does — the turn is waiting on the user.
         S.ask = {
             id = ev.id,
@@ -3596,6 +3914,18 @@ M._wire_steer_source = wire_steer_source
 local turn_hook = nil -- test seam: replaces turn.start during drain
 M._set_turn_hook = function(fn) turn_hook = fn end
 
+-- Every fresh turn restarts attempt numbering at 1 on the agent side, so
+-- stale attempt tags are cleared first: otherwise a retry drops previous
+-- turns' answers carrying the same number (transcript.new_turn).
+local function start_fresh_turn(payload)
+    transcript.new_turn()
+    if turn_hook then return turn_hook(payload) end
+    return turn.start(S, S.cfg, S.api_key or "", payload, handle_agent_event, function()
+        sync_tail()
+        paint(true)
+    end)
+end
+
 local function drain_followups()
     if not S then return end
     if S.error_banner or S.confirmation or S.ask then return end
@@ -3605,16 +3935,7 @@ local function drain_followups()
         if S.steer_queue and #S.steer_queue > 0 then return end
         local msg = table.remove(S.followup_queue, 1)
         local payload = msg .. take_bang_context()
-        local ok, err
-        if turn_hook then
-            ok, err = turn_hook(payload)
-        else
-            ok, err = turn.start(S, S.cfg, S.api_key or "", payload,
-                handle_agent_event, function()
-                    sync_tail()
-                    paint(true)
-                end)
-        end
+        local ok, err = start_fresh_turn(payload)
         sync_tail()
         if not ok and err then
             S.error_banner = tostring(err)
@@ -3677,13 +3998,10 @@ local function commit_input()
     S.user_scrolled = false
 
     -- turn owns busy/waiting/streaming begin+finish and the abort seam;
-    -- before_call paints the placeholder before the blocking agent call (T54).
+    -- before_call paints the Working indicator before the blocking agent call (T54).
     wire_steer_source()
     local send = text .. take_bang_context()
-    local ok, err = turn.start(S, S.cfg, S.api_key or "", send, handle_agent_event, function()
-        sync_tail()
-        paint(true)
-    end)
+    local ok, err = start_fresh_turn(send)
     sync_tail()
     if not ok and err then
         S.error_banner = tostring(err)
@@ -3717,13 +4035,49 @@ end
 local function handle_special(k)
     if k.name == "left" then
         if S.cursor > 0 then
-            local prev = utf8.offset(S.input, -1, S.cursor + 1)
+            local ok, prev = pcall(utf8.offset, S.input, -1, S.cursor + 1)
+            if not ok or not prev then
+                -- mid-char cursor: walk back over continuation bytes
+                local pos = S.cursor
+                while pos > 0 and S.input:byte(pos) >= 0x80
+                    and S.input:byte(pos) < 0xC0 do
+                    pos = pos - 1
+                end
+                prev = pos
+            end
             if prev then S.cursor = prev - 1 end
         end
     elseif k.name == "right" then
+        -- S.cursor is the number of bytes BEFORE the caret (0..#S.input), so
+        -- moving right must place the caret after the NEXT character, never
+        -- inside one. utf8.offset(s, 1, i) returns the 1-based byte START of
+        -- the character containing byte i; the character's length is the gap
+        -- to the next char start, so new cursor = nxt - 1 + chlen. The old
+        -- code assigned `nxt` (one byte short on multi-byte chars) or earlier
+        -- `nxt - 1` (same position — Right appeared dead). A mid-character
+        -- cursor (stale byte offset from a kill/paste) makes offset() raise —
+        -- walk to the end of that character instead.
         if S.cursor < #S.input then
-            local nxt = utf8.offset(S.input, 1, S.cursor + 1)
-            if nxt then S.cursor = nxt - 1 end
+            local ok, nxt = pcall(utf8.offset, S.input, 1, S.cursor + 1)
+            if ok and nxt then
+                -- length of the character starting at nxt, from its leading
+                -- byte (0xxxxxxx=1, 110xxxxx=2, 1110xxxx=3, 11110xxx=4).
+                -- utf8.offset(nxt+1) cannot be used: it raises on a
+                -- continuation byte, i.e. for every multi-byte character.
+                local b = S.input:byte(nxt)
+                local chlen = b < 0x80 and 1 or b < 0xE0 and 2 or b < 0xF0 and 3 or 4
+                S.cursor = nxt - 1 + chlen
+            else
+                -- cursor+1 sits inside a multi-byte character: skip its tail
+                -- bytes (0b10xxxxxx) so the caret lands after that character.
+                local pos = S.cursor + 1
+                while pos <= #S.input do
+                    local b = S.input:byte(pos)
+                    if b < 0x80 or b >= 0xC0 then break end
+                    pos = pos + 1
+                end
+                S.cursor = pos
+            end
         end
     elseif k.name == "home" and S.input == "" then
         -- M8/R3: Home jumps to top of transcript (input empty);
@@ -3738,22 +4092,19 @@ local function handle_special(k)
     elseif k.name == "end" then move_line_end()
     elseif k.name == "delete" then input_delete()
     elseif k.name == "up" then
-        -- Empty input: scroll the transcript, not history (history is
-        -- now Ctrl+Up / Ctrl+Down). Non-empty: move cursor or scroll at edge.
-        if S.input == "" then
-            S.scroll = S.scroll + 1
-            S.user_scrolled = true
-        elseif not move_cursor_up() then
-            S.scroll = S.scroll + 1
-            S.user_scrolled = true
+        -- Up always recalls history (user request); when the caret is on a
+        -- non-first line of a multi-line input, move the cursor instead, and
+        -- scroll only at that edge. PgUp/PgDn are the scroll bindings.
+        if S.input ~= "" and move_cursor_up() then
+            -- caret moved within the multi-line input
+        else
+            history_prev()
         end
     elseif k.name == "down" then
-        if S.input == "" then
-            S.scroll = math.max(0, S.scroll - 1)
-            if S.scroll == 0 then S.user_scrolled = false end
-        elseif not move_cursor_down() then
-            S.scroll = math.max(0, S.scroll - 1)
-            if S.scroll == 0 then S.user_scrolled = false end
+        if S.input ~= "" and move_cursor_down() then
+            -- caret moved within the multi-line input
+        else
+            history_next()
         end
     elseif k.name == "pgup" then
         S.scroll = S.scroll + math.max(1, math.floor(S.h / 2))
@@ -4216,7 +4567,7 @@ local function resolve_confirmation(decision)
         after_turn_settle()
     end
     bump_transcript() -- the decision line appended above
-    sync_tail()       -- menu gone (or the placeholder is back for the resume)
+    sync_tail()       -- menu gone, back to the idle input box
 end
 
 local function handle_confirmation_key(k)
@@ -4334,16 +4685,18 @@ handle_key = function(k)
         return
     end
 
-    -- T17: mouse SGR — scroll transcript, click palette/confirmation items
+    -- T17: mouse SGR — scroll transcript, click palette/confirmation items.
+    -- S.scroll counts rows hidden ABOVE the viewport: wheel up = older rows =
+    -- scroll grows; wheel down returns toward the bottom (follow at 0).
     if k.kind == "mouse" then
         if k.name == "scroll_up" then
-            S.scroll = math.max(0, S.scroll - math.max(1, math.floor(S.h / 4)))
-            if S.scroll == 0 then S.user_scrolled = false end
+            S.scroll = S.scroll + math.max(1, math.floor(S.h / 4))
+            S.user_scrolled = true
             return
         end
         if k.name == "scroll_down" then
-            S.scroll = S.scroll + math.max(1, math.floor(S.h / 4))
-            S.user_scrolled = true
+            S.scroll = math.max(0, S.scroll - math.max(1, math.floor(S.h / 4)))
+            if S.scroll == 0 then S.user_scrolled = false end
             return
         end
         if k.name == "press" then
@@ -4382,7 +4735,7 @@ handle_key = function(k)
                             S.palette_items = {}
                             S.palette_sel = 1
                             S._in_model_palette = nil
-                            pick.model(it.label)
+                            pick.model(it)
                             bump_transcript()
                         end
                     end
@@ -4525,7 +4878,7 @@ handle_key = function(k)
                 local it = S.palette_items[S.palette_sel]
                 close_model_palette()
                 if it and it.label then
-                    pick.model(it.label)
+                    pick.model(it)
                 end
                 return
             elseif k.kind == "esc" then
@@ -4657,12 +5010,17 @@ handle_key = function(k)
     -- normal mode
     if k.kind == "paste" then
         local text = k.text or ""
-        for i = 1, #text do
-            local ch = text:sub(i, i)
-            if ch == "\n" then
+        -- T176: step by UTF-8 chars, not bytes — a byte loop split
+        -- multibyte chars into invalid fragments (same crash as typed input).
+        local i = 1
+        while i <= #text do
+            if text:sub(i, i) == "\n" then
                 S.input = S.input .. "\n"
+                i = i + 1
             else
-                input_insert(ch)
+                local ni = M._step_char(text, i)
+                input_insert(text:sub(i, ni - 1))
+                i = ni
             end
         end
         S.cursor = #S.input
@@ -4703,6 +5061,7 @@ M._read_key = function() return read_key() end
 function M.run()
     S = new_state()
     transcript.clear()
+    M._byte_stash = {} -- drop any truncated-UTF-8 lookahead from a past run
 
     S.cfg = (config and config.load and config.load()) or {}
     S.model_name = S.cfg.model or "gpt-4o-mini"
@@ -4793,6 +5152,36 @@ function M.run()
         if not k then break end
         handle_key(k)
 
+        -- expand-provider-catalog: a background model refresh may have
+        -- landed (fetch_bg child wrote the pending file). Rebuild the open
+        -- /model palette in place; otherwise the next open picks it up.
+        if S._models_bg and commands and commands.poll_models_refresh then
+            local st = commands.poll_models_refresh(S.cfg, S._models_bg)
+            if st == "updated" then
+                if S.palette_mode == "model" and S.palette_active then
+                    local models, _, merr = nil, nil, nil
+                    if commands.list_models_all then
+                        local ok, m, _, e = pcall(commands.list_models_all, S.cfg)
+                        if ok then models, merr = m, e end
+                    end
+                    if models == nil then
+                        models, _, merr = commands.list_models(S.cfg, S.api_key or "")
+                    end
+                    S.palette_items = M._build_model_items(models)
+                    local n = #S.palette_items
+                    if (S.palette_sel or 1) > n and n > 0 then
+                        S.palette_sel = n
+                    end
+                    -- a still-empty palette keeps explaining itself.
+                    S._models_err = (n == 0) and merr or nil
+                    if S._models_err then S.error_banner = S._models_err end
+                end
+                S._models_bg = nil
+            elseif st == "settled" then
+                S._models_bg = nil
+            end
+        end
+
         if tether.resize_requested() then
             local sz = tether.get_terminal_size()
             if sz then S.w, S.h = sz.width, sz.height end
@@ -4825,15 +5214,18 @@ M.is_dangerous = ui_is_dangerous
 -- enabled for the given UI state. Exported for unit tests.
 --   auto:      mouse only over interactive targets (confirmation/palette)
 --   on:        always;  off: never;  selection: never (terminal native)
+-- M8/R8 + TW1: auto keeps mouse tracking always on inside alt-screen. The
+-- wheel must scroll the transcript: with tracking off, terminals translate
+-- wheel ticks into Up/Down arrows — which recall input history, so a wheel
+-- tick pasted history into the field. "selection" keeps native selection
+-- (tracking off); in "on"/"auto" hold Shift to select natively.
 function M.mouse_wants(mode, state)
     mode = mode or "auto"
     state = state or {}
     if mode == "on" then return true end
     if mode == "off" or mode == "selection" then return false end
-    -- auto
-    if state.confirmation then return true end
-    if state.palette_active then return true end
-    return false
+    -- auto: wheel capture is the point — always track
+    return true
 end
 
 return M

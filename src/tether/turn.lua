@@ -41,6 +41,8 @@ function M.begin(S)
     if not S then return end
     S.busy = true
     S.busy_started_at = os.time()
+    -- TW2: monotonic ms anchor for the time-based spinner frame (see ui.lua)
+    S.busy_started_at_ms = (tether and tether.monotonic_ms and tether.monotonic_ms()) or nil
     S.waiting = true
     S.streaming = false
 end
@@ -51,6 +53,7 @@ function M.finish(S)
     if not S then return end
     S.busy = false
     S.busy_started_at = nil
+    S.busy_started_at_ms = nil
     S.waiting = false
     S.streaming = false
     S.retry_wait = nil

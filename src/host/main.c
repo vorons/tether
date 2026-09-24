@@ -142,6 +142,13 @@ static void setup_signal_handlers(void)
     sigemptyset(&sa_winch.sa_mask);
     sa_winch.sa_flags = SA_RESTART;
     sigaction(SIGWINCH, &sa_winch, NULL);
+    /* Background fetches (fetch_bg) are fire-and-forget: auto-reap children
+       so one zombie per refresh never accumulates over a long session. */
+    struct sigaction sa_chld;
+    sa_chld.sa_handler = SIG_IGN;
+    sigemptyset(&sa_chld.sa_mask);
+    sa_chld.sa_flags = SA_RESTART;
+    sigaction(SIGCHLD, &sa_chld, NULL);
 }
 
 static int init_termios(void)
@@ -878,6 +885,113 @@ static int l_http_stream(lua_State *L)
     return 1;
 }
 
+/* tether.fetch_bg(url, headers, outpath, timeout_s) -> true | nil, err
+ *
+ * Fire-and-forget GET for background model-list refresh: fork()s and returns
+ * immediately; the child performs the transfer with the given total timeout
+ * (default 20 s), writes the body to outpath (atomically via rename) on
+ * HTTP < 400 or a "FETCH_FAILED <err>" marker otherwise, then _exit()s.
+ * The Lua side picks the file up later (commands.poll_models_refresh).
+ * @file header entries are read into memory before fork and unlinked right
+ * away, so no temp-file race exists. The child never touches the terminal
+ * (stdio goes to /dev/null) and children are reaped automatically (SIGCHLD
+ * is ignored at startup). There is no Lua interaction in the child, so no
+ * state can leak back except the outpath file. */
+static int l_fetch_bg(lua_State *L)
+{
+    const char *url = luaL_checkstring(L, 1);
+    const char *outpath = luaL_checkstring(L, 3);
+    double timeout_s = 20.0;
+    if (lua_isnumber(L, 4))
+        timeout_s = lua_tonumber(L, 4);
+
+    const char *ca = tether_ca_bundle();
+    if (ca == NULL) {
+        lua_pushnil(L);
+        lua_pushstring(L, "no system CA bundle found");
+        return 2;
+    }
+
+    char err[256] = {0};
+    struct curl_slist *headers = http_build_headers(L, 2, err, sizeof(err));
+    if (err[0] != '\0') {
+        lua_pushnil(L);
+        lua_pushstring(L, err);
+        return 2;
+    }
+
+    /* @file entries live in the slist now: drop the temp files before fork. */
+    if (lua_istable(L, 2)) {
+        int n = (int)lua_rawlen(L, 2);
+        for (int i = 1; i <= n; i++) {
+            lua_geti(L, 2, i);
+            const char *entry = lua_tostring(L, -1);
+            if (entry != NULL && entry[0] == '@')
+                unlink(entry + 1);
+            lua_pop(L, 1);
+        }
+    }
+
+    pid_t pid = fork();
+    if (pid < 0) {
+        curl_slist_free_all(headers);
+        lua_pushnil(L);
+        lua_pushstring(L, strerror(errno));
+        return 2;
+    }
+    if (pid > 0) {
+        curl_slist_free_all(headers);
+        lua_pushboolean(L, 1);
+        return 1;
+    }
+
+    /* --- child: fetch, write, _exit. No terminal, no Lua, no return. --- */
+    int devnull = open("/dev/null", O_RDWR);
+    if (devnull >= 0) {
+        dup2(devnull, STDIN_FILENO);
+        dup2(devnull, STDOUT_FILENO);
+        dup2(devnull, STDERR_FILENO);
+        if (devnull > 2)
+            close(devnull);
+    }
+
+    CURL *h = curl_easy_init();
+    struct body_buf body;
+    memset(&body, 0, sizeof(body));
+    long status = 0;
+    CURLcode rc = CURLE_FAILED_INIT;
+    if (h != NULL) {
+        http_apply_common(h, url, ca, headers);
+        curl_easy_setopt(h, CURLOPT_HTTPGET, 1L);
+        curl_easy_setopt(h, CURLOPT_TIMEOUT_MS, (long)(timeout_s * 1000.0));
+        curl_easy_setopt(h, CURLOPT_WRITEFUNCTION, http_body_cb);
+        curl_easy_setopt(h, CURLOPT_WRITEDATA, &body);
+        rc = curl_easy_perform(h);
+        curl_easy_getinfo(h, CURLINFO_RESPONSE_CODE, &status);
+        curl_easy_cleanup(h);
+    }
+    curl_slist_free_all(headers);
+
+    char tmp[4096];
+    snprintf(tmp, sizeof(tmp), "%s.tmp.%d", outpath, (int)getpid());
+    FILE *f = fopen(tmp, "w");
+    if (f != NULL) {
+        if (rc == CURLE_OK && status < 400 && body.data != NULL)
+            fwrite(body.data, 1, body.len, f);
+        else if (rc == CURLE_OK) {
+            char msg[64];
+            snprintf(msg, sizeof(msg), "http %ld", status);
+            fprintf(f, "FETCH_FAILED %s\n", msg);
+        } else {
+            fprintf(f, "FETCH_FAILED %s\n", curl_easy_strerror(rc));
+        }
+        fclose(f);
+        rename(tmp, outpath);
+    }
+    free(body.data);
+    _exit(0);
+}
+
 /* tether.http_get(url, headers, timeout_s) -> body | nil, err
  *
  * timeout_s is the total request timeout in seconds (default 30). A status of
@@ -988,9 +1102,7 @@ static int l_sleep(lua_State *L)
         poll(&pfd, 1, ms); /* returns early when the user types */
     }
     return 0;
-}
-
-/* add-retry-and-continuation: does the user want this turn stopped? The flag
+}/* add-retry-and-continuation: does the user want this turn stopped? The flag
    stays set until clear_abort(), because the very same Ctrl+C has to keep
    aborting an in-flight transfer (http_xferinfo) until the turn has actually
    stopped — only the turn knows when that happened. */
@@ -998,6 +1110,19 @@ static int l_abort_requested(lua_State *L)
 {
     poll_interrupt();
     lua_pushboolean(L, g_interrupt != 0);
+    return 1;
+}
+
+/* TW2: monotonic wall-clock milliseconds. The spinner frame must derive from
+   elapsed time (pi's Loader animates on an 80 ms interval), not from the paint
+   counter — a frame per event made the spinner a slideshow whose speed
+   depended on how fast tokens arrived. os.clock() is CPU time and stalls while
+   the process blocks on IO; this clock is CLOCK_MONOTONIC. */
+static int l_monotonic_ms(lua_State *L)
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    lua_pushnumber(L, (double)ts.tv_sec * 1000.0 + (double)ts.tv_nsec / 1e6);
     return 1;
 }
 
@@ -1042,11 +1167,13 @@ static luaL_Reg tether_api[] = {
     {"krep_search", l_krep_search},
     {"http_stream", l_http_stream},
     {"http_get",    l_http_get},
+    {"fetch_bg",    l_fetch_bg},
     {"resize_requested", l_resize_requested},
     {"sleep",         l_sleep},
     {"abort_requested", l_abort_requested},
     {"clear_abort",   l_clear_abort},
     {"detect_kb_protocol", l_detect_kb_protocol},
+    {"monotonic_ms",  l_monotonic_ms},
     {NULL, NULL}
 };
 
@@ -1111,6 +1238,9 @@ int main(int argc, char **argv)
     struct { const char *src; const char *name; } mods[] = {
         /* provider_common first: session/agent resolve their JSON helpers to it */
         { provider_common_lua,    "provider_common"    },
+        /* provider_catalog next: api/config/ui resolve presets from it —
+           must precede every module that reads it (config, ui, api) */
+        { provider_catalog_lua, "provider_catalog" },
         /* retry: pure policy module api/agent apply (see src/tether/retry.lua) */
         { retry_lua,   "retry"   },
         { session_lua, "session" },
@@ -1130,9 +1260,17 @@ int main(int argc, char **argv)
         { ui_lua,     "ui"     },
         { config_lua, "config" },
         { tools_lua,  "tools"  },
+        /* provider_catalog: preset table api/config/ui resolve (Tier-A adds no modules) */
         { provider_openai_lua,    "provider_openai"    },
         { provider_anthropic_lua, "provider_anthropic" },
         { provider_gemini_lua,    "provider_gemini"    },
+        /* Tier-B adapters (own wire/auth, before api) */
+        { provider_azure_openai_lua,          "provider_azure_openai"          },
+        { provider_amazon_bedrock_lua,        "provider_amazon_bedrock"        },
+        { provider_google_vertex_lua,         "provider_google_vertex"         },
+        { provider_cloudflare_ai_gateway_lua, "provider_cloudflare_ai_gateway" },
+        { provider_radius_lua,                "provider_radius"                },
+        { provider_openai_codex_lua,          "provider_openai_codex"          },
         { api_lua,    "api"    },
         { context_lua, "context" },
         { agent_lua,  "agent"  },

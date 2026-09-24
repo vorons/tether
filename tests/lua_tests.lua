@@ -1003,18 +1003,20 @@ do
   local ui = dofile("src/tether/ui.lua")
   assert_notnil(ui.mouse_wants, "T37 ui.mouse_wants exported")
   local mw = ui.mouse_wants
-  -- auto: enabled only when interactive targets exist
+  -- auto: always enabled — the wheel must scroll the transcript. Without
+  -- tracking, terminals translate the wheel to Up/Down arrows, which recalled
+  -- input history into the field (wheel-scroll regression TW1).
   assert_eq(mw("auto", { confirmation = true }), true, "T37 auto+confirmation")
   assert_eq(mw("auto", { palette_active = true }), true, "T37 auto+palette")
-  assert_eq(mw("auto", {}), false, "T37 auto idle -> off (native selection)")
-  assert_eq(mw("auto", { search = { input = "x" } }), false, "T37 auto+search -> off")
+  assert_eq(mw("auto", {}), true, "T37 auto idle -> on (wheel capture)")
+  assert_eq(mw("auto", { search = { input = "x" } }), true, "T37 auto+search -> on")
   -- off: never; on: always
   assert_eq(mw("off", { confirmation = true }), false, "T37 off never")
   assert_eq(mw("on", {}), true, "T37 on always")
   -- selection: same as off (terminal handles it)
   assert_eq(mw("selection", { confirmation = true }), false, "T37 selection = off")
   -- unknown/nil mode: default auto
-  assert_eq(mw(nil, {}), false, "T37 nil mode defaults to auto")
+  assert_eq(mw(nil, {}), true, "T37 nil mode defaults to auto")
   print("T37 mouse states: OK")
 end
 
@@ -1623,15 +1625,185 @@ end)
 do
   local ui = dofile("src/tether/ui.lua")
 
-  -- 5.1: keymap reflects new scroll-vs-history bindings
+  -- 5.1: keymap reflects the Up/Down-always-recall bindings
   local km = ui.KEYMAP
   assert_eq(km["ctrl+up"], "history prev", "T49 ctrl+up = history prev")
   assert_eq(km["ctrl+down"], "history next", "T49 ctrl+down = history next")
-  assert_eq(km["up"], "scroll up / cursor up", "T49 up = scroll/cursor")
-  assert_eq(km["down"], "scroll down / cursor down", "T49 down = scroll/cursor")
+  assert_eq(km["up"], "history prev / cursor up (multi-line, Shift+)", "T49 up = history/cursor")
+  assert_eq(km["down"], "history next / cursor down (multi-line, Shift+)", "T49 down = history/cursor")
 end
 
--- T49b: Up/Down with empty input scrolls, does NOT insert history.
+-- T49b: plain Up/Down with no history leaves the input empty; Ctrl+Up with
+-- empty history too. (Up/Down recall history since the user request; nothing
+-- scrolls on them anymore.)
+
+-- TK1: Right moves the caret one character right. Regression: the handler
+-- set cursor = nxt - 1, which re-wrote the same position, so Right appeared
+-- dead (cursor never advanced). utf8.offset returns the 1-based byte start of
+-- the next character; with the 0-based cursor convention the new cursor IS
+-- nxt. A mid-character cursor must not raise (utf8.offset init inside a
+-- multi-byte char) — walk to the end of that character instead.
+do
+  local names = {"tether", "config", "session", "agent", "api"}
+  local originals, preload = {}, {}
+  for _, n in ipairs(names) do
+    originals[n] = _G[n]; preload[n] = package.preload[n]
+  end
+  local function trial(bytes)
+    local q, qi = {}, 0
+    for _, b in ipairs(bytes) do q[#q + 1] = b end
+    _G.tether = host_mock{
+      write = function() end,
+      resize_requested = function() return false end,
+      get_terminal_size = function() return { width = 80, height = 24 } end,
+      getcwd = function() return "/tmp" end,
+      read_char = function() qi = qi + 1; return q[qi] or 17 end,
+      read_char_nb = function() qi = qi + 1; if qi <= #q then return q[qi] end return nil end,
+    }
+    _G.config = { load = function()
+        return { model = "test", workspace = "/tmp", ui = { input_max_lines = 8 } } end,
+      api_key = function() return "" end }
+    _G.session = { new_session = function() return "sid" end }
+    _G.agent = { turn = function() return true end, get_history = function() return {} end }
+    _G.api = { list_models = function() return {} end }
+    package.preload.tether = function() return _G.tether end
+    package.preload.config = function() return _G.config end
+    package.preload.session = function() return _G.session end
+    package.preload.agent = function() return _G.agent end
+    package.preload.api = function() return _G.api end
+    local ui_mod = assert(loadfile("src/tether/ui.lua"))()
+    ui_mod.run()
+    local S = ui_mod._get_state()
+    return S.input, S.cursor
+  end
+  local LEFT = { 27, 91, 68 }
+  local RIGHT = { 27, 91, 67 }
+  local HOME = { 27, 91, 72 }
+  local function bytes(...)
+    local t = {}
+    for _, part in ipairs({...}) do
+      if type(part) == "table" then
+        for _, b in ipairs(part) do t[#t + 1] = b end
+      else
+        t[#t + 1] = part
+      end
+    end
+    return t
+  end
+
+  local ok, err = pcall(function()
+    -- ascii: abc, Left, Right -> back to the end (cursor 3)
+    -- (string.byte returns multiple values — wrap in a table so bytes() sees one)
+    local ABC = { string.byte("abc", 1, 3) }
+    local inp, cur = trial(bytes(ABC, LEFT, RIGHT))
+    assert_eq(inp, "abc", "TK1 input intact")
+    assert_eq(cur, 3, "TK1 Right undoes Left (was stuck at 2)")
+    -- two Rights from start: Home, Right -> cursor 1, Right -> 2
+    local _, cur2 = trial(bytes(ABC, HOME, RIGHT, RIGHT))
+    assert_eq(cur2, 2, "TK1 two Rights from home reach 2")
+    -- multibyte: 'привет' Home + Right -> after 'п' = byte 2
+    local cyr = "привет"
+    local tb = {}
+    for i = 1, #cyr do tb[#tb + 1] = cyr:byte(i) end
+    local _, cur3 = trial(bytes(tb, HOME, RIGHT))
+    assert_eq(cur3, 2, "TK1 Right steps a full 2-byte char (was raising or stuck)")
+  end)
+  for _, n in ipairs(names) do _G[n] = originals[n]; package.preload[n] = preload[n] end
+  if not ok then error("TK1: " .. tostring(err), 0) end
+  print("TK1 right-arrow caret move: OK")
+end
+
+-- TK2: Left / Backspace / Delete must survive a mid-character cursor (a byte
+-- inside a multi-byte UTF-8 char). Real trigger: multiline input with lines of
+-- different widths — move_cursor_up/down carry the byte column to another line
+-- where it lands inside a character (set_cursor only clamps to #ln.text). The
+-- handlers used bare utf8.offset, which RAISES "initial position is a
+-- continuation byte" and crashed the whole UI. Also: move_cursor_up/down must
+-- snap the column to a character boundary on the destination line.
+do
+  local names = {"tether", "config", "session", "agent", "api"}
+  local originals, preload = {}, {}
+  for _, n in ipairs(names) do
+    originals[n] = _G[n]; preload[n] = package.preload[n]
+  end
+  local function trial(bytes)
+    TK2_TRIAL = (tonumber(TK2_TRIAL) or 0) + 1
+    local q, qi = {}, 0
+    for _, b in ipairs(bytes) do q[#q + 1] = b end
+    _G.tether = host_mock{
+      write = function() end,
+      resize_requested = function() return false end,
+      get_terminal_size = function() return { width = 80, height = 24 } end,
+      getcwd = function() return "/tmp" end,
+      read_char = function() qi = qi + 1; local b = q[qi] or 17; if os.getenv("TK2_DEBUG") then io.stderr:write("T" .. TK2_TRIAL .. " RD ", tostring(b), "\n") end; return b end,
+      read_char_nb = function() qi = qi + 1; local b = q[qi]; if os.getenv("TK2_DEBUG") then io.stderr:write("T" .. TK2_TRIAL .. " NB ", tostring(b), "\n") end; if qi <= #q then return b end return nil end,
+    }
+    _G.config = { load = function()
+        return { model = "test", workspace = "/tmp", ui = { input_max_lines = 8 } } end,
+      api_key = function() return "" end }
+    _G.session = { new_session = function() return "sid" end }
+    _G.agent = { turn = function() return true end, get_history = function() return {} end }
+    _G.api = { list_models = function() return {} end }
+    package.preload.tether = function() return _G.tether end
+    package.preload.config = function() return _G.config end
+    package.preload.session = function() return _G.session end
+    package.preload.agent = function() return _G.agent end
+    package.preload.api = function() return _G.api end
+    local ui_mod = assert(loadfile("src/tether/ui.lua"))()
+    ui_mod.run()
+    local S = ui_mod._get_state()
+    if os.getenv("TK2_DEBUG") then io.stderr:write("T" .. TK2_TRIAL .. " END qi=", tostring(qi), " qlen=", tostring(#q), " cursor=", tostring(S.cursor), " input=", tostring(S.input), "\n") end
+    return S.input, S.cursor
+  end
+  local LEFT = { 27, 91, 68 }
+  local UP = { 27, 91, 65 }
+  local DOWN = { 27, 91, 66 }
+  local END_KEY = { 27, 91, 70 }
+  local HOME = { 27, 91, 72 }
+  local BS = { 127 }
+  local DEL = { 27, 91, 51, 126 } -- ESC [ 3 ~
+  local function bytes(...)
+    local t = {}
+    for _, part in ipairs({...}) do
+      if type(part) == "table" then
+        for _, b in ipairs(part) do t[#t + 1] = b end
+      else
+        t[#t + 1] = part
+      end
+    end
+    return t
+  end
+  local cyr = { string.byte("привет", 1, -1) }
+
+  local ok, err = pcall(function()
+    -- Left walks full characters back over 'привет': end -> 10 -> 8 -> ... -> 0
+    local _, c = trial(bytes(cyr, END_KEY, LEFT, LEFT))
+    assert_eq(c, 8, "TK2 Left x2 from end of cyrillic")
+    -- Backspace deletes a full 2-byte char: 'привет' + BS -> 'приве', cursor 10
+    local inp, c2 = trial(bytes(cyr, BS))
+    assert_eq(inp, "приве", "TK2 Backspace deletes whole cyrillic char")
+    assert_eq(c2, 10, "TK2 Backspace cursor after char")
+    -- Delete (forward) removes the whole first char: 'привет' Home + Del -> 'ривет'
+    local inp3, c3 = trial(bytes(cyr, END_KEY, HOME, DEL))
+    assert_eq(inp3, "ривет", "TK2 Delete removes whole first char")
+    assert_eq(c3, 0, "TK2 Delete keeps cursor")
+    -- THE CRASHER: type 'abc', Ctrl+J newline, 'привет'; caret after 'c'
+    -- (col 3); Up carries col 3 into the cyrillic line = a continuation byte;
+    -- Left there used to RAISE inside handle_key and kill the app.
+    local ABC = { string.byte("abc", 1, 3) }
+    local CTRL_J = { 10 }
+    local inp4, c4 = trial(bytes(ABC, CTRL_J, cyr, END_KEY, UP, DOWN, LEFT))
+    assert_eq(inp4, "abc\nпривет", "TK2 input intact after up/left across lines")
+    assert_true(c4 ~= nil and c4 >= 0, "TK2 cursor sane after mid-char Left")
+    -- and the same for Backspace on the mid-char cursor
+    local _, c5 = trial(bytes(ABC, CTRL_J, cyr, END_KEY, UP, DOWN, BS))
+    assert_true(c5 ~= nil and c5 >= 0, "TK2 cursor sane after mid-char Backspace")
+    -- after the mid-char Backspace the input must still be VALID utf-8
+  end)
+  for _, n in ipairs(names) do _G[n] = originals[n]; package.preload[n] = preload[n] end
+  if not ok then error("TK2: " .. tostring(err), 0) end
+  print("TK2 multibyte edge cases (Left/Backspace/Delete): OK")
+end
 do
   local names = {"tether", "config", "session", "agent", "api"}
   local originals, preload = {}, {}
@@ -2018,7 +2190,6 @@ local function run_ui_with(bytes, stubs, sink, paintC)
   if not ok then error("T53 harness: " .. tostring(err), 0) end
   return ui_mod, S
 end
-
 -- add-llm-compaction 3.2: commit_input parses free text after /compact.
 do
   local captured
@@ -2159,18 +2330,19 @@ do
 end
 
 -- T54: A — live turn feedback. agent.turn is synchronous, so the TUI must
--- repaint from inside the turn: a placeholder before the first token, the
--- streaming caret on the newest line, and both visible mid-turn.
+-- repaint from inside the turn: Working... in the input box before the first
+-- token, the streaming caret on the newest line, and both visible mid-turn.
+-- No placeholder row is ever painted (turn-feedback-restyling).
 do
   local sink = {}
-  local placeholder_before_turn, painted_mid_turn = false, false
+  local working_before_turn, painted_mid_turn = false, false
   -- "hi" + Enter + Ctrl+Q, as raw bytes (read_char yields byte values)
   local _, S = run_ui_with({ 104, 105, 13, 17 }, {
     agent = {
       turn = function(_, _, _text, on_event)
-        -- the placeholder frame must already be on screen when the turn starts
-        placeholder_before_turn =
-          table.concat(sink):find("думает", 1, true) ~= nil
+        -- the Working indicator must already be on screen when the turn starts
+        working_before_turn =
+          table.concat(sink):find("Working...", 1, true) ~= nil
         local before = #sink
         on_event({ type = "text_delta", text = "streamed" })
         -- a frame was flushed while the turn was still running
@@ -2180,7 +2352,9 @@ do
       get_history = function() return {} end,
     },
   }, sink)
-  assert_true(placeholder_before_turn, "T54 placeholder painted before first token")
+  assert_true(working_before_turn, "T54 Working indicator painted before first token")
+  assert_true(table.concat(sink):find("✻ tether", 1, true) == nil,
+    "T54 no placeholder row painted")
   assert_true(painted_mid_turn, "T54 repaint during the turn")
   local chunk
   for _, s in ipairs(sink) do
@@ -2505,7 +2679,8 @@ do
   end end
 
   -- scrolled up: footer shows ↓ +N; no transcript row carries the marker
-  local msg = str_bytes("q"); msg[#msg + 1] = 13; msg[#msg + 1] = 27; msg[#msg + 1] = 91; msg[#msg + 1] = 65; msg[#msg + 1] = 17
+  -- (Up/Down now recall history; scrolling uses PgUp)
+  local msg = str_bytes("q"); msg[#msg + 1] = 13; msg[#msg + 1] = 27; msg[#msg + 1] = 91; msg[#msg + 1] = 53; msg[#msg + 1] = 126; msg[#msg + 1] = 17
   local sink_up = {}
   local uimod_up = run_ui_with(msg, { agent = { turn = make_turn_stub(), get_history = function() return {} end } }, sink_up)
   local L_up = uimod_up._layout()
@@ -2538,7 +2713,7 @@ do
     return true
   end end
   local msg = str_bytes("q"); msg[#msg + 1] = 13
-  msg[#msg + 1] = 27; msg[#msg + 1] = 91; msg[#msg + 1] = 65  -- Up once
+  msg[#msg + 1] = 27; msg[#msg + 1] = 91; msg[#msg + 1] = 53; msg[#msg + 1] = 126  -- PgUp once
   msg[#msg + 1] = 17
   local sink = {}
   local uimod = run_ui_with(msg, { agent = { turn = make_turn_stub(), get_history = function() return {} end } }, sink)
@@ -2669,12 +2844,10 @@ end
 -- Section 9: live turn feedback
 -- ============================================================
 
--- T88: 9.1 — before the first delta S.waiting=true + placeholder entry
--- visible; after first text_delta S.waiting=false + S.streaming=true.
+-- T88: 9.1 — while busy the input box shows Working... (no placeholder row);
+-- after first text_delta S.waiting=false + S.streaming=true.
 do
-  local paints = {}
-  local turn_events = {}
-  local ev_cb
+  local sink = {}
   -- capture a fake agent that records events it would emit
   local fake_agent = {
     turn = function(cfg, key, text, cb)
@@ -2684,12 +2857,16 @@ do
     get_history = function() return {} end,
   }
   local uimod, S = run_ui_with({ 104, 105, 13, 17 },
-    { agent = fake_agent }, nil,
-    function(force) paints[#paints + 1] = force end)
+    { agent = fake_agent }, sink,
+    function(force) end)
   assert_true(S.waiting == false, "T88 S.waiting false after turn completes")
   assert_true(S.streaming == false, "T88 S.streaming false after turn completes")
-  assert_true(tph(uimod) == nil, "T88 placeholder cleared after turn")
-  print("T88 9.1 placeholder lifecycle: OK")
+  local all = table.concat(sink)
+  assert_true(all:find("Working...", 1, true) ~= nil,
+    "T88 Working indicator painted while busy")
+  assert_true(all:find("✻ tether", 1, true) == nil,
+    "T88 no placeholder row painted")
+  print("T88 9.1 Working indicator lifecycle: OK")
 end
 
 -- T89: 9.2 — caret glyph: "|" in ASCII, "▌" in non-ASCII; and
@@ -2717,7 +2894,7 @@ do
 end
 
 -- T90: 9.3 — lifecycle clearing: after successful turn, after error,
--- after abort, and after confirmation → placeholder/caret/elapsed all gone.
+-- after abort, and after confirmation → Working indicator/caret/elapsed gone.
 do
   -- error case
   do
@@ -2731,8 +2908,10 @@ do
       nil, nil)
     assert_true(S.waiting == false, "T90 S.waiting false after error")
     assert_true(S.streaming == false, "T90 S.streaming false after error")
-    local ph90 = tph(uimod)
-    assert_true(ph90 == nil, "T90 placeholder nil after error")
+    uimod._paint(true)
+    local L = uimod._layout()
+    assert_true((uimod._row(L.input_row) or ""):find("Working...", 1, true) == nil,
+      "T90 no Working indicator after error")
   end
   -- abort case
   do
@@ -2750,14 +2929,179 @@ do
   print("T90 9.3 lifecycle clearing: OK")
 end
 
+-- turn-feedback-restyling: thinking header carries elapsed, assistant rows
+-- use the · marker, and the busy input box shows only the Working indicator.
+do
+  local uimod, S = run_ui_with({ 17 },
+    { agent = { turn = function() return true end, get_history = function() return {} end } })
+  uimod._handle_agent_event({ type = "reasoning_delta", text = "hmm" })
+  uimod._handle_agent_event({ type = "text_delta", text = "answer here" })
+  local function plain(rows)
+    return table.concat(rows, "\n"):gsub("\27%[[%d;]*m", "")
+  end
+  local joined = plain(uimod._render_all(80))
+  assert_true(joined:find("thinking · 0.0s", 1, true) ~= nil,
+    "TFR thinking header carries elapsed")
+  assert_true(joined:find("· answer here", 1, true) ~= nil,
+    "TFR assistant rows use the · marker")
+  -- ASCII twins (row cache is versioned, not mode-keyed: invalidate first)
+  uimod._ascii_mode = true
+  uimod._invalidate_all()
+  local ajoined = plain(uimod._render_all(80))
+  assert_true(ajoined:find("- answer here", 1, true) ~= nil,
+    "TFR assistant marker is ASCII in ascii mode")
+  uimod._ascii_mode = nil
+  -- busy top rule shows only the Working indicator
+  S.busy = true
+  uimod._paint(true)
+  local L = uimod._layout()
+  local row = (uimod._row(L.rule_top_row) or ""):gsub("\27%[[%d;]*m", "")
+  assert_true(row:find("Working...", 1, true) ~= nil,
+    "TFR busy top rule shows Working")
+  S.busy = false
+  print("TFR restyled feedback rows: OK")
+end
+
+-- TH1: input history recall parses session.add_history's JSONL correctly.
+-- Regression: load_history regex-extracted `"text":"(.*)"` — a greedy match
+-- to the LAST quote. session.lua's json_encode emits fields in arbitrary
+-- pairs() order, so when `text` was not the last field the recall inserted
+-- `hello","ts":"...","workspace":"/tmp/ws` instead of the message. Fixed:
+-- load_history decodes each line with provider_common.json_decode.
+do
+  local HOME = "/tmp/tether_th1_home"
+  os.execute("rm -rf " .. HOME .. " && mkdir -p " .. HOME .. "/.tether")
+  local hf = assert(io.open(HOME .. "/.tether/history.jsonl", "w"))
+  -- field orders exactly as session.lua's pairs() may emit them
+  hf:write('{"text":"hello","ts":"2026-09-23T10:00:00","workspace":"/tmp/wsA"}\n')
+  hf:write('{"ts":"2026-09-23T10:01:00","text":"world","workspace":"/tmp/wsA"}\n')
+  hf:write('{"ts":"2026-09-23T10:02:00","workspace":"/tmp/wsB","text":"other ws"}\n')
+  -- escapes: a quote, a backslash+quote, a real newline and a literal \n
+  -- (this line is exactly what session.lua's json_encode emits for the text
+  -- 'say "hi\\" today<LF>\\nline2')
+  hf:write('{"ts":"2026-09-23T10:03:00","workspace":"/tmp/wsA","text":"say \\"hi\\\\\\" today\\n\\\\nline2"}\n')
+  hf:close()
+
+  local str_bytes = function(s) local b = {} for i = 1, #s do b[#b + 1] = s:byte(i) end return b end
+  -- load_history reads the path from the M._history_file seam (env HOME is
+  -- not rebindable from Lua); point it at the seeded sandbox.
+  local uimod, S = run_ui_with({ 17 }, {
+    config = { load = function()
+        return { model = "test", workspace = "/tmp/wsA", ui = { input_max_lines = 8 } } end,
+      api_key = function() return "" end },
+    agent = { turn = function() return true end, get_history = function() return {} end },
+  })
+  uimod._history_file = HOME .. "/.tether/history.jsonl"
+  uimod._load_history()
+  -- TH1a: load filtered by workspace and decoded in order
+  assert_eq(S.history[1], "hello", "TH1 first entry decodes to plain text (workspace filter kept /tmp/wsA)")
+  assert_eq(S.history[2], "world", "TH1 second entry decodes to plain text")
+  assert_eq(#S.history, 3, "TH1 other-workspace entry filtered out")
+  -- TH1b: escape decoding matches JSON (quote, backslash, newline)
+  -- TH1b: escape decoding matches JSON: quote, backslash+quote, real newline,
+  -- then a literal backslash-n
+  assert_eq(S.history[3], 'say "hi\\" today\n\\nline2',
+    "TH1 escaped quote/backslash/newline round-trip")
+  print("TH1 history jsonl parse per workspace: OK")
+end
+
+-- TW1: mouse wheel scrolls the transcript, never history. Regression: with
+-- mouse mode auto the tracking was enabled only over confirmation/palette, so
+-- a wheel tick outside them hit the terminal's own arrow-key fallback and
+-- recalled input history into the field. Now auto always tracks (wheel capture)
+-- and SGR wheel events scroll: up = older rows (S.scroll grows), down = toward
+-- the bottom (S.scroll shrinks, follow at 0). Directions were also inverted.
+do
+  local str_bytes = function(s) local b = {} for i = 1, #s do b[#b + 1] = s:byte(i) end return b end
+  -- SGR wheel events: ESC[<64;x;yM = wheel up, ESC[<65;x;yM = wheel down
+  local wheel_up = {}
+  for _, c in ipairs(str_bytes("\27[<64;10;5M")) do wheel_up[#wheel_up + 1] = c end
+  local wheel_down = {}
+  for _, c in ipairs(str_bytes("\27[<65;10;5M")) do wheel_down[#wheel_down + 1] = c end
+  -- one turn renders a long answer so there is something to scroll
+  local long_answer = ("line\n"):rep(60)
+  local function make_stub() return { turn = function(_, _, _, on_ev)
+      on_ev({ type = "text_delta", text = long_answer }); return true end,
+    get_history = function() return {} end } end
+
+  -- wheel up scrolls up: follow mode off, scroll grew, input untouched
+  local up_bytes = {}
+  for _, b in ipairs(str_bytes("q")) do up_bytes[#up_bytes + 1] = b end
+  up_bytes[#up_bytes + 1] = 13
+  for _, b in ipairs(wheel_up) do up_bytes[#up_bytes + 1] = b end
+  up_bytes[#up_bytes + 1] = 17
+  local uimod_up, S_up = run_ui_with(up_bytes, { agent = make_stub() })
+  assert_true(S_up.user_scrolled, "TW1 wheel up leaves follow mode")
+  assert_true(S_up.scroll > 0, "TW1 wheel up scrolls the transcript up")
+  -- commit_input cleared the field; the wheel must not have recalled anything
+  assert_eq(S_up.input, "", "TW1 wheel up leaves the input empty (no history)")
+  assert_eq(#S_up.history, 1, "TW1 exactly the submitted message is in history (no recall re-push)")
+
+  -- wheel down returns to follow mode
+  local down_bytes = {}
+  for _, b in ipairs(str_bytes("q")) do down_bytes[#down_bytes + 1] = b end
+  down_bytes[#down_bytes + 1] = 13
+  for _, b in ipairs(wheel_up) do down_bytes[#down_bytes + 1] = b end
+  for _, b in ipairs(wheel_down) do down_bytes[#down_bytes + 1] = b end
+  down_bytes[#down_bytes + 1] = 17
+  local _, S_dn = run_ui_with(down_bytes, { agent = make_stub() })
+  assert_eq(S_dn.scroll, 0, "TW1 wheel down returns to the bottom")
+  assert_false(S_dn.user_scrolled, "TW1 wheel down re-enters follow mode")
+  print("TW1 wheel scrolls transcript not history: OK")
+end
+
+-- TW2: the busy pump runs during silent waits. agent.interruptible_sleep wakes
+-- on input (tether.sleep returns early) and then calls the pump_busy_hook set
+-- by ui.lua, so a wheel tick during a retry backoff scrolls immediately instead
+-- of queueing until the turn ends.
+do
+  local sleep_calls = 0
+  local orig_tether = _G.tether
+  local orig_api = _G.api
+  _G.tether = setmetatable({
+    sleep = function() sleep_calls = sleep_calls + 1; end, -- wake at once: input arrived
+  }, { __index = orig_tether or {} })
+
+  local agent = assert(loadfile("src/tether/agent.lua"))()
+  local pump_ticks = 0
+  _G.pump_busy_hook = function() pump_ticks = pump_ticks + 1 end
+
+  -- api.stream: first attempt fails retryably (the retry path sleeps), second
+  -- attempt streams a short answer. The backoff nap between them exercises the
+  -- hook the way production would on a wheel tick.
+  local retry = assert(loadfile("src/tether/retry.lua"))()
+  local attempts = 0
+  _G.api = { stream = function(_, _, _, on_ev)
+    attempts = attempts + 1
+    if attempts == 1 then
+      return false, retry.failure("server", "test failure", 500)
+    end
+    on_ev({ type = "text_delta", text = "ok" })
+    return true
+  end }
+
+  local cfg = { model = "test", retry = { base_delay_ms = 1, max_delay_ms = 1,
+    multiplier = 1, max_failures_at_max_delay = 3 }, context = {} }
+  local okp, err = pcall(function()
+    agent.turn(cfg, "k", "hi", function() end)
+  end)
+  _G.pump_busy_hook = nil
+  _G.tether = orig_tether
+  _G.api = orig_api
+  if not okp then error("TW2: " .. tostring(err), 0) end
+  assert_true(sleep_calls > 0, "TW2 the retry backoff slept")
+  assert_true(pump_ticks > 0, "TW2 pump hook fired during the busy wait (ticks=" .. pump_ticks .. ")")
+  print("TW2 busy pump on silent wake: OK")
+end
+
 -- T91: 9.4 — throttle: a burst of N deltas paints at most
 -- PAINT_MIN_DELTAS+1 forced frames; transitions (tool_call_start) paint at once.
 do
   -- Internal paint() cannot be intercepted from outside (it's a local closure).
-  -- Instead: verify the throttle via spinner_frame advancement.
-  -- Each actual repaint increments S.spinner_frame. 30 deltas with PAINT_MIN_DELTAS=12
-  -- means at most ceil(30/12) + 1 = 3 repaints from deltas, plus 1 forced on
-  -- tool_call_start = at most 4 total. Without the throttle it would be 31.
+  -- Instead: verify the throttle via the repaint counter (M._paint_count).
+  -- 30 deltas with PAINT_MIN_DELTAS=12 means at most ceil(30/12) + 1 = 3
+  -- repaints from deltas, plus 1 forced on tool_call_start = at most 4 total.
+  -- Without the throttle it would be 31.
   local agent = {
     turn = function(cfg, key, text, cb)
       for i = 1, 30 do
@@ -2769,13 +3113,32 @@ do
     get_history = function() return {} end,
   }
   local uimod, S = run_ui_with({ 104, 105, 13, 17 }, { agent = agent })
-  local sf = S.spinner_frame or 0
-  -- initial paint on turn start: spinner_frame = 0
-  -- 30 deltas: max 3 forced (skipped>=12) + 1 forced on tool_call_start
-  -- So spinner_frame should be < 31 (throttle working)
-  assert_true(sf < 31, "T91 spinner_frame=" .. sf .. " < 31 (throttle limits repaints)")
-  assert_true(sf >= 1, "T91 spinner_frame=" .. sf .. " >= 1 (at least one repaint happened)")
-  print("T91 9.4 throttle bound: spinner_frame=" .. sf .. " OK")
+  local sf = uimod._paint_count or 0
+  -- initial paint on turn start; 30 deltas: max 3 forced (skipped>=12) + 1
+  -- forced on tool_call_start. So repaints should be < 31 (throttle working).
+  assert_true(sf < 31, "T91 repaints=" .. sf .. " < 31 (throttle limits repaints)")
+  assert_true(sf >= 1, "T91 repaints=" .. sf .. " >= 1 (at least one repaint happened)")
+  print("T91 9.4 throttle bound: repaints=" .. sf .. " OK")
+end
+
+-- TW2: spinner frame is time-based, not event-based. Like pi's Loader (80 ms
+-- interval), the glyph derives from elapsed monotonic ms since the turn began,
+-- so it animates at constant speed whether tokens stream or the turn is silent.
+do
+  local ui = dofile("src/tether/ui.lua")
+  assert_notnil(ui.spinner_glyph, "TW2 spinner_glyph exported")
+  assert_eq(ui._spinner_interval_ms, 80, "TW2 interval is 80 ms (pi default)")
+  -- pure seam: glyph at 0ms / 80ms / 160ms must differ pairwise (animation
+  -- actually moves with time, not with event count)
+  local f0 = ui._spinner_glyph_at(0)
+  local f1 = ui._spinner_glyph_at(80)
+  local f2 = ui._spinner_glyph_at(160)
+  assert_true(f0 ~= f1, "TW2 frame advances with time (0ms vs 80ms)")
+  assert_true(f1 ~= f2, "TW2 frame advances with time (80ms vs 160ms)")
+  assert_eq(f0, ui._spinner_glyph_at(800), "TW2 frames cycle with a 10-frame period")
+  -- nil-safe pre-run glyph
+  assert_notnil(ui.spinner_glyph(), "TW2 glyph before busy is nil-safe")
+  print("TW2 time-based spinner frames: OK")
 end
 
 if failed > 0 then
@@ -3051,7 +3414,897 @@ do
     assert_eq(S.palette_active, false, "T74 dir-inside: unique candidate in place")
   end
 
-  if failed > 0 then os.exit(1) end
+-- T161: provider catalog + alias dispatch + per-preset headers
+do
+  local catalog = assert(loadfile("src/tether/providers/catalog.lua"))()
+  assert_true(catalog.count() >= 40, "T162 catalog has 40+ presets")
+  local ids = catalog.ids()
+  assert_eq(ids[1], "openai", "T162 big three pinned first")
+  assert_eq(ids[2], "anthropic", "T162 pin 2")
+  assert_eq(ids[3], "gemini", "T162 pin 3")
+  assert_eq(catalog.get("deepseek").wire, "openai", "T162 deepseek alias")
+  assert_eq(catalog.get("agnes").wire, "openai", "T162 agnes alias")
+  assert_eq(catalog.get("agnes-cn").base_url, "https://api.agnes-ai.cn/v1",
+    "T162 agnes-cn base")
+  assert_eq(catalog.get("agnes").api_key_env, "AGNES_API_KEY", "T162 agnes env")
+  assert_eq(catalog.get("kimi-coding").wire, "anthropic", "T162 kimi alias")
+  assert_eq(catalog.get("amazon-bedrock").wire, "amazon-bedrock", "T162 bedrock adapter")
+  assert_eq(catalog.get("nope"), nil, "T162 unknown id nil")
+
+  local api = assert(loadfile("src/tether/api.lua"))()
+  -- alias keeps provider identity, shares the wire module
+  assert_eq(api._provider_of({ provider = "groq" }), "groq", "T162 groq identity")
+  assert_eq(api._wire_module({ provider = "groq" }).name, "openai", "T162 groq on openai wire")
+  assert_eq(api._wire_module({ provider = "minimax" }).name, "anthropic", "T162 minimax on anthropic wire")
+  assert_eq(api._wire_module({}).name, "openai", "T162 default wire")
+
+  local openai = assert(loadfile("src/tether/providers/openai.lua"))()
+  -- opencode session routing header (pi opencode-headers.ts)
+  local ohl = openai.header_lines("k", { provider = "opencode", session_id = "s-1" })
+  local has_session = false
+  for _, ln in ipairs(ohl) do
+    if ln == "x-opencode-session: s-1" then has_session = true end
+    assert_true(ln:find("HTTP-Referer", 1, true) == nil, "T162 no attribution headers")
+  end
+  assert_true(has_session, "T162 opencode session header")
+  local ohl2 = openai.header_lines("k", { provider = "opencode" })
+  assert_eq(#ohl2, 1, "T162 session header omitted (never empty) without session id")
+  -- copilot dynamic headers (pi github-copilot-headers.ts)
+  local chl = openai.header_lines("k", { provider = "github-copilot",
+    messages = { { role = "user", content = "hi" } } })
+  local saw_init, saw_intent = false, false
+  for _, ln in ipairs(chl) do
+    if ln == "X-Initiator: user" then saw_init = true end
+    if ln == "Openai-Intent: conversation-edits" then saw_intent = true end
+  end
+  assert_true(saw_init and saw_intent, "T162 copilot user-initiated headers")
+  local chl2 = openai.header_lines("k", { provider = "github-copilot",
+    messages = { { role = "user", content = "hi" }, { role = "assistant", content = "ok" } } })
+  local saw_agent = false
+  for _, ln in ipairs(chl2) do if ln == "X-Initiator: agent" then saw_agent = true end end
+  assert_true(saw_agent, "T162 copilot agent initiator after assistant message")
+
+  local anthropic = assert(loadfile("src/tether/providers/anthropic.lua"))()
+  local bhl = anthropic.header_lines("k", { auth_style = "bearer" })
+  assert_eq(#bhl, 1, "T162 bearer single header")
+  assert_true(bhl[1] == "Authorization: Bearer k", "T162 bearer shape")
+  local khl = anthropic.header_lines("k")
+  assert_true(khl[1] == "x-api-key: k", "T162 key shape unchanged without ctx")
+
+  -- {VAR} URL templates expand from cfg.provider_env, else fail named
+  do
+    local old = _G.tether
+    local got_url = nil
+    _G.tether = host_mock{
+      http_get = function(url) got_url = url; return '{"data":[{"id":"m"}]}', nil end,
+      http_stream = function() return true end,
+      sleep = function() end,
+    }
+    local res = api.list_models_live({
+      provider = "cloudflare-workers-ai",
+      base_url = "https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOUNT_ID}/ai/v1",
+      provider_env = { CLOUDFLARE_ACCOUNT_ID = "acc123" },
+    }, "key")
+    _G.tether = old
+    assert_true(res ~= nil and res[1].id == "m", "T162 template expands from provider_env")
+    assert_true(got_url:find("accounts/acc123/ai/v1/models", 1, true) ~= nil,
+      "T162 expanded URL correct")
+  end
+  do
+    local old = _G.tether
+    _G.tether = host_mock{
+      http_get = function() return nil, "must not be called" end,
+      http_stream = function() return true end,
+      sleep = function() end,
+    }
+    local res, err = api.list_models_live({
+      provider = "cloudflare-workers-ai",
+      base_url = "https://x/{CLOUDFLARE_ACCOUNT_ID}/ai/v1",
+    }, "key")
+    _G.tether = old
+    assert_eq(res, nil, "T162 unexpanded placeholder fails")
+    assert_true(tostring(err):find("CLOUDFLARE_ACCOUNT_ID", 1, true) ~= nil,
+      "T162 failure names the missing piece")
+  end
+  print("T162 catalog + alias + headers: OK")
+end
+
+-- T163: catalog defaults wired into config
+do
+  local cfgm = dofile("src/tether/config.lua")
+  local function load_tbl(t)
+    local p = "/tmp/tether_cfg_t163.lua"
+    local f = io.open(p, "w")
+    f:write("return " .. t)
+    f:close()
+    local c = cfgm.load(p)
+    os.remove(p)
+    return c
+  end
+  local d1 = load_tbl('{ provider = "deepseek" }')
+  assert_eq(d1.base_url, "https://api.deepseek.com", "T163 deepseek base default")
+  assert_eq(d1.api_key_env, "DEEPSEEK_API_KEY", "T163 deepseek env")
+  assert_eq(d1.model, "deepseek-chat", "T163 deepseek model")
+  local d2 = load_tbl('{ provider = "kimi-coding" }')
+  assert_eq(d2.base_url, "https://api.kimi.com/coding", "T163 kimi base default")
+  assert_eq(d2.api_key_env, "KIMI_API_KEY", "T163 kimi env")
+  local d3 = load_tbl('{ provider = "xiaomi-token-plan-sgp" }')
+  assert_true(d3.base_url:find("token-plan-sgp", 1, true) ~= nil, "T163 xiaomi sgp base")
+  assert_eq(d3.api_key_env, "XIAOMI_TOKEN_PLAN_SGP_API_KEY", "T163 xiaomi sgp env")
+  -- user override still wins over the catalog default
+  local d4 = load_tbl('{ provider = "deepseek", providers = { deepseek = { model = "deepseek-reasoner" } } }')
+  assert_eq(d4.model, "deepseek-reasoner", "T163 user model override wins")
+  assert_eq(d4.base_url, "https://api.deepseek.com", "T163 catalog base kept")
+  -- codex takes no env key: empty default, never falls back to OPENAI_API_KEY
+  local d5 = load_tbl('{ provider = "openai-codex" }')
+  assert_eq(d5.api_key_env, "", "T163 codex no env key")
+  assert_eq(cfgm.api_key(d5), "", "T163 codex resolves empty without store")
+  print("T163 catalog config defaults: OK")
+end
+
+-- T164: presets resolve live /models only (no static fallback)
+do
+  local api = assert(loadfile("src/tether/api.lua"))()
+  assert_eq(#api.list_models({ provider = "groq" }), 0, "T164 preset static empty")
+  assert_eq(#api.list_models({ provider = "kimi-coding" }), 0, "T164 anthropic-alias static empty")
+  assert_true(#api.list_models({ provider = "openai" }) >= 10, "T164 native openai keeps list")
+  -- live failure on a preset yields empty (commands.list_models wraps this)
+  do
+    local old = _G.tether
+    _G.tether = host_mock{
+      http_get = function() return nil, "unreachable" end,
+      http_stream = function() return true end,
+      sleep = function() end,
+    }
+    local res, err = api.list_models_live(
+      { provider = "groq", base_url = "http://x" }, "key")
+    _G.tether = old
+    assert_eq(res, nil, "T164 unreachable preset live nil")
+  end
+  print("T164 preset live-only models: OK")
+end
+
+-- T165: catalog login flows (device + code, config-sourced; key fallback)
+do
+  local catalog = assert(loadfile("src/tether/providers/catalog.lua"))()
+  -- no oauth config → nil (API-key paste path)
+  assert_eq(catalog.login_flow({ providers = {} }, "deepseek"), nil,
+    "T165 no oauth config means key paste")
+  assert_eq(catalog.login_flow({}, "nope"), nil, "T165 unknown id nil flow")
+  -- device flow descriptor (endpoints from config, never invented)
+  local dflow = catalog.login_flow({ providers = { ["github-copilot"] = {
+    oauth_client_id = "cid", oauth_device_url = "https://example.com/device",
+  } } }, "github-copilot")
+  assert_notnil(dflow, "T165 device flow built")
+  assert_true(dflow.device == true, "T165 device flag")
+  assert_eq(dflow.authorize_url, "https://example.com/device", "T165 device url shown")
+  -- code flow needs the full triple
+  assert_eq(catalog.login_flow({ providers = { xai = { oauth_client_id = "c" } } },
+    "xai"), nil, "T165 partial oauth config nil")
+  local cflow = catalog.login_flow({ providers = { xai = {
+    oauth_client_id = "c", oauth_token_url = "https://example.com/token",
+    oauth_authorize_url = "https://example.com/auth",
+  } } }, "xai")
+  assert_notnil(cflow, "T165 code flow built")
+  assert_true(cflow.authorize_url:find("client_id=c", 1, true) ~= nil,
+    "T165 authorize url carries client id")
+
+  -- ui: device paste stores an oauth entry, masked, no transcript leak
+  local auth = assert(loadfile("src/tether/auth.lua"))()
+  local home = "/tmp/tether_t165_home"
+  os.execute("rm -rf '" .. home .. "' && mkdir -p '" .. home .. "/.tether'")
+  local orig_path = auth.path
+  auth.path = function() return home .. "/.tether/auth.json" end
+  local orig_auth = _G.auth
+  _G.auth = auth
+  local uim, S = run_ui_with({ 17 }, {
+    agent = { turn = function() return true end, get_history = function() return {} end },
+    config = { load = function()
+        return { model = "test", workspace = "/tmp", provider = "github-copilot",
+          providers = { ["github-copilot"] = {
+            oauth_client_id = "cid", oauth_device_url = "https://example.com/device" } },
+          ui = { input_max_lines = 8 } }
+      end,
+      api_key = function() return "" end },
+  })
+  uim._execute_command("login", "github-copilot")
+  assert_notnil(S.login_secret, "T165 device login enters secret mode")
+  assert_true(S.login_flow and S.login_flow.device == true, "T165 device flow active")
+  local n0 = #uim._transcript.entries()
+  uim._handle_key({ kind = "paste", text = "copilot-device-token-65" })
+  uim._handle_key({ kind = "enter" })
+  local e = auth.get(home, "github-copilot")
+  assert_notnil(e, "T165 device paste stored")
+  assert_eq(e.kind, "oauth", "T165 device paste stored as oauth")
+  assert_eq(e.access_token, "copilot-device-token-65", "T165 token saved")
+  local leaked = false
+  for i = n0 + 1, #uim._transcript.entries() do
+    if tostring(uim._transcript.entries()[i].text or ""):find("copilot-device-token-65", 1, true) then
+      leaked = true
+    end
+  end
+  assert_false(leaked, "T165 confirmation has no token text")
+  auth.path = orig_path
+  _G.auth = orig_auth
+  print("T165 catalog login flows: OK")
+end
+
+-- T166: multi-source credential resolution (stored env merge, bearer style,
+-- Vertex ADC mint, AWS chain)
+do
+  local auth = assert(loadfile("src/tether/auth.lua"))()
+  local cfgm = dofile("src/tether/config.lua")
+  local real_getenv = os.getenv
+  local env_ov = {}
+  os.getenv = function(k)
+    if env_ov[k] ~= nil then return env_ov[k] end
+    return real_getenv(k)
+  end
+
+  local home = "/tmp/tether_t166_home"
+  os.execute("rm -rf '" .. home .. "' && mkdir -p '" .. home .. "/.tether'")
+
+  -- stored env wins over ambient for compound providers
+  env_ov.CLOUDFLARE_ACCOUNT_ID = "ambient-acc"
+  auth.set(home, "cloudflare-ai-gateway", { kind = "api_key",
+    access_token = "cf-key", env = { CLOUDFLARE_ACCOUNT_ID = "stored-acc" } })
+  local penv = auth.provider_env("cloudflare-ai-gateway", home)
+  assert_eq(penv.CLOUDFLARE_ACCOUNT_ID, "stored-acc", "T166 stored env wins")
+  assert_eq(auth.provider_env("openai", home).CLOUDFLARE_ACCOUNT_ID, nil,
+    "T166 non-compound empty")
+  env_ov.CLOUDFLARE_ACCOUNT_ID = nil
+
+  -- stored oauth resolves with bearer style
+  auth.set(home, "anthropic", { kind = "oauth", access_token = "sk-oauth-66",
+    expires_at = os.time() + 3600 })
+  local c66 = { provider = "anthropic", _auth_home = home }
+  local tok, style = cfgm.api_key(c66)
+  assert_eq(tok, "sk-oauth-66", "T166 stored oauth token")
+  assert_eq(style, "bearer", "T166 stored oauth bearer style")
+  assert_eq(c66._auth_style, "bearer", "T166 style stashed on cfg")
+
+  -- ANTHROPIC_AUTH_TOKEN rides Bearer
+  os.execute("rm -f '" .. home .. "/.tether/auth.json'")
+  env_ov.ANTHROPIC_AUTH_TOKEN = "auth-token-66"
+  local c66b = { provider = "anthropic", _auth_home = home,
+    api_key_env = "ANTHROPIC_API_KEY" }
+  local tok2, style2 = cfgm.api_key(c66b)
+  assert_eq(tok2, "auth-token-66", "T166 auth token resolves")
+  assert_eq(style2, "bearer", "T166 auth token bearer style")
+  env_ov.ANTHROPIC_AUTH_TOKEN = nil
+  env_ov.ANTHROPIC_OAUTH_TOKEN = "oauth-token-66"
+  assert_eq(cfgm.api_key(c66b), "oauth-token-66", "T166 oauth token resolves plain")
+  env_ov.ANTHROPIC_OAUTH_TOKEN = nil
+
+  -- Vertex ambient ADC mints a token when project+location exist
+  local adc_path = home .. "/adc.json"
+  local f = io.open(adc_path, "w")
+  f:write('{"type":"authorized_user","client_id":"cid","client_secret":"cs","refresh_token":"rt"}')
+  f:close()
+  env_ov.GOOGLE_APPLICATION_CREDENTIALS = adc_path
+  env_ov.GOOGLE_CLOUD_PROJECT = "proj"
+  env_ov.GOOGLE_CLOUD_LOCATION = "us-central1"
+  local posted = nil
+  auth._post_json = function(url, body) posted = body; return '{"access_token":"ya29.test","expires_in":3600}' end
+  local orig_auth = _G.auth
+  _G.auth = auth
+  local c66c = { provider = "google-vertex", _auth_home = home, provider_env = {} }
+  local tok3, style3 = cfgm.api_key(c66c)
+  assert_eq(tok3, "ya29.test", "T166 ADC mints access token")
+  assert_eq(style3, "bearer", "T166 minted token bearer style")
+  assert_eq(posted and posted.client_id, "cid", "T166 mint sends ADC client id")
+  -- without location there is no mint (partial credential refused)
+  env_ov.GOOGLE_CLOUD_LOCATION = nil
+  assert_eq(cfgm.api_key(c66c), "", "T166 partial ADC refused")
+  env_ov.GOOGLE_APPLICATION_CREDENTIALS = nil
+  env_ov.GOOGLE_CLOUD_PROJECT = nil
+  _G.auth = orig_auth
+
+  -- AWS chain shapes
+  env_ov.HOME = home
+  env_ov.AWS_BEARER_TOKEN_BEDROCK = "bedrock-bearer"
+  local b1 = auth.aws_creds()
+  assert_eq(b1.mode, "bearer", "T166 bedrock bearer mode")
+  env_ov.AWS_BEARER_TOKEN_BEDROCK = nil
+  env_ov.AWS_ACCESS_KEY_ID = "AKID"
+  env_ov.AWS_SECRET_ACCESS_KEY = "SECRET"
+  local b2 = auth.aws_creds()
+  assert_eq(b2.mode, "sigv4", "T166 static keys sigv4 mode")
+  assert_eq(b2.key, "AKID", "T166 static key kept")
+  env_ov.AWS_ACCESS_KEY_ID = nil
+  env_ov.AWS_SECRET_ACCESS_KEY = nil
+  env_ov.AWS_PROFILE = "nosuchprofile"
+  assert_eq(auth.aws_creds(), nil, "T166 no creds yields nil")
+  env_ov.AWS_PROFILE = nil
+  env_ov.HOME = nil
+
+  os.getenv = real_getenv
+  print("T166 multi-source credentials: OK")
+end
+
+-- T167: Bedrock adapter (SigV4 cross-checked vs Python hmac reference,
+-- Converse body mapping, non-stream response parsing)
+do
+  local bedrock = assert(loadfile("src/tether/providers/amazon-bedrock.lua"))()
+  -- SigV4 vector (verified against an independent Python implementation)
+  local authz = bedrock._sign("AKIDEXAMPLE",
+    "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY", nil,
+    "us-east-1", "service", "GET",
+    "https://host.foo.com/?Param2=value2&Param1=value1", "", false,
+    "20150830T123600Z")
+  assert_true(authz:find(
+    "Signature=0562a53cd5f50f2397cff531737ea044394282c3148918524844055cfadfaa36",
+    1, true) ~= nil, "T167 SigV4 GET vector")
+  local authz2 = bedrock._sign("AKID", "SECRET", "TOKEN", "us-east-1",
+    "bedrock", "POST",
+    "https://bedrock-runtime.us-east-1.amazonaws.com/model/x/converse",
+    '{"messages":[]}', true, "20240101T000000Z")
+  assert_true(authz2:find(
+    "Signature=d29aa5e92e93288854af3054c02fdf20a93af6c217cc4ff3408f890875831549",
+    1, true) ~= nil, "T167 SigV4 POST+session vector")
+  assert_true(authz2:find("bedrock/aws4_request", 1, true) ~= nil,
+    "T167 bedrock scope")
+
+  -- stream URL carries region + encoded model id
+  local url = bedrock.stream_url(
+    { model = "us.anthropic.claude-x-v1:0",
+      providers = { ["amazon-bedrock"] = { region = "eu-west-1" } } },
+    "us.anthropic.claude-x-v1:0")
+  assert_eq(url, "https://bedrock-runtime.eu-west-1.amazonaws.com/model/us.anthropic.claude-x-v1%3A0/converse",
+    "T167 converse URL")
+
+  -- Converse body: system extracted, roles alternate, tools converted
+  local hist = {
+    { role = "system", content = "sys" },
+    { role = "user", content = "hi" },
+    { role = "assistant", content = { tool_calls = { { id = "t1", type = "function",
+        ["function"] = { name = "read", arguments = '{"path":"a"}' } } } } },
+    { role = "tool", tool_call_id = "t1", content = "out" },
+  }
+  local body = bedrock.build_request(hist, "m")
+  assert_true(body:find('"system":[{"text":"sys"}]', 1, true) ~= nil,
+    "T167 converse system")
+  assert_true(body:find('"toolUseId":"t1"', 1, true) ~= nil,
+    "T167 converse toolUse")
+  assert_true(body:find('"name":"read"', 1, true) ~= nil,
+    "T167 converse tool name")
+  assert_true(body:find('"toolResult"', 1, true) ~= nil,
+    "T167 converse toolResult")
+  assert_true(body:find('"toolConfig":{"tools"', 1, true) ~= nil,
+    "T167 converse toolConfig")
+
+  -- non-stream Converse response → canonical events
+  bedrock.reset_stream()
+  local evs = {}
+  local function on(ev) evs[#evs + 1] = ev end
+  local resp = '{"output":{"message":{"role":"assistant","content":['
+    .. '{"text":"hello"},{"toolUse":{"toolUseId":"t1","name":"read","input":{"path":"a"}}}],'
+    .. '"stopReason":"tool_use"},"stopReason":"tool_use"},'
+    .. '"usage":{"inputTokens":10,"outputTokens":5}}'
+  assert_true(bedrock.handle_non_sse(resp, on), "T167 converse consumed")
+  local saw = {}
+  for _, ev in ipairs(evs) do
+    saw[ev.type] = (saw[ev.type] or 0) + 1
+    if ev.type == "tool_call_delta" then
+      assert_eq(ev.id, "t1", "T167 delta id")
+      assert_true(ev.arguments:find("a", 1, true) ~= nil, "T167 delta args")
+    end
+    if ev.type == "usage" then assert_eq(ev.usage.used, 15, "T167 usage sum") end
+    if ev.type == "done" then assert_eq(ev.reason, "tool_calls", "T167 stop mapped") end
+  end
+  assert_eq(saw.text_delta, 1, "T167 text")
+  assert_eq(saw.tool_call_start, 1, "T167 start")
+  assert_eq(saw.tool_call_delta, 1, "T167 delta")
+  assert_eq(saw.done, 1, "T167 done")
+  assert_true(bedrock.stream_failure() == nil, "T167 no failure")
+
+  -- error shape fails the attempt with the provider message
+  bedrock.reset_stream()
+  assert_true(bedrock.handle_non_sse('{"message":"ValidationException: bad"}', on),
+    "T167 error consumed")
+  local f = bedrock.stream_failure()
+  assert_notnil(f, "T167 error recorded")
+  assert_true(f.message:find("ValidationException", 1, true) ~= nil,
+    "T167 provider message kept")
+
+  -- preflight names missing credentials; bearer passes
+  assert_true(bedrock.preflight({}, "", "u", "amazon-bedrock") ~= nil,
+    "T167 preflight blocks keyless ambient-less")
+  assert_true(bedrock.preflight({}, "tok", "u", "amazon-bedrock") == nil,
+    "T167 bearer passes preflight")
+  print("T167 bedrock adapter: OK")
+end
+
+-- T168: Tier-B adapters resolve + emit canonical events on canned streams
+do
+  local api = assert(loadfile("src/tether/api.lua"))()
+  assert_eq(api._provider_of({ provider = "azure-openai" }), "azure-openai",
+    "T168 azure identity")
+  assert_eq(api._wire_module({ provider = "azure-openai" }).name, "azure-openai",
+    "T168 azure own module")
+  assert_eq(api._wire_module({ provider = "google-vertex" }).name, "google-vertex",
+    "T168 vertex own module")
+  assert_eq(api._wire_module({ provider = "openai-codex" }).name, "openai-codex",
+    "T168 codex own module")
+  assert_eq(#api.list_models({ provider = "azure-openai" }), 0,
+    "T168 adapter static empty")
+
+  local azure = assert(loadfile("src/tether/providers/azure-openai.lua"))()
+  assert_eq(azure.stream_url(
+    { base_url = "https://r.openai.azure.com", model = "d" }, "d"),
+    "https://r.openai.azure.com/openai/deployments/d/chat/completions?api-version=2024-10-21",
+    "T168 azure deployments URL")
+  assert_eq(azure.header_lines("k")[1], "api-key: k", "T168 azure api-key header")
+  assert_true(azure.preflight({ model = "" }) ~= nil, "T168 azure preflight needs deployment")
+
+  local vertex = assert(loadfile("src/tether/providers/google-vertex.lua"))()
+  local vcfg = { model = "m", _auth_style = "bearer", provider_env = {
+    GOOGLE_CLOUD_PROJECT = "p", GOOGLE_CLOUD_LOCATION = "l" } }
+  assert_eq(vertex.stream_url(vcfg, "m", "tok"),
+    "https://l-aiplatform.googleapis.com/v1/projects/p/locations/l/publishers/google/models/m:streamGenerateContent",
+    "T168 vertex bearer URL has no key")
+  -- vertex SSE delegates to the gemini wire
+  vertex.reset_stream()
+  local vevs = {}
+  vertex.parse_sse_line('data: {"candidates":[{"content":{"parts":[{"text":"vhi"}],"role":"model"}}]}',
+    function(ev) vevs[#vevs + 1] = ev end)
+  assert_eq(#vevs, 1, "T168 vertex text via gemini wire")
+  assert_eq(vevs[1].type, "text_delta", "T168 vertex event type")
+
+  local cf = assert(loadfile("src/tether/providers/cloudflare-ai-gateway.lua"))()
+  local chl = cf.header_lines("k")
+  assert_eq(#chl, 1, "T168 gateway single header")
+  assert_true(chl[1]:find("cf-aig-authorization", 1, true) ~= nil,
+    "T168 gateway auth shape")
+  for _, ln in ipairs(chl) do
+    assert_true(ln:find("Authorization:", 1, true) == nil
+      or ln:find("cf-aig", 1, true) ~= nil, "T168 no bare Authorization")
+  end
+
+  local radius = assert(loadfile("src/tether/providers/radius.lua"))()
+  assert_eq(radius.stream_url({ base_url = "https://radius.pi.dev/" }, "m"),
+    "https://radius.pi.dev/messages", "T168 radius messages URL")
+  assert_eq(radius.models_url({ base_url = "https://radius.pi.dev" }, "k"),
+    "https://radius.pi.dev/v1/config", "T168 radius config catalog")
+
+  local codex = assert(loadfile("src/tether/providers/openai-codex.lua"))()
+  codex.reset_stream()
+  local cevs = {}
+  local function con(ev) cevs[#cevs + 1] = ev end
+  codex.parse_sse_line('data: {"type":"response.output_text.delta","delta":"Hi"}', con)
+  codex.parse_sse_line('data: {"type":"response.output_item.added","output_index":0,'
+    .. '"item":{"type":"function_call","call_id":"c9","name":"list"}}', con)
+  codex.parse_sse_line('data: {"type":"response.function_call_arguments.delta",'
+    .. '"output_index":0,"delta":"{}"}', con)
+  codex.parse_sse_line('data: {"type":"response.completed","response":{"status":"completed",'
+    .. '"usage":{"input_tokens":1,"output_tokens":2}}}', con)
+  local csaw = {}
+  for _, ev in ipairs(cevs) do csaw[ev.type] = (csaw[ev.type] or 0) + 1 end
+  assert_eq(csaw.text_delta, 1, "T168 codex text")
+  assert_eq(csaw.tool_call_start, 1, "T168 codex start")
+  assert_eq(csaw.tool_call_delta, 1, "T168 codex delta")
+  assert_eq(csaw.done, 1, "T168 codex done")
+  assert_true(codex.stream_failure() == nil, "T168 codex no failure")
+  codex.reset_stream()
+  codex.parse_sse_line('data: {"type":"response.failed","error":{"message":"nope"}}', con)
+  assert_true(codex.stream_failure() ~= nil, "T168 codex failure recorded")
+  print("T168 tier-B adapters: OK")
+end
+
+-- T169: model-list cache (instant fresh hit, stale refresh ≤5s, fallback)
+do
+  local home = "/tmp/tether_t169_home"
+  os.execute("rm -rf '" .. home .. "' && mkdir -p '" .. home .. "/.tether'")
+  local api = assert(loadfile("src/tether/api.lua"))()
+  local orig_api = _G.api
+  _G.api = api
+  local commands = assert(loadfile("src/tether/commands.lua"))()
+  local calls = { n = 0, timeout = nil }
+  local live_body = '{"data":[{"id":"live-a"}]}'
+  local orig_tether = _G.tether
+  _G.tether = host_mock{
+    http_get = function(_, _, timeout)
+      calls.n = calls.n + 1
+      calls.timeout = timeout
+      if live_body then return live_body, nil end
+      return nil, "boom"
+    end,
+    http_stream = function() return true end,
+    sleep = function() end,
+  }
+  local cfg = { provider = "openai", base_url = "http://x", model = "m",
+    _auth_home = home }
+
+  -- miss + live success → live served, short timeout used, cache written
+  local m1 = commands.list_models(cfg, "key")
+  assert_eq(#m1, 1, "T169 live served on miss")
+  assert_eq(m1[1].id, "live-a", "T169 live id")
+  assert_eq(calls.timeout, 5, "T169 refresh capped at 5s")
+  assert_eq(calls.n, 1, "T169 one attempt")
+
+  -- fresh hit → instant, no network
+  live_body = '{"data":[{"id":"live-b"}]}'
+  local m2 = commands.list_models(cfg, "key")
+  assert_eq(m2[1].id, "live-a", "T169 fresh cache wins")
+  assert_eq(calls.n, 1, "T169 no network on fresh hit")
+
+  -- stale cache + live failure → stale served, attempt recorded once
+  local cp = commands._models_cache_path(home)
+  local f = io.open(cp, "r")
+  local raw = f:read("*a")
+  f:close()
+  local stale_raw = raw:gsub('"checked_at":(%d+)',
+    function(ts) return '"checked_at":' .. (tonumber(ts) - 5 * 3600) end)
+  f = io.open(cp, "w")
+  f:write(stale_raw)
+  f:close()
+  live_body = nil
+  local m3 = commands.list_models(cfg, "key")
+  assert_eq(m3[1].id, "live-a", "T169 stale served on failure")
+  assert_eq(calls.n, 2, "T169 one refresh attempt on stale")
+
+  -- second open right after failure → instant (checked_at persisted)
+  local m4 = commands.list_models(cfg, "key")
+  assert_eq(m4[1].id, "live-a", "T169 still served")
+  assert_eq(calls.n, 2, "T169 dead endpoint not hammered")
+
+  -- no key → static, no network
+  os.execute("rm -f '" .. cp .. "'")
+  local m5 = commands.list_models(cfg, "")
+  assert_true(#m5 >= 10, "T169 static without key")
+  assert_eq(calls.n, 2, "T169 no network without key")
+
+  _G.tether = orig_tether
+  _G.api = orig_api
+  print("T169 model cache: OK")
+end
+
+-- T170: background refresh (instant stale display, spawn, poll pickup)
+do
+  local home = "/tmp/tether_t170_home"
+  os.execute("rm -rf '" .. home .. "' && mkdir -p '" .. home .. "/.tether'")
+  local api = assert(loadfile("src/tether/api.lua"))()
+  local orig_api = _G.api
+  _G.api = api
+  local commands = assert(loadfile("src/tether/commands.lua"))()
+  local spawned = {}
+  local orig_tether = _G.tether
+  _G.tether = host_mock{
+    http_get = function() return nil, "must not be called" end,
+    fetch_bg = function(url, headers, outpath, timeout)
+      spawned[#spawned + 1] = { url = url, outpath = outpath, timeout = timeout,
+        headers = headers }
+      return true
+    end,
+    http_stream = function() return true end,
+    sleep = function() end,
+  }
+  local cfg = { provider = "openai", base_url = "http://x", model = "m",
+    _auth_home = home }
+
+  -- miss: static instantly + one spawn, no sync network
+  local m1, bg1 = commands.list_models(cfg, "key")
+  assert_true(#m1 >= 10, "T170 static instantly on miss")
+  assert_true(bg1 == true, "T170 spawn reported")
+  assert_eq(#spawned, 1, "T170 one fetch spawned")
+  assert_true(spawned[1].url:find("/models", 1, true) ~= nil, "T170 spawn hits models URL")
+  assert_true(spawned[1].timeout >= 10, "T170 bg timeout generous")
+
+  -- second open while fetch in flight: no duplicate spawn
+  local m1b, bg1b = commands.list_models(cfg, "key")
+  assert_true(#m1b >= 10, "T170 still instant")
+  assert_eq(#spawned, 1, "T170 no duplicate spawn")
+
+  -- poll before child writes: waiting
+  assert_eq(commands.poll_models_refresh(cfg, { provider = "openai",
+    started = os.time() }), "waiting", "T170 waiting for child")
+
+  -- child lands: poll consumes, cache fills
+  local f = io.open(spawned[1].outpath, "w")
+  f:write('{"data":[{"id":"bg-live"}]}')
+  f:close()
+  assert_eq(commands.poll_models_refresh(cfg, { provider = "openai",
+    started = os.time() }), "updated", "T170 updated on land")
+  local m2 = commands.list_models(cfg, "key")
+  assert_eq(#m2, 1, "T170 fresh cache served")
+  assert_eq(m2[1].id, "bg-live", "T170 bg content wins")
+  assert_eq(#spawned, 1, "T170 no spawn on fresh hit")
+
+  -- failure marker: stale kept, checked_at settles (no hammering)
+  local cp = commands._models_cache_path(home)
+  local rf = io.open(cp, "r")
+  local raw = rf:read("*a")
+  rf:close()
+  local old_raw = raw:gsub('"checked_at":(%d+)',
+    function(ts) return '"checked_at":' .. (tonumber(ts) - 5 * 3600) end)
+  local wf = io.open(cp, "w")
+  wf:write(old_raw)
+  wf:close()
+  local m3, bg3 = commands.list_models(cfg, "key")
+  assert_eq(m3[1].id, "bg-live", "T170 stale instantly")
+  assert_true(bg3 == true, "T170 respawn on stale")
+  assert_eq(#spawned, 2, "T170 second spawn")
+  local ff = io.open(spawned[2].outpath, "w")
+  ff:write("FETCH_FAILED timeout\n")
+  ff:close()
+  assert_eq(commands.poll_models_refresh(cfg, { provider = "openai",
+    started = os.time() }), "updated", "T170 failure consumed")
+  local m4 = commands.list_models(cfg, "key")
+  assert_eq(m4[1].id, "bg-live", "T170 stale kept after failure")
+  assert_eq(#spawned, 2, "T170 settled, no respawn")
+
+  -- provider switch / ancient state settles
+  assert_eq(commands.poll_models_refresh({ provider = "gemini" },
+    { provider = "openai", started = os.time() }), "settled",
+    "T170 provider switch settles")
+  assert_eq(commands.poll_models_refresh(cfg,
+    { provider = "openai", started = os.time() - 500 }), "settled",
+    "T170 ancient state settles")
+
+  -- multi-provider: a non-active id's pending file is consumed too
+  local cfg_a = { provider = "openai", base_url = "http://x", model = "m",
+    _auth_home = home }
+  local m_a = commands.list_models(
+    { provider = "agnes", base_url = "http://x", model = "m", _auth_home = home },
+    "key")
+  assert_eq(#m_a, 0, "T170 agnes preset empty instantly")
+  local pend_a = commands._models_pending_path(home, "agnes")
+  local fa = io.open(pend_a, "w")
+  fa:write('{"data":[{"id":"agnes-poll-x"}]}')
+  fa:close()
+  assert_eq(commands.poll_models_refresh(cfg_a,
+    { provider = "openai", started = os.time() }), "updated",
+    "T170 non-active provider consumed")
+  local m_a2 = commands.list_models(
+    { provider = "agnes", base_url = "http://x", model = "m", _auth_home = home },
+    "key")
+  assert_eq(#m_a2, 1, "T170 agnes cache filled")
+  assert_eq(m_a2[1].id, "agnes-poll-x", "T170 agnes content")
+
+  _G.tether = orig_tether
+  _G.api = orig_api
+  print("T170 background refresh: OK")
+end
+
+-- T172: empty model list explains itself (no silent palette)
+do
+  local home = "/tmp/tether_t172_home"
+  os.execute("rm -rf '" .. home .. "' && mkdir -p '" .. home .. "/.tether'")
+  local api = assert(loadfile("src/tether/api.lua"))()
+  local orig_api = _G.api
+  _G.api = api
+  local commands = assert(loadfile("src/tether/commands.lua"))()
+  local orig_tether = _G.tether
+  _G.tether = host_mock{
+    http_get = function() return nil, "connection refused" end,
+    http_stream = function() return true end,
+    sleep = function() end,
+  }
+  -- keyless preset: names provider, login command and env var
+  local m1, _, e1 = commands.list_models(
+    { provider = "agnes", base_url = "http://x", model = "m", _auth_home = home,
+      api_key_env = "AGNES_API_KEY" }, "")
+  assert_eq(#m1, 0, "T172 keyless preset empty")
+  assert_true(e1 ~= nil, "T172 keyless reason present")
+  assert_true(e1:find("agnes", 1, true) ~= nil, "T172 reason names provider")
+  assert_true(e1:find("/login agnes", 1, true) ~= nil, "T172 reason points at login")
+  assert_true(e1:find("AGNES_API_KEY", 1, true) ~= nil, "T172 reason names env var")
+  -- keyed preset, dead endpoint: live reason surfaces (no fetch_bg in mock → sync)
+  local m2, _, e2 = commands.list_models(
+    { provider = "groq", base_url = "http://x", model = "m", _auth_home = home,
+      api_key_env = "GROQ_API_KEY" }, "key")
+  assert_eq(#m2, 0, "T172 dead endpoint empty")
+  assert_true(e2 ~= nil, "T172 live reason present")
+  assert_true(e2:find("groq", 1, true) ~= nil, "T172 live reason names provider")
+  assert_true(e2:find("refused", 1, true) ~= nil, "T172 live reason kept")
+  -- non-empty list: no reason attached
+  local m3, _, e3 = commands.list_models(
+    { provider = "openai", base_url = "http://x", model = "m", _auth_home = home,
+      api_key_env = "OPENAI_API_KEY" }, "")
+  assert_true(#m3 > 0, "T172 static served")
+  assert_true(e3 == nil, "T172 no reason when list non-empty")
+  _G.tether = orig_tether
+  _G.api = orig_api
+  print("T172 empty list diagnosis: OK")
+end
+
+-- T173: providers_with_keys + for_provider (multi-provider /model basis)
+do
+  local cfgm = dofile("src/tether/config.lua")
+  local real_getenv = os.getenv
+  local env_ov = {}
+  os.getenv = function(k)
+    if env_ov[k] ~= nil then return env_ov[k] end
+    return real_getenv(k)
+  end
+  local home = "/tmp/tether_t173_home"
+  os.execute("rm -rf '" .. home .. "' && mkdir -p '" .. home .. "/.tether'")
+  local auth = assert(loadfile("src/tether/auth.lua"))()
+  auth.set(home, "openai", { kind = "api_key", access_token = "sk-oai" })
+
+  -- nothing in env: only stored openai
+  local k1 = cfgm.providers_with_keys({ provider = "openai", _auth_home = home })
+  assert_eq(#k1, 1, "T173 one stored key")
+  assert_eq(k1[1], "openai", "T173 stored id")
+
+  -- env key adds a provider; active pins first
+  env_ov.DEEPSEEK_API_KEY = "sk-deep"
+  local k2 = cfgm.providers_with_keys({ provider = "deepseek", _auth_home = home })
+  assert_eq(#k2, 2, "T173 stored + env")
+  assert_eq(k2[1], "deepseek", "T173 active pinned first")
+  assert_eq(k2[2], "openai", "T173 catalog order after")
+  env_ov.DEEPSEEK_API_KEY = nil
+
+  -- nothing anywhere → empty
+  os.execute("rm -f '" .. home .. "/.tether/auth.json'")
+  local k3 = cfgm.providers_with_keys({ provider = "openai", _auth_home = home })
+  -- (CI env may hold real keys; only assert ours are absent)
+  for _, id in ipairs(k3) do
+    assert_true(id ~= "openai" or real_getenv("OPENAI_API_KEY") ~= nil,
+      "T173 no phantom openai")
+  end
+
+  -- for_provider folds catalog defaults without mutating input
+  local base = { provider = "openai", model = "gpt-4o-mini",
+    base_url = "https://api.openai.com/v1", _auth_home = home }
+  local c2 = cfgm.for_provider(base, "deepseek")
+  assert_eq(c2.provider, "deepseek", "T173 copy provider")
+  assert_eq(c2.base_url, "https://api.deepseek.com", "T173 catalog base")
+  assert_eq(c2.api_key_env, "DEEPSEEK_API_KEY", "T173 catalog env")
+  assert_eq(base.provider, "openai", "T173 input untouched")
+  assert_eq(base.base_url, "https://api.openai.com/v1", "T173 input url untouched")
+
+  os.getenv = real_getenv
+  print("T173 providers_with_keys: OK")
+end
+
+-- T174: list_models_all aggregates keyed providers, tags provider
+do
+  local home = "/tmp/tether_t174_home"
+  os.execute("rm -rf '" .. home .. "' && mkdir -p '" .. home .. "/.tether'")
+  local auth = assert(loadfile("src/tether/auth.lua"))()
+  auth.set(home, "openai", { kind = "api_key", access_token = "sk-oai" })
+  auth.set(home, "agnes", { kind = "api_key", access_token = "sk-agnes" })
+  local api = assert(loadfile("src/tether/api.lua"))()
+  local orig_api = _G.api
+  _G.api = api
+  local orig_cfg = rawget(_G, "config")
+  _G.config = assert(loadfile("src/tether/config.lua"))()
+  local commands = assert(loadfile("src/tether/commands.lua"))()
+  local orig_tether = _G.tether
+  _G.tether = host_mock{
+    http_get = function(url)
+      if tostring(url):find("agnes", 1, true) then
+        return '{"data":[{"id":"agnes-2.5-flash"}]}', nil
+      end
+      return '{"data":[{"id":"gpt-4o-mini"}]}', nil
+    end,
+    http_stream = function() return true end,
+    sleep = function() end,
+  }
+  local cfg = { provider = "openai", _auth_home = home }
+  local items, bg, err = commands.list_models_all(cfg)
+  assert_true(#items >= 2, "T174 both providers listed")
+  assert_eq(items[1].provider, "openai", "T174 active first")
+  local seen = {}
+  for _, m in ipairs(items) do seen[m.provider] = m.id end
+  assert_eq(seen.openai, "gpt-4o-mini", "T174 openai model")
+  assert_eq(seen.agnes, "agnes-2.5-flash", "T174 agnes model")
+  assert_true(err == nil, "T174 no error when non-empty")
+
+  -- no keys anywhere → empty + /login hint
+  os.execute("rm -f '" .. home .. "/.tether/auth.json'")
+  local real_getenv = os.getenv
+  os.getenv = function() return nil end
+  local items2, _, err2 = commands.list_models_all(cfg)
+  os.getenv = real_getenv
+  assert_eq(#items2, 0, "T174 keyless empty")
+  assert_true(err2 ~= nil and err2:find("/login", 1, true) ~= nil,
+    "T174 keyless hint points at /login")
+
+  _G.tether = orig_tether
+  _G.api = orig_api
+  _G.config = orig_cfg
+  print("T174 list_models_all: OK")
+end
+
+-- T175: picking another provider's model switches provider + re-resolves key
+do
+  local orig_commands = _G.commands
+  local model_calls = 0
+  _G.commands = {
+    list_models_all = function()
+      model_calls = model_calls + 1
+      if model_calls == 1 then
+        return { { id = "gpt-4o-mini", name = "GPT-4o mini", provider = "openai" },
+                 { id = "agnes-2.5-flash", name = "Agnes Flash", provider = "agnes" } }
+      end
+      return { { id = "x-model", name = "X" } }
+    end,
+    list_models = function() return {} end,
+  }
+  local orig_config = _G.config
+  _G.config = { load = function()
+      return { model = "gpt-4o-mini", workspace = "/tmp", provider = "openai",
+        ui = { input_max_lines = 8 } }
+    end,
+    api_key = function(cfg) return "key-for-" .. tostring(cfg.provider) end }
+  local uim, S = run_ui_with({ 17 }, {
+    agent = { turn = function() return true end, get_history = function() return {} end },
+  })
+  uim._execute_command("model")
+  assert_true(S.palette_active, "T175 palette opens")
+  assert_eq(#(S.palette_items or {}), 2, "T175 two providers shown")
+  assert_eq(S.palette_items[2].provider, "agnes", "T175 item carries provider")
+  -- pick the agnes model (second row)
+  uim._handle_key({ kind = "special", name = "down" })
+  uim._handle_key({ kind = "enter" })
+  assert_eq(S.cfg.provider, "agnes", "T175 provider switched")
+  assert_eq(S.cfg.model, "agnes-2.5-flash", "T175 model set")
+  assert_eq(S.api_key, "key-for-agnes", "T175 key re-resolved for agnes")
+  local rows = uim._transcript.entries()
+  assert_true(tostring(rows[#rows].text or ""):find("agnes/agnes-2.5-flash", 1, true)
+    ~= nil, "T175 row names provider/model")
+  -- providerless item keeps current provider (backward compat)
+  uim._execute_command("model")
+  uim._handle_key({ kind = "enter" })
+  assert_eq(S.cfg.provider, "agnes", "T175 provider kept without tag")
+  assert_eq(S.cfg.model, "x-model", "T175 model still set")
+  _G.commands = orig_commands
+  _G.config = orig_config
+  print("T175 cross-provider pick: OK")
+end
+
+-- T171: bracketed paste terminates on ESC [ 2 0 1 ~ (not a prefix of it).
+-- Regression: the terminator check matched "[21~", so a real paste never
+-- completed — the decoder swallowed all following input into the void.
+do
+  local function to_bytes(s)
+    local t = {}
+    for i = 1, #s do t[#t + 1] = s:byte(i) end
+    return t
+  end
+  local qi, queue = 0, {}
+  _G.tether = host_mock{
+    -- exhausted queue yields nil (EOF): the paste loop must terminate.
+    read_char = function()
+      qi = qi + 1
+      if qi <= #queue then return queue[qi] end
+      return nil
+    end,
+    read_char_nb = function()
+      qi = qi + 1
+      if qi <= #queue then return queue[qi] end
+      return nil
+    end,
+  }
+  local uidec = assert(loadfile("src/tether/ui.lua"))()
+  local function one(seq)
+    queue, qi = to_bytes(seq), 0
+    return uidec._read_key()
+  end
+  -- full bracketed paste arrives atomically: content only, no marker leak
+  local k = one("\27[200~sk-test-key\27[201~")
+  assert_eq(k.kind, "paste", "T171 bracketed paste kind")
+  assert_eq(k.text, "sk-test-key", "T171 terminator excluded from content")
+  -- ESC inside a paste that is NOT the terminator stays content
+  local k2 = one("\27[200~a\27Xb\27[201~")
+  assert_eq(k2.kind, "paste", "T171 paste with stray ESC kind")
+  assert_eq(k2.text, "a\27Xb", "T171 stray ESC kept, terminator excluded")
+  -- the byte after the paste is decoded separately, not swallowed
+  queue, qi = to_bytes("\27[200~k\27[201~Z"), 0
+  local p1 = uidec._read_key()
+  assert_eq(p1.kind, "paste", "T171 first event paste")
+  assert_eq(p1.text, "k", "T171 first content")
+  local p2 = uidec._read_key()
+  assert_eq(p2.kind, "text", "T171 byte after paste decoded separately")
+  assert_eq(p2.char, "Z", "T171 trailing byte intact")
+  print("T171 bracketed paste terminator: OK")
+end
+
+if failed > 0 then
+    os.exit(1)
+end
   print("T74 4.2/4.3/4.4 path completion: OK")
 end
 
@@ -5266,8 +6519,8 @@ do
   uimod._paint(true)
   local L119 = uimod._layout()
   local top_rule = uimod._row(L119.rule_top_row) or ""
-  assert_true(top_rule:find("4.0s", 1, true) ~= nil,
-    "T119 the top rule shows the pending retry, got: " .. top_rule:sub(1, 80))
+  assert_true(top_rule:find("повтор", 1, true) == nil,
+    "T119 the top rule no longer shows the pending retry, got: " .. top_rule:sub(1, 80))
 
   -- attempt 2's text is kept, and clears the pending indicator
   uimod._handle_agent_event({ type = "text_delta", text = "the answer", attempt = 2 })
@@ -5290,7 +6543,7 @@ do
     "T119 the empty-stop row is appended")
   assert_true(#uimod._render_all(80) > 0, "T119 the notices render")
 
-  -- ASCII mode degrades the glyphs (the arrow becomes [r])
+  -- ASCII mode degrades the glyphs (the arrow becomes [r] in the transcript row)
   local uimod2, S2 = run_ui_with({ 17 }, { agent = agent_stub })
   uimod2._ascii_mode = true
   uimod2._handle_agent_event({ type = "retry", attempt = 1, delay = 2.0,
@@ -5305,8 +6558,8 @@ do
   uimod2._paint(true)
   local L119b = uimod2._layout()
   local top_rule2 = uimod2._row(L119b.rule_top_row) or ""
-  assert_true(top_rule2:find("[r]", 1, true) ~= nil,
-    "T119 the top-rule retry glyph is ascii, got: " .. top_rule2:sub(1, 80))
+  assert_true(top_rule2:find("[r]", 1, true) == nil,
+    "T119 the top rule no longer shows the retry glyph, got: " .. top_rule2:sub(1, 80))
   print("T119 retry and continuation notices: OK")
 end
 
@@ -6156,10 +7409,12 @@ do
                        answer_ask = function() return false end, continue = function() return true end }
   local uimod, S = run_ui_with({ 17 }, { agent = agent_stub })
 
-  -- a waiting turn first: the block must take the placeholder's place
+  -- a waiting turn first: no placeholder tail exists anymore — the block
+  -- opens straight from the waiting state (turn-feedback-restyling)
   S.waiting = true
   uimod._sync_tail()
-  assert_notnil(tph(uimod), "T124 the placeholder is up before the question")
+  local _, _, no_third_tail = uimod._transcript.tails()
+  assert_eq(no_third_tail, nil, "T124 tails carry no placeholder entry")
 
   uimod._handle_agent_event({ type = "ask", id = "a1", questions = {
     { id = "scope", question = "Which scope?", description = "Pick exactly one.",
@@ -6677,7 +7932,7 @@ do
     painted_before_turn = S2.busy == true
   end)
   assert_eq(turn_calls[1], "turn", "T129 start calls agent.turn")
-  assert_true(painted_before_turn, "T129 before_call runs while busy (T54 placeholder)")
+  assert_true(painted_before_turn, "T129 before_call runs while busy (Working indicator)")
   assert_false(S2.busy, "T129 start finishes busy")
 
   turn.confirm("c1", "allow", {}, function() end)
@@ -6925,12 +8180,12 @@ do
     end
   end
 
-  -- 4.1: the busy spinner with elapsed seconds in the top rule, cleared when
+  -- 4.1: the busy spinner with Working... in the top rule, cleared when
   -- the turn ends (reply).
   do
     local uimod = run_ui_with({ 104, 105, 13, 17 }, { agent = {
       turn = function(_, _, _, on_ev)
-        -- mid-turn: the top rule must carry the spinner + elapsed
+        -- mid-turn: the top rule must carry the spinner + Working
         uimod.busy_probe = true
         return true
       end,
@@ -6943,14 +8198,13 @@ do
     uimod._paint(true)
     local L = uimod._layout()
     local top = uimod._row(L.rule_top_row) or ""
-    assert_true(strip(top):find("думает", 1, true) ~= nil, "pi 4.1 busy top rule names the turn")
-    assert_true(strip(top):find("s", 1, true) ~= nil, "pi 4.1 busy top rule carries elapsed seconds")
+    assert_true(strip(top):find("Working...", 1, true) ~= nil, "pi 4.1 busy top rule shows Working")
     -- end path: reply clears it
     S.busy = false
     S.busy_started_at = nil
     uimod._paint(true)
     top = strip(uimod._row(L.rule_top_row) or "")
-    assert_eq(top:find("думает", 1, true), nil, "pi 4.1 reply clears the busy indicator")
+    assert_eq(top:find("Working...", 1, true), nil, "pi 4.1 reply clears the busy indicator")
     assert_true(top:find("─", 1, true) ~= nil or top:find("%-", 1, true) ~= nil,
       "pi 4.1 top rule is a plain rule again")
   end
@@ -6973,7 +8227,7 @@ do
     assert_true(uimod.vlen(plain) <= L.w, "pi 4.3 narrow top rule never exceeds the width")
     -- status survives as a truncated single row (full word may not fit at w=12)
     assert_true(plain:find("─", 1, true) ~= nil or plain:find("%-", 1, true) ~= nil
-      or plain:find("дум", 1, true) ~= nil or plain:find("tether", 1, true) ~= nil
+      or plain:find("Working", 1, true) ~= nil or plain:find("tether", 1, true) ~= nil
       or plain:find("…", 1, true) ~= nil, "pi 4.3 narrow rule keeps status or glyphs: " .. plain)
     S.busy = false
   end
@@ -7862,8 +9116,10 @@ do
   assert_eq(S155.palette_mode, "login", "T155 palette mode is login")
   local labels = {}
   for _, it in ipairs(S155.palette_items or {}) do labels[#labels + 1] = it.label end
-  assert_eq(table.concat(labels, ","), "openai,anthropic,gemini",
-    "T155 palette lists known providers")
+  assert_eq(labels[1], "openai", "T155 picker pins openai first")
+  assert_eq(labels[2], "anthropic", "T155 picker pins anthropic second")
+  assert_eq(labels[3], "gemini", "T155 picker pins gemini third")
+  assert_true(#labels >= 40, "T155 picker lists full catalog")
   assert_eq(S155.input, "", "T155 picker does not touch main input")
   assert_true(S155.login_provider == nil, "T155 no login flow started until pick")
   assert_eq(S155.login_secret, nil, "T155 picker is not secret mode")
@@ -8307,6 +9563,270 @@ do
   _G.commands = orig_commands
 
   print("T160 /model palette: OK")
+end
+
+-- T176: non-ASCII input (e.g. Russian) must not crash the TUI.
+-- Regression: decode_first_byte emitted one "text" event per BYTE, splitting
+-- multibyte UTF-8 into invalid fragments; S.input became invalid UTF-8 and
+-- vlen (utf8.codes) raised "invalid UTF-8 code". The decoder must assemble a
+-- full UTF-8 char per event, and vlen/trunc must never raise on stray bytes.
+do
+  local function to_bytes(s)
+    local t = {}
+    for i = 1, #s do t[#t + 1] = s:byte(i) end
+    return t
+  end
+  -- 1. decoder: raw bytes of "п" (D0 BF) arrive as one text event
+  local qi, queue = 0, {}
+  _G.tether = host_mock{
+    read_char = function()
+      qi = qi + 1
+      if qi <= #queue then return queue[qi] end
+      return nil
+    end,
+    read_char_nb = function()
+      qi = qi + 1
+      if qi <= #queue then return queue[qi] end
+      return nil
+    end,
+  }
+  local uidec = assert(loadfile("src/tether/ui.lua"))()
+  local function one(seq)
+    queue, qi = to_bytes(seq), 0
+    return uidec._read_key()
+  end
+  local k = one("п")
+  assert_eq(k.kind, "text", "T176 cyrillic decodes to text")
+  assert_eq(k.char, "п", "T176 cyrillic bytes assemble one char")
+  k = one("привет")
+  assert_eq(k.char, "п", "T176 first event is the first char")
+  local k2 = uidec._read_key()
+  assert_eq(k2.char, "р", "T176 second event is the second char")
+  -- 4-byte emoji stays whole
+  k = one("😀")
+  assert_eq(k.char, "😀", "T176 emoji assembles one char")
+  -- 2. vlen never raises, even on split/stray bytes
+  local ok, w = pcall(uidec.vlen, "привет")
+  assert_true(ok, "T176 vlen survives cyrillic")
+  assert_eq(w, 6, "T176 vlen counts cyrillic chars")
+  local ok2, w2 = pcall(uidec.vlen, string.char(0xD0))
+  assert_true(ok2, "T176 vlen survives a split lead byte")
+  assert_eq(w2, 1, "T176 split lead byte degrades to width 1")
+  local ok3 = pcall(uidec.trunc, string.char(0xD0) .. "abc", 4)
+  assert_true(ok3, "T176 trunc survives a split lead byte")
+  -- 3. end-to-end: typing + submitting Russian works, transcript keeps it
+  local bytes = {}
+  for _, b in ipairs(to_bytes("привет")) do bytes[#bytes + 1] = b end
+  bytes[#bytes + 1] = 13 -- Enter
+  bytes[#bytes + 1] = 17 -- Ctrl+Q quit
+  local uimod = run_ui_with(bytes, {
+    agent = { turn = function() return true end, get_history = function() return {} end },
+  })
+  local saw = false
+  for _, e in ipairs(tentries(uimod)) do
+    if e.role == "user" and e.text == "привет" then saw = true end
+  end
+  assert_true(saw, "T176 russian submit lands in the transcript")
+  -- 4. paste of Russian text inserts whole chars, paint survives
+  local uim2, S2 = run_ui_with({ 17 }, {
+    agent = { turn = function() return true end, get_history = function() return {} end },
+  })
+  uim2._handle_key({ kind = "paste", text = "привет" })
+  assert_eq(S2.input, "привет", "T176 russian paste inserts intact")
+  local okp = pcall(uim2._paint, true)
+  assert_true(okp, "T176 paint survives russian input")
+  print("T176 non-ASCII input: OK")
+end
+
+-- T177 (reworked by config-file-persist-settings): config.lua is the single
+-- source of truth — bootstrapped with defaults when missing, and the /model
+-- pick is written back into it (the model.lua side file is retired).
+do
+  local cfgmod = assert(loadfile("src/tether/config.lua"))()
+  local home = "/tmp/tether_t177_home"
+  os.execute("rm -rf " .. home .. " && mkdir -p " .. home .. "/.tether")
+  local cfgpath = home .. "/.tether/config.lua"
+  -- 1. bootstrap: missing file is created, parses, reloads identically
+  local c0 = cfgmod.load(cfgpath, home)
+  assert_eq(c0.model, "gpt-4o-mini", "T177 bootstrap loads defaults")
+  local f0 = assert(io.open(cfgpath, "r"))
+  local disk0 = f0:read("*a")
+  f0:close()
+  assert_true(disk0:find("return {", 1, true) ~= nil, "T177 bootstrap writes a table")
+  assert_true(disk0:find("editor_padding_x", 1, true) ~= nil, "T177 bootstrap is commented")
+  local c0b = cfgmod.load(cfgpath, home)
+  assert_eq(c0b.model, c0.model, "T177 bootstrap reload is identical")
+  assert_eq(c0b.ui.theme, c0.ui.theme, "T177 bootstrap reload keeps ui")
+  -- existing file is never reformatted by the bootstrap
+  local f = assert(io.open(cfgpath, "w"))
+  f:write('-- hand note\nreturn { model = "gpt-4o" }\n')
+  f:close()
+  local c1 = cfgmod.load(cfgpath, home)
+  assert_eq(c1.model, "gpt-4o", "T177 hand edit applies")
+  local f1 = assert(io.open(cfgpath, "r"))
+  assert_eq(f1:read("*a"), '-- hand note\nreturn { model = "gpt-4o" }\n',
+    "T177 existing file byte-identical")
+  f1:close()
+  -- unwritable location still loads in-memory defaults
+  local cbroken = cfgmod.load("/nonexistent/t177_missing.lua", home)
+  assert_eq(cbroken.model, "gpt-4o-mini", "T177 unwritable loads defaults")
+  -- 2. write-through preserves everything but the two keys
+  f = assert(io.open(cfgpath, "w"))
+  f:write('-- custom\nreturn {\n  provider = "openai",\n  model = "gpt-4o-mini", -- pinned\n  providers = {\n    anthropic = { model = "custom-claude" },\n  },\n}\n')
+  f:close()
+  assert_true(cfgmod.persist_keys(home, { provider = "openai", model = "gpt-4o" }),
+    "T177 persist_keys writes")
+  local f2 = assert(io.open(cfgpath, "r"))
+  local disk2 = f2:read("*a")
+  f2:close()
+  assert_true(disk2:find("-- custom", 1, true) ~= nil, "T177 comments survive")
+  assert_true(disk2:find("custom-claude", 1, true) ~= nil, "T177 nested model untouched")
+  assert_true(disk2:find("pinned", 1, true) ~= nil, "T177 trailing comment kept")
+  assert_true(disk2:find('model = "gpt-4o"', 1, true) ~= nil, "T177 top model patched")
+  -- exotic files fail closed (intact, pick stays in memory)
+  f = assert(io.open(cfgpath, "w"))
+  f:write('local m = os.getenv("M") or "x"\nreturn { model = m }\n')
+  f:close()
+  assert_true(cfgmod.persist_keys(home, { provider = "openai", model = "gpt-4o" }) == false,
+    "T177 exotic fails closed")
+  local f3 = assert(io.open(cfgpath, "r"))
+  assert_true(f3:read("*a"):find("os.getenv", 1, true) ~= nil, "T177 exotic intact")
+  f3:close()
+  assert_true(cfgmod.persist_keys(home .. "/nope", { provider = "openai", model = "x" }) == false,
+    "T177 missing file fails closed")
+  -- 3. one-time model.lua migration (staged side file + default-valued config)
+  assert_true(cfgmod._write_bootstrap(cfgpath), "T177 re-bootstrap for migration")
+  local sf = assert(io.open(home .. "/.tether/model.lua", "w"))
+  sf:write('return {\n  provider = "anthropic",\n  model = "claude-mig",\n}\n')
+  sf:close()
+  local cm = cfgmod.load(cfgpath, home)
+  assert_eq(cm.provider, "anthropic", "T177 migration restores provider")
+  assert_eq(cm.model, "claude-mig", "T177 migration restores model")
+  assert_eq(cm.api_key_env, "ANTHROPIC_API_KEY", "T177 migration resolves endpoint")
+  assert_eq(io.open(home .. "/.tether/model.lua"), nil, "T177 side file removed")
+  local cm2 = cfgmod.load(cfgpath, home)
+  assert_eq(cm2.model, "claude-mig", "T177 migrated value stable")
+  -- explicit config blocks migration (side file kept)
+  f = assert(io.open(cfgpath, "w"))
+  f:write('return { model = "gpt-4o" }\n')
+  f:close()
+  sf = assert(io.open(home .. "/.tether/model.lua", "w"))
+  sf:write('return { provider = "anthropic", model = "claude-mig" }\n')
+  sf:close()
+  local cb = cfgmod.load(cfgpath, home)
+  assert_eq(cb.model, "gpt-4o", "T177 explicit model blocks migration")
+  assert_true(io.open(home .. "/.tether/model.lua") ~= nil, "T177 blocked side file kept")
+  -- 4. end-to-end: /model Enter writes provider/model into config.lua
+  assert_true(cfgmod._write_bootstrap(cfgpath), "T177 bootstrap for e2e")
+  os.remove(home .. "/.tether/model.lua")
+  local orig_commands = _G.commands
+  _G.commands = {
+    list_sessions = function() return {} end,
+    resume = function() return nil end,
+    new = function() return "new-sid" end,
+    list_models = function() return { { id = "gpt-4o", name = "GPT-4o" } } end,
+    compact = function() return "", "noop" end,
+  }
+  local uim, S = run_ui_with({ 17 }, {
+    agent = { turn = function() return true end, get_history = function() return {} end },
+  })
+  S.cfg._auth_home = home
+  uim._execute_command("model")
+  uim._handle_key({ kind = "enter" })
+  _G.commands = orig_commands
+  assert_eq(S.model_name, "gpt-4o", "T177 pick applies in session")
+  local c4 = cfgmod.load(cfgpath, home)
+  assert_eq(c4.model, "gpt-4o", "T177 restart keeps the picked model")
+  assert_eq(c4.provider, "openai", "T177 restart keeps the picked provider")
+  os.execute("rm -rf " .. home)
+  print("T177 config file is the source of truth: OK")
+end
+
+-- T178: a retry in turn N must not drop previous turns' answers.
+-- Regression: attempt numbering restarts at 1 every turn
+-- (agent reset_retry_state), but transcript's retry-drop removed
+-- same-attempt entries across the WHOLE transcript — turn 1's completed
+-- answer (tagged 1) vanished when turn 2 retried attempt 1.
+do
+  local orig_agent = _G.agent
+  local turn_no = 0
+  _G.agent = {
+    -- like the real agent: attempt numbers restart at 1 every turn
+    turn = function(_, _, _, on_event)
+      turn_no = turn_no + 1
+      if turn_no == 1 then
+        on_event({ type = "text_delta", attempt = 1, text = "answer one" })
+      else
+        on_event({ type = "text_delta", attempt = 1, text = "doomed partial" })
+        on_event({ type = "retry", attempt = 1, delay = 0, reason = "boom" })
+        on_event({ type = "text_delta", attempt = 2, text = "answer two" })
+      end
+      return true
+    end,
+    get_history = function() return {} end,
+  }
+  local uim = run_ui_with({ 17 }, { agent = _G.agent })
+  local function type_text(s)
+    for i = 1, #s do uim._handle_key({ kind = "text", char = s:sub(i, i) }) end
+  end
+  type_text("one")
+  uim._handle_key({ kind = "enter" })
+  type_text("two")
+  uim._handle_key({ kind = "enter" })
+  _G.agent = orig_agent
+  local saw_one, saw_two, saw_doomed = false, false, false
+  for _, e in ipairs(tentries(uim)) do
+    if e.role == "assistant" and e.text == "answer one" then saw_one = true end
+    if e.role == "assistant" and e.text == "answer two" then saw_two = true end
+    if e.role == "assistant" and (e.text or ""):find("doomed", 1, true) then
+      saw_doomed = true
+    end
+  end
+  assert_true(saw_one, "T178 turn 1 answer survives turn 2 retry")
+  assert_true(saw_two, "T178 turn 2 answer lands after retry")
+  assert_true(not saw_doomed, "T178 failed attempt partial is dropped")
+  print("T178 retry keeps previous answers: OK")
+end
+
+-- T179: empty string deltas emit nothing (no `"content":""` garbage).
+-- Regression: the `or match('"..."')` empty-value fallbacks had no capture
+-- group, so string.match returned the whole key fragment and it was emitted
+-- as a text/argument delta (every turn starts with an empty-content frame).
+do
+  local openai_p = assert(loadfile("src/tether/providers/openai.lua"))()
+  local anthropic_p = assert(loadfile("src/tether/providers/anthropic.lua"))()
+  local codex_p = assert(loadfile("src/tether/providers/openai-codex.lua"))()
+  local function collect(mod, line)
+    local evs = {}
+    mod.parse_sse_line(line, function(ev) evs[#evs + 1] = ev end)
+    return evs
+  end
+  -- empty frames: zero events (they used to emit `"content":""` etc.)
+  assert_eq(#collect(openai_p,
+    'data: {"choices":[{"index":0,"delta":{"role":"assistant","content":""}}]}'),
+    0, "T179 openai empty content silent")
+  assert_eq(#collect(anthropic_p,
+    'data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":""}}'),
+    0, "T179 anthropic empty text silent")
+  assert_eq(#collect(codex_p,
+    'data: {"type":"response.output_text.delta","output_index":0,"delta":""}'),
+    0, "T179 codex empty delta silent")
+  assert_eq(#collect(codex_p,
+    'data: {"type":"response.function_call_arguments.delta","output_index":0,"delta":""}'),
+    0, "T179 codex empty args silent")
+  -- non-empty values still flow, unescaped once
+  local oevs = collect(openai_p, 'data: {"choices":[{"index":0,"delta":{"content":"Hi!"}}]}')
+  assert_eq(#oevs, 1, "T179 openai text flows")
+  assert_eq(oevs[1].text, "Hi!", "T179 openai text intact")
+  local aevs = collect(anthropic_p,
+    'data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hey"}}')
+  assert_eq(#aevs, 1, "T179 anthropic text flows")
+  assert_eq(aevs[1].text, "Hey", "T179 anthropic text intact")
+  local cevs = collect(codex_p,
+    'data: {"type":"response.output_text.delta","output_index":0,"delta":"Yo"}')
+  assert_eq(#cevs, 1, "T179 codex text flows")
+  assert_eq(cevs[1].text, "Yo", "T179 codex text intact")
+  print("T179 empty deltas are silent: OK")
 end
 
 if failed > 0 then
