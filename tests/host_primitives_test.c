@@ -219,6 +219,32 @@ static void test_krep_search(lua_State *L)
         lua_pop(L, 1);
     }
 
+    /* file base: tools.grep passes the model's path straight through, so it
+       is routinely a FILE. opendir on it failed ENOTDIR with the complaint
+       going to the terminal (straight over the TUI) and zero records. */
+    char errcap[400];
+    snprintf(errcap, sizeof(errcap), "%s/stderr.cap", kdir);
+    fflush(stderr);
+    int saved_err = dup(STDERR_FILENO);
+    int capfd = open(errcap, O_WRONLY | O_CREAT | O_TRUNC, 0600);
+    if (saved_err >= 0 && capfd >= 0)
+        dup2(capfd, STDERR_FILENO);
+    if (call_krep_search(L, ak, "NEEDLE", NULL, 0, 0, 100)) {
+        if (lua_istable(L, -1)) {
+            check((int)lua_rawlen(L, -1) == 1, "krep file base returns the match");
+            check(krep_has_path(L, -1, "a.txt"),
+                  "krep file base record names the file");
+        }
+        lua_pop(L, 1);
+    }
+    fflush(stderr);
+    if (saved_err >= 0) { dup2(saved_err, STDERR_FILENO); close(saved_err); }
+    if (capfd >= 0) close(capfd);
+    FILE *ef = fopen(errcap, "r");
+    int ech = ef ? fgetc(ef) : -1;
+    if (ef) fclose(ef);
+    check(ech == EOF, "krep keeps stderr silent (no TUI corruption)");
+
     snprintf(cmd, sizeof(cmd), "rm -rf %s", kdir);
     if (system(cmd) != 0) { /* best effort */ }
 }
@@ -479,6 +505,237 @@ static void test_http_transport(lua_State *L)
               "http_stream keeps the blank SSE event boundary");
         lua_pop(L, 2);
     }
+
+    int status = 0;
+    waitpid(pid, &status, 0);
+}
+
+/* --- spinner tick rate during a silent stream ------------------------------
+ * The server sends headers, then stays silent for TTFT_SILENCE_MS (a TTFT
+ * stall), then sends one line. The tick hook must fire at ~80 ms all the
+ * way through the silence: with curl_easy_perform the progress callback ran
+ * only on network activity, so the spinner froze and jumped per batch. */
+#define TTFT_SILENCE_MS 1200
+#define TICK_TS_CAP 512
+
+static double g_tick_ts[TICK_TS_CAP];
+static int g_tick_n;
+
+static double tick_clock_ms(void)
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (double)ts.tv_sec * 1000.0 + (double)ts.tv_nsec / 1e6;
+}
+
+static int tick_stub(lua_State *L)
+{
+    (void)L;
+    if (g_tick_n < TICK_TS_CAP)
+        g_tick_ts[g_tick_n++] = tick_clock_ms();
+    return 0;
+}
+
+/* The blocking waits tick the hook the UI registers (tether.set_tick_hook);
+   the tests bind the same seam instead of a global name. */
+static void bind_tick_hook(lua_State *L, lua_CFunction fn)
+{
+    lua_getglobal(L, "tether");
+    lua_getfield(L, -1, "set_tick_hook");
+    lua_remove(L, -2);
+    lua_pushcfunction(L, fn);
+    if (lua_pcall(L, 1, 0, 0) != LUA_OK)
+        report_lua_error(L, "set_tick_hook");
+}
+
+static void clear_tick_hook(lua_State *L)
+{
+    lua_getglobal(L, "tether");
+    lua_getfield(L, -1, "set_tick_hook");
+    lua_remove(L, -2);
+    lua_pushnil(L);
+    if (lua_pcall(L, 1, 0, 0) != LUA_OK)
+        report_lua_error(L, "set_tick_hook(nil)");
+}
+
+static pid_t start_ttft_server(int *out_port)
+{
+    int srv = socket(AF_INET, SOCK_STREAM, 0);
+    if (srv < 0)
+        return -1;
+    int one = 1;
+    setsockopt(srv, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one));
+    struct sockaddr_in addr;
+    memset(&addr, 0, sizeof(addr));
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    addr.sin_port = 0;
+    if (bind(srv, (struct sockaddr *)&addr, sizeof(addr)) != 0 || listen(srv, 4) != 0) {
+        close(srv);
+        return -1;
+    }
+    socklen_t alen = sizeof(addr);
+    if (getsockname(srv, (struct sockaddr *)&addr, &alen) != 0) {
+        close(srv);
+        return -1;
+    }
+    *out_port = ntohs(addr.sin_port);
+
+    pid_t pid = fork();
+    if (pid < 0) {
+        close(srv);
+        return -1;
+    }
+    if (pid == 0) {
+        signal(SIGPIPE, SIG_IGN);
+        int c = accept(srv, NULL, NULL);
+        if (c >= 0) {
+            char req[2048];
+            ssize_t n = read(c, req, sizeof(req) - 1);
+            if (n < 0) n = 0;
+            (void)n;
+            const char *line = "data: late\n";
+            char head[256];
+            int hlen = snprintf(head, sizeof(head),
+                "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\n"
+                "Content-Length: %zu\r\nConnection: close\r\n\r\n",
+                strlen(line));
+            if (hlen > 0)
+                write(c, head, (size_t)hlen);
+            struct timespec nap = { TTFT_SILENCE_MS / 1000,
+                                    (TTFT_SILENCE_MS % 1000) * 1000 * 1000 };
+            nanosleep(&nap, NULL);
+            write(c, line, strlen(line));
+            close(c);
+        }
+        close(srv);
+        _exit(0);
+    }
+    return pid;
+}
+
+static void test_spinner_tick_rate(lua_State *L)
+{
+    int port = 0;
+    pid_t pid = start_ttft_server(&port);
+    if (pid <= 0) {
+        failures++;
+        fprintf(stderr, "FAIL: cannot start the TTFT test server\n");
+        return;
+    }
+    char url[128];
+    snprintf(url, sizeof(url), "http://127.0.0.1:%d/slow", port);
+    g_tick_n = 0;
+    bind_tick_hook(L, tick_stub);
+    g_stream_lines = 0;
+    lua_getglobal(L, "tether");
+    lua_getfield(L, -1, "http_stream");
+    lua_remove(L, -2);
+    lua_pushstring(L, "POST");
+    lua_pushstring(L, url);
+    lua_newtable(L);
+    lua_pushnil(L);
+    lua_pushcfunction(L, on_line_stub);
+    lua_newtable(L);
+    if (lua_pcall(L, 6, 2, 0) != LUA_OK) {
+        report_lua_error(L, "http_stream (ttft)");
+    } else {
+        check(lua_toboolean(L, -2) == 1, "http_stream survives a TTFT stall");
+        check(g_stream_lines == 1, "http_stream delivers the late line");
+        lua_pop(L, 2);
+    }
+    clear_tick_hook(L);
+
+    /* ~1200 ms of silence at an 80 ms quantum: expect a steady tick train,
+       not the 1-2 progress callbacks easy_perform delivered while idle. */
+    check(g_tick_n >= 8, "spinner ticks through a silent stream");
+    double worst_gap = 0;
+    for (int i = 1; i < g_tick_n; i++) {
+        double gap = g_tick_ts[i] - g_tick_ts[i - 1];
+        if (gap > worst_gap)
+            worst_gap = gap;
+    }
+    char gap_msg[128];
+    snprintf(gap_msg, sizeof(gap_msg),
+             "spinner tick gaps stay small (worst %.0f ms)", worst_gap);
+    check(g_tick_n < 2 || worst_gap <= 400.0, gap_msg);
+
+    int status = 0;
+    waitpid(pid, &status, 0);
+}
+
+/* --- spinner tick rate during sleep ----------------------------------------
+ * Retry backoff waits in tether.sleep with no transfer in flight, so the
+ * multi-loop quantum never fires there: the spinner froze for the whole
+ * wait. The sleep loop ticks on the same cadence instead. */
+static void test_sleep_ticks(lua_State *L)
+{
+    g_tick_n = 0;
+    bind_tick_hook(L, tick_stub);
+    lua_getglobal(L, "tether");
+    lua_getfield(L, -1, "sleep");
+    lua_remove(L, -2);
+    lua_pushnumber(L, 0.3);
+    if (lua_pcall(L, 1, 0, 0) != LUA_OK) {
+        report_lua_error(L, "sleep");
+    } else {
+        check(g_tick_n >= 2, "spinner ticks through a sleep (retry backoff)");
+    }
+    clear_tick_hook(L);
+}
+
+/* --- spinner tick rate during exec / http_get ------------------------------
+ * The agent `run` tool blocks in tether.exec (up to 120 s) and a /models
+ * refresh blocks in tether.http_get (up to 30 s): both froze the spinner
+ * like the stream and the backoff did before them. */
+static void test_exec_ticks(lua_State *L)
+{
+    g_tick_n = 0;
+    bind_tick_hook(L, tick_stub);
+    lua_getglobal(L, "tether");
+    lua_getfield(L, -1, "exec");
+    lua_remove(L, -2);
+    lua_pushstring(L, "sleep 0.3");
+    if (lua_pcall(L, 1, 2, 0) != LUA_OK) {
+        report_lua_error(L, "exec");
+    } else {
+        check(lua_toboolean(L, -2) == 1, "tether.exec(sleep) still succeeds");
+        check(lua_tointeger(L, -1) == 0, "tether.exec exit_code == 0");
+        check(g_tick_n >= 2, "spinner ticks while a tool command runs");
+        lua_pop(L, 2);
+    }
+    clear_tick_hook(L);
+}
+
+static void test_http_get_ticks(lua_State *L)
+{
+    int port = 0;
+    pid_t pid = start_ttft_server(&port);
+    if (pid <= 0) {
+        failures++;
+        fprintf(stderr, "FAIL: cannot start the TTFT test server\n");
+        return;
+    }
+    char url[128];
+    snprintf(url, sizeof(url), "http://127.0.0.1:%d/slow", port);
+    g_tick_n = 0;
+    bind_tick_hook(L, tick_stub);
+    lua_getglobal(L, "tether");
+    lua_getfield(L, -1, "http_get");
+    lua_remove(L, -2);
+    lua_pushstring(L, url);
+    lua_newtable(L);
+    lua_pushinteger(L, 30);
+    if (lua_pcall(L, 3, 2, 0) != LUA_OK) {
+        report_lua_error(L, "http_get (ttft)");
+    } else {
+        const char *body = lua_tostring(L, -2);
+        check(body != NULL && strstr(body, "data: late") != NULL,
+              "http_get delivers the body after a TTFT stall");
+        check(g_tick_n >= 8, "spinner ticks through a silent http_get");
+        lua_pop(L, 2);
+    }
+    clear_tick_hook(L);
 
     int status = 0;
     waitpid(pid, &status, 0);
@@ -822,6 +1079,296 @@ static void test_interrupt_watch(lua_State *L)
     }
 }
 
+/* --- incremental transfers for the reactor ----------------------------------
+ * tether.http_start/step/lines/abort/free/fds + tether.poll against a local
+ * server: a stepped transfer delivers the same lines as http_stream
+ * (including the blank SSE boundary and the trailing line), abort ends it
+ * as a failure, and poll reports no stdin wait. */
+static void test_http_xfer_steps(lua_State *L)
+{
+    int port = 0;
+    pid_t pid = start_test_server(&port);
+    if (pid <= 0) {
+        failures++;
+        fprintf(stderr, "FAIL: cannot start the loopback HTTP test server\n");
+        return;
+    }
+    char url[128];
+    snprintf(url, sizeof(url), "http://127.0.0.1:%d/stream", port);
+
+    lua_getglobal(L, "tether");
+    lua_getfield(L, -1, "http_start");
+    lua_remove(L, -2);
+    lua_pushstring(L, "POST");
+    lua_pushstring(L, url);
+    lua_newtable(L);
+    lua_pushnil(L);
+    lua_newtable(L);
+    if (lua_pcall(L, 5, 2, 0) != LUA_OK) {
+        report_lua_error(L, "http_start");
+        goto xfer_done;
+    }
+    if (lua_isnil(L, -2)) {
+        char msg[256];
+        snprintf(msg, sizeof(msg), "http_start failed: %s",
+                 lua_tostring(L, -1) ? lua_tostring(L, -1) : "?");
+        check(0, msg);
+        lua_pop(L, 2);
+        goto xfer_done;
+    }
+    lua_pop(L, 1); /* drop nil error slot */
+    check(luaL_testudata(L, -1, "tether.http_xfer") != NULL,
+          "http_start returns a transfer handle");
+    int hidx = lua_gettop(L);
+
+    /* fds for the reactor poll exist from the start */
+    lua_getglobal(L, "tether");
+    lua_getfield(L, -1, "http_fds");
+    lua_remove(L, -2);
+    lua_pushvalue(L, hidx);
+    if (lua_pcall(L, 1, 1, 0) != LUA_OK) {
+        report_lua_error(L, "http_fds");
+    } else {
+        lua_getfield(L, -1, "timeout");
+        check(lua_isnumber(L, -1), "http_fds reports a poll timeout");
+        lua_pop(L, 2);
+    }
+
+    /* step until done, draining lines on every step */
+    char collected[1024];
+    collected[0] = '\0';
+    int nsteps = 0;
+    const char *status = "running";
+    while (nsteps < 200) {
+        lua_getglobal(L, "tether");
+        lua_getfield(L, -1, "http_step");
+        lua_remove(L, -2);
+        lua_pushvalue(L, hidx);
+        lua_pushinteger(L, 100);
+        if (lua_pcall(L, 2, 2, 0) != LUA_OK) {
+            report_lua_error(L, "http_step");
+            break;
+        }
+        status = lua_tostring(L, -2);
+        if (status == NULL)
+            status = "?";
+        lua_pop(L, 2);
+        nsteps++;
+        lua_getglobal(L, "tether");
+        lua_getfield(L, -1, "http_lines");
+        lua_remove(L, -2);
+        lua_pushvalue(L, hidx);
+        if (lua_pcall(L, 1, 1, 0) != LUA_OK) {
+            report_lua_error(L, "http_lines");
+            break;
+        }
+        size_t n = lua_rawlen(L, -1);
+        for (size_t i = 1; i <= n; i++) {
+            lua_geti(L, -1, (lua_Integer)i);
+            const char *ln = lua_tostring(L, -1);
+            if (ln != NULL) {
+                strncat(collected, ln,
+                        sizeof(collected) - strlen(collected) - 1);
+                strncat(collected, "|",
+                        sizeof(collected) - strlen(collected) - 1);
+            }
+            lua_pop(L, 1);
+        }
+        lua_pop(L, 1);
+        if (strcmp(status, "done") == 0 || strcmp(status, "failed") == 0)
+            break;
+    }
+    check(strcmp(status, "done") == 0, "a stepped transfer finishes as done");
+    check(strcmp(collected, "data: one||data: two|") == 0,
+          "stepped lines match http_stream framing");
+    /* stepping a finished handle repeats the terminal status */
+    lua_getglobal(L, "tether");
+    lua_getfield(L, -1, "http_step");
+    lua_remove(L, -2);
+    lua_pushvalue(L, hidx);
+    lua_pushinteger(L, 10);
+    if (lua_pcall(L, 2, 2, 0) != LUA_OK) {
+        report_lua_error(L, "http_step (repeat)");
+    } else {
+        check(strcmp(lua_tostring(L, -2), "done") == 0,
+              "stepping a finished transfer repeats done");
+        lua_pop(L, 2);
+    }
+    lua_getglobal(L, "tether");
+    lua_getfield(L, -1, "http_free");
+    lua_remove(L, -2);
+    lua_pushvalue(L, hidx);
+    if (lua_pcall(L, 1, 1, 0) != LUA_OK)
+        report_lua_error(L, "http_free");
+    else
+        lua_pop(L, 1);
+    lua_pop(L, 1); /* handle */
+
+xfer_done:;
+    /* the shared fixture server serves a fixed request count; this test
+       makes only one, so reap by signal instead of waiting for exit. */
+    kill(pid, SIGKILL);
+    int st = 0;
+    waitpid(pid, &st, 0);
+}
+
+/* Abort on the reactor path: http_abort ends an in-flight transfer as a
+ * failure on the next step, without touching stdin. */
+static void test_http_xfer_abort(lua_State *L)
+{
+    const char *line = "data: {\"x\":1}\n";
+    int port = 0;
+    pid_t server = start_slow_server(&port, line, SLOW_SERVER_LINES);
+    if (server <= 0) {
+        failures++;
+        fprintf(stderr, "FAIL: cannot start the slow HTTP test server\n");
+        return;
+    }
+    char url[128];
+    snprintf(url, sizeof(url), "http://127.0.0.1:%d/stream", port);
+    lua_getglobal(L, "tether");
+    lua_getfield(L, -1, "http_start");
+    lua_remove(L, -2);
+    lua_pushstring(L, "POST");
+    lua_pushstring(L, url);
+    lua_newtable(L);
+    lua_pushnil(L);
+    lua_newtable(L);
+    if (lua_pcall(L, 5, 2, 0) != LUA_OK) {
+        report_lua_error(L, "http_start (abort)");
+        goto abort_done;
+    }
+    if (lua_isnil(L, -2)) {
+        lua_pop(L, 2);
+        check(0, "http_start failed for the abort test");
+        goto abort_done;
+    }
+    lua_pop(L, 1);
+    int hidx = lua_gettop(L);
+    lua_getglobal(L, "tether");
+    lua_getfield(L, -1, "http_abort");
+    lua_remove(L, -2);
+    lua_pushvalue(L, hidx);
+    if (lua_pcall(L, 1, 1, 0) != LUA_OK) {
+        report_lua_error(L, "http_abort");
+    } else {
+        lua_pop(L, 1);
+    }
+    lua_getglobal(L, "tether");
+    lua_getfield(L, -1, "http_step");
+    lua_remove(L, -2);
+    lua_pushvalue(L, hidx);
+    lua_pushinteger(L, 500);
+    if (lua_pcall(L, 2, 2, 0) != LUA_OK) {
+        report_lua_error(L, "http_step (abort)");
+    } else {
+        check(strcmp(lua_tostring(L, -2), "failed") == 0,
+              "an aborted transfer steps as failed");
+        lua_pop(L, 2);
+    }
+    lua_getglobal(L, "tether");
+    lua_getfield(L, -1, "http_free");
+    lua_remove(L, -2);
+    lua_pushvalue(L, hidx);
+    if (lua_pcall(L, 1, 1, 0) != LUA_OK)
+        report_lua_error(L, "http_free (abort)");
+    else
+        lua_pop(L, 1);
+    lua_pop(L, 1);
+
+abort_done:;
+    kill(server, SIGKILL);
+    int st = 0;
+    waitpid(server, &st, 0);
+}
+
+/* tether.poll waits on the given descriptors with a bounded timeout and
+ * reports readiness without touching Lua input state. */
+static void test_poll_primitive(lua_State *L)
+{
+    lua_getglobal(L, "tether");
+    lua_getfield(L, -1, "poll");
+    lua_remove(L, -2);
+    lua_newtable(L);
+    lua_newtable(L);
+    lua_pushinteger(L, 20);
+    double t0 = now_seconds();
+    if (lua_pcall(L, 3, 1, 0) != LUA_OK) {
+        report_lua_error(L, "poll");
+        return;
+    }
+    double waited = now_seconds() - t0;
+    check(lua_istable(L, -1), "tether.poll returns a readiness table");
+    lua_getfield(L, -1, "read");
+    int nread = (int)lua_rawlen(L, -1);
+    lua_pop(L, 1);
+    check(nread == 0, "tether.poll reports no readiness on empty sets");
+    check(waited < 1.0, "tether.poll honors its timeout");
+    lua_pop(L, 1);
+}
+
+/* read_char_nb is a pure non-blocking drain: with stdin idle (an open pipe,
+ * no data, no EOF) it returns nil at once instead of sitting out the 50 ms
+ * select the pre-reactor primitive waited. Readiness waiting belongs to
+ * tether.poll, so no pump or timer callback can stall on input. */
+static void test_read_char_nb_never_waits(lua_State *L)
+{
+    int fds[2];
+    if (pipe(fds) != 0) {
+        failures++;
+        fprintf(stderr, "FAIL: cannot create the read_char_nb pipe\n");
+        return;
+    }
+    if (dup2(fds[0], STDIN_FILENO) < 0) {
+        failures++;
+        fprintf(stderr, "FAIL: cannot point stdin at the read_char_nb pipe\n");
+        close(fds[0]);
+        close(fds[1]);
+        return;
+    }
+    close(fds[0]); /* the writer stays open: idle, but no EOF */
+    g_interrupt = 0;
+    g_stdin_eof = 0;
+    g_pending_len = g_pending_pos = 0;
+
+    /* The old primitive waited 50 ms per call; four of those are 200 ms, so
+       the bound below cannot pass if the wait ever comes back. */
+    int i, nils = 0;
+    double t0 = now_seconds();
+    for (i = 0; i < 4; i++) {
+        if (call0(L, "read_char_nb")) {
+            nils += lua_isnil(L, -1);
+            lua_pop(L, 1);
+        }
+    }
+    double waited = now_seconds() - t0;
+    check(nils == 4, "read_char_nb yields nil while no byte is ready");
+    check(waited < 0.1, "read_char_nb never waits on an idle stdin");
+
+    /* a byte that is already available comes back, also without waiting */
+    if (write(fds[1], "x", 1) != 1) {
+        failures++;
+        fprintf(stderr, "FAIL: cannot write to the read_char_nb pipe\n");
+    } else {
+        int got = 0;
+        t0 = now_seconds();
+        if (call0(L, "read_char_nb")) {
+            got = lua_tointeger(L, -1) == 'x';
+            lua_pop(L, 1);
+        }
+        check(got, "read_char_nb hands back a ready byte");
+        check(now_seconds() - t0 < 0.1,
+              "read_char_nb reads a ready byte without waiting");
+    }
+
+    close(fds[1]);
+    int devnull = open("/dev/null", O_RDONLY);
+    if (devnull >= 0) {
+        if (dup2(devnull, STDIN_FILENO) < 0) { /* best effort */ }
+        close(devnull);
+    }
+}
+
 int main(void)
 {
     char dir[256], nested[512], f1[512], f2[512];
@@ -913,8 +1460,32 @@ int main(void)
     check(!call_fchmod(L, "/no/such/file/for-tether-fs-test", 0600),
           "tether.fchmod fails on a missing file");
 
+    /* --- exec / SIGCHLD -------------------------------------------------- */
+    /* Audit blocker: SIG_IGN for SIGCHLD makes system() fail with ECHILD and
+       every shell tool report exit 255 even on success. Any regression in the
+       signal setup shows up here. */
+    {
+        lua_getglobal(L, "tether");
+        lua_getfield(L, -1, "exec");
+        lua_remove(L, -2);
+        lua_pushstring(L, "true");
+        check(lua_pcall(L, 1, 2, 0) == LUA_OK, "tether.exec runs");
+        check(lua_toboolean(L, -2) == 1,
+              "tether.exec(\"true\") reports success (SIGCHLD not SIG_IGN)");
+        check(lua_tointeger(L, -1) == 0, "tether.exec exit_code == 0");
+        lua_pop(L, 2);
+    }
+
     test_krep_search(L);
     test_http_transport(L);
+    test_http_xfer_steps(L);
+    test_http_xfer_abort(L);
+    test_poll_primitive(L);
+    test_read_char_nb_never_waits(L);
+    test_spinner_tick_rate(L);
+    test_sleep_ticks(L);
+    test_exec_ticks(L);
+    test_http_get_ticks(L);
     test_tls_verification(L);
     test_interrupt_watch(L);
     test_interrupt_aborts_transfer(L);

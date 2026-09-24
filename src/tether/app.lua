@@ -184,19 +184,25 @@ local function run_inner()
         end
     end
 
-    -- Start new session or reuse resumed one
-    local id = resume_id or commands.new(cfg.workspace, cfg.model)
-    cfg._session_id = id
+    -- Reuse the resumed session, if any. A fresh session is minted lazily
+    -- by the first turn (ui.ensure_session) — opening tether just to look
+    -- must not leave empty session files behind.
+    local id = resume_id
+    if id then cfg._session_id = id end
 
-    -- Run TUI
-    ui.run()
+    -- Run TUI with this same cfg: ui.run used to load a second copy, so it
+    -- never saw _session_id and minted its own session every launch (two
+    -- session files per run, -r ambiguity on top).
+    ui.run(cfg)
 
-    -- End session
-    session.append(id, {
-        ts = os.date(),
-        type = "session_end",
-        meta = { workspace = cfg.workspace, model = cfg.model },
-    })
+    -- End session (only when one exists: a look-around run has no file)
+    if cfg._session_id then
+        session.append(cfg._session_id, {
+            ts = os.date(),
+            type = "session_end",
+            meta = { workspace = cfg.workspace, model = cfg.model },
+        })
+    end
 end
 
 function M.run()

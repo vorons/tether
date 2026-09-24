@@ -601,20 +601,10 @@ fall back to modifyOtherKeys / xterm fallback sequences.
 
 The TUI SHALL show turn progress while the agent works, without waiting for the turn to finish. On submit it SHALL paint the waiting state immediately: the input box's top rule status SHALL show a leading space, the spinner frame, and `Working...`, advancing on repaints while the turn runs. The transcript SHALL carry no waiting placeholder — only real entries (user, assistant, thinking, tool, system rows) plus the caret `▌` (ASCII `|`) at the end of the newest line while deltas keep arriving; the caret SHALL NOT be drawn while the user has scrolled up or while the palette, confirmation menu, ask block, or login secret mode owns the keyboard. Thinking rows SHALL render as `thinking · Ns` with the live elapsed seconds of the reasoning so far. Assistant rows SHALL use the `•` marker (ASCII `-`). Text and tool progress SHALL become visible during the turn: the TUI SHALL repaint while the turn is running, throttled by a bounded number of skipped deltas, and SHALL repaint immediately on state transitions (tool call start, tool result, error, abort, confirmation). No background timer SHALL be required: repaints driven by events and keypresses are sufficient, and the spinner advances only when the TUI repaints. While busy, the TUI SHALL additionally pump non-blocking key reads on each paint/event tick so Enter / Alt+Enter / Escape are handled mid-turn (steering capability); the pump SHALL NOT block for input and SHALL NOT run while a confirmation menu, ask block, or login secret mode owns the keyboard. The input-box indicator, caret and elapsed fields SHALL be cleared when the turn ends — after a reply, on error, on abort, and when a confirmation menu is raised (the turn is then waiting on the user) — and SHALL apply equally to a turn resumed after a confirmation decision. The elapsed counter SHALL reset at the start of each turn. In ASCII mode the spinner SHALL use ASCII frames (the caret is `|`, the assistant marker is `-`) and no non-ASCII glyph SHALL be introduced by this feedback.
 
-#### Scenario: Placeholder before the first token
-
-- **WHEN** the user submits a message and no token has arrived yet
-- **THEN** the input box's top rule status shows a leading space, the spinner frame plus `Working...` and the transcript carries no placeholder row
-
 #### Scenario: Working indicator in the top rule
 
 - **WHEN** the user submits a message and no token has arrived yet
 - **THEN** the input box's top rule status shows a leading space, the spinner frame plus `Working...` and the transcript carries no placeholder row
-
-#### Scenario: First delta replaces the placeholder
-
-- **WHEN** the first text or reasoning delta arrives
-- **THEN** the transcript row appears, the caret is drawn at the end of the newest line, and the top rule keeps showing the spinner with `Working...` until the turn settles
 
 #### Scenario: First delta keeps the indicator until the turn ends
 

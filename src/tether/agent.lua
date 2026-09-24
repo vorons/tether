@@ -515,10 +515,13 @@ local function run_tool_call(cfg, on_event, id, name, args, projection)
         history_result = { content = truncate_body(body) or "" }
     end
     M.add_tool_result(id, history_result)
+    -- the journal keeps the bounded body too (summary alone lobotomized
+    -- resumed turns: the model only saw "17 записей" instead of output).
     slog(cfg, {
         ts = os.date(), type = "tool_result",
         tool_call_id = id, name = name,
-        result = res.error and { error = res.error } or { summary = summary },
+        result = res.error and { error = res.error }
+            or { summary = summary, body = truncate_body(body) or "" },
     })
     if on_event then
         on_event({
@@ -675,23 +678,52 @@ local function inject_steer(cfg)
     return true
 end
 
--- Sleep in slices so Ctrl+C is honored during a wait of up to a minute.
--- Returns true when the wait was interrupted by an abort. tether.sleep itself
--- returns as soon as input arrives, so the check below usually fires well
--- before the slice elapses.
--- TW2: the wake also runs the busy-pump hook (set by ui.lua) so wheel scrolls
--- and other keys apply during silent stretches instead of queueing until the
--- turn ends. Agent never imports ui: the hook is an optional global.
+-- The reactor loop that owns waiting right now (ui.run binds it around its
+-- run()); nil in print mode and for non-UI callers. Agent never imports ui:
+-- the loop is an optional global seam, like the transport.
+local function active_loop()
+    local r = _G.reactor
+    if type(r) == "table" and type(r.active) == "function" then
+        return r.active()
+    end
+    return nil
+end
+
+-- Wait out a retry backoff of up to a minute and report whether an abort cut
+-- it short. With a reactor loop owning waiting the deadline is a loop timer:
+-- keys, spinner and timers keep dispatching through the wait (TW2: a wheel
+-- tick scrolls immediately instead of queueing until the turn ends), and the
+-- wait ends early on abort or a stopped loop. Without a loop (print mode,
+-- one-shot callers) the wait slices on tether.sleep: it returns as soon as
+-- input arrives and the host flag is sticky until the turn clears it, so the
+-- abort check below usually fires well before the slice elapses.
 local function interruptible_sleep(seconds)
-    local elapsed = 0
     local total = tonumber(seconds) or 0
+    if total <= 0 then return false end
+    local loop = active_loop()
+    if loop then
+        local done = false
+        local id = loop:after(total * 1000, function() done = true end)
+        while not done do
+            if take_abort() then
+                loop:cancel(id)
+                return true
+            end
+            if not loop:tick() then
+                -- closed stdin / quit: stop waiting instead of spinning on a
+                -- loop that can no longer dispatch anything
+                loop:cancel(id)
+                return true
+            end
+        end
+        return false
+    end
+    local elapsed = 0
     while elapsed < total do
         local step = total - elapsed
         if step > 0.25 then step = 0.25 end
         pcall(tether.sleep, step)
         elapsed = elapsed + step
-        local pump = _G.pump_busy_hook
-        if pump then pcall(pump) end
         if take_abort() then return true end
     end
     return false
@@ -741,11 +773,22 @@ local function run_attempt(cfg, api_key, attempt, on_event)
             stop_reason = ev.reason or "other"
         end
         if ev.type == "tool_call_start" then
-            tool_calls[ev.id] = { id = ev.id, name = ev.name, arguments = "" }
-            ordered[#ordered + 1] = ev.id
+            -- a repeated start (same id resent by a later chunk) must not
+            -- wipe the arguments assembled so far.
+            if ev.id and not tool_calls[ev.id] then
+                tool_calls[ev.id] = { id = ev.id, name = ev.name, arguments = "" }
+                ordered[#ordered + 1] = ev.id
+            end
         elseif ev.type == "tool_call_delta" then
-            if tool_calls[ev.id] then
-                tool_calls[ev.id].arguments = tool_calls[ev.id].arguments .. (ev.arguments or "")
+            -- gateways split arguments into index-only continuation chunks
+            -- (no id): index N is the Nth started call. Without this mapping
+            -- the fragments were dropped, the tool still ran on fallback {},
+            -- but the echoed arguments went out truncated and strict
+            -- providers 400'd every follow-up request ("bad request").
+            local id = ev.id
+            if not id and ev.index ~= nil then id = ordered[ev.index + 1] end
+            if id and tool_calls[id] then
+                tool_calls[id].arguments = tool_calls[id].arguments .. (ev.arguments or "")
             end
         end
     end)
@@ -885,9 +928,12 @@ local function run_answer_segments(cfg, api_key, on_event, state, max_iterations
                 return false, failure
             end
             if on_event then
+                -- detail carries the provider's own text (a bare "bad
+                -- request" never says which field the gateway rejected).
                 on_event({ type = "retry", attempt = state.attempt, delay = verdict.delay,
                            reason = verdict.reason or (failure and failure.reason),
-                           kind = verdict.kind })
+                           kind = verdict.kind,
+                           detail = failure and failure.message or nil })
             end
             if interruptible_sleep(verdict.delay) then
                 collapse_partial_answer(cfg, pending, merged)
@@ -955,10 +1001,16 @@ local function main_loop(cfg, api_key, on_event)
         local tc_list = {}
         for _, id in ipairs(ordered) do
             local tc = tool_calls[id]
+            -- the echo must carry the transport-DECODED arguments: fragments
+            -- arrive raw (still SSE-escaped, so a split escape survives the
+            -- boundary), but echoing them raw adds a whole escape layer and
+            -- strict providers 400 every follow-up ("arguments must be valid
+            -- JSON"). Execution keeps using the raw form via parse_args below.
             tc_list[#tc_list + 1] = {
                 id = tc.id,
                 type = "function",
-                ['function'] = { name = tc.name, arguments = tc.arguments },
+                ['function'] = { name = tc.name,
+                                 arguments = sse_unescape(tc.arguments or "") },
             }
         end
         -- 1.2: keep any text the model emitted alongside its tool calls

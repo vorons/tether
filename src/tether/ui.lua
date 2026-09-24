@@ -923,6 +923,15 @@ if type(turn) ~= "table" then
     turn = (chunk and chunk()) or {}
 end
 
+-- reactor: single-threaded event loop (main.c mods[]); loadfile fallback
+-- for tests. Owns the main loop once run() starts: stdin drain, transport
+-- sources, timers and the per-tick callback. One line, no chunk locals:
+-- the main chunk sits at Lua's 200-locals limit. Published as _G.reactor so
+-- the synchronous callers (api.stream, agent backoff) find the very loop
+-- this ui runs: the host preloads the global, the loadfile fallback does not.
+M._reactor = _G.reactor or ((loadfile("src/tether/reactor.lua")) or function() return {} end)()
+_G.reactor = M._reactor
+
 -- tools: same pattern as turn/commands — global in the host, loadfile fallback
 -- for tests/dev. Captured as a local so bang path survives global restore in
 -- the test harness (run_ui_with snapshots/restores _G after load). Call sites
@@ -1052,6 +1061,13 @@ local function new_state()
 
         scroll = 0,
         user_scrolled = false,
+        -- viewport pin (pi's ScrollView): rows-from-bottom alone lets fresh
+        -- rows below drag a scrolled-up viewport toward the tail. Remember
+        -- the last painted (total, scroll); when the offset sits still
+        -- while the total drifts, the drift folds back into scroll so the
+        -- same rows stay put.
+        _last_total = nil,
+        _last_scroll = nil,
 
         tokens_used = 0,
         tokens_max = 32768,
@@ -2106,6 +2122,34 @@ local function render_ask(width)
     return out
 end
 
+-- The call's primary argument for the tool row head: which file ran what.
+-- Pure data in (parsed args, fallback path) so tests drive it directly.
+-- (M-field, not chunk local: ui.lua sits at Lua's 200-locals limit.)
+function M._tool_arg_label(name, args, path)
+    args = (type(args) == "table" and args) or {}
+    if name == "read" or name == "write" then
+        return args.path or path
+    elseif name == "list" then
+        return args.path or path or "."
+    elseif name == "glob" then
+        local pat = args.pattern or ""
+        if args.path and args.path ~= "" then pat = pat .. " in " .. args.path end
+        return pat ~= "" and pat or nil
+    elseif name == "grep" then
+        local pat = args.pattern or ""
+        if args.path and args.path ~= "" then pat = pat .. " in " .. args.path end
+        return pat ~= "" and pat or nil
+    elseif name == "run" then
+        return args.command
+    elseif name == "patch" then
+        local p = args.patch or args.content or ""
+        if type(p) == "string" then
+            return p:match("%+%+%+ b/([^\n]+)") or p:match("%+%+%+ ([^%s]+)")
+        end
+    end
+    return path
+end
+
 local function render_entry(e, width)
     -- Synthetic tail entries go through the same path as real entries so the
     -- height index, the scroll indicator and the parity helper stay consistent.
@@ -2145,8 +2189,9 @@ local function render_entry(e, width)
         if (e.text or "") == "" then return {} end
         -- M8/R4: markdown-lite render; md_render handles wrap/width itself
         local body = md_render(e.text, math.max(width - 2, 1))
+        -- assistant marker: • (ASCII `-`) — was `·`/spec's `●`; user choice
         local marker = M.ascii_active(S.cfg and S.cfg.ui and S.cfg.ui.ascii)
-            and "- " or "· "
+            and "- " or "• "
         return with_prefix(marker, 2, body)
     elseif role == "thinking" then
         if not S.thinking_visible then
@@ -2169,6 +2214,16 @@ local function render_entry(e, width)
         elseif e.status == "error" then marker = red("✗")
         else marker = green("✓") end
         local head = marker .. " " .. yellow(e.name or "?")
+        -- the call's primary argument (which file ran what): without it
+        -- `✓ read` / `✓ run` say nothing about what actually happened.
+        do
+            local label = M._tool_arg_label(e.name, e.args, e.path)
+            if label and label ~= "" then
+                label = sanitize_output(label:match("^[^\n]*") or "")
+                local budget = width - vlen(head) - 1
+                if budget >= 4 then head = head .. " " .. clip(label, budget) end
+            end
+        end
         if e.status == "pending" then
             -- M8/R3: pending tools show live elapsed time
             if e.started_at then
@@ -2318,6 +2373,15 @@ end
 local function render_transcript(L)
     local total = ensure_index(L.w)
     S.last_transcript_h = L.transcript_h -- cache bound follows the viewport
+    -- viewport pin: while scrolled away from the tail, rows arriving (or
+    -- dropped by a retry) below the viewport must not move it — fold the
+    -- total drift back into the offset so the same rows stay visible. Only
+    -- when the offset itself sat still: a user scroll between paints takes
+    -- precedence, so preset offsets are never rewritten.
+    if S.user_scrolled and S._last_total ~= nil and total ~= S._last_total
+        and S.scroll == (S._last_scroll or S.scroll) then
+        S.scroll = S.scroll + (total - S._last_total)
+    end
     -- M10: clamp scroll so the viewport can never move past the top of the
     -- transcript. Over-scroll made top negative and the scroll indicator
     -- report nonsense (⏸ +36 on a 4-line transcript).
@@ -2325,6 +2389,9 @@ local function render_transcript(L)
     if max_scroll < 0 then max_scroll = 0 end
     if S.scroll > max_scroll then S.scroll = max_scroll end
     if S.scroll < 0 then S.scroll = 0 end
+    -- baseline AFTER the clamp: the pin compares against what is actually
+    -- painted, never a pre-clamp value.
+    S._last_total, S._last_scroll = total, S.scroll
     local bottom = total - S.scroll
     if bottom > total then bottom = total end
     if bottom < 1 then bottom = 1 end
@@ -2371,9 +2438,15 @@ local function render_transcript(L)
     -- A: live tail — the caret while deltas are still streaming (the waiting
     -- spinner moved to the input box: the transcript carries no placeholder).
     -- Applied at paint time so the wrapped-line cache stays untouched.
+    -- tui spec: the caret must NOT be drawn while the palette, confirmation,
+    -- ask block or login secret mode owns the keyboard (the busy pump lets
+    -- the palette open mid-turn, so the guard must be explicit here).
     local tail = ""
     if not S.user_scrolled and total > 0 then
-        if S.streaming then tail = caret_glyph() end
+        if S.streaming and not S.palette_active
+            and not S.confirmation and not S.ask and not S.login_secret then
+            tail = caret_glyph()
+        end
     end
     local last_painted = math.min(total, bottom)
     local lo = entry_of_row(top, L.w) or 0
@@ -2505,10 +2578,11 @@ local function rule_row(width, status, label)
     return dim(fill(width))
 end
 
--- The turn's status for the box's top rule: the spinner with Working... while busy.
+-- The turn's status for the box's top rule: the spinner with Working... while
+-- busy. Leading space separates the indicator from the rule's left edge.
 local function turn_status()
     if S.busy then
-        return " " .. cyan(spinner_glyph()) .. dim(" Working...")
+        return " " .. cyan(spinner_glyph()) .. dim(" Working...") .. " "
     end
     return nil
 end
@@ -2534,7 +2608,13 @@ local function render_input(L)
                 hint = hint .. " (" .. entry.api_key_env .. ")"
             end
         end
-        if S.login_flow and S.login_flow.device and S.login_flow.device_url then
+        if S.login_flow and S.login_flow.device and S.login_flow.device_code then
+            -- full device flow: the TUI polls; the user just authorizes
+            hint = "open " .. tostring(S.login_flow.verification_uri
+                or S.login_flow.device_url)
+                .. " and enter " .. tostring(S.login_flow.user_code or "")
+                .. " — waiting (Esc cancels)"
+        elseif S.login_flow and S.login_flow.device and S.login_flow.device_url then
             hint = "open " .. S.login_flow.device_url .. ", paste token"
         elseif S.login_flow and S.login_flow.authorize_url then
             hint = hint .. " or auth code"
@@ -2733,10 +2813,12 @@ local function render_footer(L)
     end
     if S.tokens_max and S.tokens_max > 0 then
         local summarize_at = (S.cfg.context and S.cfg.context.summarize_at) or 0.7
-        stats[#stats + 1] = dim(S.tokens_estimated and "· " or "") ..
-            M.token_usage(S.tokens_used, S.tokens_max, summarize_at)
+        -- no estimated prefix: the ≈/· marker in front of the context cell
+        -- was dropped (the cell itself already reads as an estimate)
+        stats[#stats + 1] = M.token_usage(S.tokens_used, S.tokens_max, summarize_at)
     end
-    local stats_str = table.concat(stats, " ")
+    -- blocks joined by `·` separators: path · stats · flags (user request)
+    local stats_str = table.concat(stats, dim(" · "))
 
     local flags = static_flags()
     local scroll = scroll_flag(L.transcript_h)
@@ -2744,21 +2826,25 @@ local function render_footer(L)
     local flags_str = #flags > 0 and to_ascii(table.concat(flags, " ")) or ""
 
     local width = L.w
-    -- Visual order: path, stats, flags. Truncation order (spec): path first
-    -- (to_ascii so ASCII mode gets "..." not "…"), then toast, then scroll,
-    -- then stats — each step re-fits the path into the room that opened up.
+    -- Visual order: path, stats, flags — joined with ` · ` separators.
+    -- Truncation order (spec): path first (to_ascii so ASCII mode gets
+    -- "..." not "…"), then toast, then scroll, then stats — each step
+    -- re-fits the path into the room that opened up.
+    local SEP = dim(" · ")
     local function join(path_s, s_str, f_str)
         local parts = {}
         if path_s ~= "" then parts[#parts + 1] = path_s end
         if s_str ~= "" then parts[#parts + 1] = s_str end
         if f_str ~= "" then parts[#parts + 1] = f_str end
-        return table.concat(parts, " ")
+        return table.concat(parts, SEP)
     end
 
     local function fit_path(f_str, s_str)
+        -- separators widen the row by 3 columns per join; reserve room for
+        -- them so the truncated path still fits alongside the other blocks
         local rest = 0
-        if s_str ~= "" then rest = rest + 1 + vlen(s_str) end
-        if f_str ~= "" then rest = rest + 1 + vlen(f_str) end
+        if s_str ~= "" then rest = rest + 3 + vlen(s_str) end
+        if f_str ~= "" then rest = rest + 3 + vlen(f_str) end
         local room = width - rest
         if room < 1 then return "" end
         return to_ascii(trunc(dim(ws), room))
@@ -2782,7 +2868,7 @@ local function render_footer(L)
         left = join(path_s, s_str, f_str)
     end
     if vlen(left) > width then
-        local stats_room = width - (path_s ~= "" and vlen(path_s) + 1 or 0)
+        local stats_room = width - (path_s ~= "" and vlen(path_s) + 3 or 0)
         if stats_room >= 1 then
             s_str = to_ascii(trunc(s_str, stats_room))
         else
@@ -2795,7 +2881,11 @@ local function render_footer(L)
         end
     end
 
-    set_row(L.footer_row, M.footer_stats(left, dim(S.model_name or "?"), width))
+    -- right-aligned cell: provider/model (provider omitted when unknown)
+    local provider = (type(S.cfg) == "table" and S.cfg.provider) or nil
+    local model_cell = provider and (provider .. "/" .. (S.model_name or "?"))
+        or (S.model_name or "?")
+    set_row(L.footer_row, M.footer_stats(left, dim(model_cell), width))
 end
 
 -- ============================================================
@@ -2835,19 +2925,71 @@ local PAINT_INTERVAL = 0.05
 local PAINT_MIN_DELTAS = 12
 M._paint_skipped = 0
 M._paint_count = 0 -- TW2: repaint counter (spinner frame is time-based now)
+M._last_paint = 0
+-- wall-clock seconds: os.clock() is CPU time and stalls while blocked in
+-- C (curl_easy_perform), which froze the throttle during silent waits.
+function M._paint_clock()
+    local ok, ms = pcall(function()
+        return tether.monotonic_ms and tether.monotonic_ms() or nil
+    end)
+    if ok and type(ms) == "number" then return ms / 1000 end
+    return os.clock()
+end
 local function paint(force)
     if not S then return end
+    -- provider-auth: while a device-flow login waits for authorization the
+    -- event loop is idle, so the poll ticks from the paint path (paced via
+    -- flow.poll_next_at inside the tick).
+    if S.login_secret and type(M._device_poll_tick) == "function" then
+        M._device_poll_tick()
+    end
     M._paint_skipped = M._paint_skipped + 1
-    local now = os.clock()
-    if not force and M._paint_skipped < PAINT_MIN_DELTAS and (now - last_paint) < PAINT_INTERVAL then
+    local now = M._paint_clock()
+    if not force and M._paint_skipped < PAINT_MIN_DELTAS and (now - M._last_paint) < PAINT_INTERVAL then
         return
     end
-    last_paint = now
+    M._last_paint = now
     M._paint_skipped = 0
     M._paint_count = M._paint_count + 1
     redraw()
 end
 M._paint = paint
+
+-- Busy-spinner tick: repaints the ` Working...` indicator and drains keys
+-- while a turn runs, so a silent stretch (TTFT, backoff, a tool command)
+-- never freezes the TUI or queues a wheel tick until the next event. Two
+-- drivers cover the two kinds of wait: the reactor's on_tick (the loop owns
+-- waiting on the turn path — streamed attempts and backoff deadlines nest
+-- into it) and the host hook bound by run() via tether.set_tick_hook (the
+-- waits that still block the loop — tether.exec, http_get, the blocking
+-- transport/sleep fallbacks — call it back on their quantum).
+-- The tick repaints at most once per spinner interval while a turn is busy;
+-- overlays own the keyboard first, so it stays a no-op then.
+-- (M-fields, not chunk locals: ui.lua sits at Lua's 200-locals limit.)
+M._last_spinner_tick_s = nil
+function M._spinner_tick()
+    if not S or not S.busy then return end
+    if S.confirmation or S.ask or S.login_secret then return end
+    -- Drain keys here too, not only on agent events: while a turn waits
+    -- silently (TTFT/backoff) no event fires, so without this a wheel tick
+    -- queued until the next model/tool event and the scroll visibly lagged
+    -- one step behind. Pumping first also keeps fragmented ESC sequences
+    -- whole: the non-blocking decode yields nil until the tail arrives.
+    local had_keys = false
+    if type(M._pump_keys) == "function" then had_keys = M._pump_keys() or false end
+    local now_s = M._paint_clock()
+    if had_keys then
+        M._last_spinner_tick_s = now_s
+        paint(true)
+        return
+    end
+    if M._last_spinner_tick_s
+        and now_s - M._last_spinner_tick_s < SPINNER_INTERVAL_MS / 1000 then
+        return
+    end
+    M._last_spinner_tick_s = now_s
+    paint(true)
+end
 
 -- ============================================================
 -- Key reading — bytes → typed events (narrow contract)
@@ -2957,6 +3099,17 @@ function M._read_nb()
     return tether.read_char_nb()
 end
 
+-- Push bytes back to the FRONT of the stash (order preserved) so a
+-- fragmented escape sequence is retried whole on the next tick instead of
+-- leaking its tail ("[<65;48;31M") into the input as text.
+function M._stash_front(list)
+    if not list or #list == 0 then return end
+    local old = M._byte_stash
+    local n = #list
+    for i = #old, 1, -1 do old[i + n] = old[i] end
+    for i = 1, n do old[i] = list[i] end
+end
+
 function M._read_utf8_char(first)
     local need
     if first >= 0xC2 and first <= 0xDF then need = 1
@@ -2980,18 +3133,36 @@ end
 -- Decode one already-read first byte; continuation bytes come from
 -- read_char_nb (and the paste body from read_char). Shared by read_key and
 -- read_key_nb so blocking and non-blocking paths stay identical.
-local function decode_first_byte(c)
+-- nb (non-blocking caller, the busy pump): an escape sequence split across
+-- reads must not decode as a lone esc plus a text tail. When the next byte
+-- is not available yet, the consumed prefix goes back to the stash front
+-- and decode yields nil — the next tick retries the sequence whole.
+local function decode_first_byte(c, nb)
     if c == 27 then
-        local b2 = M._read_nb()
-        if b2 == nil then return { kind = "esc" } end
+        local consumed = { c }
+        local function nb_read()
+            local b = M._read_nb()
+            if b == nil then
+                if nb then M._stash_front(consumed) end
+                return nil
+            end
+            consumed[#consumed + 1] = b & 0xFF
+            return b
+        end
+        local function incomplete()
+            if nb then return nil end
+            return { kind = "esc" }
+        end
+        local b2 = nb_read()
+        if b2 == nil then return incomplete() end
         local c2 = b2 & 0xFF
         if c2 ~= 91 and c2 ~= 79 then
             return { kind = "alt", code = c2 }
         end
         local params = {}
         while true do
-            local b3 = M._read_nb()
-            if b3 == nil then return { kind = "esc" } end
+            local b3 = nb_read()
+            if b3 == nil then return incomplete() end
             local c3 = b3 & 0xFF
             -- digits, ';', ':', '<', '>': ':' carries kitty alternate-key
             -- sub-fields, so it must not terminate the sequence
@@ -3129,7 +3300,7 @@ end
 local function read_key_nb()
     local b = M._read_nb()
     if b == nil or b == -1 then return nil end
-    return decode_first_byte(b & 0xFF)
+    return decode_first_byte(b & 0xFF, true)
 end
 
 -- ============================================================
@@ -3220,8 +3391,47 @@ local function begin_login(provider)
             end
         end)
     end
+    -- provider-auth: full device flow — request the device/user code pair up
+    -- front. The TUI then polls the token endpoint while the user authorizes;
+    -- no paste is needed (a paste still works as a manual fallback for flows
+    -- without a token endpoint). Polling state rides the flow table.
+    if flow and flow.device and flow.device_token_url then
+        local auth_mod = rawget(_G, "auth")
+        if not auth_mod then
+            local chunk = loadfile("src/tether/auth.lua")
+            auth_mod = chunk and chunk() or nil
+        end
+        if auth_mod and auth_mod.device_request and tether and tether.http_stream then
+            local ok, res, err = pcall(auth_mod.device_request,
+                flow.device_url, flow.client_id, flow.scope)
+            if ok and type(res) == "table" then
+                flow.device_code = res.device_code
+                flow.user_code = res.user_code
+                flow.verification_uri = res.verification_uri or flow.device_url
+                flow.poll_interval = tonumber(res.interval) or 5
+                flow.poll_deadline = os.time() + (tonumber(res.expires_in) or 900)
+                flow.poll_next_at = os.time() + flow.poll_interval
+                if tether.exec then
+                    local vq = "'" .. flow.verification_uri:gsub("'", "'\\''") .. "'"
+                    pcall(function()
+                        local okv = tether.exec("xdg-open " .. vq .. " >/dev/null 2>&1")
+                        if not okv then tether.exec("open " .. vq .. " >/dev/null 2>&1") end
+                    end)
+                end
+            else
+                -- device endpoint unreachable: degrade to the paste path
+                flow.device_request_error = tostring(err or "device request failed")
+            end
+        end
+    end
     return true
 end
+
+-- One device-flow poll tick, called from the busy pump on each paint while
+-- login secret mode with a device flow is active. Paces itself via
+-- flow.poll_next_at. Lives on M.* (chunk-local limit: 200 locals); the
+-- implementation is assigned right after cancel_login's declaration below
+-- (it closes over cancel_login).
 
 local function cancel_login()
     S.login_provider = nil
@@ -3233,6 +3443,65 @@ local function cancel_login()
     S.palette_items = {}
     S.palette_sel = 1
     S._in_login_palette = nil
+end
+
+-- provider-auth: one device-flow poll tick, called from the paint path while
+-- login secret mode with a device flow is active. Paces itself via
+-- flow.poll_next_at; returns "pending" | "granted" | "failed" | nil.
+M._device_poll_tick = function()
+    local flow = S and S.login_flow
+    if not (flow and flow.device and flow.device_code and flow.device_token_url) then
+        return nil
+    end
+    if os.time() >= (flow.poll_deadline or 0) then
+        S.error_banner = "device login expired — run /login again"
+        cancel_login()
+        return "failed"
+    end
+    if os.time() < (flow.poll_next_at or 0) then return "pending" end
+    flow.poll_next_at = os.time() + (flow.poll_interval or 5)
+    local auth_mod = rawget(_G, "auth")
+    if not auth_mod then
+        local chunk = loadfile("src/tether/auth.lua")
+        auth_mod = chunk and chunk() or nil
+    end
+    if not (auth_mod and auth_mod.device_poll) then return nil end
+    local ok, res, perr = pcall(auth_mod.device_poll,
+        flow.device_token_url, flow.client_id, flow.device_code)
+    if not ok or res == nil then
+        -- transport hiccup: keep polling until the deadline
+        return "pending"
+    end
+    if type(res) == "table" and type(res.access_token) == "string"
+        and res.access_token ~= "" then
+        local entry = auth_mod.device_entry and auth_mod.device_entry(res, S.login_provider)
+        if entry and auth_mod.set then
+            auth_mod.set(nil, S.login_provider, entry)
+        end
+        if S.cfg and ((S.cfg.provider or "openai") == S.login_provider) then
+            S.api_key = entry.access_token
+            S.cfg.api_key = entry.access_token
+        end
+        transcript.append({
+            role = "system",
+            text = "→ login " .. tostring(S.login_provider)
+                .. ": device flow authorized",
+        })
+        bump_transcript()
+        S.error_banner = nil
+        cancel_login()
+        return "granted"
+    end
+    local etype = type(res) == "table" and res.error or nil
+    if etype == "authorization_pending" or etype == "slow_down" then
+        if etype == "slow_down" then
+            flow.poll_interval = (flow.poll_interval or 5) + 5
+        end
+        return "pending"
+    end
+    S.error_banner = "device login failed: " .. tostring(etype or perr or "unknown")
+    cancel_login()
+    return "failed"
 end
 
 -- Shared store path for secret-mode Enter: OAuth code/redirect vs bare API key.
@@ -3389,11 +3658,34 @@ function pick.model(item, provider)
     if type(prov) == "string" and prov ~= "" and S.cfg
         and S.cfg.provider ~= prov then
         -- picking another provider's model switches provider and
-        -- re-resolves the key, so the next turn authenticates correctly.
+        -- re-resolves everything provider-scoped (endpoint, key env, key),
+        -- so the next turn hits the new endpoint at once. Resolving only
+        -- the key left base_url baked for the old provider: the turn then
+        -- reached the old endpoint with the new model name and failed
+        -- until a restart re-baked the URL.
         S.cfg.provider = prov
         S.cfg._auth_style = nil
         local cfgmod = rawget(_G, "config")
-        if cfgmod and cfgmod.api_key then
+        -- endpoint re-resolution must not clobber the active config module:
+        -- a test/dev stub may carry api_key without for_provider.
+        local for_provider = (type(cfgmod) == "table" and cfgmod.for_provider)
+            or nil
+        if type(for_provider) ~= "function" then
+            local chunk = loadfile("src/tether/config.lua")
+            local real = chunk and chunk() or nil
+            if type(real) == "table" then for_provider = real.for_provider end
+        end
+        if type(for_provider) == "function" then
+            local ok, c2 = pcall(for_provider, S.cfg, prov)
+            if ok and type(c2) == "table" then
+                -- model is assigned below from the pick (for_provider would
+                -- fall back to the catalog default), never from c2.
+                S.cfg.base_url = c2.base_url
+                S.cfg.api_key_env = c2.api_key_env
+                S.cfg.provider_env = c2.provider_env
+            end
+        end
+        if type(cfgmod) == "table" and cfgmod.api_key then
             local ok, key = pcall(cfgmod.api_key, S.cfg)
             S.api_key = (ok and type(key) == "string" and key) or ""
             S.cfg.api_key = S.api_key
@@ -3442,9 +3734,11 @@ local function execute_command(cmd, rest)
         if focus == "" then focus = nil end
         local summary = commands.compact(S.cfg, S.api_key or "", focus)
         if summary ~= nil then
-            local row = (type(summary) == "string" and summary ~= "")
-                and summary or "── summary ──"
-            transcript.append({ role = "system", text = row })
+            if type(summary) == "string" and summary ~= "" then
+                transcript.append({ role = "system", text = summary })
+            else
+                transcript.append({ role = "separator", text = "summary" })
+            end
         end
         if agent and agent.estimate_tokens then
             S.tokens_used = agent.estimate_tokens(agent.get_history())
@@ -3518,9 +3812,12 @@ local function execute_command(cmd, rest)
     if cmd == "resume" then
         local items = {}
         for _, f in ipairs(commands.list_sessions(S.workspace)) do
+            -- session ts is ISO ("2026-09-24T10:00:00"): show the clock time,
+            -- not the year prefix sub(1,5) used to show ("2026-" on every row).
+            local ts = (f.ts and f.ts:match("T(%d%d:%d%d)")) or "…"
             items[#items + 1] = {
                 label = string.format("%s · %s · %s",
-                    (f.ts and f.ts:sub(1, 5)) or "…",
+                    ts,
                     (f.id and f.id:sub(1, 8)) or "…",
                     (f.first_line or ""):sub(1, 40)),
                 id = f.id,
@@ -3623,7 +3920,9 @@ local function handle_agent_event(ev)
     if not ev or not ev.type then return end
     -- add-steering-input: drain mid-turn keys on every event tick so Enter /
     -- Alt+Enter / Escape work while the agent is busy (no second turn).
-    pump_keys()
+    -- Returns whether it handled anything: a scroll drained here must repaint
+    -- at once instead of waiting out the delta throttle below.
+    local pumped = pump_keys()
     -- A: remember the tail-decoration state so a transition (waiting ->
     -- caret, or caret -> nothing) repaints at once instead of waiting out the
     -- delta throttle.
@@ -3747,6 +4046,7 @@ local function handle_agent_event(ev)
     -- Deltas are throttled inside paint(); every other event repaints at once.
     local force = ev.type ~= "text_delta" and ev.type ~= "reasoning_delta"
         and ev.type ~= "usage"
+    if pumped then force = true end
     if S.waiting ~= was_waiting or S.streaming ~= was_streaming then force = true end
     paint(force)
 end
@@ -3763,18 +4063,22 @@ M._handle_agent_event = handle_agent_event
 -- Enter / Alt+Enter / Escape work mid-turn without a second concurrent turn.
 -- Confirmation/ask/secret own the keyboard first — pump is a no-op then.
 -- Drains everything available in one tick (not one key per event).
+-- Returns whether any key was handled (callers repaint on true).
 pump_keys = function()
-    if not S or not S.busy then return end
-    if S.confirmation or S.ask or S.login_secret then return end
+    if not S or not S.busy then return false end
+    if S.confirmation or S.ask or S.login_secret then return false end
+    local handled = false
     while true do
         local k = read_key_nb()
         if not k then break end
+        handled = true
         handle_key(k)
         if not S or not S.busy then break end
         if S.confirmation or S.ask or S.login_secret then break end
     end
+    return handled
 end
-M._pump_keys = function() if S then pump_keys() end end
+M._pump_keys = function() if S then return pump_keys() end return false end
 
 -- Shared submit path for Enter / Alt+Enter while busy: user row now, queue
 -- FIFO, clear input. Does not start a turn.
@@ -3914,11 +4218,29 @@ M._wire_steer_source = wire_steer_source
 local turn_hook = nil -- test seam: replaces turn.start during drain
 M._set_turn_hook = function(fn) turn_hook = fn end
 
+-- Lazy session: the file appears with the first turn, never at startup.
+-- (M-field: ui.lua sits at Lua's 200-locals limit for the main chunk.)
+function M._ensure_session()
+    if not S then return end
+    if S.cfg and S.cfg._session_id then
+        S.session_id = S.cfg._session_id
+        return
+    end
+    if commands and commands.new then
+        local ok, sid = pcall(commands.new, S.workspace, S.model_name)
+        if ok and sid then
+            S.session_id = sid
+            if S.cfg then S.cfg._session_id = sid end
+        end
+    end
+end
+
 -- Every fresh turn restarts attempt numbering at 1 on the agent side, so
 -- stale attempt tags are cleared first: otherwise a retry drops previous
 -- turns' answers carrying the same number (transcript.new_turn).
 local function start_fresh_turn(payload)
     transcript.new_turn()
+    M._ensure_session()
     if turn_hook then return turn_hook(payload) end
     return turn.start(S, S.cfg, S.api_key or "", payload, handle_agent_event, function()
         sync_tail()
@@ -4092,16 +4414,24 @@ local function handle_special(k)
     elseif k.name == "end" then move_line_end()
     elseif k.name == "delete" then input_delete()
     elseif k.name == "up" then
-        -- Up always recalls history (user request); when the caret is on a
-        -- non-first line of a multi-line input, move the cursor instead, and
-        -- scroll only at that edge. PgUp/PgDn are the scroll bindings.
-        if S.input ~= "" and move_cursor_up() then
+        -- tui spec: Shift+Up/Shift+Down move the cursor between input lines
+        -- explicitly (no history recall, no scroll edge). Plain Up recalls
+        -- history; when the caret is on a non-first line of a multi-line
+        -- input, move the cursor instead, and scroll only at that edge.
+        -- PgUp/PgDn are the scroll bindings. Terminals without
+        -- kitty/modifyOtherKeys report Shift+Up as plain Up — acceptable:
+        -- the recall behaviour stays identical to the pre-spec default.
+        if k.shift and S.input ~= "" then
+            move_cursor_up()
+        elseif S.input ~= "" and move_cursor_up() then
             -- caret moved within the multi-line input
         else
             history_prev()
         end
     elseif k.name == "down" then
-        if S.input ~= "" and move_cursor_down() then
+        if k.shift and S.input ~= "" then
+            move_cursor_down()
+        elseif S.input ~= "" and move_cursor_down() then
             -- caret moved within the multi-line input
         else
             history_next()
@@ -5058,12 +5388,14 @@ M._read_key = function() return read_key() end
 -- ============================================================
 -- Main
 -- ============================================================
-function M.run()
+-- app_cfg is the already-loaded config from app.run (carries _session_id,
+-- CLI overrides and agents-files). Without it (tests/dev) load fresh.
+function M.run(app_cfg)
     S = new_state()
     transcript.clear()
     M._byte_stash = {} -- drop any truncated-UTF-8 lookahead from a past run
 
-    S.cfg = (config and config.load and config.load()) or {}
+    S.cfg = app_cfg or (config and config.load and config.load()) or {}
     S.model_name = S.cfg.model or "gpt-4o-mini"
     S.workspace  = S.cfg.workspace or tether.getcwd()
     if config and config.api_key then
@@ -5089,13 +5421,12 @@ function M.run()
     local size = tether.get_terminal_size()
     if size then S.w, S.h = size.width, size.height end
 
-    -- Session is created by app.lua (cfg._session_id); resume path reuses it.
+    -- Session arrives via app_cfg (fresh resume or nil); a brand-new one is
+    -- minted lazily by the first turn, never at startup.
     if S.cfg._session_id then
         S.session_id = S.cfg._session_id
-    elseif session and session.new_session then
-        local ok, id = pcall(session.new_session, S.workspace, S.model_name)
-        S.session_id = ok and id or "?"
-        S.cfg._session_id = S.session_id
+    else
+        S.session_id = "?"
     end
 
     -- Resume (-r): app.lua restored the agent history, but the transcript
@@ -5147,52 +5478,107 @@ function M.run()
     palette_sync()
     redraw()
 
-    while not S.quit do
-        local k = read_key()
-        if not k then break end
-        handle_key(k)
+    -- The waits that still block the loop (tether.exec while a tool runs,
+    -- http_get, the blocking transport/sleep fallbacks) call back into the
+    -- TUI on their own quantum; bind the spinner tick for them for as long
+    -- as this loop runs. The turn path itself rides the reactor's on_tick.
+    if tether.set_tick_hook then tether.set_tick_hook(M._spinner_tick) end
 
-        -- expand-provider-catalog: a background model refresh may have
-        -- landed (fetch_bg child wrote the pending file). Rebuild the open
-        -- /model palette in place; otherwise the next open picks it up.
-        if S._models_bg and commands and commands.poll_models_refresh then
-            local st = commands.poll_models_refresh(S.cfg, S._models_bg)
-            if st == "updated" then
-                if S.palette_mode == "model" and S.palette_active then
-                    local models, _, merr = nil, nil, nil
-                    if commands.list_models_all then
-                        local ok, m, _, e = pcall(commands.list_models_all, S.cfg)
-                        if ok then models, merr = m, e end
-                    end
-                    if models == nil then
-                        models, _, merr = commands.list_models(S.cfg, S.api_key or "")
-                    end
-                    S.palette_items = M._build_model_items(models)
-                    local n = #S.palette_items
-                    if (S.palette_sel or 1) > n and n > 0 then
-                        S.palette_sel = n
-                    end
-                    -- a still-empty palette keeps explaining itself.
-                    S._models_err = (n == 0) and merr or nil
-                    if S._models_err then S.error_banner = S._models_err end
-                end
-                S._models_bg = nil
-            elseif st == "settled" then
-                S._models_bg = nil
-            end
+    -- expand-provider-catalog: a background model refresh may have
+    -- landed (fetch_bg child wrote the pending file). Rebuild the open
+    -- /model palette in place; otherwise the next open picks it up.
+    -- M-field (not a run() local): M.run sits at Lua's 200-locals limit.
+    function M._poll_models_bg()
+        if not (S._models_bg and commands and commands.poll_models_refresh) then
+            return
         end
+        local st = commands.poll_models_refresh(S.cfg, S._models_bg)
+        if st == "updated" then
+            if S.palette_mode == "model" and S.palette_active then
+                local models, _, merr = nil, nil, nil
+                if commands.list_models_all then
+                    local ok, m, _, e = pcall(commands.list_models_all, S.cfg)
+                    if ok then models, merr = m, e end
+                end
+                if models == nil then
+                    models, _, merr = commands.list_models(S.cfg, S.api_key or "")
+                end
+                S.palette_items = M._build_model_items(models)
+                local n = #S.palette_items
+                if (S.palette_sel or 1) > n and n > 0 then
+                    S.palette_sel = n
+                end
+                -- a still-empty palette keeps explaining itself.
+                S._models_err = (n == 0) and merr or nil
+                if S._models_err then S.error_banner = S._models_err end
+            end
+            S._models_bg = nil
+        elseif st == "settled" then
+            S._models_bg = nil
+        end
+    end
 
+    -- The main loop belongs to the reactor: one poll over stdin, transport
+    -- sockets and timers drives the stdin drain, per-tick work and future
+    -- transport sources. Nothing here blocks: keys dispatch on the tick
+    -- they arrive, whether a turn runs or not.
+    -- M-field (not a run() local): M.run sits at Lua's 200-locals limit.
+    M._loop = M._reactor.new({
+        poll = function(rfds, wfds, timeout)
+            return tether.poll(rfds, wfds, timeout)
+        end,
+        clock = function()
+            return (tether.monotonic_ms and tether.monotonic_ms()) or 0
+        end,
+    })
+    M._loop:on_stdin(function()
+        local n = 0
+        while true do
+            local k = read_key_nb()
+            if not k then break end
+            n = n + 1
+            handle_key(k)
+            if S.quit then M._loop:stop(); break end
+        end
+        if n > 0 then paint(true) end
+        -- a stashed escape prefix means bytes were consumed for an
+        -- incomplete sequence: not EOF, the tail is still coming
+        if n == 0 and #M._byte_stash > 0 then n = 1 end
+        return n
+    end)
+    M._loop:on_eof(function()
+        S.quit = true
+        M._loop:stop()
+    end)
+    M._loop:on_tick(function()
+        M._poll_models_bg()
         if tether.resize_requested() then
             local sz = tether.get_terminal_size()
             if sz then S.w, S.h = sz.width, sz.height end
             S.screen = {}
         end
-
         mouse_update_tracking() -- M8/R8: ?1000h/?1006h on state change only
-        redraw()
-    end
+        if S.busy then
+            -- the turn nests into this loop (streamed attempts, backoff
+            -- deadlines), so the spinner cadence rides the tick itself; the
+            -- host hook bound in run() covers the waits that still block it
+            M._spinner_tick()
+        else
+            paint(false) -- throttled; picks up bg/resize/mouse changes
+        end
+        if S.quit then M._loop:stop() end
+    end)
+    -- A turn started from the stdin dispatch parks the loop inside its own
+    -- tick; the synchronous callers (api.stream between steps, the agent's
+    -- backoff deadline) find this loop through the module and pump it
+    -- nested instead of blocking the OS thread.
+    M._reactor.set_active(M._loop)
+    M._loop:run()
+    M._reactor.set_active(nil)
+    M._loop = nil
 
     if debug_log_fh then pcall(function() debug_log_fh:close() end) end
+    if tether.set_tick_hook then tether.set_tick_hook(nil) end
     -- Restore the keyboard protocol while the alternate screen (and with it
     -- kitty's own flag stack) is still current, then leave alt-screen.
     if S.kb_protocol == 1 then

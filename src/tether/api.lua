@@ -36,15 +36,11 @@ local function load_module(spec)
     return nil
 end
 
-local warned_unknown = false
-
-local function warn_unknown(name)
-    if not warned_unknown then
-        warned_unknown = true
-        io.stderr:write('tether: unknown provider "' .. tostring(name)
-            .. '", falling back to "openai"\n')
-    end
-end
+-- Unknown provider ids fall back to "openai" silently: library code must
+-- never write to the terminal mid-TUI (one stray line over the alt-screen
+-- persists past diff repaints), and the configured id stays visible in the
+-- footer's provider cell for diagnosis.
+local function warn_unknown() end
 
 local function wire_spec(wire)
     if WIRE_MODULES[wire] then return WIRE_MODULES[wire] end
@@ -142,10 +138,47 @@ end
 -- literals, so the digits are parsed as base 8).
 local HEADER_FILE_MODE = tonumber("600", 8)
 
+-- provider-catalog spec: static `extra_headers` (catalog + user override at
+-- providers.<id>.extra_headers) ride on every request of a preset. A user
+-- value replaces the same-named catalog value (that is what override means);
+-- emission is name-sorted so duplicate-name ordering is deterministic.
+-- Header values are validated: CR/LF in a value would smuggle extra header
+-- lines (CRLF injection through the header temp file).
+local function extra_header_lines(cfg)
+    if type(cfg) ~= "table" then return {} end
+    local sources = {}
+    local preset = cfg.provider
+    if type(cfg.providers) == "table" and type(cfg.providers[preset]) == "table"
+        and type(cfg.providers[preset].extra_headers) == "table" then
+        sources[#sources + 1] = cfg.providers[preset].extra_headers
+    end
+    if type(cfg.extra_headers) == "table" then
+        sources[#sources + 1] = cfg.extra_headers
+    end
+    local merged, names = {}, {}
+    for _, src in ipairs(sources) do
+        for name, value in pairs(src) do
+            if type(name) == "string" and type(value) == "string"
+                and name ~= "" and not name:find("[\r\n:]")
+                and not value:find("[\r\n]") then
+                if not merged[name] then names[#names + 1] = name end
+                merged[name] = value
+            end
+        end
+    end
+    table.sort(names)
+    local out = {}
+    for _, name in ipairs(names) do
+        out[#out + 1] = name .. ": " .. merged[name]
+    end
+    return out
+end
+M._extra_header_lines = extra_header_lines -- test seam
+
 -- Audit #6: provider credentials must not appear in argv (visible in ps).
 -- Header-based auth (OpenAI Bearer, Anthropic x-api-key) goes through a
 -- private temp file; the header file and request body file are removed
--- right after the request completes.
+-- right after the request completes. The body file is written 0600 too.
 local function header_file(lines)
     local path = ("/tmp/tether_h_%d_%d"):format(os.time(), math.random(100000, 999999))
     -- 3.5: create the file, lock it down, then write the key — no window in
@@ -212,13 +245,91 @@ function M.refresh_models_bg(cfg, api_key, outpath)
         if P.preflight(cfg, api_key, url, pname) then return nil end
     end
     if url:match("{([A-Za-z_][A-Za-z0-9_]*)}") then return nil end
-    local hfile = header_file(P.models_headers(api_key,
-        { provider = pname, cfg = cfg, auth_style = cfg._auth_style }))
+    local hlines = P.models_headers(api_key,
+        { provider = pname, cfg = cfg, auth_style = cfg._auth_style,
+          session_id = cfg._session_id, messages = nil })
+    for _, ln in ipairs(extra_header_lines(cfg)) do hlines[#hlines + 1] = ln end
+    local hfile = header_file(hlines)
     if not hfile then return nil end
     -- the C layer reads @file headers before fork and unlinks them.
     local ok = tether.fetch_bg(url, { "@" .. hfile }, outpath, 20)
     if not ok then os.remove(hfile) end
     return ok or nil
+end
+
+-- The reactor loop that owns waiting right now (ui.run binds it around its
+-- run()); nil in print mode, one-shot callers and tests without a loop.
+local function active_loop()
+    local r = _G.reactor
+    if type(r) == "table" and type(r.active) == "function" then
+        return r.active()
+    end
+    return nil
+end
+
+-- The abort seam the agent reads: the UI flag (Ctrl+C while busy) or the
+-- host flag (blocking paths). Checked between reactor ticks so an abort ends
+-- the transfer instead of streaming on to completion.
+local function abort_pending()
+    local turn = _G.turn
+    if type(turn) == "table" and type(turn.take_abort) == "function" then
+        return turn.take_abort()
+    end
+    local agent = _G.agent
+    if agent and agent.abort_requested then return true end
+    if type(tether.abort_requested) == "function" and tether.abort_requested() then
+        return true
+    end
+    return false
+end
+
+-- One attempt over the step API: the reactor owns the wait (its tick polls
+-- stdin, these sockets and the timers together), this loop only advances the
+-- transfer between ticks. Complete lines are fed in arrival order, so the
+-- event sequence is identical to the blocking http_stream over the same
+-- body. An abort (or a stopped loop) ends the transfer as `aborted`, which
+-- http_request classifies as interrupted — never as a retryable failure.
+local function stepped_stream(loop, url, hfile, bfile, feed)
+    local h, herr = tether.http_start("POST", url,
+        { "@" .. hfile, "Content-Type: application/json" },
+        "@" .. bfile, { timeout_s = 10, idle_timeout_s = 60 })
+    if not h then return nil, herr or "cannot start transfer" end
+    local finished, step_ok, step_err = false, nil, nil
+    local function step()
+        if finished then return end
+        local st, err = tether.http_step(h, 0)
+        local lines = tether.http_lines(h)
+        for i = 1, #lines do
+            -- http_stream delivers a line error as a failed call too: stop
+            -- feeding, keep the message, never retry the parse as transport
+            local fed, ferr = pcall(feed, lines[i])
+            if not fed then
+                finished, step_ok, step_err = true, nil, ferr
+                return
+            end
+        end
+        if st ~= "running" then
+            finished = true
+            if st == "done" then step_ok = true else step_err = err end
+        end
+    end
+    local src = loop:add_source{
+        fds = function() return tether.http_fds(h) end,
+        ready = function() step() end,
+    }
+    local ok, terr = pcall(function()
+        while not finished do
+            if abort_pending() or not loop:tick() then
+                tether.http_abort(h)
+                step()
+                break
+            end
+        end
+    end)
+    loop:remove_source(src)
+    tether.http_free(h)
+    if not ok then error(terr, 0) end
+    return step_ok, step_err
 end
 
 local function http_request(cfg, api_key, messages, on_event)
@@ -254,12 +365,15 @@ local function http_request(cfg, api_key, messages, on_event)
         provider_env = cfg.provider_env,
         cfg = cfg,
     }
-    local hfile = header_file(P.header_lines(api_key, hctx))
+    local hlines = P.header_lines(api_key, hctx)
+    for _, ln in ipairs(extra_header_lines(cfg)) do hlines[#hlines + 1] = ln end
+    local hfile = header_file(hlines)
     if not hfile then
         return false, retry.failure("permanent", "cannot write auth header file")
     end
 
-    -- request body via stdin to avoid quoting issues entirely
+    -- request body via stdin to avoid quoting issues entirely; written 0600
+    -- (audit: a 0644 draft body is world-readable in /tmp for its lifetime)
     local bfile = hfile .. ".body"
     local bf = io.open(bfile, "w")
     if not bf then
@@ -268,6 +382,20 @@ local function http_request(cfg, api_key, messages, on_event)
     end
     bf:write(req)
     bf:close()
+    -- Debug: TETHER_DUMP_BODY=/path keeps a copy of the exact outgoing body
+    -- (opt-in only; bodies may carry workspace content).
+    pcall(function()
+        local dump = os.getenv("TETHER_DUMP_BODY")
+        if type(dump) == "string" and dump ~= "" then
+            local df = io.open(dump, "w")
+            if df then df:write(req); df:close() end
+        end
+    end)
+    if not tether.fchmod or not tether.fchmod(bfile, HEADER_FILE_MODE) then
+        os.remove(hfile)
+        os.remove(bfile)
+        return false, retry.failure("permanent", "cannot lock down request body file")
+    end
 
     if P.reset_stream then P.reset_stream() end
 
@@ -278,41 +406,61 @@ local function http_request(cfg, api_key, messages, on_event)
     local parse_failed = false
     local parse_error = nil
     local buf = {}
-    local stream_ok, serr = tether.http_stream("POST", url,
-        { "@" .. hfile, "Content-Type: application/json" },
-        "@" .. bfile,
-        function(line)
-            if parse_failed then return true end -- drain, stop parsing
-            -- SSE framing: an empty line is an EVENT BOUNDARY, not EOF.
-            -- Breaking on "" used to drop everything after the first event
-            -- separator (multi-event streams lost deltas).
-            if line ~= "" then
-                buf[#buf + 1] = line
-                got_data = true
-                local ok2, err = pcall(P.parse_sse_line, line, on_event)
-                if not ok2 then
-                    parse_failed = true
-                    ok = false
-                    parse_error = "SSE parse: " .. tostring(err)
-                elseif P.stream_failure and P.stream_failure() then
-                    -- a provider error inside the stream fails the attempt;
-                    -- the rest of the stream is only drained
-                    parse_failed = true
-                end
+    -- Debug: TETHER_DUMP_SSE=/path appends every raw SSE line (opt-in only).
+    local sse_dump = os.getenv("TETHER_DUMP_SSE")
+    if type(sse_dump) ~= "string" or sse_dump == "" then sse_dump = nil end
+    local function feed(line)
+        if sse_dump then
+            pcall(function()
+                local df = io.open(sse_dump, "a")
+                if df then df:write(line, "\n"); df:close() end
+            end)
+        end
+        if parse_failed then return true end -- drain, stop parsing
+        -- SSE framing: an empty line is an EVENT BOUNDARY, not EOF.
+        -- Breaking on "" used to drop everything after the first event
+        -- separator (multi-event streams lost deltas).
+        if line ~= "" then
+            buf[#buf + 1] = line
+            got_data = true
+            local ok2, err = pcall(P.parse_sse_line, line, on_event)
+            if not ok2 then
+                parse_failed = true
+                ok = false
+                parse_error = "SSE parse: " .. tostring(err)
+            elseif P.stream_failure and P.stream_failure() then
+                -- a provider error inside the stream fails the attempt;
+                -- the rest of the stream is only drained
+                parse_failed = true
             end
-            return true
-        end,
-        { timeout_s = 10, idle_timeout_s = 60 })
+        end
+        return true
+    end
+
+    -- Transport selection: while a reactor loop owns waiting (ui.run parked
+    -- inside its dispatch), stream over the step API so keys, spinner and
+    -- timers keep ticking for the whole turn. Everything else — print mode,
+    -- one-shot callers, tests without a loop — keeps the blocking contract.
+    local stream_ok, serr
+    local loop = active_loop()
+    if loop then
+        stream_ok, serr = stepped_stream(loop, url, hfile, bfile, feed)
+    else
+        stream_ok, serr = tether.http_stream("POST", url,
+            { "@" .. hfile, "Content-Type: application/json" },
+            "@" .. bfile, feed, { timeout_s = 10, idle_timeout_s = 60 })
+    end
 
     os.remove(hfile)
     os.remove(bfile)
 
-    -- A transfer the user stopped (Ctrl+C during the stream: libcurl reports
-    -- an aborted-by-callback error). Distinct from a connection failure so it
+    -- A transfer the user stopped (Ctrl+C during the stream: the blocking
+    -- path reports libcurl's aborted-by-callback text, the stepped path the
+    -- `aborted` from http_abort). Distinct from a connection failure so it
     -- can never be retried as one — the turn ends instead.
     if not stream_ok then
         local raw = tostring(serr or "connection error")
-        if retry.classify(raw) == "interrupted" then
+        if raw == "aborted" or retry.classify(raw) == "interrupted" then
             return false, retry.failure("interrupted", retry.reason("interrupted"))
         end
         local text = "request failed: " .. raw
@@ -432,8 +580,13 @@ function M.list_models_live(cfg, api_key, timeout_s)
     local missing_var = url:match("{([A-Za-z_][A-Za-z0-9_]*)}")
     if missing_var then return nil, "missing " .. missing_var end
     -- ctx carries cfg for adapters that sign the models call (bedrock).
-    local hfile = header_file(P.models_headers(api_key,
-        { provider = pname, cfg = cfg, auth_style = cfg._auth_style }))
+    -- Audit: models requests are "every request of a preset" too — session
+    -- id and provider must reach header_lines (x-opencode-session etc.).
+    local hlines = P.models_headers(api_key,
+        { provider = pname, cfg = cfg, auth_style = cfg._auth_style,
+          session_id = cfg._session_id, provider_env = cfg.provider_env })
+    for _, ln in ipairs(extra_header_lines(cfg)) do hlines[#hlines + 1] = ln end
+    local hfile = header_file(hlines)
     if not hfile then return nil, "cannot write header file" end
     -- 4.2: in-process GET; the return format (list | nil, reason) is unchanged.
     -- timeout_s caps interactive freeze (pi uses 4s for catalog refresh).

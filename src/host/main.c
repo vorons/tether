@@ -22,6 +22,9 @@
 #include <lauxlib.h>
 #include <lualib.h>
 #include <curl/curl.h>
+#include <mbedtls/pk.h>
+#include <mbedtls/sha256.h>
+#include <mbedtls/md.h>
 
 /* Vendor'd krep engine (grep backend). Its header also defines file-scope
    skip lists that only krep.c itself consumes; silence the unused-variable
@@ -93,13 +96,106 @@ static int poll_interrupt(void)
     return g_interrupt;
 }
 
+/* Busy-spinner tick: repaints the ` Working...` indicator while a turn runs.
+   The registered hook is a no-op unless a turn is busy. Throttled to the
+   spinner interval (80 ms, pi's Loader default); re-entrancy guarded because
+   the tick runs a full repaint from inside the transfer.
+
+   The hook is bound explicitly (tether.set_tick_hook) instead of read from a
+   magic global name: only ui.run registers it, so print mode and plain tests
+   stay silent, and the blocking waits that still need it (tether.exec,
+   http_get, the blocking http_stream/sleep fallbacks) call the one function
+   the TUI handed over. */
+#define SPINNER_QUANTUM_MS 80
+static int g_tick_hook_ref = LUA_NOREF;
+
+/* tether.set_tick_hook(fn | nil): register the UI tick the blocking waits
+   may call back into. nil (or a non-function) unregisters it. */
+static int l_set_tick_hook(lua_State *L)
+{
+    if (g_tick_hook_ref != LUA_NOREF) {
+        luaL_unref(L, LUA_REGISTRYINDEX, g_tick_hook_ref);
+        g_tick_hook_ref = LUA_NOREF;
+    }
+    if (lua_isfunction(L, 1)) {
+        lua_pushvalue(L, 1);
+        g_tick_hook_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+    }
+    return 0;
+}
+
+static double spinner_tick_now_ms(void)
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (double)ts.tv_sec * 1000.0 + (double)ts.tv_nsec / 1e6;
+}
+
+static void spinner_tick_call(lua_State *L)
+{
+    if (L == NULL || g_tick_hook_ref == LUA_NOREF) return;
+    static double last_tick_ms = 0;
+    static int in_tick = 0;
+    double now = spinner_tick_now_ms();
+    if (in_tick || now - last_tick_ms < (double)SPINNER_QUANTUM_MS) return;
+    last_tick_ms = now;
+    in_tick = 1;
+    lua_rawgeti(L, LUA_REGISTRYINDEX, g_tick_hook_ref);
+    if (lua_pcall(L, 0, 0, 0) != LUA_OK)
+        lua_pop(L, 1);
+    in_tick = 0;
+}
+
 /* libcurl progress callback: abort an in-flight transfer as soon as Ctrl+C
-   arrives, so a stalled stream cannot hold the turn. */
+   arrives, so a stalled stream cannot hold the turn. Also fires the spinner
+   tick on network activity (the multi-loop quantum below covers silence). */
 static int http_xferinfo(void *clientp, curl_off_t dltotal, curl_off_t dlnow,
                          curl_off_t ultotal, curl_off_t ulnow)
 {
-    (void)clientp; (void)dltotal; (void)dlnow; (void)ultotal; (void)ulnow;
-    return poll_interrupt() ? 1 : 0;
+    (void)dltotal; (void)dlnow; (void)ultotal; (void)ulnow;
+    if (poll_interrupt()) return 1;
+    spinner_tick_call((lua_State *)clientp);
+    return 0;
+}
+
+/* Run a streaming transfer on a multi handle with an 80 ms poll quantum.
+   curl_easy_perform blocks Lua for the whole SSE stream and only invokes the
+   progress callback on network activity, so a tick from xferinfo alone fires
+   at libcurl's mercy: frozen TTFT, choppy animation. The multi loop wakes on
+   socket activity AND on quantum timeout, so the spinner animates at a steady
+   rate for the whole transfer while Ctrl+C still aborts promptly. */
+static CURLcode stream_perform(CURL *h, lua_State *L)
+{
+    CURLM *m = curl_multi_init();
+    if (m == NULL) return CURLE_OUT_OF_MEMORY;
+    if (curl_multi_add_handle(m, h) != CURLM_OK) {
+        curl_multi_cleanup(m);
+        return CURLE_FAILED_INIT;
+    }
+    CURLcode rc = CURLE_OK;
+    int still_running = 0;
+    if (curl_multi_perform(m, &still_running) != CURLM_OK)
+        still_running = 0;
+    while (still_running) {
+        int numfds = 0;
+        if (curl_multi_poll(m, NULL, 0, SPINNER_QUANTUM_MS, &numfds) != CURLM_OK)
+            break;
+        if (poll_interrupt()) { rc = CURLE_ABORTED_BY_CALLBACK; break; }
+        spinner_tick_call(L);
+        if (curl_multi_perform(m, &still_running) != CURLM_OK)
+            break;
+    }
+    if (rc == CURLE_OK) {
+        CURLMsg *msg;
+        int left = 0;
+        while ((msg = curl_multi_info_read(m, &left)) != NULL) {
+            if (msg->msg == CURLMSG_DONE && msg->easy_handle == h)
+                rc = msg->data.result;
+        }
+    }
+    curl_multi_remove_handle(m, h);
+    curl_multi_cleanup(m);
+    return rc;
 }
 
 static void restore_termios(void)
@@ -142,13 +238,12 @@ static void setup_signal_handlers(void)
     sigemptyset(&sa_winch.sa_mask);
     sa_winch.sa_flags = SA_RESTART;
     sigaction(SIGWINCH, &sa_winch, NULL);
-    /* Background fetches (fetch_bg) are fire-and-forget: auto-reap children
-       so one zombie per refresh never accumulates over a long session. */
-    struct sigaction sa_chld;
-    sa_chld.sa_handler = SIG_IGN;
-    sigemptyset(&sa_chld.sa_mask);
-    sa_chld.sa_flags = SA_RESTART;
-    sigaction(SIGCHLD, &sa_chld, NULL);
+    /* NB: SIGCHLD is deliberately NOT set to SIG_IGN here. The original
+       fire-and-forget design had it auto-reap fetch_bg children, but SIG_IGN
+       breaks system()/wait() for every later child: exec'd commands finish
+       and are reaped by the kernel, leaving system() with ECHILD (-1/255).
+       fetch_bg double-forks instead (the grandchild is reparented to init),
+       so shell tools keep their exit codes. */
 }
 
 static int init_termios(void)
@@ -188,6 +283,11 @@ static int l_read_char(lua_State *L)
     return 1;
 }
 
+/* Pure non-blocking drain: returns a byte only when one is already
+ * available, nil otherwise — never waits. Readiness waiting belongs to the
+ * reactor's poll (tether.poll), so no transfer or timer callback can stall
+ * on input. Incomplete escape sequences are the decoder's job: it stashes
+ * the prefix and retries whole on the next tick. */
 static int l_read_char_nb(lua_State *L)
 {
     unsigned char queued;
@@ -200,7 +300,7 @@ static int l_read_char_nb(lua_State *L)
     FD_ZERO(&fds);
     FD_SET(STDIN_FILENO, &fds);
     tv.tv_sec = 0;
-    tv.tv_usec = 50000;
+    tv.tv_usec = 0;
     int ready = select(STDIN_FILENO + 1, &fds, NULL, NULL, &tv);
     if (ready <= 0) { lua_pushnil(L); return 1; }
     char c;
@@ -237,9 +337,37 @@ static int l_write(lua_State *L)
 static int l_exec(lua_State *L)
 {
     const char *cmd = luaL_checkstring(L, 1);
-    /* system() already runs via sh -c, so pass cmd directly */
-    int code = system(cmd);
-    int exit_code = WEXITSTATUS(code);
+    /* fork/exec instead of system(): system() blocks Lua (and the spinner)
+       for the whole command — the agent `run` tool allows up to 120 s. The
+       parent waits in spinner quanta and ticks, so the indicator animates
+       while the tool works. Contract unchanged: no kill on Ctrl+C (the
+       interrupt surfaces at the next checkpoint), same (ok, exit_code). */
+    pid_t pid = fork();
+    if (pid < 0) {
+        lua_pushboolean(L, 0);
+        lua_pushinteger(L, 127);
+        return 2;
+    }
+    if (pid == 0) {
+        execl("/bin/sh", "sh", "-c", cmd, (char *)NULL);
+        _exit(127);
+    }
+    int st = 0;
+    for (;;) {
+        pid_t w = waitpid(pid, &st, WNOHANG);
+        if (w == pid)
+            break;
+        if (w < 0 && errno != EINTR)
+            break; /* lost child: report through the status below */
+        {
+            struct timespec ts;
+            ts.tv_sec = 0;
+            ts.tv_nsec = (long)SPINNER_QUANTUM_MS * 1000L * 1000L;
+            nanosleep(&ts, NULL);
+        }
+        spinner_tick_call(L);
+    }
+    int exit_code = WIFEXITED(st) ? WEXITSTATUS(st) : 127;
     lua_pushboolean(L, exit_code == 0);
     lua_pushinteger(L, exit_code);
     return 2;
@@ -511,12 +639,36 @@ static int l_krep_search(lua_State *L)
         lua_pushstring(L, "cannot capture krep output");
         return 2;
     }
+    /* krep reports everything from permission problems to regex failures on
+       stderr, straight over the alt-screen TUI. Silence it for the call. */
+    fflush(stderr);
+    int saved_err = dup(STDERR_FILENO);
+    int devnull = -1;
+    if (saved_err >= 0) {
+        devnull = open("/dev/null", O_WRONLY);
+        if (devnull >= 0)
+            dup2(devnull, STDERR_FILENO);
+    }
 
-    search_directory_recursive(base_dir, &params, 0);
+    /* tools.grep passes the model's path through untouched, so it is
+       routinely a FILE (grep this one file), not a directory. opendir on
+       it failed ENOTDIR with the complaint above and zero records. */
+    struct stat base_st;
+    if (stat(base_dir, &base_st) == 0 && S_ISREG(base_st.st_mode))
+        search_file(&params, base_dir, 0);
+    else
+        search_directory_recursive(base_dir, &params, 0);
 
     fflush(stdout);
     dup2(saved_fd, STDOUT_FILENO);
     close(saved_fd);
+    if (saved_err >= 0) {
+        fflush(stderr);
+        dup2(saved_err, STDERR_FILENO);
+        close(saved_err);
+    }
+    if (devnull >= 0)
+        close(devnull);
 
     /* slurp the capture */
     char *buf = NULL;
@@ -563,6 +715,79 @@ static int l_krep_search(lua_State *L)
 }
 
 /* --- in-process HTTP(S) via vendor'd libcurl + mbedTLS + zlib --- */
+
+/* RS256 (PKCS#1 v1.5 over SHA-256) with a PEM RSA private key, via the
+   vendor'd mbedTLS. Exposed to Lua as tether.rs256_sign for the Google
+   service-account ADC JWT (auth.resolve_adc_token). Returns a base64url
+   (unpadded) signature or nil. */
+/* RNG callback for pk_sign (padding needs a few random bytes). Reading
+   /dev/urandom directly keeps the entropy/DRBG machinery out of the binary. */
+static int urandom_rng(void *p_rng, unsigned char *out, size_t len)
+{
+    (void)p_rng;
+    FILE *f = fopen("/dev/urandom", "rb");
+    if (f == NULL) return 0x006C; /* MBEDTLS_ERR_ENTROPY_SOURCE_FAILED */
+    size_t got = fread(out, 1, len, f);
+    fclose(f);
+    return got == len ? 0 : 0x006C;
+}
+
+static int l_rs256_sign(lua_State *L)
+{
+    const char *pem = luaL_checkstring(L, 1);
+    size_t msglen;
+    const char *msg = luaL_checklstring(L, 2, &msglen);
+
+    mbedtls_pk_context pk;
+    mbedtls_pk_init(&pk);
+    /* unencrypted PEM keys never invoke the RNG during parse, but the API
+       still wants a callback; any failure here means an unusable key. */
+    if (mbedtls_pk_parse_key(&pk, (const unsigned char *)pem,
+                             strlen(pem) + 1, NULL, 0,
+                             urandom_rng, NULL) != 0) {
+        mbedtls_pk_free(&pk);
+        lua_pushnil(L);
+        return 1;
+    }
+    unsigned char hash[32];
+    if (mbedtls_sha256((const unsigned char *)msg, msglen, hash, 0) != 0) {
+        mbedtls_pk_free(&pk);
+        lua_pushnil(L);
+        return 1;
+    }
+    unsigned char sig[MBEDTLS_PK_SIGNATURE_MAX_SIZE];
+    size_t siglen = 0;
+    int rc = mbedtls_pk_sign(&pk, MBEDTLS_MD_SHA256, hash, sizeof(hash),
+                             sig, sizeof(sig), &siglen,
+                             urandom_rng, NULL);
+    mbedtls_pk_free(&pk);
+    if (rc != 0) {
+        lua_pushnil(L);
+        return 1;
+    }
+    /* base64url, no padding */
+    static const char alpha[] =
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+    size_t cap = ((siglen + 2) / 3) * 4 + 1;
+    char *out = malloc(cap);
+    if (out == NULL) {
+        lua_pushnil(L);
+        return 1;
+    }
+    size_t o = 0;
+    for (size_t i = 0; i < siglen; i += 3) {
+        unsigned n = ((unsigned)sig[i] << 16)
+            | (i + 1 < siglen ? (unsigned)sig[i + 1] << 8 : 0)
+            | (i + 2 < siglen ? (unsigned)sig[i + 2] : 0);
+        out[o++] = alpha[(n >> 18) & 63];
+        out[o++] = alpha[(n >> 12) & 63];
+        if (i + 1 < siglen) out[o++] = alpha[(n >> 6) & 63];
+        if (i + 2 < siglen) out[o++] = alpha[n & 63];
+    }
+    lua_pushlstring(L, out, o);
+    free(out);
+    return 1;
+}
 
 /* The OS-distributed trust anchor; there is no per-call override and curl's
    own CURL_CA_BUNDLE handling is overridden by setting CAINFO explicitly. */
@@ -673,58 +898,6 @@ static int http_apply_common(CURL *h, const char *url, const char *ca,
     return 1;
 }
 
-/* Streaming read callback: split the body into lines and hand each one to the
-   Lua on_line function stored in the context. */
-struct stream_ctx {
-    lua_State *L;
-    int fn_ref;
-    char *buf;
-    size_t len;
-    size_t cap;
-    int lua_error;
-    char lua_err[256];
-};
-
-static int stream_emit_line(struct stream_ctx *ctx)
-{
-    lua_State *L = ctx->L;
-    lua_rawgeti(L, LUA_REGISTRYINDEX, ctx->fn_ref);
-    lua_pushlstring(L, ctx->buf ? ctx->buf : "", ctx->len);
-    ctx->len = 0;
-    if (lua_pcall(L, 1, 0, 0) != LUA_OK) {
-        ctx->lua_error = 1;
-        const char *msg = lua_tostring(L, -1);
-        snprintf(ctx->lua_err, sizeof(ctx->lua_err), "%s", msg ? msg : "?");
-        lua_pop(L, 1);
-        return 0;
-    }
-    return 1;
-}
-
-static size_t http_write_cb(char *ptr, size_t size, size_t nmemb, void *userdata)
-{
-    struct stream_ctx *ctx = userdata;
-    size_t total = size * nmemb;
-    for (size_t i = 0; i < total; i++) {
-        char c = ptr[i];
-        if (c == '\n') {
-            if (!stream_emit_line(ctx))
-                return 0; /* abort the transfer */
-            continue;
-        }
-        if (ctx->len + 1 >= ctx->cap) {
-            size_t cap = ctx->cap ? ctx->cap * 2 : 4096;
-            char *grown = realloc(ctx->buf, cap);
-            if (grown == NULL)
-                return 0;
-            ctx->buf = grown;
-            ctx->cap = cap;
-        }
-        ctx->buf[ctx->len++] = c;
-    }
-    return total;
-}
-
 /* Growable buffer for http_get. */
 struct body_buf {
     char *data;
@@ -773,13 +946,496 @@ static int http_read_body(const char *body, char **out, size_t *outlen,
     return 1;
 }
 
+/* --- Incremental HTTP transfers for the reactor ---------------------------
+ * Same wire behavior as http_stream, but the loop belongs to Lua: start the
+ * request, poll the sockets together with stdin, step with a bounded
+ * timeout, drain complete lines, abort, free. The write callback queues
+ * lines in C and never calls Lua, so no transfer callback can block on
+ * input or reenter the interpreter. */
+struct xfer_line_q {
+    char **v;
+    size_t n, cap;
+};
+
+struct http_xfer {
+    CURLM *m;
+    CURL *h;
+    struct curl_slist *headers;
+    char *body_buf;
+    struct xfer_line_q lines;
+    char *part;
+    size_t part_len, part_cap;
+    int running;
+    int done;
+    int aborted;
+    int failed;
+    char err[256];
+};
+
+static int xfer_queue_line(struct http_xfer *x, const char *s, size_t len)
+{
+    if (x->lines.n == x->lines.cap) {
+        size_t cap = x->lines.cap ? x->lines.cap * 2 : 32;
+        char **grown = realloc(x->lines.v, cap * sizeof(*grown));
+        if (grown == NULL)
+            return 0;
+        x->lines.v = grown;
+        x->lines.cap = cap;
+    }
+    char *copy = malloc(len + 1);
+    if (copy == NULL)
+        return 0;
+    memcpy(copy, s, len);
+    copy[len] = '\0';
+    x->lines.v[x->lines.n++] = copy;
+    return 1;
+}
+
+/* Queue complete lines; the trailing partial line stays buffered until the
+ * transfer finishes (same framing as http_stream: split on '\n' only). */
+static size_t xfer_write_cb(char *ptr, size_t size, size_t nmemb, void *userdata)
+{
+    struct http_xfer *x = userdata;
+    size_t total = size * nmemb;
+    size_t start = 0;
+    for (size_t i = 0; i < total; i++) {
+        if (ptr[i] != '\n')
+            continue;
+        size_t seg = i - start;
+        size_t len = x->part_len + seg;
+        char *line = malloc(len + 1);
+        if (line == NULL)
+            return 0;
+        if (x->part_len > 0)
+            memcpy(line, x->part, x->part_len);
+        memcpy(line + x->part_len, ptr + start, seg);
+        line[len] = '\0';
+        x->part_len = 0;
+        if (!xfer_queue_line(x, line, len)) {
+            free(line);
+            return 0;
+        }
+        free(line);
+        start = i + 1;
+    }
+    size_t tail = total - start;
+    if (tail > 0) {
+        if (x->part_len + tail + 1 > x->part_cap) {
+            size_t cap = x->part_cap ? x->part_cap : 4096;
+            while (cap < x->part_len + tail + 1)
+                cap *= 2;
+            char *grown = realloc(x->part, cap);
+            if (grown == NULL)
+                return 0;
+            x->part = grown;
+            x->part_cap = cap;
+        }
+        memcpy(x->part + x->part_len, ptr + start, tail);
+        x->part_len += tail;
+    }
+    return total;
+}
+
+/* A final line without a trailing newline still counts (http_stream parity). */
+static void xfer_flush_part(struct http_xfer *x)
+{
+    if (x->part_len == 0)
+        return;
+    if (xfer_queue_line(x, x->part, x->part_len))
+        x->part_len = 0;
+}
+
+static void xfer_destroy(struct http_xfer *x)
+{
+    if (x == NULL)
+        return;
+    if (x->h != NULL && x->m != NULL)
+        curl_multi_remove_handle(x->m, x->h);
+    if (x->h != NULL)
+        curl_easy_cleanup(x->h);
+    if (x->m != NULL)
+        curl_multi_cleanup(x->m);
+    curl_slist_free_all(x->headers);
+    free(x->body_buf);
+    for (size_t i = 0; i < x->lines.n; i++)
+        free(x->lines.v[i]);
+    free(x->lines.v);
+    free(x->part);
+    free(x);
+}
+
+/* Shared easy-handle setup; takes ownership of headers/body_buf on success. */
+static struct http_xfer *xfer_create(const char *method, const char *url,
+                                     struct curl_slist *headers, char *body_buf,
+                                     size_t body_len, double connect_s,
+                                     double idle_s, char *err, size_t errlen)
+{
+    struct http_xfer *x = calloc(1, sizeof(*x));
+    if (x == NULL) {
+        snprintf(err, errlen, "out of memory");
+        return NULL;
+    }
+    x->headers = headers;
+    x->body_buf = body_buf;
+    x->h = curl_easy_init();
+    if (x->h == NULL) {
+        snprintf(err, errlen, "cannot create HTTP handle");
+        curl_slist_free_all(headers);
+        free(body_buf);
+        free(x);
+        return NULL;
+    }
+    const char *ca = tether_ca_bundle();
+    if (ca == NULL) {
+        snprintf(err, errlen, "no system CA bundle found");
+        curl_easy_cleanup(x->h);
+        curl_slist_free_all(headers);
+        free(body_buf);
+        free(x);
+        return NULL;
+    }
+    http_apply_common(x->h, url, ca, headers);
+    curl_easy_setopt(x->h, CURLOPT_CONNECTTIMEOUT_MS, (long)(connect_s * 1000.0));
+    curl_easy_setopt(x->h, CURLOPT_LOW_SPEED_LIMIT, 1L);
+    curl_easy_setopt(x->h, CURLOPT_LOW_SPEED_TIME, (long)idle_s);
+    curl_easy_setopt(x->h, CURLOPT_WRITEFUNCTION, xfer_write_cb);
+    curl_easy_setopt(x->h, CURLOPT_WRITEDATA, x);
+    /* No progress callback: the reactor owns stdin and abort. Aborts arrive
+       via http_abort between steps, never from inside the transfer. */
+    if (body_buf != NULL) {
+        curl_easy_setopt(x->h, CURLOPT_POSTFIELDS, body_buf);
+        curl_easy_setopt(x->h, CURLOPT_POSTFIELDSIZE, (long)body_len);
+    }
+    if (method[0] != '\0' && strcasecmp(method, "POST") != 0)
+        curl_easy_setopt(x->h, CURLOPT_CUSTOMREQUEST, method);
+    x->m = curl_multi_init();
+    if (x->m == NULL) {
+        snprintf(err, errlen, "cannot create HTTP multi handle");
+        xfer_destroy(x);
+        return NULL;
+    }
+    if (curl_multi_add_handle(x->m, x->h) != CURLM_OK) {
+        snprintf(err, errlen, "cannot start HTTP transfer");
+        xfer_destroy(x);
+        return NULL;
+    }
+    x->running = 1;
+    int still_running = 0;
+    if (curl_multi_perform(x->m, &still_running) != CURLM_OK)
+        still_running = 0;
+    if (!still_running) {
+        /* finished synchronously (fast failure, e.g. refused): collect it */
+        CURLMsg *msg;
+        int left = 0;
+        while ((msg = curl_multi_info_read(x->m, &left)) != NULL) {
+            if (msg->msg == CURLMSG_DONE && msg->easy_handle == x->h) {
+                x->running = 0;
+                x->done = 1;
+                if (msg->data.result == CURLE_OK) {
+                    xfer_flush_part(x);
+                } else {
+                    x->failed = 1;
+                    snprintf(x->err, sizeof(x->err), "%s",
+                             curl_easy_strerror(msg->data.result));
+                }
+            }
+        }
+        if (!x->done) {
+            /* no message but nothing running: treat as done */
+            x->running = 0;
+            x->done = 1;
+            xfer_flush_part(x);
+        }
+    }
+    return x;
+}
+
+static struct http_xfer *check_xfer(lua_State *L, int idx)
+{
+    struct http_xfer **pp = luaL_checkudata(L, idx, "tether.http_xfer");
+    if (pp == NULL || *pp == NULL)
+        luaL_error(L, "http handle is closed");
+    return *pp;
+}
+
+/* tether.http_start(method, url, headers, body, opts) -> handle | nil, err */
+static int l_http_start(lua_State *L)
+{
+    const char *method = luaL_checkstring(L, 1);
+    const char *url = luaL_checkstring(L, 2);
+    const char *body = luaL_optstring(L, 4, NULL);
+    double connect_s = 10.0, idle_s = 60.0;
+    if (lua_istable(L, 5)) {
+        lua_getfield(L, 5, "timeout_s");
+        if (lua_isnumber(L, -1)) connect_s = lua_tonumber(L, -1);
+        lua_pop(L, 1);
+        lua_getfield(L, 5, "connect_timeout_s");
+        if (lua_isnumber(L, -1)) connect_s = lua_tonumber(L, -1);
+        lua_pop(L, 1);
+        lua_getfield(L, 5, "idle_timeout_s");
+        if (lua_isnumber(L, -1)) idle_s = lua_tonumber(L, -1);
+        lua_pop(L, 1);
+    }
+    char err[256] = {0};
+    struct curl_slist *headers = http_build_headers(L, 3, err, sizeof(err));
+    if (err[0] != '\0') {
+        lua_pushnil(L);
+        lua_pushstring(L, err);
+        return 2;
+    }
+    char *body_buf = NULL;
+    size_t body_len = 0;
+    if (!http_read_body(body, &body_buf, &body_len, err, sizeof(err))) {
+        curl_slist_free_all(headers);
+        lua_pushnil(L);
+        lua_pushstring(L, err);
+        return 2;
+    }
+    struct http_xfer *x = xfer_create(method, url, headers, body_buf,
+                                      body_len, connect_s, idle_s,
+                                      err, sizeof(err));
+    if (x == NULL) {
+        lua_pushnil(L);
+        lua_pushstring(L, err);
+        return 2;
+    }
+    struct http_xfer **pp = lua_newuserdatauv(L, sizeof(*pp), 0);
+    *pp = x;
+    luaL_getmetatable(L, "tether.http_xfer");
+    lua_setmetatable(L, -2);
+    return 1;
+}
+
+/* tether.http_step(handle, timeout_ms) -> "running" | "done" | "failed" [, err]
+ * Advances the transfer by at most timeout_ms. Never touches stdin. */
+static int l_http_step(lua_State *L)
+{
+    struct http_xfer *x = check_xfer(L, 1);
+    long timeout_ms = luaL_optinteger(L, 2, 80);
+    if (timeout_ms < 0)
+        timeout_ms = 0;
+    if (x->done) {
+        if (x->failed) {
+            lua_pushstring(L, "failed");
+            lua_pushstring(L, x->err);
+            return 2;
+        }
+        lua_pushstring(L, "done");
+        return 1;
+    }
+    if (x->aborted) {
+        curl_multi_remove_handle(x->m, x->h);
+        x->running = 0;
+        x->done = 1;
+        x->failed = 1;
+        snprintf(x->err, sizeof(x->err), "aborted");
+        lua_pushstring(L, "failed");
+        lua_pushstring(L, x->err);
+        return 2;
+    }
+    int numfds = 0;
+    if (curl_multi_poll(x->m, NULL, 0, (int)timeout_ms, &numfds) != CURLM_OK) {
+        x->running = 0;
+        x->done = 1;
+        x->failed = 1;
+        snprintf(x->err, sizeof(x->err), "poll failed");
+        lua_pushstring(L, "failed");
+        lua_pushstring(L, x->err);
+        return 2;
+    }
+    int still_running = 0;
+    if (curl_multi_perform(x->m, &still_running) != CURLM_OK)
+        still_running = 0;
+    CURLMsg *msg;
+    int left = 0;
+    while ((msg = curl_multi_info_read(x->m, &left)) != NULL) {
+        if (msg->msg == CURLMSG_DONE && msg->easy_handle == x->h) {
+            x->running = 0;
+            x->done = 1;
+            if (msg->data.result == CURLE_OK) {
+                xfer_flush_part(x);
+            } else {
+                x->failed = 1;
+                snprintf(x->err, sizeof(x->err), "%s",
+                         curl_easy_strerror(msg->data.result));
+            }
+        }
+    }
+    if (!still_running && !x->done) {
+        x->running = 0;
+        x->done = 1;
+        xfer_flush_part(x);
+    } else {
+        x->running = still_running;
+    }
+    if (x->done) {
+        if (x->failed) {
+            lua_pushstring(L, "failed");
+            lua_pushstring(L, x->err);
+            return 2;
+        }
+        lua_pushstring(L, "done");
+        return 1;
+    }
+    lua_pushstring(L, "running");
+    return 1;
+}
+
+/* tether.http_lines(handle) -> {lines}: drain queued complete lines. */
+static int l_http_lines(lua_State *L)
+{
+    struct http_xfer *x = check_xfer(L, 1);
+    lua_newtable(L);
+    for (size_t i = 0; i < x->lines.n; i++) {
+        lua_pushstring(L, x->lines.v[i]);
+        lua_rawseti(L, -2, (lua_Integer)i + 1);
+        free(x->lines.v[i]);
+    }
+    free(x->lines.v);
+    x->lines.v = NULL;
+    x->lines.n = 0;
+    x->lines.cap = 0;
+    return 1;
+}
+
+/* tether.http_abort(handle): end the transfer as a failure on the next step. */
+static int l_http_abort(lua_State *L)
+{
+    struct http_xfer *x = check_xfer(L, 1);
+    x->aborted = 1;
+    lua_pushboolean(L, 1);
+    return 1;
+}
+
+/* tether.http_free(handle): release the transfer immediately. */
+static int l_http_free(lua_State *L)
+{
+    struct http_xfer **pp = luaL_checkudata(L, 1, "tether.http_xfer");
+    if (pp != NULL && *pp != NULL) {
+        xfer_destroy(*pp);
+        *pp = NULL;
+    }
+    lua_pushboolean(L, 1);
+    return 1;
+}
+
+/* tether.http_fds(handle) -> {read={fd}, write={fd}, exc={fd}, timeout=ms|-1}:
+ * the sockets the reactor must poll alongside stdin. */
+static int l_http_fds(lua_State *L)
+{
+    struct http_xfer *x = check_xfer(L, 1);
+    fd_set rfds, wfds, efds;
+    FD_ZERO(&rfds);
+    FD_ZERO(&wfds);
+    FD_ZERO(&efds);
+    int maxfd = -1;
+    curl_multi_fdset(x->m, &rfds, &wfds, &efds, &maxfd);
+    long timeout = -1;
+    curl_multi_timeout(x->m, &timeout);
+    lua_newtable(L);
+    lua_newtable(L);
+    lua_newtable(L);
+    lua_newtable(L);
+    if (maxfd >= 0) {
+        int ri = 1, wi = 1, ei = 1;
+        for (int fd = 0; fd <= maxfd; fd++) {
+            if (FD_ISSET(fd, &rfds)) {
+                lua_pushinteger(L, fd);
+                lua_rawseti(L, -4, ri++);
+            }
+            if (FD_ISSET(fd, &wfds)) {
+                lua_pushinteger(L, fd);
+                lua_rawseti(L, -3, wi++);
+            }
+            if (FD_ISSET(fd, &efds)) {
+                lua_pushinteger(L, fd);
+                lua_rawseti(L, -2, ei++);
+            }
+        }
+    }
+    lua_setfield(L, -4, "exc");
+    lua_setfield(L, -3, "write");
+    lua_setfield(L, -2, "read");
+    lua_pushinteger(L, timeout);
+    lua_setfield(L, -2, "timeout");
+    return 1;
+}
+
+/* tether.poll(read_fds, write_fds, timeout_ms) -> {read={...}, write={...}}:
+ * the reactor's single wait: poll the given descriptors with a bounded
+ * timeout. Never touches Lua state beyond its arguments and result. */
+static int l_poll(lua_State *L)
+{
+    struct pollfd pfds[256];
+    char which[256];
+    int n = 0;
+    if (lua_istable(L, 1)) {
+        size_t len = lua_rawlen(L, 1);
+        for (size_t i = 1; i <= len && n < 256; i++) {
+            lua_geti(L, 1, (lua_Integer)i);
+            if (lua_isinteger(L, -1)) {
+                pfds[n].fd = (int)lua_tointeger(L, -1);
+                pfds[n].events = POLLIN;
+                pfds[n].revents = 0;
+                which[n] = 0;
+                n++;
+            }
+            lua_pop(L, 1);
+        }
+    }
+    if (lua_istable(L, 2)) {
+        size_t len = lua_rawlen(L, 2);
+        for (size_t i = 1; i <= len && n < 256; i++) {
+            lua_geti(L, 2, (lua_Integer)i);
+            if (lua_isinteger(L, -1)) {
+                pfds[n].fd = (int)lua_tointeger(L, -1);
+                pfds[n].events = POLLOUT;
+                pfds[n].revents = 0;
+                which[n] = 1;
+                n++;
+            }
+            lua_pop(L, 1);
+        }
+    }
+    long timeout_ms = luaL_optinteger(L, 3, 80);
+    if (timeout_ms < 0)
+        timeout_ms = 0;
+    if (n > 0)
+        poll(pfds, (nfds_t)n, (int)timeout_ms);
+    else if (timeout_ms > 0) {
+        struct timespec ts;
+        ts.tv_sec = timeout_ms / 1000;
+        ts.tv_nsec = (timeout_ms % 1000) * 1000L * 1000L;
+        nanosleep(&ts, NULL);
+    }
+    lua_newtable(L);
+    lua_newtable(L);
+    lua_newtable(L);
+    int ri = 1, wi = 1;
+    for (int i = 0; i < n; i++) {
+        if ((pfds[i].revents & (POLLIN | POLLHUP | POLLERR)) != 0 && which[i] == 0) {
+            lua_pushinteger(L, pfds[i].fd);
+            lua_rawseti(L, -3, ri++);
+        }
+        if ((pfds[i].revents & (POLLOUT | POLLERR)) != 0 && which[i] == 1) {
+            lua_pushinteger(L, pfds[i].fd);
+            lua_rawseti(L, -2, wi++);
+        }
+    }
+    lua_setfield(L, -3, "write");
+    lua_setfield(L, -2, "read");
+    return 1;
+}
+
 /* tether.http_stream(method, url, headers, body, on_line, opts) -> true | nil, err
  *
  * on_line(line) is called for every body line (the newline is not included).
  * opts: {timeout_s} connect timeout, default 10 s; {idle_timeout_s} max gap
  * between body bytes, default 60 s. There is deliberately no total timeout so
  * long SSE streams stay open. An HTTP error status is NOT a transport failure:
- * the body is still streamed so the caller can inspect the error JSON. */
+ * the body is still streamed so the caller can inspect the error JSON.
+ * Implemented over the incremental transfer API (same framing as stepped
+ * drains); the blocking watch and spinner-tick behavior are unchanged. */
 static int l_http_stream(lua_State *L)
 {
     const char *method = luaL_checkstring(L, 1);
@@ -800,13 +1456,6 @@ static int l_http_stream(lua_State *L)
         lua_pop(L, 1);
     }
 
-    const char *ca = tether_ca_bundle();
-    if (ca == NULL) {
-        lua_pushnil(L);
-        lua_pushstring(L, "no system CA bundle found");
-        return 2;
-    }
-
     char err[256] = {0};
     struct curl_slist *headers = http_build_headers(L, 3, err, sizeof(err));
     if (err[0] != '\0') {
@@ -824,63 +1473,107 @@ static int l_http_stream(lua_State *L)
         return 2;
     }
 
-    CURL *h = curl_easy_init();
-    if (h == NULL) {
-        curl_slist_free_all(headers);
-        free(body_buf);
-        lua_pushnil(L);
-        lua_pushstring(L, "cannot create HTTP handle");
-        return 2;
-    }
-
-    struct stream_ctx ctx;
-    memset(&ctx, 0, sizeof(ctx));
-    ctx.L = L;
     lua_pushvalue(L, 5);
-    ctx.fn_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+    int fn_ref = luaL_ref(L, LUA_REGISTRYINDEX);
 
-    http_apply_common(h, url, ca, headers);
-    curl_easy_setopt(h, CURLOPT_CONNECTTIMEOUT_MS, (long)(connect_s * 1000.0));
-    /* libcurl has no native idle timeout; the low-speed limit aborts when the
-       transfer stays under 1 byte/s for idle_s seconds. */
-    curl_easy_setopt(h, CURLOPT_LOW_SPEED_LIMIT, 1L);
-    curl_easy_setopt(h, CURLOPT_LOW_SPEED_TIME, (long)idle_s);
-    curl_easy_setopt(h, CURLOPT_WRITEFUNCTION, http_write_cb);
-    curl_easy_setopt(h, CURLOPT_WRITEDATA, &ctx);
-    /* Ctrl+C during a transfer: libcurl calls this between packets, so the
-       turn ends promptly instead of when the provider's stream happens to end. */
-    curl_easy_setopt(h, CURLOPT_NOPROGRESS, 0L);
-    curl_easy_setopt(h, CURLOPT_XFERINFOFUNCTION, http_xferinfo);
-    curl_easy_setopt(h, CURLOPT_XFERINFODATA, NULL);
-    if (body_buf != NULL) {
-        curl_easy_setopt(h, CURLOPT_POSTFIELDS, body_buf);
-        curl_easy_setopt(h, CURLOPT_POSTFIELDSIZE, (long)body_len);
-    }
-    if (method[0] != '\0' && strcasecmp(method, "POST") != 0)
-        curl_easy_setopt(h, CURLOPT_CUSTOMREQUEST, method);
-
-    CURLcode rc = curl_easy_perform(h);
-
-    /* a final line without a trailing newline still counts */
-    if (rc == CURLE_OK && ctx.len > 0 && !ctx.lua_error)
-        stream_emit_line(&ctx);
-
-    luaL_unref(L, LUA_REGISTRYINDEX, ctx.fn_ref);
-    curl_slist_free_all(headers);
-    curl_easy_cleanup(h);
-    free(body_buf);
-    free(ctx.buf);
-
-    if (ctx.lua_error) {
+    struct http_xfer *x = xfer_create(method, url, headers, body_buf,
+                                      body_len, connect_s, idle_s,
+                                      err, sizeof(err));
+    if (x == NULL) {
+        luaL_unref(L, LUA_REGISTRYINDEX, fn_ref);
         lua_pushnil(L);
-        lua_pushstring(L, ctx.lua_err);
+        lua_pushstring(L, err);
         return 2;
     }
-    if (rc != CURLE_OK) {
+
+    int lua_error = 0;
+    char lua_err[256] = {0};
+    while (!x->done) {
+        if (poll_interrupt()) {
+            x->aborted = 1;
+        }
+        /* one step per spinner quantum, like the old multi loop */
+        int numfds = 0;
+        if (!x->done && !x->aborted) {
+            if (curl_multi_poll(x->m, NULL, 0,
+                                SPINNER_QUANTUM_MS, &numfds) != CURLM_OK) {
+                x->done = 1;
+                x->failed = 1;
+                snprintf(x->err, sizeof(x->err), "poll failed");
+            } else {
+                int still_running = 0;
+                if (curl_multi_perform(x->m, &still_running) != CURLM_OK)
+                    still_running = 0;
+                CURLMsg *msg;
+                int left = 0;
+                while ((msg = curl_multi_info_read(x->m, &left)) != NULL) {
+                    if (msg->msg == CURLMSG_DONE && msg->easy_handle == x->h) {
+                        x->done = 1;
+                        if (msg->data.result == CURLE_OK) {
+                            xfer_flush_part(x);
+                        } else {
+                            x->failed = 1;
+                            snprintf(x->err, sizeof(x->err), "%s",
+                                     curl_easy_strerror(msg->data.result));
+                        }
+                    }
+                }
+                if (!still_running && !x->done) {
+                    x->done = 1;
+                    xfer_flush_part(x);
+                }
+            }
+        }
+        if (x->aborted && !x->done) {
+            curl_multi_remove_handle(x->m, x->h);
+            x->done = 1;
+            x->failed = 1;
+            snprintf(x->err, sizeof(x->err), "%s",
+                     curl_easy_strerror(CURLE_ABORTED_BY_CALLBACK));
+        }
+        /* deliver every queued line in order, exactly like the old callback */
+        for (size_t i = 0; i < x->lines.n && !lua_error; i++) {
+            lua_rawgeti(L, LUA_REGISTRYINDEX, fn_ref);
+            lua_pushstring(L, x->lines.v[i]);
+            if (lua_pcall(L, 1, 0, 0) != LUA_OK) {
+                lua_error = 1;
+                const char *m = lua_tostring(L, -1);
+                snprintf(lua_err, sizeof(lua_err), "%s", m ? m : "?");
+                lua_pop(L, 1);
+            }
+            free(x->lines.v[i]);
+        }
+        free(x->lines.v);
+        x->lines.v = NULL;
+        x->lines.n = 0;
+        x->lines.cap = 0;
+        if (lua_error) {
+            x->aborted = 1;
+            if (!x->done) {
+                curl_multi_remove_handle(x->m, x->h);
+                x->done = 1;
+                x->failed = 1;
+            }
+        }
+        spinner_tick_call(L);
+    }
+
+    luaL_unref(L, LUA_REGISTRYINDEX, fn_ref);
+    if (lua_error) {
+        xfer_destroy(x);
         lua_pushnil(L);
-        lua_pushstring(L, curl_easy_strerror(rc));
+        lua_pushstring(L, lua_err);
         return 2;
     }
+    if (x->failed) {
+        char ebuf[256];
+        snprintf(ebuf, sizeof(ebuf), "%s", x->err[0] ? x->err : "transfer failed");
+        xfer_destroy(x);
+        lua_pushnil(L);
+        lua_pushstring(L, ebuf);
+        return 2;
+    }
+    xfer_destroy(x);
     lua_pushboolean(L, 1);
     return 1;
 }
@@ -894,9 +1587,10 @@ static int l_http_stream(lua_State *L)
  * The Lua side picks the file up later (commands.poll_models_refresh).
  * @file header entries are read into memory before fork and unlinked right
  * away, so no temp-file race exists. The child never touches the terminal
- * (stdio goes to /dev/null) and children are reaped automatically (SIGCHLD
- * is ignored at startup). There is no Lua interaction in the child, so no
- * state can leak back except the outpath file. */
+ * (stdio goes to /dev/null) and the grandchild is reaped by init (double
+ * fork — SIGCHLD stays at its default disposition so system()/wait keep
+ * working). There is no Lua interaction in the child, so no state can leak
+ * back except the outpath file. */
 static int l_fetch_bg(lua_State *L)
 {
     const char *url = luaL_checkstring(L, 1);
@@ -941,11 +1635,28 @@ static int l_fetch_bg(lua_State *L)
     }
     if (pid > 0) {
         curl_slist_free_all(headers);
+        /* Reap the intermediate child so no zombie accumulates. It only
+           forwards the grandchild's exit status (waitpid below). */
+        int st = 0;
+        while (waitpid(pid, &st, 0) < 0 && errno == EINTR) {}
         lua_pushboolean(L, 1);
         return 1;
     }
 
-    /* --- child: fetch, write, _exit. No terminal, no Lua, no return. --- */
+    /* --- intermediate child: double-fork, reap the grandchild, _exit. ---
+       The grandchild does the transfer; once reparented to init it cannot
+       leave a zombie in this process, and SIGCHLD stays default so
+       system()/tether.exec keep reporting real exit codes. */
+    pid_t gpid = fork();
+    if (gpid > 0) {
+        int gst = 0;
+        while (waitpid(gpid, &gst, 0) < 0 && errno == EINTR) {}
+        _exit(0);
+    }
+    if (gpid < 0)
+        _exit(1); /* no grandchild: nothing will write the outpath anyway */
+
+    /* --- grandchild: fetch, write, _exit. No terminal, no Lua, no return. --- */
     int devnull = open("/dev/null", O_RDWR);
     if (devnull >= 0) {
         dup2(devnull, STDIN_FILENO);
@@ -1034,8 +1745,13 @@ static int l_http_get(lua_State *L)
     curl_easy_setopt(h, CURLOPT_TIMEOUT_MS, (long)(timeout_s * 1000.0));
     curl_easy_setopt(h, CURLOPT_WRITEFUNCTION, http_body_cb);
     curl_easy_setopt(h, CURLOPT_WRITEDATA, &body);
+    /* same steady tick as the stream path (a /models refresh mid-turn
+       stalled the spinner for up to timeout_s); abort comes free. */
+    curl_easy_setopt(h, CURLOPT_NOPROGRESS, 0L);
+    curl_easy_setopt(h, CURLOPT_XFERINFOFUNCTION, http_xferinfo);
+    curl_easy_setopt(h, CURLOPT_XFERINFODATA, (void *)L);
 
-    CURLcode rc = curl_easy_perform(h);
+    CURLcode rc = stream_perform(h, L);
     long status = 0;
     curl_easy_getinfo(h, CURLINFO_RESPONSE_CODE, &status);
     curl_slist_free_all(headers);
@@ -1076,12 +1792,19 @@ static int l_sleep(lua_State *L)
     double secs = luaL_optnumber(L, 1, 0.0);
     if (secs <= 0.0) return 0;
     if (g_stdin_eof) {
-        /* nothing to watch: a poll on a closed stdin would return at once */
-        long us = (long)(secs * 1000000);
-        struct timespec ts;
-        ts.tv_sec = us / 1000000;
-        ts.tv_nsec = (us % 1000000) * 1000L;
-        nanosleep(&ts, NULL);
+        /* nothing to watch: a poll on a closed stdin would return at once.
+           Still sleep in spinner quanta so the tick fires here too. */
+        double left = secs;
+        while (left > 0.0) {
+            double slice = left > (double)SPINNER_QUANTUM_MS / 1000.0
+                ? (double)SPINNER_QUANTUM_MS / 1000.0 : left;
+            struct timespec ts;
+            ts.tv_sec = (time_t)slice;
+            ts.tv_nsec = (long)((slice - (double)ts.tv_sec) * 1e9);
+            nanosleep(&ts, NULL);
+            left -= slice;
+            spinner_tick_call(L);
+        }
         return 0;
     }
     struct timespec start, now;
@@ -1094,12 +1817,17 @@ static int l_sleep(lua_State *L)
         double remaining = secs - elapsed;
         if (remaining <= 0.0) break;
         int ms = (int)(remaining * 1000.0);
-        if (ms > 200) ms = 200; /* bounded: re-check the flag at least every 200ms */
+        /* bounded: re-check the flag on the spinner cadence. The retry
+           backoff sleeps here with no transfer in flight, so without a tick
+           the spinner froze for the whole wait (the tick itself throttles
+           to the same quantum, so firing it every loop is safe). */
+        if (ms > SPINNER_QUANTUM_MS) ms = SPINNER_QUANTUM_MS;
         struct pollfd pfd;
         pfd.fd = STDIN_FILENO;
         pfd.events = POLLIN;
         pfd.revents = 0;
         poll(&pfd, 1, ms); /* returns early when the user types */
+        spinner_tick_call(L);
     }
     return 0;
 }/* add-retry-and-continuation: does the user want this turn stopped? The flag
@@ -1151,11 +1879,22 @@ static int l_detect_kb_protocol(lua_State *L)
     return 1;
 }
 
+static int l_xfer_gc(lua_State *L)
+{
+    struct http_xfer **pp = luaL_checkudata(L, 1, "tether.http_xfer");
+    if (pp != NULL && *pp != NULL) {
+        xfer_destroy(*pp);
+        *pp = NULL;
+    }
+    return 0;
+}
+
 static luaL_Reg tether_api[] = {
     {"read_char",       l_read_char},
     {"read_char_nb",    l_read_char_nb},
     {"write",           l_write},
     {"exec",        l_exec},
+    {"rs256_sign",     l_rs256_sign},
     {"realpath",    l_realpath},
     {"getcwd",      l_getcwd},
     {"is_tty",      l_tty},
@@ -1167,6 +1906,14 @@ static luaL_Reg tether_api[] = {
     {"krep_search", l_krep_search},
     {"http_stream", l_http_stream},
     {"http_get",    l_http_get},
+    {"http_start",  l_http_start},
+    {"http_step",   l_http_step},
+    {"http_lines",  l_http_lines},
+    {"http_abort",  l_http_abort},
+    {"http_free",   l_http_free},
+    {"http_fds",    l_http_fds},
+    {"poll",        l_poll},
+    {"set_tick_hook", l_set_tick_hook},
     {"fetch_bg",    l_fetch_bg},
     {"resize_requested", l_resize_requested},
     {"sleep",         l_sleep},
@@ -1183,6 +1930,10 @@ static void open_tether_api(lua_State *L)
     curl_global_init(CURL_GLOBAL_DEFAULT);
     luaL_newlib(L, tether_api);
     lua_setglobal(L, "tether");
+    luaL_newmetatable(L, "tether.http_xfer");
+    lua_pushcfunction(L, l_xfer_gc);
+    lua_setfield(L, -2, "__gc");
+    lua_pop(L, 1);
 }
 
 /* Load a Lua chunk, execute it, store its single return value in global `name`. */
@@ -1251,6 +2002,8 @@ int main(int argc, char **argv)
         { confirm_policy_lua, "confirm_policy" },
         /* auth: OAuth/API-key store for /login /logout (src/tether/auth.lua) */
         { auth_lua, "auth" },
+        /* reactor: single-threaded event loop over stdin+transport+timers */
+        { reactor_lua, "reactor" },
         /* transcript: visible conversation model; ui loads it before State */
         { transcript_lua, "transcript" },
         /* commands: session lifecycle + slash side effects (src/tether/commands.lua) */
