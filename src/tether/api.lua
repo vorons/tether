@@ -52,12 +52,15 @@ local function wire_spec(wire)
 end
 
 local function provider_of(cfg)
-    local name = (cfg and cfg.provider) or "openai"
+    -- dynamic-provider-catalog: the default is the local-first bootstrap id;
+    -- unknown ids warn and behave as the default (spec: Provider selection).
+    local default_id = (catalog and catalog.DEFAULT_ID) or "openai"
+    local name = (cfg and cfg.provider) or default_id
     local entry = catalog and catalog.get(name)
     if not entry then
         warn_unknown(name)
-        name = "openai"
-        entry = catalog and catalog.get("openai")
+        name = default_id
+        entry = catalog and catalog.get(default_id)
     end
     local wire = (entry and entry.wire) or "openai"
     if not catalog then
@@ -220,6 +223,23 @@ local function expand_url(url, cfg)
         return v
     end))
 end
+
+-- dynamic-provider-catalog: loopback test for keyless local listing.
+-- Only localhost / 127.0.0.0/8 / ::1 ever qualify; LAN and public hosts
+-- always need a key (a dummy value works — runtimes ignore Bearer).
+local function is_loopback(url)
+    if type(url) ~= "string" then return false end
+    local host = url:match("^https?://%[([^%]]+)%]") -- [::1]:port
+        or url:match("^https?://([^/:]+)")
+    if not host then return false end
+    host = host:lower()
+    if host == "localhost" then return true end
+    if host == "::1" or host == "[::1]" then return true end
+    if host:match("^127%.%d+%.%d+%.%d+$") then return true end
+    return false
+end
+
+M._is_loopback = is_loopback -- test seam (also used by commands)
 
 -- Test seam: parse a models body through the active adapter.
 function M._parse_models(cfg, body)
@@ -553,11 +573,21 @@ local NATIVE_WIRES = { openai = true, anthropic = true, gemini = true }
 function M.list_models(cfg)
     local pname, P = provider_of(cfg)
     local entry = M._catalog_entry(pname)
-    -- expand-provider-catalog: alias presets resolve live /models only —
-    -- the shared wire module's static list belongs to another provider.
-    -- Native ids and Tier-B adapters use their own static_models().
+    -- dynamic-provider-catalog: native ids and Tier-B adapters keep their
+    -- curated static_models(); every other id falls back to its
+    -- pipeline/bundled models[] (ids only), else empty. Live listing stays
+    -- authoritative one layer up (commands.list_models tries live first).
     if entry and NATIVE_WIRES[entry.wire] and pname ~= entry.wire then
-        return {}
+        local ids = {}
+        if type(entry.models) == "table" then
+            for _, m in ipairs(entry.models) do
+                local id = (type(m) == "table" and m.id) or m
+                if type(id) == "string" and id ~= "" then
+                    ids[#ids + 1] = id
+                end
+            end
+        end
+        return ids
     end
     return P.static_models()
 end
@@ -569,6 +599,10 @@ function M.list_models_live(cfg, api_key, timeout_s)
         -- expand-provider-catalog: ambient credentials (Bedrock AWS chain)
         -- count as a key; the adapter signs without a bearer token.
         if P.ambient and P.ambient(cfg) then
+            api_key = ""
+        -- dynamic-provider-catalog: local runtimes take no key. Loopback
+        -- only — a keyless request to a non-loopback host never happens.
+        elseif M._is_loopback(expand_url(cfg.base_url or "", cfg)) then
             api_key = ""
         else
             return nil, "no api key"

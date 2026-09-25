@@ -155,6 +155,16 @@ local function keyless_err(cfg, provider)
             and cfg.providers[provider]) or {}
         env_name = p.api_key_env or ""
     end
+    -- dynamic-provider-catalog: api_key_env may be a list; name the first.
+    if type(env_name) == "table" then
+        env_name = type(env_name[1]) == "string" and env_name[1] or ""
+    end
+    -- dynamic-provider-catalog: locals fail for lack of runtime, not key.
+    local base = (type(cfg) == "table" and cfg.base_url) or ""
+    if api and api._is_loopback and api._is_loopback(base) then
+        return "no models for " .. provider
+            .. ": is the local runtime running at " .. base .. "?"
+    end
     local err = "no models for " .. provider .. ": no API key"
     if env_name ~= "" then
         err = err .. " (/login " .. provider .. " or $" .. env_name .. ")"
@@ -207,7 +217,11 @@ function M.list_models(cfg, api_key)
         -- ambient-keyless adapters (Bedrock chain) still attempt live.
         local can_ambient = api and api._has_ambient
             and api._has_ambient(cfg) or false
-        if not can_ambient then
+        -- dynamic-provider-catalog: loopback locals attempt live keyless.
+        local is_local = api and api._is_loopback
+            and api._is_loopback((type(cfg) == "table" and cfg.base_url) or "")
+            or false
+        if not can_ambient and not is_local then
             if #display == 0 then
                 return display, nil, keyless_err(cfg, provider)
             end
@@ -256,8 +270,16 @@ function M.list_models(cfg, api_key)
         end
         local ferr = nil
         if #display == 0 then
-            ferr = reason and (provider .. ": " .. reason)
-                or (provider .. ": listing unavailable")
+            -- dynamic-provider-catalog: a dead loopback runtime gets the
+            -- runtime hint (with the transport reason), not a key complaint.
+            local base = (type(cfg) == "table" and cfg.base_url) or ""
+            if api and api._is_loopback and api._is_loopback(base) then
+                ferr = keyless_err(cfg, provider)
+                    .. (reason and (" (" .. reason .. ")") or "")
+            else
+                ferr = reason and (provider .. ": " .. reason)
+                    or (provider .. ": listing unavailable")
+            end
         end
         cache[provider] = { checked_at = now,
             models = ((stale and #stale > 0) and stale) or {},
@@ -280,6 +302,164 @@ local function config_module()
         cfgmod = chunk and chunk() or nil
     end
     return cfgmod
+end
+
+local function catalog_module()
+    local cat = rawget(_G, "provider_catalog")
+    if not cat then
+        local chunk = loadfile("src/tether/providers/catalog.lua")
+        cat = chunk and chunk() or nil
+    end
+    return cat
+end
+
+-- dynamic-provider-catalog: sync refresh for the pipeline providers file.
+-- Mirror of the models-cache discipline: fresh cache serves with zero
+-- network; otherwise one background fetch (20s cap) or, without fetch_bg,
+-- a single sync attempt. Returns a status string:
+-- "fresh" | "background" | "ok" | "stale" | "missing" plus an optional
+-- error reason. Never blocks without a host http client (plain-lua safe).
+local PROVIDERS_SYNC_TIMEOUT_S = 10
+
+function M.sync_providers(home, url)
+    local cat = catalog_module()
+    if not cat then return "missing", "no catalog module" end
+    local path = cat.cache_path(home)
+    local cache = read_cache(path)
+    local now = os.time()
+    local checked = tonumber(cache.checked_at)
+    if checked and (now - checked) < (cat.CACHE_TTL or 12 * 3600) then
+        return "fresh"
+    end
+    local u = url or cat.PROVIDERS_URL
+    local th = rawget(_G, "tether")
+    local has_old = cache.providers ~= nil
+    -- Background refresh only when old data can serve meanwhile. With no
+    -- cache at all the first run blocks on one sync attempt — otherwise a
+    -- fresh install could never bootstrap its catalog (permanent brick:
+    -- the gate below fails before any background fetch could land).
+    if th and th.fetch_bg and has_old then
+        local pend = cat.pending_path(home)
+        local pf = io.open(pend, "r")
+        if pf then
+            pf:close()
+            return "background"
+        end
+        local mf = io.open(pend, "w")
+        if mf then
+            mf:close()
+            local ok, res = pcall(th.fetch_bg, u, {}, pend, 20)
+            if ok and res then return "background" end
+            os.remove(pend)
+        end
+    end
+    if th and th.http_get then
+        local ok, body, herr = pcall(th.http_get, u, {}, PROVIDERS_SYNC_TIMEOUT_S)
+        if ok and type(body) == "string" and body ~= "" then
+            local tbl, perr = cat.parse_file(body)
+            if tbl then
+                write_cache(path, { checked_at = now, schema = tbl.schema,
+                    generated_at = tbl.generated_at, providers = tbl.providers })
+                return "ok"
+            end
+            if cache.providers then return "stale", perr end
+            return "missing", perr
+        end
+        if cache.providers then return "stale", herr or "request failed" end
+        return "missing", herr or "request failed"
+    end
+    if cache.providers then return "stale", "no http client" end
+    return "missing", "no http client"
+end
+
+-- Consume a finished providers background fetch: verify, store, re-merge
+-- so the running session picks it up. Returns "updated" | "waiting" |
+-- "settled" (mirror of poll_one for model lists).
+function M.poll_providers(home)
+    local cat = catalog_module()
+    if not cat then return "settled" end
+    local pend = cat.pending_path(home)
+    local f = io.open(pend, "r")
+    if not f then return "settled" end
+    local body = f:read("*a")
+    f:close()
+    if not body or body == "" then
+        -- empty marker: child hasn't finished; a marker older than 120s is
+        -- a crashed child — drop it and settle (same rule as model lists).
+        local th = rawget(_G, "tether")
+        if th and th.stat then
+            local ok, st = pcall(th.stat, pend)
+            if ok and type(st) == "table" and tonumber(st.mtime)
+                and (os.time() - st.mtime) > 120 then
+                os.remove(pend)
+                return "settled"
+            end
+        end
+        return "waiting"
+    end
+    os.remove(pend)
+    local tbl, perr = cat.parse_file(body or "")
+    local now = os.time()
+    if not tbl then
+        -- failure cools down like a models miss: checked_at persists so a
+        -- dead source blocks at most once per TTL, not per open.
+        local old = read_cache(cat.cache_path(home))
+        write_cache(cat.cache_path(home), { checked_at = now,
+            schema = old.schema, generated_at = old.generated_at,
+            providers = old.providers })
+        return "settled"
+    end
+    write_cache(cat.cache_path(home), { checked_at = now, schema = tbl.schema,
+        generated_at = tbl.generated_at, providers = tbl.providers })
+    cat.set_overlay(nil, nil)
+    cat.ensure(home)
+    return "updated"
+end
+
+-- Startup gate: the active provider must resolve in the merged view.
+-- Unknown id WITH a usable catalog is a typo (api warns + defaults);
+-- without any catalog there is nothing to fall back to: nil + error
+-- naming the cache file. Bootstrap-local ids always pass offline.
+function M.check_providers(home, provider)
+    local cat = catalog_module()
+    if not cat or not cat.ensure then return true end
+    local id = provider or cat.DEFAULT_ID or "openai"
+    local ok, err = cat.ensure(home)
+    if cat.get(id) then return true end
+    if ok then return true end
+    return nil, "tether: " .. tostring(err)
+        .. " (provider '" .. tostring(id) .. "' unavailable)"
+end
+
+-- App boot entry: refresh, then gate. The refresh runs first so a first
+-- run can bootstrap its catalog (sync path when no cache exists) before
+-- the gate judges it. Returns true | nil + error.
+function M.boot_providers(cfg)
+    local home = (type(cfg) == "table" and cfg._auth_home) or nil
+    local provider = (type(cfg) == "table" and cfg.provider) or nil
+    local url = (type(cfg) == "table" and cfg.providers_url) or nil
+    M.sync_providers(home, url)
+    local ok, err = M.check_providers(home, provider)
+    if not ok then return nil, err end
+    return true
+end
+
+-- Catalog age for UI marks: nil when no cache, else
+-- { age_s, stale, text } where stale means data older than the TTL.
+function M.providers_age(home)
+    local cat = catalog_module()
+    if not cat then return nil end
+    local cache = read_cache(cat.cache_path(home))
+    if type(cache.generated_at) ~= "number" then return nil end
+    local now = os.time()
+    local age = now - cache.generated_at
+    if age < 0 then age = 0 end
+    local text
+    if age >= 86400 then text = math.floor(age / 86400) .. "d"
+    elseif age >= 3600 then text = math.floor(age / 3600) .. "h"
+    else text = math.floor(age / 60) .. "m" end
+    local ttl = cat.CACHE_TTL or 12 * 3600
+    return { age_s = age, stale = age > ttl, text = text }
 end
 
 -- Background fetches in flight: provider id → spawn time. list_models_all

@@ -75,6 +75,13 @@ local function run_inner()
     if opts.print_mode then
         -- Non-interactive: run a single agent turn, print final text to stdout
         local cfg = config.load()
+        do
+            local ok, perr = commands.boot_providers(cfg)
+            if not ok then
+                io.stderr:write(tostring(perr) .. "\n")
+                os.exit(1)
+            end
+        end
         if opts.workspace then cfg.workspace = opts.workspace end
         if opts.model then cfg.model = opts.model end
         -- context-injection: CLI agents files feed the composed prompt (merged
@@ -158,6 +165,13 @@ local function run_inner()
     end
 
     local cfg = config.load()
+    do
+        local ok, perr = commands.boot_providers(cfg)
+        if not ok then
+            io.stderr:write(tostring(perr) .. "\n")
+            os.exit(1)
+        end
+    end
     if opts.workspace then
         cfg.workspace = opts.workspace
     end

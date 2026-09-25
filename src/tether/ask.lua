@@ -25,17 +25,17 @@ M.QUESTION_MAX = 1000
 M.DESCRIPTION_MAX = 8000
 
 -- The freeform row is always present; this is the label the UI renders for it.
-M.FREEFORM_LABEL = "Other (ввести свой вариант)"
+M.FREEFORM_LABEL = "Other (type your own)"
 
 -- The truncation marker the rest of the project uses for oversized bodies.
 M.TRUNCATION = "…(truncated)"
 
--- Model-facing error texts (the UI keeps its own Russian strings).
+-- Model-facing error texts (shown to the model, English throughout).
 M.NOTHING_ASKABLE = "ask: no usable question in this request"
 M.NO_INTERACTIVE_USER = "ask unavailable: this run has no interactive user, decide with your own judgement"
 
 -- The row the TUI appends when the user cancels a question set.
-M.CANCELLED_TEXT = "отменён (Esc)"
+M.CANCELLED_TEXT = "cancelled (Esc)"
 
 local function truncate(s, max)
     if type(s) ~= "string" then return nil end
@@ -196,7 +196,7 @@ function M.cancelled_payload()
 end
 
 -- One-line transcript summary of an answered set:
---   "scope=src; priority=Core + «первая»; scope/Vue: too heavy"
+--   "scope=src; priority=Core + 'first'; scope/Vue: too heavy"
 function M.summary(questions, answers)
     questions = questions or {}
     answers = answers or {}

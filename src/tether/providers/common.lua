@@ -175,8 +175,10 @@ function M.json_decode(s)
         elseif s:sub(pos, pos+3) == "null" then
             pos = pos + 4; return nil
         else
-            local st, fin = s:find("%-?%d+%.?%d*[eE][%+%-]?%d+", pos)
-            if not st then st, fin = s:find("%-?%d+%.?%d*", pos) end
+            -- Anchored (^): unanchored find() scans the rest of the
+            -- string on every number (O(n^2) on model lists).
+            local st, fin = s:find("^%-?%d+%.?%d*[eE][%+%-]?%d+", pos)
+            if not st then st, fin = s:find("^%-?%d+%.?%d*", pos) end
             if st then
                 local num = s:sub(st, fin)
                 pos = fin + 1

@@ -40,7 +40,7 @@ local function to_rel(path, cfg)
     return path
 end
 
--- Design §7: symlink-и раскрываются; path traversal через ".." не проходит.
+-- Design §7: symlinks are resolved; path traversal via ".." is rejected.
 local function within_workspace(path, cfg)
     if cfg and cfg.allow_outside_workspace == true then return true end
     local rp = tether.realpath and tether.realpath(path) or nil
@@ -415,7 +415,7 @@ function M.patch(patch_str, cfg)
             files_applied = files_applied + 1
             applied_files[#applied_files + 1] = { file = fname, add = add_count, del = del_count }
         else
-            return nil, string.format("patch conflict in %s — перечитайте файл", fname)
+            return nil, string.format("patch conflict in %s — re-read the file", fname)
         end
     end
 

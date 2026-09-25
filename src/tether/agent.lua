@@ -31,6 +31,34 @@ local retry = _G.retry
     end)()
 assert(retry, "agent: cannot load retry")
 
+-- dynamic-provider-catalog: catalog lookup for the compaction budget.
+-- Shared instance in the binary, loadfile fallback for dev/test runs.
+local catalog = _G.provider_catalog
+    or (function()
+        local chunk = loadfile("src/tether/providers/catalog.lua")
+        return chunk and chunk()
+    end)()
+
+-- Per-model context limit: exact (provider, model) hit, else the
+-- provider's default model, else nil (caller keeps 32768). A model name
+-- matching nothing falls down the chain, never fails.
+local function catalog_max_tokens(cfg)
+    if not (catalog and catalog.get and cfg) then return nil end
+    local entry = catalog.get(cfg.provider)
+    if not (entry and type(entry.models) == "table") then return nil end
+    local want, fallback = cfg.model, entry.model
+    local fb = nil
+    for _, m in ipairs(entry.models) do
+        local id = (type(m) == "table" and m.id) or m
+        local cx = (type(m) == "table" and m.context) or nil
+        if type(cx) == "number" and cx > 0 then
+            if id == want then return cx end
+            if id == fallback then fb = cx end
+        end
+    end
+    return fb
+end
+
 -- add-ask-tool: the structured-question rules (normalisation, answer payload,
 -- transcript summary) live in a pure module — a global in the built binary and
 -- a loadfile fallback for development/plain-lua runs.
@@ -140,13 +168,13 @@ end
 local function tool_summary(name, result)
     if not result then return "" end
     if name == "read" then
-        return (result.line_count or 0) .. " стр."
+        return (result.line_count or 0) .. " lines"
     elseif name == "list" then
-        return (result.count or 0) .. " записей"
+        return (result.count or 0) .. " entries"
     elseif name == "glob" then
-        return (result.count or 0) .. " файлов"
+        return (result.count or 0) .. " files"
     elseif name == "grep" then
-        return (result.count or 0) .. " совп."
+        return (result.count or 0) .. " matches"
     elseif name == "run" then
         return "exit " .. tostring(result.exit_code or "?") .. ", " .. fmt_ms(result.elapsed_ms)
     elseif name == "write" then
@@ -346,7 +374,10 @@ end
 
 local function should_summarize(history, cfg)
     local ctx = (cfg and cfg.context) or {}
-    local max_tokens = tonumber(ctx.max_tokens) or 32768
+    local max_tokens = tonumber(ctx.max_tokens)
+    if not max_tokens then
+        max_tokens = catalog_max_tokens(cfg) or 32768
+    end
     local fraction = tonumber(ctx.summarize_at)
     if not fraction or fraction <= 0 or fraction >= 1 then fraction = 0.7 end
     local reserve = tonumber(ctx.reserve_tokens)
@@ -497,7 +528,7 @@ local function run_tool_call(cfg, on_event, id, name, args, projection)
         summary = nil
     elseif name == "write" and projection then
         body = projection.diff
-        local word = projection.is_new and "создан" or "перезаписан"
+        local word = projection.is_new and "created" or "overwritten"
         summary = string.format("+%d −%d %s", projection.add, projection.del, word)
     elseif name == "patch" and projection then
         body = projection.diff
@@ -516,7 +547,7 @@ local function run_tool_call(cfg, on_event, id, name, args, projection)
     end
     M.add_tool_result(id, history_result)
     -- the journal keeps the bounded body too (summary alone lobotomized
-    -- resumed turns: the model only saw "17 записей" instead of output).
+    -- resumed turns: the model only saw "17 entries" instead of output).
     slog(cfg, {
         ts = os.date(), type = "tool_result",
         tool_call_id = id, name = name,

@@ -10,9 +10,12 @@ local catalog = _G.provider_catalog
     end)()
 
 local function catalog_providers()
-    if catalog and catalog.entries then
+    -- dynamic-provider-catalog: merged view (bootstrap + cache + models.lua).
+    local all = (catalog and catalog.all and catalog.all())
+        or (catalog and catalog.entries)
+    if all then
         local t = {}
-        for id, e in pairs(catalog.entries) do
+        for id, e in pairs(all) do
             t[id] = {
                 api_key_env = e.api_key_env,
                 base_url = e.base_url or e.url_template,
@@ -42,10 +45,13 @@ end
 
 local function default_config()
     return {
-        provider = "openai",
-        api_key_env = "OPENAI_API_KEY",
-        base_url = "https://api.openai.com/v1",
-        model = "gpt-4o-mini",
+        -- dynamic-provider-catalog: local-first default (llama.cpp);
+        -- cloud providers arrive via the pipeline cache. NOTE: upstream
+        -- `llama` is Meta's cloud API — the local id is `llama-cpp`.
+        provider = "llama-cpp",
+        api_key_env = "LLAMA_API_KEY",
+        base_url = "http://127.0.0.1:8080/v1",
+        model = "",
         -- add-reasoning-level: reasoning effort; only these four levels are
         -- valid (M.load normalizes anything else back to "off").
         reasoning = "off",
@@ -250,10 +256,11 @@ local BOOTSTRAP_ORDER = {
     "workspace", "allow_outside_workspace", "auto_approve",
     "context", "retry", "ui", "tools",
     "system_prompt", "skills_dirs", "agents_files", "log_level",
-    "providers",
+    "providers", "providers_url",
 }
 local BOOTSTRAP_COMMENTS = {
-    provider = "active provider: any catalog id (openai, anthropic, gemini, ...)",
+    provider = "active provider: any catalog id (default llama-cpp = local llama.cpp; cloud ids arrive via the providers cache; override the sync source with providers_url)",
+    providers_url = "override the providers-cache sync source (default: the data file published by .github/workflows/sync-providers.yml)",
     api_key_env = "legacy top-level key env (per-provider providers.<id>.api_key_env wins)",
     base_url = "legacy top-level endpoint (per-provider providers.<id>.base_url wins)",
     model = "legacy top-level model (per-provider providers.<id>.model wins; /model writes here)",
@@ -269,7 +276,7 @@ local BOOTSTRAP_COMMENTS = {
     skills_dirs = "nil = default discovery set",
     agents_files = "explicit agents-instruction files",
     log_level = "info or debug",
-    providers = "per-provider overrides (empty = catalog-driven)",
+    providers = "per-provider overrides (empty = catalog-driven); whole custom providers live in ~/.tether/models.lua",
 }
 
 local function write_lua_value(buf, v, indent)
@@ -353,6 +360,19 @@ local function coerce_nonneg(v, default)
 end
 
 function M.load(path, home)
+    -- dynamic-provider-catalog: merge pipeline cache + models.lua over the
+    -- thin bootstrap BEFORE default_config() snapshots catalog defaults.
+    -- File reads only, no network; a missing cache warns here, the startup
+    -- gate (commands.check_providers) decides brick vs bootstrap-local.
+    do
+        local h = home or os.getenv("HOME")
+        if catalog and catalog.ensure then
+            local ok, err = catalog.ensure(h)
+            if not ok then
+                io.stderr:write("tether: providers: " .. tostring(err) .. "\n")
+            end
+        end
+    end
     local cfg = default_config()
     -- M7/N4: loadfile returns nil+err when the file is missing — the old code
     -- called the result unconditionally and crashed (nil call) on a fresh
@@ -457,6 +477,27 @@ function M.load(path, home)
             or def_p.base_url or cfg.base_url
         cfg.model = up.model or eu.model
             or def_p.model or cfg.model
+    end
+    -- dynamic-provider-catalog: a pinned model absent from the merged
+    -- catalog still resolves (the request goes out verbatim) but warns
+    -- here — pre-TUI startup is the only legal stderr moment. An empty
+    -- merged list means "unknown", never "renamed": no warning then.
+    do
+        local p = cfg.provider
+        local e = (catalog and catalog.get and p) and catalog.get(p) or nil
+        local ids = (e and type(e.models) == "table") and e.models or nil
+        if ids and #ids > 0 and type(cfg.model) == "string" and cfg.model ~= "" then
+            local found = false
+            for _, m in ipairs(ids) do
+                local id = (type(m) == "table" and m.id) or m
+                if id == cfg.model then found = true; break end
+            end
+            if not found then
+                io.stderr:write("tether: model '" .. cfg.model
+                    .. "' not in the providers catalog for '" .. tostring(p)
+                    .. "' (will still try)\n")
+            end
+        end
     end
     -- expand-provider-catalog: merged compound credential pieces for the
     -- active provider (stored entry env over ambient env; see auth).
@@ -642,6 +683,12 @@ function M.api_key(cfg)
     end
     cfg._auth_style = nil
     if env_name == "" then return "" end
+    -- dynamic-provider-catalog: pipeline entries carry api_key_env lists
+    -- ("first set wins"); resolve to one name before getenv.
+    if catalog and catalog.env_name then
+        env_name = catalog.env_name(env_name)
+    end
+    if env_name == nil or env_name == "" then return "" end
     return os.getenv(env_name or "OPENAI_API_KEY") or ""
 end
 
@@ -746,6 +793,9 @@ function M.providers_with_keys(cfg)
         end
         local entry = catalog and catalog.get(id)
         local env_name = entry and entry.api_key_env or nil
+        if catalog and catalog.env_name then
+            env_name = catalog.env_name(env_name)
+        end
         if env_name == nil or env_name == "" then return false end
         return env_set(os.getenv(env_name))
     end

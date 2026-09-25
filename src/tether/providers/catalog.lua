@@ -1,112 +1,31 @@
--- tether providers/catalog — provider preset catalog (pi parity).
--- Maps every supported provider id to its wire protocol, default endpoint,
--- credential env var, and default model. Tier-A entries reuse one of the
--- three wire modules (openai/anthropic/gemini) via the api.lua alias
--- registry — no new adapter, no new embed row. Tier-B entries name an
--- adapter module (src/tether/providers/<wire>.lua).
---
--- Sources: pi packages/ai/src/providers/* + env-api-keys.ts.
--- Model ids are defaults only: live /models listing is authoritative
--- (new presets have no static fallback).
+-- tether providers/catalog — thin bootstrap + merged view.
+-- Tier-A provider data arrives via the pipeline cache
+-- (~/.tether/providers_cache.json, generated from models.dev; see
+-- dynamic-provider-catalog) and an optional user overlay
+-- (~/.tether/models.lua). This file bundles only what the pipeline cannot
+-- provide: local runtimes, Tier-B adapter entries, and endpoint-less ids.
+-- get()/ids() read the merged view; entries stays the bootstrap.
 local M = {}
 
 -- wire: "openai" | "anthropic" | "gemini" | adapter module id (Tier-B).
 -- url_template: {VAR} placeholders expanded from cfg.provider_env/os env.
 -- api_key_env "": provider takes no env key (OAuth/store only).
+--
+-- dynamic-provider-catalog: M.entries is the thin bootstrap only (local
+-- providers + Tier-B adapters + endpoint-less entries). Tier-A arrives via
+-- the pipeline cache (~/.tether/providers_cache.json, see ensure()) and an
+-- optional user overlay (~/.tether/models.lua). get()/ids() read the merged
+-- view; entries stays the bootstrap for reference.
 M.entries = {
-    openai    = { wire = "openai", base_url = "https://api.openai.com/v1",
-                 api_key_env = "OPENAI_API_KEY", model = "gpt-4o-mini" },
-    anthropic = { wire = "anthropic", base_url = "https://api.anthropic.com",
-                 api_key_env = "ANTHROPIC_API_KEY", model = "claude-sonnet-4-20250514" },
-    gemini    = { wire = "gemini", base_url = "https://generativelanguage.googleapis.com",
-                 api_key_env = "GEMINI_API_KEY", model = "gemini-2.5-flash" },
-
-    -- Tier-A: OpenAI-compatible wire
-    deepseek  = { wire = "openai", base_url = "https://api.deepseek.com",
-                 api_key_env = "DEEPSEEK_API_KEY", model = "deepseek-chat" },
-    groq      = { wire = "openai", base_url = "https://api.groq.com/openai/v1",
-                 api_key_env = "GROQ_API_KEY", model = "llama-3.3-70b-versatile" },
-    cerebras  = { wire = "openai", base_url = "https://api.cerebras.ai/v1",
-                 api_key_env = "CEREBRAS_API_KEY", model = "llama-3.3-70b" },
-    xai       = { wire = "openai", base_url = "https://api.x.ai/v1",
-                 api_key_env = "XAI_API_KEY", model = "grok-4" },
-    openrouter = { wire = "openai", base_url = "https://openrouter.ai/api/v1",
-                 api_key_env = "OPENROUTER_API_KEY", model = "openai/gpt-4o-mini" },
-    fireworks = { wire = "openai", base_url = "https://api.fireworks.ai/inference",
-                 api_key_env = "FIREWORKS_API_KEY",
-                 model = "accounts/fireworks/models/llama-v3p3-70b-instruct" },
-    together  = { wire = "openai", base_url = "https://api.together.ai/v1",
-                 api_key_env = "TOGETHER_API_KEY",
-                 model = "meta-llama/Llama-3.3-70B-Instruct-Turbo" },
-    baseten   = { wire = "openai", base_url = "https://inference.baseten.co/v1",
-                 api_key_env = "BASETEN_API_KEY", model = "deepseek-ai/DeepSeek-V3" },
-    nvidia    = { wire = "openai", base_url = "https://integrate.api.nvidia.com/v1",
-                 api_key_env = "NVIDIA_API_KEY", model = "meta/llama-3.3-70b-instruct" },
-    moonshotai = { wire = "openai", base_url = "https://api.moonshot.ai/v1",
-                 api_key_env = "MOONSHOT_API_KEY", model = "kimi-k2-0711-preview" },
-    ["moonshotai-cn"] = { wire = "openai", base_url = "https://api.moonshot.cn/v1",
-                 api_key_env = "MOONSHOT_API_KEY", model = "kimi-k2-0711-preview" },
-    huggingface = { wire = "openai", base_url = "https://router.huggingface.co/v1",
-                 api_key_env = "HF_TOKEN", model = "meta-llama/Llama-3.3-70B-Instruct" },
-    zai       = { wire = "openai", base_url = "https://api.z.ai/api/coding/paas/v4",
-                 api_key_env = "ZAI_API_KEY", model = "glm-4.5" },
-    ["zai-coding-cn"] = { wire = "openai", base_url = "https://open.bigmodel.cn/api/coding/paas/v4",
-                 api_key_env = "ZAI_CODING_CN_API_KEY", model = "glm-4.5" },
-    ["qwen-token-plan"] = { wire = "openai",
-                 base_url = "https://token-plan.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1",
-                 api_key_env = "QWEN_TOKEN_PLAN_API_KEY", model = "qwen-max" },
-    ["qwen-token-plan-cn"] = { wire = "openai",
-                 base_url = "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1",
-                 api_key_env = "QWEN_TOKEN_PLAN_CN_API_KEY", model = "qwen-max" },
-    ["qwen-token-plan-individual"] = { wire = "openai",
-                 base_url = "https://token-plan.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1",
-                 api_key_env = "QWEN_TOKEN_PLAN_API_KEY", model = "qwen-max" },
-    xiaomi    = { wire = "openai", base_url = "https://api.xiaomimimo.com/v1",
-                 api_key_env = "XIAOMI_API_KEY", model = "mimo-7b" },
-    ["xiaomi-token-plan-cn"] = { wire = "openai",
-                 base_url = "https://token-plan-cn.xiaomimimo.com/v1",
-                 api_key_env = "XIAOMI_TOKEN_PLAN_CN_API_KEY", model = "mimo-7b" },
-    ["xiaomi-token-plan-ams"] = { wire = "openai",
-                 base_url = "https://token-plan-ams.xiaomimimo.com/v1",
-                 api_key_env = "XIAOMI_TOKEN_PLAN_AMS_API_KEY", model = "mimo-7b" },
-    ["xiaomi-token-plan-sgp"] = { wire = "openai",
-                 base_url = "https://token-plan-sgp.xiaomimimo.com/v1",
-                 api_key_env = "XIAOMI_TOKEN_PLAN_SGP_API_KEY", model = "mimo-7b" },
-    ["ant-ling"] = { wire = "openai", base_url = "https://api.ant-ling.com/v1",
-                 api_key_env = "ANT_LING_API_KEY", model = "Ling-2.6-flash" },
-    -- pi-agnes extension (Agnes AI, OpenAI-compatible, Bearer, /v1/models)
-    agnes     = { wire = "openai", base_url = "https://apihub.agnes-ai.com/v1",
-                 api_key_env = "AGNES_API_KEY", model = "agnes-2.5-flash" },
-    ["agnes-cn"] = { wire = "openai", base_url = "https://api.agnes-ai.cn/v1",
-                 api_key_env = "AGNES_CN_API_KEY", model = "agnes-2.5-flash" },
-    mistral   = { wire = "openai", base_url = "https://api.mistral.ai/v1",
-                 api_key_env = "MISTRAL_API_KEY", model = "mistral-large-latest" },
-    -- pi serves Meta over openai-responses; chat-completions is best-effort.
-    meta      = { wire = "openai", base_url = "https://api.meta.ai/v1",
-                 api_key_env = "META_API_KEY", model = "muse" },
-    ["github-copilot"] = { wire = "openai",
-                 base_url = "https://api.individual.githubcopilot.com",
-                 api_key_env = "COPILOT_GITHUB_TOKEN", model = "gpt-4.1" },
-    opencode  = { wire = "openai", base_url = "https://opencode.ai/zen/v1",
-                 api_key_env = "OPENCODE_API_KEY", model = "kimi-k2.6" },
-    ["opencode-go"] = { wire = "openai", base_url = "https://opencode.ai/zen/go/v1",
-                 api_key_env = "OPENCODE_API_KEY", model = "kimi-k2.6" },
-    llama     = { wire = "openai", base_url = "http://127.0.0.1:8080/v1",
+    -- Local runtimes (loopback; keyless live listing, offline-capable).
+    -- NOTE: upstream `llama` is Meta's cloud Llama API, not llama.cpp —
+    -- the local default lives under `llama-cpp` and never collides.
+    ["llama-cpp"] = { wire = "openai", base_url = "http://127.0.0.1:8080/v1",
                  api_key_env = "LLAMA_API_KEY", model = "" },
-    ["cloudflare-workers-ai"] = { wire = "openai",
-                 url_template = "https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOUNT_ID}/ai/v1",
-                 api_key_env = "CLOUDFLARE_API_KEY",
-                 model = "@cf/meta/llama-3.3-70b-instruct-fp8-fast" },
-
-    -- Tier-A: Anthropic-compatible wire
-    ["kimi-coding"] = { wire = "anthropic", base_url = "https://api.kimi.com/coding",
-                 api_key_env = "KIMI_API_KEY", model = "kimi-for-coding" },
-    minimax   = { wire = "anthropic", base_url = "https://api.minimax.io/anthropic",
-                 api_key_env = "MINIMAX_API_KEY", model = "MiniMax-M2.7" },
-    ["minimax-cn"] = { wire = "anthropic", base_url = "https://api.minimaxi.com/anthropic",
-                 api_key_env = "MINIMAX_CN_API_KEY", model = "MiniMax-M2.7" },
-    ["vercel-ai-gateway"] = { wire = "anthropic", base_url = "https://ai-gateway.vercel.sh",
-                 api_key_env = "AI_GATEWAY_API_KEY", model = "anthropic/claude-sonnet-4" },
+    ollama    = { wire = "openai", base_url = "http://localhost:11434/v1",
+                 api_key_env = "OLLAMA_API_KEY", model = "" },
+    lmstudio  = { wire = "openai", base_url = "http://127.0.0.1:1234/v1",
+                 api_key_env = "LMSTUDIO_API_KEY", model = "" },
 
     -- Tier-B: own adapter modules (src/tether/providers/<wire>.lua)
     ["azure-openai"] = { wire = "azure-openai",
@@ -130,18 +49,226 @@ M.entries = {
 -- Picker order: the big three first, then alphabetical.
 local PINNED = { "openai", "anthropic", "gemini" }
 
+-- dynamic-provider-catalog: sync source. The owner/repo default matches the
+-- workflow in .github/workflows/sync-providers.yml; override with
+-- cfg.providers_url (top-level) when the data lives elsewhere.
+M.PROVIDERS_URL =
+    "https://raw.githubusercontent.com/vorons/tether/main/data/providers.json"
+M.SCHEMA_VERSION = 1
+M.CACHE_TTL = 12 * 3600
+M.DEFAULT_ID = "llama-cpp"
+
+local function home_dir(home)
+    if type(home) == "string" and home ~= "" then return home end
+    -- TETHER_HOME overrides HOME (portable installs, test isolation).
+    local t = os.getenv("TETHER_HOME")
+    if type(t) == "string" and t ~= "" then return t end
+    return os.getenv("HOME") or "."
+end
+
+function M.cache_path(home)
+    return home_dir(home) .. "/.tether/providers_cache.json"
+end
+
+function M.pending_path(home)
+    return M.cache_path(home) .. ".pending"
+end
+
+function M.models_lua_path(home)
+    return home_dir(home) .. "/.tether/models.lua"
+end
+
+local function common()
+    return _G.provider_common
+        or (function()
+            local chunk = loadfile("src/tether/providers/common.lua")
+            return chunk and chunk()
+        end)()
+end
+
+-- Verify a downloaded providers file. Returns the decoded table or
+-- nil + reason. Unknown fields are ignored; an unsupported schema major
+-- discards the whole file (caller falls back to stale cache).
+function M.parse_file(body)
+    if type(body) ~= "string" or body == "" then
+        return nil, "empty providers file"
+    end
+    if body:match("^FETCH_FAILED") then
+        return nil, (body:match("^FETCH_FAILED%s*(.-)%s*$") or "request failed")
+    end
+    local c = common()
+    if not c then return nil, "no json parser" end
+    local ok, tbl = pcall(c.json_decode, body)
+    if not ok or type(tbl) ~= "table" then
+        return nil, "unparseable providers file"
+    end
+    if tbl.schema ~= M.SCHEMA_VERSION then
+        return nil, "unsupported providers schema " .. tostring(tbl.schema)
+    end
+    if type(tbl.providers) ~= "table" then
+        return nil, "providers file has no providers table"
+    end
+    return tbl
+end
+
+-- Read the optional user overlay. Missing file is silent (nil, nil);
+-- a broken file warns to stderr and is ignored (nil + reason).
+function M.read_models_lua(home)
+    local path = M.models_lua_path(home)
+    local f = io.open(path, "r")
+    if not f then return nil end
+    f:close()
+    local chunk, err = loadfile(path)
+    if not chunk then
+        io.stderr:write("tether: models error: " .. tostring(err) .. "\n")
+        return nil, err
+    end
+    local ok, tbl = pcall(chunk)
+    if not ok or type(tbl) ~= "table" then
+        io.stderr:write("tether: models error: file must return a table\n")
+        return nil, "file must return a table"
+    end
+    if tbl.providers ~= nil and type(tbl.providers) ~= "table" then
+        io.stderr:write("tether: models error: providers must be a table\n")
+        return nil, "providers must be a table"
+    end
+    return tbl.providers or {}
+end
+
+local function copy_entry(e)
+    if type(e) ~= "table" then return nil end
+    local out = {}
+    for k, v in pairs(e) do out[k] = v end
+    return out
+end
+
+-- Merge layers low -> high: bootstrap < pipeline cache < models.lua
+-- (whole entry per id). Pure function over inputs; never mutates them.
+-- Returns merged entries + meta {generated_at, sources}.
+function M.merge(bootstrap, cache_providers, models_lua_providers, generated_at)
+    local merged = {}
+    if type(bootstrap) == "table" then
+        for id, e in pairs(bootstrap) do
+            local c = copy_entry(e)
+            if c then c._source = "bootstrap"; merged[id] = c end
+        end
+    end
+    if type(cache_providers) == "table" then
+        for id, e in pairs(cache_providers) do
+            if type(id) == "string" and type(e) == "table" then
+                local c = copy_entry(e)
+                c._source = "cache"
+                merged[id] = c
+            end
+        end
+    end
+    if type(models_lua_providers) == "table" then
+        for id, e in pairs(models_lua_providers) do
+            if type(id) == "string" and type(e) == "table" then
+                local c = copy_entry(e)
+                c._source = "models.lua"
+                merged[id] = c
+            end
+        end
+    end
+    return merged, { generated_at = generated_at,
+        bootstrap = type(bootstrap) == "table",
+        cache = type(cache_providers) == "table",
+        overlay = type(models_lua_providers) == "table" }
+end
+
+-- Merged view state. ensure() fills it once per process+home; get()/ids()
+-- fall back to the bootstrap when it is empty (tests, dev runs).
+M._merged = nil
+M._meta = nil
+M._home = nil
+
+-- Test seam / poll hook: layer entries over the bootstrap as the merged
+-- view (same position as the pipeline cache layer). nil clears the view
+-- (poll re-merges from disk right after).
+function M.set_overlay(entries, meta)
+    if entries == nil then
+        M._merged, M._meta, M._home = nil, nil, nil
+        return
+    end
+    local merged, m = M.merge(M.entries, entries, nil, nil)
+    M._merged = merged
+    M._meta = meta
+end
+
+function M.overlay_meta()
+    return M._meta
+end
+
+-- Load cache + models.lua from home and merge over the bootstrap.
+-- Returns "ready" | nil + reason. Missing cache is nil + a naming error
+-- (the caller decides: bootstrap-local ids still work offline).
+function M.ensure(home)
+    -- one home per process in prod; a different home re-merges (tests use
+    -- several temp homes in one process — a stale merge would leak).
+    if M._merged and M._home == home then return "ready" end
+    local cache_providers, generated_at = nil, nil
+    local cf = io.open(M.cache_path(home), "r")
+    local cache_err = nil
+    if cf then
+        local body = cf:read("*a")
+        cf:close()
+        local tbl, err = M.parse_file(body or "")
+        if tbl then
+            cache_providers, generated_at = tbl.providers, tbl.generated_at
+        else
+            cache_err = err
+        end
+    else
+        cache_err = "no providers cache at " .. M.cache_path(home)
+    end
+    local overlay = M.read_models_lua(home)
+    if not cache_providers and not overlay then
+        return nil, cache_err or "no providers available"
+    end
+    if cache_err and not cache_providers then
+        io.stderr:write("tether: providers cache ignored (" .. cache_err .. ")\n")
+    end
+    local merged, meta = M.merge(M.entries, cache_providers, overlay,
+        generated_at)
+    M._merged = merged
+    M._meta = meta
+    M._home = home
+    return "ready"
+end
+
+-- Resolve an api_key_env value (string or list) to a single var name.
+-- Lists mean "first set wins" (pipeline entries carry every known var);
+-- with none set the first name is returned so diagnostics name a var.
+function M.env_name(v)
+    if type(v) ~= "table" then return v end
+    for _, name in ipairs(v) do
+        if type(name) == "string" and name ~= "" then
+            local val = os.getenv(name)
+            if val ~= nil and val ~= "" then return name end
+        end
+    end
+    return type(v[1]) == "string" and v[1] or nil
+end
+
+-- Full merged view (bootstrap when no overlay loaded yet).
+function M.all()
+    return M._merged or M.entries
+end
+
 function M.get(id)
     if type(id) ~= "string" then return nil end
-    return M.entries[id]
+    return M.all()[id]
 end
 
 function M.ids()
+    local all = M.all()
     local out = {}
     for _, id in ipairs(PINNED) do
-        if M.entries[id] then out[#out + 1] = id end
+        if all[id] then out[#out + 1] = id end
     end
     local rest = {}
-    for id in pairs(M.entries) do
+    for id in pairs(all) do
         if id ~= "openai" and id ~= "anthropic" and id ~= "gemini" then
             rest[#rest + 1] = id
         end
@@ -153,7 +280,7 @@ end
 
 function M.count()
     local n = 0
-    for _ in pairs(M.entries) do n = n + 1 end
+    for _ in pairs(M.all()) do n = n + 1 end
     return n
 end
 
@@ -163,7 +290,7 @@ end
 -- oauth_client_id + oauth_token_url + oauth_authorize_url → code flow.
 -- Otherwise nil (the caller falls back to API-key paste).
 function M.login_flow(cfg, id)
-    if type(id) ~= "string" or not M.entries[id] then return nil end
+    if type(id) ~= "string" or not M.all()[id] then return nil end
     local p = (type(cfg) == "table" and type(cfg.providers) == "table"
         and type(cfg.providers[id]) == "table") and cfg.providers[id] or {}
     local cid = p.oauth_client_id

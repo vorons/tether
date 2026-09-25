@@ -897,18 +897,18 @@ M.SPINNER_ASCII = SPINNER_ASCII
 
 local SLASH_COMMANDS = {
     -- M9: /help, /status, /log removed per user request
-    { label = "/clear",   desc = "очистить транскрипт",              cmd = "clear" },
-    { label = "/compact", desc = "сжать контекст (суммаризация)",    cmd = "compact" },
-    { label = "/model",   desc = "сменить модель",                   cmd = "model" },
-    { label = "/resume",  desc = "возобновить сессию для workspace", cmd = "resume" },
-    { label = "/new",     desc = "начать новую сессию",              cmd = "new" },
-    { label = "/quit",    desc = "выход",                            cmd = "quit" },
-    { label = "/copy",    desc = "копировать из транскрипта",        cmd = "copy" },
+    { label = "/clear",   desc = "clear the transcript",            cmd = "clear" },
+    { label = "/compact", desc = "compact context (summarize)",       cmd = "compact" },
+    { label = "/model",   desc = "switch model",                      cmd = "model" },
+    { label = "/resume",  desc = "resume session for workspace",      cmd = "resume" },
+    { label = "/new",     desc = "start a new session",               cmd = "new" },
+    { label = "/quit",    desc = "exit",                              cmd = "quit" },
+    { label = "/copy",    desc = "copy from the transcript",          cmd = "copy" },
     -- add-provider-login: OAuth/API-key store
-    { label = "/login",   desc = "войти у провайдера (API key/OAuth)", cmd = "login" },
-    { label = "/logout",  desc = "выйти у провайдера (удалить ключ)",  cmd = "logout" },
+    { label = "/login",   desc = "log in with a provider (API key/OAuth)", cmd = "login" },
+    { label = "/logout",  desc = "log out from a provider (drop the key)",  cmd = "logout" },
     -- add-reasoning-level: reasoning effort picker
-    { label = "/think",   desc = "уровень мышления",                  cmd = "think" },
+    { label = "/think",   desc = "thinking level",                    cmd = "think" },
     -- unified-slash-palette: /skills removed — skills are entries of this list
 }
 M.SLASH_COMMANDS = SLASH_COMMANDS
@@ -1319,16 +1319,9 @@ local function static_flags()
     return out
 end
 
--- The scroll indicator as the footer shows it: the count of transcript rows
--- hidden below the viewport, or nil while following. Uses M.scroll_indicator so
--- layout() can call it before the local is declared (the module table is
--- complete by the time any frame is painted).
-local function scroll_flag(transcript_h)
-    if not S.user_scrolled then return nil end
-    local hidden = M.scroll_indicator(M.transcript_height(S.w), S.scroll, transcript_h)
-    if not hidden or hidden <= 0 then return nil end
-    return ((M._ascii_mode or M._env_ascii or _ascii) and "v" or "↓") .. " +" .. hidden
-end
+-- Scroll position math (count of transcript rows hidden below the
+-- viewport, or nil while following). The footer "↓ +N" flag itself was
+-- removed per user request; the math stays for tests and potential reuse.
 
 local function layout()
     local total = #input_lines()
@@ -2209,7 +2202,7 @@ local function render_ask(width)
             row[#row + 1] = ask_selected(answer, opt.label) and "[x] " or "[ ] "
         end
         row[#row + 1] = i .. ". " .. opt.label
-        if q.recommended == i then row[#row + 1] = dim("  (рекомендуется)") end
+        if q.recommended == i then row[#row + 1] = dim("  (recommended)") end
         local text = "  " .. table.concat(row)
         if i == a.sel and a.mode == "list" then text = rev(text) end
         out[#out + 1] = text
@@ -2286,7 +2279,7 @@ local function render_entry(e, width, prev_role)
     elseif e.virt == "confirm" then
         local c = S.confirmation
         if not c then return {} end
-        local co = { "", yellow("⚠ " .. (c.label or "подтверждение")) }
+        local co = { "", yellow("⚠ " .. (c.label or "confirmation")) }
         for _, l in ipairs(wrap(c.body or "", width - 2)) do
             co[#co + 1] = "  " .. l
         end
@@ -2395,7 +2388,7 @@ local function render_entry(e, width, prev_role)
                     or M.tool_collapse_cap(e.name, S.cfg and S.cfg.ui and S.cfg.ui.collapse, 200)
                 for i, l in ipairs(bl) do
                     if i > cap then
-                        to[#to + 1] = "  " .. dim("… (" .. (#bl - i + 1) .. " строк скрыто)")
+                        to[#to + 1] = "  " .. dim("… (" .. (#bl - i + 1) .. " lines hidden)")
                         break
                     end
                     to[#to + 1] = "  " .. l
@@ -2955,9 +2948,9 @@ function M.footer_stats(left, right, width)
 end
 
 -- slim-footer-indicators: one dim footer row below the box — path ($HOME → ~),
--- session token stats + context cell, transient flags (toast, scroll), and the
+-- session token stats + context cell, transient flags (toast), and the
 -- model right-aligned. Truncation when over width (spec tui Footer): path
--- right-truncate first, then toast dropped, then scroll dropped, then stats
+-- right-truncate first, then toast dropped, then stats
 -- right-truncate; model is handled separately by footer_stats. No reverse
 -- video, no mode icons.
 local function render_footer(L)
@@ -2984,14 +2977,12 @@ local function render_footer(L)
     local stats_str = table.concat(stats, dim(" · "))
 
     local flags = static_flags()
-    local scroll = scroll_flag(L.transcript_h)
-    if scroll then flags[#flags + 1] = scroll end
     local flags_str = #flags > 0 and to_ascii(table.concat(flags, " ")) or ""
 
     local width = L.w
     -- Visual order: path, stats, flags — joined with ` · ` separators.
     -- Truncation order (spec): path first (to_ascii so ASCII mode gets
-    -- "..." not "…"), then toast, then scroll, then stats — each step
+    -- "..." not "…"), then toast, then stats — each step
     -- re-fits the path into the room that opened up.
     local SEP = dim(" · ")
     local function join(path_s, s_str, f_str)
@@ -3018,9 +3009,9 @@ local function render_footer(L)
     local left = join(path_s, s_str, f_str)
 
     if vlen(left) > width then
-        -- Drop toast before the scroll indicator.
+        -- Drop the toast when over width.
         if S.toast and f_str:find(to_ascii(green(S.toast)), 1, true) then
-            f_str = scroll and to_ascii(scroll) or ""
+            f_str = ""
             path_s = fit_path(f_str, s_str)
             left = join(path_s, s_str, f_str)
         end
@@ -3482,7 +3473,7 @@ local function start_new_session(banner)
     S.tokens_in, S.tokens_out = 0, 0
     -- a new session knows nothing of the old transcript — drop it too,
     -- otherwise the screen shows messages the agent never saw
-    reset_transcript({ { role = "system", text = banner or "↻ Новая сессия" } })
+    reset_transcript({ { role = "system", text = banner or "↻ New session" } })
 end
 
 -- M9: /log command (and its view) removed
@@ -3813,7 +3804,7 @@ function pick.resume(id)
         -- appending would mix two conversations on one screen
         transcript.seed(messages or {})
         transcript.append(
-            { role = "system", text = "↻ сессия " .. tostring(sid):sub(1, 8) .. " возобновлена" })
+            { role = "system", text = "↻ session " .. tostring(sid):sub(1, 8) .. " resumed" })
         bump_transcript()
     end
 end
@@ -3874,12 +3865,15 @@ function pick.model(item, provider)
         end
         if cfgmod and cfgmod.persist_keys then
             local home = (S.cfg and S.cfg._auth_home) or os.getenv("HOME") or ""
-            local prov = (S.cfg and S.cfg.provider) or "openai"
+            -- dynamic-provider-catalog: a providerless pick keeps the
+            -- current provider — persist skips nil keys, so never bake a
+            -- hardcoded fallback into the file (it used to write "openai").
+            local prov = (S.cfg and S.cfg.provider) or nil
             pcall(cfgmod.persist_keys, home, { provider = prov, model = model_id })
         end
     end
     local where = (type(prov) == "string" and prov ~= "") and (prov .. "/") or ""
-    transcript.append({ role = "system", text = "→ модель: " .. where .. model_id })
+    transcript.append({ role = "system", text = "→ model: " .. where .. model_id })
     bump_transcript()
 end
 -- add-reasoning-level: apply a level from /think or its picker — in-memory
@@ -3898,7 +3892,7 @@ function pick.think(level)
             pcall(cfgmod.persist_keys, home, { reasoning = level })
         end
     end
-    transcript.append({ role = "system", text = "→ мышление: " .. level })
+    transcript.append({ role = "system", text = "→ thinking: " .. level })
     bump_transcript()
 end
 
@@ -3994,6 +3988,20 @@ local function execute_command(cmd, rest)
         -- an empty palette explains itself (no key, dead endpoint, ...).
         S._models_err = (#S.palette_items == 0) and merr or nil
         if S._models_err then S.error_banner = S._models_err end
+        -- dynamic-provider-catalog: a landed providers refresh applies now;
+        -- a stale catalog marks its age (one-shot toast + debug log).
+        do
+            local home = (S.cfg and S.cfg._auth_home) or nil
+            if commands.poll_providers then
+                pcall(commands.poll_providers, home)
+            end
+            local age = commands.providers_age
+                and commands.providers_age(home) or nil
+            if age and age.stale then
+                S.toast = "providers catalog " .. age.text .. " old"
+                debug_log("providers catalog age: " .. age.text)
+            end
+        end
         return
     end
     if cmd == "resume" then
@@ -4085,7 +4093,7 @@ local function execute_command(cmd, rest)
             local items = {}
             for _, lv in ipairs(ORDER) do
                 items[#items + 1] = { label = lv,
-                    desc = (lv == cur) and "текущий" or "" }
+                    desc = (lv == cur) and "current" or "" }
             end
             S.error_banner = nil
             S.palette_mode = "think"
@@ -4098,7 +4106,7 @@ local function execute_command(cmd, rest)
         level = level:lower()
         local known = { off = true, low = true, medium = true, high = true }
         if not known[level] then
-            S.error_banner = "неизвестный уровень мышления: " .. level
+            S.error_banner = "unknown thinking level: " .. level
             return
         end
         pick.think(level)
@@ -4156,10 +4164,10 @@ local function handle_agent_event(ev)
         S.waiting = false
         S.streaming = false
     elseif ev.type == "error" then
-        S.error_banner = ev.message or "ошибка"
+        S.error_banner = ev.message or "error"
         -- palette-only R4: full text only to the debug log (when on), never
         -- a modal palette and never a transcript row.
-        debug_log("error: " .. tostring(ev.message or "ошибка"))
+        debug_log("error: " .. tostring(ev.message or "error"))
         S.retry_wait = nil -- a terminal failure ends the backoff wait
     elseif ev.type == "aborted" then
         S.waiting = false
@@ -4210,16 +4218,16 @@ local function handle_agent_event(ev)
                 -- M7/D1+D2: extracted to ui.is_dangerous() (crash: %f is a Lua
                 -- pattern boundary prefix, %frm%s was an invalid pattern).
                 if ui_is_dangerous(body) then
-                    body = body .. "\n⚠ потенциально опасная команда"
+                    body = body .. "\n⚠ potentially dangerous command"
                 end
             elseif args.content and args.path then
                 body = "write → " .. args.path .. " (" .. #args.content .. " B)"
             end
-            local options = {"[1/y] once     разрешить один раз",
-                             "[2/a] session  разрешить до конца сессии",
-                             "[3/A] always   сохранить в auto_approve",
-                             "[4/n] deny     отклонить",
-                             "[5/Esc] cancel прервать ход агента"}
+            local options = {"[1/y] once     allow once",
+                             "[2/a] session  allow until the session ends",
+                             "[3/A] always   save to auto_approve",
+                             "[4/n] deny     decline",
+                             "[5/Esc] cancel abort the agent turn"}
             S.confirmation = {
                 label = label,
                 body = body,
@@ -4827,7 +4835,7 @@ function M.copy_targets(transcript)
     -- last answer: last assistant entry
     for i = #t, 1, -1 do
         if t[i].role == "assistant" and (t[i].text or "") ~= "" then
-            add("последний ответ", t[i].text)
+            add("last answer", t[i].text)
             break
         end
     end
@@ -4835,14 +4843,14 @@ function M.copy_targets(transcript)
     for i = #t, 1, -1 do
         if t[i].role == "tool" then
             local body = t[i].body or t[i].text or ""
-            if body ~= "" then add("последний вывод инструмента", body) end
+            if body ~= "" then add("last tool output", body) end
             break
         end
     end
     -- last fenced block, scanned from the newest entry
     for i = #t, 1, -1 do
         local fb = fenced_block_of(t[i].text)
-        if fb ~= "" then add("последний код-блок", fb); break end
+        if fb ~= "" then add("last code block", fb); break end
     end
     -- whole transcript: entries in display order (source text, no SGR)
     local parts = {}
@@ -4855,7 +4863,7 @@ function M.copy_targets(transcript)
         end
         if txt ~= "" then parts[#parts + 1] = txt end
     end
-    add("весь транскрипт", table.concat(parts, "\n"))
+    add("whole transcript", table.concat(parts, "\n"))
     return out
 end
 
@@ -5099,7 +5107,7 @@ local function resolve_confirmation(decision)
         if not ok and err then S.error_banner = tostring(err) end
         transcript.append({
             role = "system",
-            text = "→ подтверждение: " .. decision .. " (" .. detail.name .. ")",
+            text = "→ confirmation: " .. decision .. " (" .. detail.name .. ")",
         })
         if decision == "cancel" then needs_resume = false end
         if needs_resume then
@@ -5234,14 +5242,16 @@ handle_key = function(k)
     -- T17: mouse SGR — scroll transcript, click palette/confirmation items.
     -- S.scroll counts rows hidden ABOVE the viewport: wheel up = older rows =
     -- scroll grows; wheel down returns toward the bottom (follow at 0).
+    -- Wheel steps 3 rows (not a screen fraction): finer, calmer scrolling —
+    -- terminals have no pixels, so this is the smoothest honest step.
     if k.kind == "mouse" then
         if k.name == "scroll_up" then
-            S.scroll = S.scroll + math.max(1, math.floor(S.h / 4))
+            S.scroll = S.scroll + 3
             S.user_scrolled = true
             return
         end
         if k.name == "scroll_down" then
-            S.scroll = math.max(0, S.scroll - math.max(1, math.floor(S.h / 4)))
+            S.scroll = math.max(0, S.scroll - 3)
             if S.scroll == 0 then S.user_scrolled = false end
             return
         end
@@ -5366,7 +5376,7 @@ handle_key = function(k)
                     -- spec tui: toast carries the copied size, ASCII twin uses [ok]
                     local sz = it.copy.bytes or #(it.copy.text or "")
                     local mark = M.ascii_active(S.cfg and S.cfg.ui and S.cfg.ui.ascii) and "[ok]" or "✓"
-                    S.toast = mark .. " скопировано " .. tostring(sz) .. " B"
+                    S.toast = mark .. " copied " .. tostring(sz) .. " B"
                     paint(true)
                 end
                 return
@@ -5690,7 +5700,7 @@ function M.run(app_cfg)
             local seeded = transcript.seed(hist)
             if #seeded > 0 then
                 transcript.append(
-                    { role = "system", text = "↻ сессия возобновлена" })
+                    { role = "system", text = "↻ session resumed" })
             end
         end
     end

@@ -286,7 +286,7 @@ function M.handle(ev)
                 e.body = ""
             end
         end
-        M.append({ role = "system", text = "⏹ прервано (Ctrl+C)" })
+        M.append({ role = "system", text = "⏹ interrupted (Ctrl+C)" })
         M.bump()
         return true
     elseif t == "context_compressed" then
@@ -329,7 +329,7 @@ function M.handle(ev)
         end
         M.append({
             role = "system",
-            text = string.format("↻ повтор %d (ждём %.1fs): %s%s",
+            text = string.format("↻ retry %d (waiting %.1fs): %s%s",
                 ev.attempt or 1, ev.delay or 0.5, ev.reason or "", detail),
         })
         M.bump()
@@ -343,8 +343,8 @@ function M.handle(ev)
     elseif t == "continuation" then
         M.append({
             role = "system",
-            text = ev.kind == "empty" and "↻ продолжение (пустой ответ)"
-                or "↻ продолжение (лимит вывода)",
+            text = ev.kind == "empty" and "↻ continuation (empty response)"
+                or "↻ continuation (output limit)",
         })
         M.bump()
         return false

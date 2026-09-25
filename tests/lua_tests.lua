@@ -2161,10 +2161,25 @@ end
 
 -- T51: dispatcher — unknown provider falls back, per-provider streams work
 do
+  -- dynamic-provider-catalog: the binary ships a thin bootstrap (no cloud
+  -- Tier-A), so seed the merged view with the three native wires.
+  local catfix = assert(loadfile("src/tether/providers/catalog.lua"))()
+  catfix.set_overlay({
+    ["llama-cpp"] = { wire = "openai", base_url = "http://127.0.0.1:8080/v1",
+      api_key_env = "LLAMA_API_KEY", model = "", _source = "test" },
+    openai = { wire = "openai", base_url = "https://api.openai.com/v1",
+      api_key_env = "OPENAI_API_KEY", model = "gpt-4o-mini", _source = "test" },
+    anthropic = { wire = "anthropic", base_url = "https://api.anthropic.com",
+      api_key_env = "ANTHROPIC_API_KEY", model = "claude-x", _source = "test" },
+    gemini = { wire = "gemini", base_url = "https://generativelanguage.googleapis.com",
+      api_key_env = "GEMINI_API_KEY", model = "gemini-x", _source = "test" },
+  }, { generated_at = 0 })
+  local orig_catalog = _G.provider_catalog
+  _G.provider_catalog = catfix
   local api = assert(loadfile("src/tether/api.lua"))()
-  assert_eq(api._provider_of({}), "openai", "T51 default provider openai")
+  assert_eq(api._provider_of({}), "llama-cpp", "T51 default provider llama-cpp")
   assert_eq(api._provider_of({ provider = "gemini" }), "gemini", "T51 gemini selected")
-  assert_eq(api._provider_of({ provider = "azure" }), "openai", "T51 unknown falls back")
+  assert_eq(api._provider_of({ provider = "azure" }), "llama-cpp", "T51 unknown falls back")
 
   local function run_stream(script, cfg)
     local old = _G.tether
@@ -2220,7 +2235,10 @@ do
   assert_true(#api.list_models({ provider = "openai" }) >= 10, "T51 openai static list")
   assert_true(api.list_models({ provider = "anthropic" })[1]:find("claude", 1, true) ~= nil, "T51 anthropic static list")
   assert_true(api.list_models({ provider = "gemini" })[1]:find("gemini", 1, true) ~= nil, "T51 gemini static list")
-  assert_eq(openai_p.static_models()[1], api.list_models({})[1], "T51 default list is openai")
+  assert_eq(openai_p.static_models()[1], api.list_models({ provider = "openai" })[1],
+    "T51 openai list is curated static")
+  assert_eq(#api.list_models({}), 0,
+    "T51 default list empty (local id, live-authoritative)")
   local _, err = api.list_models_live({ provider = "gemini", base_url = "http://x" }, "")
   assert_eq(err, "no api key", "T51 gemini live without key")
 
@@ -2254,11 +2272,23 @@ do
     assert_eq(res, nil, "T51 empty list returns nil")
     assert_eq(lerr, "empty model list", "T51 empty list reason")
   end
+  _G.provider_catalog = orig_catalog
   print("T51 dispatcher: OK")
 end
 
 -- T52: config providers table resolution
 do
+  -- dynamic-provider-catalog: seed the merged view (thin bootstrap has no
+  -- cloud Tier-A); config captures _G.provider_catalog at load.
+  local catfix = assert(loadfile("src/tether/providers/catalog.lua"))()
+  catfix.set_overlay({
+    ["llama-cpp"] = { wire = "openai", base_url = "http://127.0.0.1:8080/v1",
+      api_key_env = "LLAMA_API_KEY", model = "", _source = "test" },
+    anthropic = { wire = "anthropic", base_url = "https://api.anthropic.com",
+      api_key_env = "ANTHROPIC_API_KEY", model = "claude-x", _source = "test" },
+  }, { generated_at = 0 })
+  local orig_catalog = _G.provider_catalog
+  _G.provider_catalog = catfix
   local cfgm = dofile("src/tether/config.lua")
   local p1 = "/tmp/tether_cfg_t52_a.lua"
   local f = io.open(p1, "w")
@@ -2271,13 +2301,13 @@ do
   assert_eq(c1.api_key_env, "ANTHROPIC_API_KEY", "T52 per-provider env")
   os.remove(p1)
 
-  -- legacy top-level keys keep working as openai defaults (custom proxy safe)
+  -- legacy top-level keys keep working (custom proxy safe)
   local p2 = "/tmp/tether_cfg_t52_b.lua"
   f = io.open(p2, "w")
   f:write('return { api_key_env = "FOO_KEY", base_url = "http://proxy:8080/v1" }')
   f:close()
   local c2 = cfgm.load(p2)
-  assert_eq(c2.provider, "openai", "T52 default provider")
+  assert_eq(c2.provider, "llama-cpp", "T52 default provider")
   assert_eq(c2.api_key_env, "FOO_KEY", "T52 legacy env kept")
   assert_eq(c2.base_url, "http://proxy:8080/v1", "T52 custom proxy kept")
   os.remove(p2)
@@ -2293,6 +2323,15 @@ do
   os.remove(p3)
   assert_eq(cfgm.api_key({ api_key_env = "TETHER_DEFINITELY_MISSING_XYZ" }), "",
     "T52 missing key yields empty string")
+  -- api_key_env list end to end: first set wins, none set yields ""
+  assert_eq(cfgm.api_key({ provider = "anthropic",
+      api_key_env = { "TETHER_DEF_UNSET_X", "HOME" }, providers = {} }),
+    os.getenv("HOME"), "T52 list env first set wins")
+  assert_eq(cfgm.api_key({ provider = "anthropic",
+      api_key_env = { "TETHER_DEF_UNSET_X", "TETHER_DEF_UNSET_Y" },
+      providers = {} }),
+    "", "T52 list env none set yields empty")
+  _G.provider_catalog = orig_catalog
   print("T52 config providers: OK")
 end
 
@@ -2896,8 +2935,8 @@ do
   print("T64 2.3 separator skip on restore: OK")
 end
 
--- T65: 2.4 — scroll indicator lives only on the footer row; no in-transcript
--- ↓ +N marker is painted on the newest visible row.
+-- T65: 2.4 — no ↓ +N marker anywhere (footer flag removed per user
+-- request); no in-transcript marker is painted on visible rows either.
 do
   local str_bytes = function(s) local b = {} for i = 1, #s do b[#b + 1] = s:byte(i) end return b end
   local ESC = "\27"
@@ -2907,15 +2946,15 @@ do
     return true
   end end
 
-  -- scrolled up: footer shows ↓ +N; no transcript row carries the marker
+  -- scrolled up: footer shows no indicator; no transcript row carries one
   -- (Up/Down now recall history; scrolling uses PgUp)
   local msg = str_bytes("q"); msg[#msg + 1] = 13; msg[#msg + 1] = 27; msg[#msg + 1] = 91; msg[#msg + 1] = 53; msg[#msg + 1] = 126; msg[#msg + 1] = 17
   local sink_up = {}
   local uimod_up = run_ui_with(msg, { agent = { turn = make_turn_stub(), get_history = function() return {} end } }, sink_up)
   local L_up = uimod_up._layout()
   local footer_up = uimod_up._row(L_up.footer_row) or ""
-  assert_true(footer_up:find("↓ +", 1, true) ~= nil,
-    "T65 scrolled-up footer shows the indicator: " .. footer_up:sub(1, 80))
+  assert_eq(footer_up:find("↓ +", 1, true), nil,
+    "T65 scrolled-up footer shows no indicator: " .. footer_up:sub(1, 80))
   for r = L_up.transcript_row, L_up.transcript_row + L_up.transcript_h - 1 do
     local row = uimod_up._row(r) or ""
     assert_eq(row:find("↓ +", 1, true), nil,
@@ -2929,27 +2968,15 @@ do
   local L_b = uimod_b._layout()
   local footer_b = uimod_b._row(L_b.footer_row) or ""
   assert_eq(footer_b:find("↓ +", 1, true), nil, "T65 follow mode: no footer indicator")
-  print("T65 2.4 footer-only scroll indicator: OK")
+  print("T65 2.4 no scroll indicator anywhere: OK")
 end
 
--- T66: 2.5 — footer scroll indicator reports the hidden-row count when
--- scrolled up; when the count is zero (bottom) it does not show.
+-- T66: 2.5 — scroll math helper still reports the hidden-row count when
+-- scrolled up (footer flag itself removed; math kept for reuse).
 do
-  local str_bytes = function(s) local b = {} for i = 1, #s do b[#b + 1] = s:byte(i) end return b end
-  local long_answer = string.rep("abcdefghij ", 8) .. "\n" .. ("second line\n"):rep(50)
-  local function make_turn_stub() return function(_, _, _, on_ev)
-    on_ev({ type = "text_delta", text = long_answer })
-    return true
-  end end
-  local msg = str_bytes("q"); msg[#msg + 1] = 13
-  msg[#msg + 1] = 27; msg[#msg + 1] = 91; msg[#msg + 1] = 53; msg[#msg + 1] = 126  -- PgUp once
-  msg[#msg + 1] = 17
-  local sink = {}
-  local uimod = run_ui_with(msg, { agent = { turn = make_turn_stub(), get_history = function() return {} end } }, sink)
-  local L = uimod._layout()
-  local footer = uimod._row(L.footer_row) or ""
-  assert_true(footer:find("↓ +", 1, true) ~= nil,
-    "T66 footer indicator present when scrolled up: " .. footer:sub(1, 80))
+  local uim = assert(loadfile("src/tether/ui.lua"))()
+  assert_eq(uim.scroll_indicator(100, 12, 20), 12, "T66 hidden count")
+  assert_eq(uim.scroll_indicator(100, 0, 20), nil, "T66 following hides the count")
   print("T66 2.5 shared count: OK")
 end
 
@@ -3604,8 +3631,8 @@ do
       .. " < " .. tostring(steps_at_answer) .. ")")
   assert_false(lines_at_tail, "TW4 no stream line was in flight at the wheel")
   assert_notnil(frame2, "TW4 a frame repainted in the wheel's own tick")
-  assert_true(tostring(frame2):find("+", 1, true) ~= nil,
-    "TW4 the repaint shows the scroll indicator: "
+  assert_true(tostring(frame2):find("↓ +", 1, true) == nil,
+    "TW4 no scroll indicator in the repaint: "
       .. tostring(frame2 and frame2:sub(1, 160)))
   assert_true(S.scroll > 0, "TW4 the mid-turn wheel scrolled the viewport")
   assert_true(S.user_scrolled, "TW4 the wheel left follow mode")
@@ -3940,7 +3967,32 @@ do
 -- T161: provider catalog + alias dispatch + per-preset headers
 do
   local catalog = assert(loadfile("src/tether/providers/catalog.lua"))()
-  assert_true(catalog.count() >= 40, "T162 catalog has 40+ presets")
+  -- dynamic-provider-catalog: Tier-A arrives via the pipeline cache; seed
+  -- the merged view with a fixture (bootstrap alone has 9 locals + Tier-B).
+  local tier_a = {
+    openai = { wire = "openai", base_url = "https://api.openai.com/v1",
+      api_key_env = "OPENAI_API_KEY", model = "gpt-4o-mini" },
+    anthropic = { wire = "anthropic", base_url = "https://api.anthropic.com",
+      api_key_env = "ANTHROPIC_API_KEY", model = "claude-x" },
+    gemini = { wire = "gemini", base_url = "https://generativelanguage.googleapis.com",
+      api_key_env = "GEMINI_API_KEY", model = "gemini-x" },
+    deepseek = { wire = "openai", base_url = "https://api.deepseek.com",
+      api_key_env = "DEEPSEEK_API_KEY", model = "deepseek-chat" },
+    groq = { wire = "openai", base_url = "https://api.groq.com/openai/v1",
+      api_key_env = "GROQ_API_KEY", model = "llama-3.3-70b-versatile" },
+    agnes = { wire = "openai", base_url = "https://apihub.agnes-ai.com/v1",
+      api_key_env = "AGNES_API_KEY", model = "agnes-2.5-flash" },
+    ["agnes-cn"] = { wire = "openai", base_url = "https://api.agnes-ai.cn/v1",
+      api_key_env = "AGNES_CN_API_KEY", model = "agnes-2.5-flash" },
+    ["kimi-coding"] = { wire = "anthropic", base_url = "https://api.kimi.com/coding",
+      api_key_env = "KIMI_API_KEY", model = "kimi-for-coding" },
+    minimax = { wire = "anthropic", base_url = "https://api.minimax.io/anthropic",
+      api_key_env = "MINIMAX_API_KEY", model = "MiniMax-M2.7" },
+  }
+  catalog.set_overlay(tier_a, { generated_at = 0 })
+  local orig_catalog = _G.provider_catalog
+  _G.provider_catalog = catalog
+  assert_eq(catalog.count(), 9 + 9, "T162 merged bootstrap plus cache")
   local ids = catalog.ids()
   assert_eq(ids[1], "openai", "T162 big three pinned first")
   assert_eq(ids[2], "anthropic", "T162 pin 2")
@@ -4030,10 +4082,26 @@ do
       "T162 failure names the missing piece")
   end
   print("T162 catalog + alias + headers: OK")
+  _G.provider_catalog = orig_catalog
 end
 
 -- T163: catalog defaults wired into config
 do
+  -- dynamic-provider-catalog: seed the merged view (config snapshots it).
+  local catfix = assert(loadfile("src/tether/providers/catalog.lua"))()
+  catfix.set_overlay({
+    deepseek = { wire = "openai", base_url = "https://api.deepseek.com",
+      api_key_env = "DEEPSEEK_API_KEY", model = "deepseek-chat", _source = "test" },
+    ["kimi-coding"] = { wire = "anthropic", base_url = "https://api.kimi.com/coding",
+      api_key_env = "KIMI_API_KEY", model = "kimi-for-coding", _source = "test" },
+    ["xiaomi-token-plan-sgp"] = { wire = "openai",
+      base_url = "https://token-plan-sgp.xiaomimimo.com/v1",
+      api_key_env = "XIAOMI_TOKEN_PLAN_SGP_API_KEY", model = "mimo-7b", _source = "test" },
+    xai = { wire = "openai", base_url = "https://api.x.ai/v1",
+      api_key_env = "XAI_API_KEY", model = "grok-4.6", _source = "test" },
+  }, { generated_at = 0 })
+  local orig_catalog = _G.provider_catalog
+  _G.provider_catalog = catfix
   local cfgm = dofile("src/tether/config.lua")
   local function load_tbl(t)
     local p = "/tmp/tether_cfg_t163.lua"
@@ -4062,11 +4130,29 @@ do
   local d5 = load_tbl('{ provider = "openai-codex" }')
   assert_eq(d5.api_key_env, "", "T163 codex no env key")
   assert_eq(cfgm.api_key(d5), "", "T163 codex resolves empty without store")
+  -- pipeline-sourced preset resolves without user config
+  local d6 = load_tbl('{ provider = "xai" }')
+  assert_eq(d6.base_url, "https://api.x.ai/v1", "T163 xai base from cache")
+  assert_eq(d6.api_key_env, "XAI_API_KEY", "T163 xai env from cache")
+  assert_eq(d6.model, "grok-4.6", "T163 xai model from cache")
+  _G.provider_catalog = orig_catalog
   print("T163 catalog config defaults: OK")
 end
 
 -- T164: presets resolve live /models only (no static fallback)
 do
+  -- dynamic-provider-catalog: seed preset entries without models[].
+  local catfix = assert(loadfile("src/tether/providers/catalog.lua"))()
+  catfix.set_overlay({
+    groq = { wire = "openai", base_url = "https://api.groq.com/openai/v1",
+      api_key_env = "GROQ_API_KEY", model = "x", _source = "test" },
+    ["kimi-coding"] = { wire = "anthropic", base_url = "https://api.kimi.com/coding",
+      api_key_env = "KIMI_API_KEY", model = "y", _source = "test" },
+    openai = { wire = "openai", base_url = "https://api.openai.com/v1",
+      api_key_env = "OPENAI_API_KEY", model = "gpt-4o-mini", _source = "test" },
+  }, { generated_at = 0 })
+  local orig_catalog = _G.provider_catalog
+  _G.provider_catalog = catfix
   local api = assert(loadfile("src/tether/api.lua"))()
   assert_eq(#api.list_models({ provider = "groq" }), 0, "T164 preset static empty")
   assert_eq(#api.list_models({ provider = "kimi-coding" }), 0, "T164 anthropic-alias static empty")
@@ -4084,12 +4170,25 @@ do
     _G.tether = old
     assert_eq(res, nil, "T164 unreachable preset live nil")
   end
+  _G.provider_catalog = orig_catalog
   print("T164 preset live-only models: OK")
 end
 
 -- T165: catalog login flows (device + code, config-sourced; key fallback)
 do
-  local catalog = assert(loadfile("src/tether/providers/catalog.lua"))()
+  -- dynamic-provider-catalog: login_flow needs catalog ids; seed them.
+  local catfix = assert(loadfile("src/tether/providers/catalog.lua"))()
+  catfix.set_overlay({
+    deepseek = { wire = "openai", base_url = "https://api.deepseek.com",
+      api_key_env = "DEEPSEEK_API_KEY", model = "x", _source = "test" },
+    ["github-copilot"] = { wire = "openai", base_url = "https://x",
+      api_key_env = "COPILOT_GITHUB_TOKEN", model = "x", _source = "test" },
+    xai = { wire = "openai", base_url = "https://api.x.ai/v1",
+      api_key_env = "XAI_API_KEY", model = "x", _source = "test" },
+  }, { generated_at = 0 })
+  local orig_catalog = _G.provider_catalog
+  _G.provider_catalog = catfix
+  local catalog = catfix
   -- no oauth config → nil (API-key paste path)
   assert_eq(catalog.login_flow({ providers = {} }, "deepseek"), nil,
     "T165 no oauth config means key paste")
@@ -4149,6 +4248,7 @@ do
   assert_false(leaked, "T165 confirmation has no token text")
   auth.path = orig_path
   _G.auth = orig_auth
+  _G.provider_catalog = orig_catalog
   print("T165 catalog login flows: OK")
 end
 
@@ -4416,6 +4516,14 @@ end
 
 -- T169: model-list cache (instant fresh hit, stale refresh ≤5s, fallback)
 do
+  -- dynamic-provider-catalog: curated openai static comes from the overlay.
+  local catfix = assert(loadfile("src/tether/providers/catalog.lua"))()
+  catfix.set_overlay({
+    openai = { wire = "openai", base_url = "https://api.openai.com/v1",
+      api_key_env = "OPENAI_API_KEY", model = "gpt-4o-mini", _source = "test" },
+  }, { generated_at = 0 })
+  local orig_catalog = _G.provider_catalog
+  _G.provider_catalog = catfix
   local home = "/tmp/tether_t169_home"
   os.execute("rm -rf '" .. home .. "' && mkdir -p '" .. home .. "/.tether'")
   local api = assert(loadfile("src/tether/api.lua"))()
@@ -4479,11 +4587,19 @@ do
 
   _G.tether = orig_tether
   _G.api = orig_api
+  _G.provider_catalog = orig_catalog
   print("T169 model cache: OK")
 end
 
 -- T170: background refresh (instant stale display, spawn, poll pickup)
 do
+  local catfix = assert(loadfile("src/tether/providers/catalog.lua"))()
+  catfix.set_overlay({
+    openai = { wire = "openai", base_url = "https://api.openai.com/v1",
+      api_key_env = "OPENAI_API_KEY", model = "gpt-4o-mini", _source = "test" },
+  }, { generated_at = 0 })
+  local orig_catalog = _G.provider_catalog
+  _G.provider_catalog = catfix
   local home = "/tmp/tether_t170_home"
   os.execute("rm -rf '" .. home .. "' && mkdir -p '" .. home .. "/.tether'")
   local api = assert(loadfile("src/tether/api.lua"))()
@@ -4586,11 +4702,19 @@ do
 
   _G.tether = orig_tether
   _G.api = orig_api
+  _G.provider_catalog = orig_catalog
   print("T170 background refresh: OK")
 end
 
 -- T172: empty model list explains itself (no silent palette)
 do
+  local catfix = assert(loadfile("src/tether/providers/catalog.lua"))()
+  catfix.set_overlay({
+    openai = { wire = "openai", base_url = "https://api.openai.com/v1",
+      api_key_env = "OPENAI_API_KEY", model = "gpt-4o-mini", _source = "test" },
+  }, { generated_at = 0 })
+  local orig_catalog = _G.provider_catalog
+  _G.provider_catalog = catfix
   local home = "/tmp/tether_t172_home"
   os.execute("rm -rf '" .. home .. "' && mkdir -p '" .. home .. "/.tether'")
   local api = assert(loadfile("src/tether/api.lua"))()
@@ -4628,11 +4752,22 @@ do
   assert_true(e3 == nil, "T172 no reason when list non-empty")
   _G.tether = orig_tether
   _G.api = orig_api
+  _G.provider_catalog = orig_catalog
   print("T172 empty list diagnosis: OK")
 end
 
 -- T173: providers_with_keys + for_provider (multi-provider /model basis)
 do
+  -- dynamic-provider-catalog: seed openai + deepseek (config snapshots it).
+  local catfix = assert(loadfile("src/tether/providers/catalog.lua"))()
+  catfix.set_overlay({
+    openai = { wire = "openai", base_url = "https://api.openai.com/v1",
+      api_key_env = "OPENAI_API_KEY", model = "gpt-4o-mini", _source = "test" },
+    deepseek = { wire = "openai", base_url = "https://api.deepseek.com",
+      api_key_env = "DEEPSEEK_API_KEY", model = "deepseek-chat", _source = "test" },
+  }, { generated_at = 0 })
+  local orig_catalog = _G.provider_catalog
+  _G.provider_catalog = catfix
   local cfgm = dofile("src/tether/config.lua")
   local real_getenv = os.getenv
   local env_ov = {}
@@ -4678,11 +4813,22 @@ do
   assert_eq(base.base_url, "https://api.openai.com/v1", "T173 input url untouched")
 
   os.getenv = real_getenv
+  _G.provider_catalog = orig_catalog
   print("T173 providers_with_keys: OK")
 end
 
 -- T174: list_models_all aggregates keyed providers, tags provider
 do
+  -- dynamic-provider-catalog: seed openai + agnes.
+  local catfix = assert(loadfile("src/tether/providers/catalog.lua"))()
+  catfix.set_overlay({
+    openai = { wire = "openai", base_url = "https://api.openai.com/v1",
+      api_key_env = "OPENAI_API_KEY", model = "gpt-4o-mini", _source = "test" },
+    agnes = { wire = "openai", base_url = "https://apihub.agnes-ai.com/v1",
+      api_key_env = "AGNES_API_KEY", model = "agnes-2.5-flash", _source = "test" },
+  }, { generated_at = 0 })
+  local orig_catalog = _G.provider_catalog
+  _G.provider_catalog = catfix
   local home = "/tmp/tether_t174_home"
   os.execute("rm -rf '" .. home .. "' && mkdir -p '" .. home .. "/.tether'")
   local auth = assert(loadfile("src/tether/auth.lua"))()
@@ -4728,6 +4874,7 @@ do
   _G.tether = orig_tether
   _G.api = orig_api
   _G.config = orig_cfg
+  _G.provider_catalog = orig_catalog
   print("T174 list_models_all: OK")
 end
 
@@ -4849,13 +4996,13 @@ do
   }
   local r = ct(t)
   assert_eq(#r, 4, "T75 mixed transcript: 4 targets")
-  assert_eq(r[1].name, "последний ответ", "T75 target 1 is last answer")
+  assert_eq(r[1].name, "last answer", "T75 target 1 is last answer")
   assert_eq(r[1].text, "see:\n```lua\nlocal x = 1\n```", "T75 target 1 text")
-  assert_eq(r[2].name, "последний вывод инструмента", "T75 target 2 is tool output")
+  assert_eq(r[2].name, "last tool output", "T75 target 2 is tool output")
   assert_eq(r[2].text, "tool out", "T75 target 2 text")
-  assert_eq(r[3].name, "последний код-блок", "T75 target 3 is fenced block")
+  assert_eq(r[3].name, "last code block", "T75 target 3 is fenced block")
   assert_eq(r[3].text, "local x = 1", "T75 target 3 content")
-  assert_eq(r[4].name, "весь транскрипт", "T75 target 4 is whole transcript")
+  assert_eq(r[4].name, "whole transcript", "T75 target 4 is whole transcript")
   -- whole transcript = all entry texts in display order, joined by newline
   local whole = table.concat({ "hi", "answer one", "tool out",
       "see:\n```lua\nlocal x = 1\n```" }, "\n")
@@ -4871,7 +5018,7 @@ do
   local r2 = ct(t2)
   local fenced
   for _, tg in ipairs(r2) do
-    if tg.name == "последний код-блок" then fenced = tg end
+    if tg.name == "last code block" then fenced = tg end
   end
   assert_notnil(fenced, "T75 fenced block found")
   assert_eq(fenced.text, "print(1)", "T75 fenced block content")
@@ -4884,7 +5031,7 @@ do
   }
   local r3 = ct(t3)
   assert_eq(#r3, 1, "T75 empty answers: only whole transcript remains")
-  assert_eq(r3[1].name, "весь транскрипт", "T75 only target is whole transcript")
+  assert_eq(r3[1].name, "whole transcript", "T75 only target is whole transcript")
 
   print("T75 5.1 copy_targets: OK")
 end
@@ -4960,7 +5107,7 @@ do
   uimod._handle_key({ kind = "enter" })  -- copies target 1
   S = uimod._get_state()
   assert_eq(S.palette_mode, "command", "T77 after copy Enter: back to command mode")
-  assert_true(S.toast ~= nil and S.toast:find("✓ скопировано", 1, true) == 1,
+  assert_true(S.toast ~= nil and S.toast:find("✓ copied", 1, true) == 1,
     "T77 toast set (with size)")
 
   assert_true(#captured > 0, "T77 copy payload captured")
@@ -5041,7 +5188,7 @@ do
   assert_eq(S.palette_mode, "copy", "T78 copy palette open")
   uimod._handle_key({ kind = "enter" })
   S = uimod._get_state()
-  assert_true(S.toast ~= nil and S.toast:find("✓ скопировано", 1, true) == 1,
+  assert_true(S.toast ~= nil and S.toast:find("✓ copied", 1, true) == 1,
     "T78 toast set after copy Enter (with size)")
   assert_eq(S.palette_mode, "command", "T78 back to command mode after copy")
 
@@ -5678,7 +5825,8 @@ end
 
 -- T102 (1.5): --print must add the user message exactly once.
 do
-  local names = {"arg", "tether", "config", "session", "agent", "ui", "context"}
+  local names = {"arg", "tether", "config", "session", "agent", "ui", "context",
+    "commands"}
   local orig = {}
   for _, n in ipairs(names) do orig[n] = _G[n] end
   local log = {}
@@ -5686,6 +5834,9 @@ do
   _G.tether = host_mock{ getcwd = function() return "/ws" end, realpath = function(p) return p end,
                 is_tty = function() return false end }
   _G.config = { load = function() return { context = {} } end, api_key = function() return "k" end }
+  -- providers gate is orthogonal here (its own tests: T198); stub it open.
+  _G.commands = { new = function() return "id" end,
+    boot_providers = function() return true end }
   _G.session = { new_session = function() return "id" end, append = function() end }
   _G.agent = {
     add_user = function() log[#log + 1] = "add_user" end,
@@ -6344,7 +6495,7 @@ do
     assert_notnil(diffmod.parse(res.body), "2.3 write body is a diff")
     assert_true(res.summary:find("+1", 1, true) ~= nil and res.summary:find("−1", 1, true) ~= nil,
       "2.3 write summary +N −M")
-    assert_true(res.summary:find("перезаписан", 1, true) ~= nil, "2.3 write summary overwritten")
+    assert_true(res.summary:find("overwritten", 1, true) ~= nil, "2.3 write summary overwritten")
     local hist
     for _, m in ipairs(a.get_history()) do if m.role == "tool" then hist = m.content end end
     assert_eq(hist, res.body, "2.3 history body equals UI body")
@@ -7141,7 +7292,7 @@ do
   assert_eq(find_entry(function(e) return e.role == "assistant" and e.text == "half an ans" end),
     nil, "T119 the failed attempt's row is dropped")
   local retry_row = find_entry(function(e)
-    return e.role == "system" and (e.text or ""):find("повтор 1", 1, true) ~= nil end)
+    return e.role == "system" and (e.text or ""):find("retry 1", 1, true) ~= nil end)
   assert_notnil(retry_row, "T119 the retry row is appended")
   assert_true(retry_row and retry_row.text:find("4.0s", 1, true) ~= nil,
     "T119 the retry row names the wait")
@@ -7164,7 +7315,7 @@ do
   assert_eq(uig.transcript_height(80), #gfull, "T119d gap: index == full render")
   local grow
   for i, r in ipairs(gfull) do
-    if (r:gsub("\27%[[0-9;]*m", "")):find("повтор 1", 1, true) then grow = i end
+    if (r:gsub("\27%[[0-9;]*m", "")):find("retry 1", 1, true) then grow = i end
   end
   assert_notnil(grow, "T119d the retry row is rendered")
   local before = grow and gfull[grow - 1]
@@ -7176,7 +7327,7 @@ do
   uimod._paint(true)
   local L119 = uimod._layout()
   local top_rule = uimod._row(L119.rule_top_row) or ""
-  assert_true(top_rule:find("повтор", 1, true) == nil,
+  assert_true(top_rule:find("retry", 1, true) == nil,
     "T119 the top rule no longer shows the pending retry, got: " .. top_rule:sub(1, 80))
 
   -- attempt 2's text is kept, and clears the pending indicator
@@ -7192,11 +7343,11 @@ do
   -- continuation notices
   uimod._handle_agent_event({ type = "continuation", kind = "length" })
   assert_notnil(find_entry(function(e)
-    return e.role == "system" and (e.text or ""):find("продолжение", 1, true) ~= nil end),
+    return e.role == "system" and (e.text or ""):find("continuation", 1, true) ~= nil end),
     "T119 the continuation row is appended")
   uimod._handle_agent_event({ type = "continuation", kind = "empty" })
   assert_notnil(find_entry(function(e)
-    return e.role == "system" and (e.text or ""):find("пустой", 1, true) ~= nil end),
+    return e.role == "system" and (e.text or ""):find("empty", 1, true) ~= nil end),
     "T119 the empty-stop row is appended")
   assert_true(#uimod._render_all(80) > 0, "T119 the notices render")
 
@@ -7230,7 +7381,7 @@ do
                               detail = 'http 400: {"error":{"message":"Invalid arguments"}}' })
   local row = nil
   for _, e in ipairs(tentries(uimod)) do
-    if e.role == "system" and (e.text or ""):find("повтор 1", 1, true) then row = e end
+    if e.role == "system" and (e.text or ""):find("retry 1", 1, true) then row = e end
   end
   assert_notnil(row, "T119b the retry row is appended")
   assert_true(row and row.text:find("Invalid arguments", 1, true) ~= nil,
@@ -7241,7 +7392,7 @@ do
                                reason = "bad request" })
   local row2 = nil
   for _, e in ipairs(tentries(uimod2)) do
-    if e.role == "system" and (e.text or ""):find("повтор 1", 1, true) then row2 = e end
+    if e.role == "system" and (e.text or ""):find("retry 1", 1, true) then row2 = e end
   end
   assert_true(row2 and row2.text:find("bad request", 1, true) ~= nil,
     "T119b the retry row renders without detail")
@@ -8203,7 +8354,7 @@ do
   assert_true(joined:find("1. src", 1, true) ~= nil, "T124 option rows carry their index")
   assert_true(joined:find("2. all", 1, true) ~= nil, "T124 the second option is rendered")
   assert_true(joined:find("only src", 1, true) ~= nil, "T124 an option description is rendered")
-  assert_true(joined:find("(рекомендуется)", 1, true) ~= nil, "T124 the recommended option is flagged")
+  assert_true(joined:find("(recommended)", 1, true) ~= nil, "T124 the recommended option is flagged")
   assert_true(joined:find(askmod.FREEFORM_LABEL, 1, true) ~= nil, "T124 the freeform row is always present")
   assert_true(joined:find("(", 1, true) ~= nil, "T124 the block renders rows")
 
@@ -8211,7 +8362,7 @@ do
   local highlighted, recommended_row = nil, nil
   for _, r in ipairs(rows) do
     if r:find("\27[7m", 1, true) then highlighted = r end
-    if r:find("(рекомендуется)", 1, true) then recommended_row = r end
+    if r:find("(recommended)", 1, true) then recommended_row = r end
   end
   assert_notnil(highlighted, "T124 a row is highlighted")
   assert_true(highlighted and highlighted:find("1. src", 1, true) ~= nil,
@@ -9088,8 +9239,8 @@ do
   end
 
   -- 5.5: truncation order when the left side exceeds the width —
-  -- path right-truncates first (toast and scroll stay), then toast is
-  -- dropped before the scroll flag, and stats truncate last while the
+  -- path right-truncates first (toast and stats stay), then toast is
+  -- dropped, and stats truncate last while the
   -- path stays on the row. ASCII mode must not inject a Unicode ellipsis.
   do
     local long_ws = "/home/user/projects/very/long/workspace/path/for/footer/truncation"
@@ -9101,7 +9252,7 @@ do
       local S = uimod._get_state()
       S.tokens_in, S.tokens_out = 3000, 1000
       S.tokens_max, S.tokens_used = 32000, 4100
-      S.toast = "✓ скопировано 42 B"
+      S.toast = "✓ copied 42 B"
       uimod._transcript.reset({})
       for i = 1, 40 do
         uimod._transcript.append({ role = "system", text = "row " .. i })
@@ -9114,37 +9265,32 @@ do
       return uimod, S, strip(uimod._row(L.footer_row) or ""), L.w
     end
 
-    -- roomy enough: full path, toast and scroll all visible (the ` · `
+    -- roomy enough: full path, toast and stats all visible (the ` · `
     -- separators between blocks cost 3 cols each vs the old single spaces)
     local _, _, wide = footer_at(130)
     assert_true(wide:find(long_ws, 1, true) ~= nil, "pi 5.5 roomy footer keeps the full path: " .. wide)
-    assert_true(wide:find("скопировано", 1, true) ~= nil, "pi 5.5 roomy footer shows the toast: " .. wide)
-    assert_true(wide:find("↓ +7", 1, true) ~= nil, "pi 5.5 roomy footer shows the scroll flag: " .. wide)
+    assert_true(wide:find("copied", 1, true) ~= nil, "pi 5.5 roomy footer shows the toast: " .. wide)
+    assert_eq(wide:find("↓ +7", 1, true), nil, "pi 5.5 no scroll flag on a roomy row: " .. wide)
 
-    -- narrow: path truncates first — toast and scroll must survive
-    -- (60 is the floor where stats+toast+scroll leave room for a truncated path)
+    -- narrow: path truncates first — toast and stats must survive
+    -- (60 is the floor where stats+toast leave room for a truncated path)
     local uimod_n, _, narrow, w_n = footer_at(60)
     assert_true(uimod_n.vlen(narrow) <= w_n, "pi 5.5 narrow footer fits the width")
     assert_eq(narrow:find(long_ws, 1, true), nil, "pi 5.5 narrow footer truncates the path: " .. narrow)
     assert_true(narrow:find("…", 1, true) ~= nil or narrow:find("...", 1, true) ~= nil,
       "pi 5.5 truncated path carries an ellipsis: " .. narrow)
-    assert_true(narrow:find("скопировано", 1, true) ~= nil,
+    assert_true(narrow:find("copied", 1, true) ~= nil,
       "pi 5.5 toast survives path truncation (path drops first): " .. narrow)
-    assert_true(narrow:find("↓ +7", 1, true) ~= nil,
-      "pi 5.5 scroll flag survives path truncation: " .. narrow)
 
-    -- path gone from the left (no room): toast drops before scroll, then
-    -- stats truncate — the path must reappear (fit_path re-claims room)
-    -- or, if stats alone fill the row, stats are truncated not dropped whole.
+    -- path gone from the left (no room): toast drops, then stats truncate —
+    -- the path must reappear (fit_path re-claims room) or, if stats alone
+    -- fill the row, stats are truncated not dropped whole.
     local uimod_t, _, row_t, w_t = footer_at(40)
     assert_true(uimod_t.vlen(row_t) <= w_t, "pi 5.5 tiny footer fits the width")
-    -- toast is dropped before scroll when both cannot fit
-    local has_toast = row_t:find("скопировано", 1, true) ~= nil
-    local has_scroll = row_t:find("↓ +7", 1, true) ~= nil
-    assert_true(not has_toast or has_scroll,
-      "pi 5.5 toast never outlives the scroll flag once space runs out: " .. row_t)
-    assert_true(has_scroll,
-      "pi 5.5 scroll flag outlives the toast on a tiny row: " .. row_t)
+    -- toast is dropped when it cannot fit
+    local has_toast = row_t:find("copied", 1, true) ~= nil
+    assert_true(not has_toast,
+      "pi 5.5 toast drops on a tiny row: " .. row_t)
 
     -- ASCII mode: path truncation must use "...", never "…" (width 60 keeps
     -- a truncated path on the row alongside stats, toast and scroll)
@@ -9666,6 +9812,19 @@ do
   _G.auth = orig_auth
 
   -- T149: /login /logout palette registration + unknown provider banner
+  -- dynamic-provider-catalog: seed the big three (ui snapshots the catalog
+  -- at load; the seed stays through T156, which also needs them).
+  local catfix = assert(loadfile("src/tether/providers/catalog.lua"))()
+  catfix.set_overlay({
+    openai = { wire = "openai", base_url = "https://api.openai.com/v1",
+      api_key_env = "OPENAI_API_KEY", model = "gpt-4o-mini", _source = "test" },
+    anthropic = { wire = "anthropic", base_url = "https://api.anthropic.com",
+      api_key_env = "ANTHROPIC_API_KEY", model = "x", _source = "test" },
+    gemini = { wire = "gemini", base_url = "https://generativelanguage.googleapis.com",
+      api_key_env = "GEMINI_API_KEY", model = "x", _source = "test" },
+  }, { generated_at = 0 })
+  local orig_catalog = _G.provider_catalog
+  _G.provider_catalog = catfix
   local uim, S = run_ui_with({ 17 }, {
     agent = { turn = function() return true end, get_history = function() return {} end },
   })
@@ -9889,7 +10048,9 @@ do
   assert_eq(labels[1], "openai", "T155 picker pins openai first")
   assert_eq(labels[2], "anthropic", "T155 picker pins anthropic second")
   assert_eq(labels[3], "gemini", "T155 picker pins gemini third")
-  assert_true(#labels >= 40, "T155 picker lists full catalog")
+  -- dynamic-provider-catalog: the picker lists the merged catalog, however
+  -- large the pipeline cache makes it (fixture here: bootstrap + 3 seeded).
+  assert_eq(#labels, #catfix.ids(), "T155 picker lists full catalog")
   assert_eq(S155.input, "", "T155 picker does not touch main input")
   assert_true(S155.login_provider == nil, "T155 no login flow started until pick")
   assert_eq(S155.login_secret, nil, "T155 picker is not secret mode")
@@ -10129,6 +10290,7 @@ do
   _G.tether = orig_tether7
   auth.path = orig_path7
   _G.auth = orig_auth4
+  _G.provider_catalog = orig_catalog
 
   print("T146-T156 provider login: OK")
 end
@@ -10553,13 +10715,22 @@ end
 -- source of truth — bootstrapped with defaults when missing, and the /model
 -- pick is written back into it (the model.lua side file is retired).
 do
+  -- dynamic-provider-catalog: seed anthropic (migration endpoint check).
+  local catfix = assert(loadfile("src/tether/providers/catalog.lua"))()
+  catfix.set_overlay({
+    anthropic = { wire = "anthropic", base_url = "https://api.anthropic.com",
+      api_key_env = "ANTHROPIC_API_KEY", model = "x", _source = "test" },
+  }, { generated_at = 0 })
+  local orig_catalog = _G.provider_catalog
+  _G.provider_catalog = catfix
   local cfgmod = assert(loadfile("src/tether/config.lua"))()
   local home = "/tmp/tether_t177_home"
   os.execute("rm -rf " .. home .. " && mkdir -p " .. home .. "/.tether")
   local cfgpath = home .. "/.tether/config.lua"
   -- 1. bootstrap: missing file is created, parses, reloads identically
   local c0 = cfgmod.load(cfgpath, home)
-  assert_eq(c0.model, "gpt-4o-mini", "T177 bootstrap loads defaults")
+  assert_eq(c0.provider, "llama-cpp", "T177 bootstrap loads defaults")
+  assert_eq(c0.model, "", "T177 default model unset (pick via /model)")
   local f0 = assert(io.open(cfgpath, "r"))
   local disk0 = f0:read("*a")
   f0:close()
@@ -10580,7 +10751,7 @@ do
   f1:close()
   -- unwritable location still loads in-memory defaults
   local cbroken = cfgmod.load("/nonexistent/t177_missing.lua", home)
-  assert_eq(cbroken.model, "gpt-4o-mini", "T177 unwritable loads defaults")
+  assert_eq(cbroken.provider, "llama-cpp", "T177 unwritable loads defaults")
   -- 2. write-through preserves everything but the two keys
   f = assert(io.open(cfgpath, "w"))
   f:write('-- custom\nreturn {\n  provider = "openai",\n  model = "gpt-4o-mini", -- pinned\n  providers = {\n    anthropic = { model = "custom-claude" },\n  },\n}\n')
@@ -10662,8 +10833,9 @@ do
   assert_eq(S.model_name, "gpt-4o", "T177 pick applies in session")
   local c4 = cfgmod.load(cfgpath, home)
   assert_eq(c4.model, "gpt-4o", "T177 restart keeps the picked model")
-  assert_eq(c4.provider, "openai", "T177 restart keeps the picked provider")
+  assert_eq(c4.provider, "llama-cpp", "T177 restart keeps the picked provider")
   os.execute("rm -rf " .. home)
+  _G.provider_catalog = orig_catalog
   print("T177 config file is the source of truth: OK")
 end
 
@@ -10799,7 +10971,12 @@ do
   local seen_headers = nil
   -- api.lua reads the catalog through _G.provider_catalog (plain-lua tests
   -- must provide it or every provider falls back to the openai wire).
+  -- dynamic-provider-catalog: seed opencode (thin bootstrap lacks Tier-A).
   local catalog = dofile("src/tether/providers/catalog.lua")
+  catalog.set_overlay({
+    opencode = { wire = "openai", base_url = "https://opencode.ai/zen/v1",
+      api_key_env = "OPENCODE_API_KEY", model = "x", _source = "test" },
+  }, { generated_at = 0 })
   _G.provider_catalog = catalog
   local api = assert(loadfile("src/tether/api.lua"))()
   _G.api = api
@@ -10868,7 +11045,13 @@ do
   local orig_tether = _G.tether
   local orig_catalog = _G.provider_catalog
   local calls = { n = 0 }
-  _G.provider_catalog = dofile("src/tether/providers/catalog.lua")
+  -- dynamic-provider-catalog: seed openai (curated static for cooldown).
+  local catfix = assert(loadfile("src/tether/providers/catalog.lua"))()
+  catfix.set_overlay({
+    openai = { wire = "openai", base_url = "https://api.openai.com/v1",
+      api_key_env = "OPENAI_API_KEY", model = "gpt-4o-mini", _source = "test" },
+  }, { generated_at = 0 })
+  _G.provider_catalog = catfix
   local api = assert(loadfile("src/tether/api.lua"))()
   _G.api = api
   _G.tether = host_mock{
@@ -11063,6 +11246,15 @@ do
     '{"error":"authorization_pending"}',
     '{"access_token":"ghu-ui","token_type":"bearer"}',
   }
+  -- dynamic-provider-catalog: seed github-copilot (ui snapshots the catalog).
+  do
+    local catfix = assert(loadfile("src/tether/providers/catalog.lua"))()
+    catfix.set_overlay({
+      ["github-copilot"] = { wire = "openai", base_url = "https://x",
+        api_key_env = "COPILOT_GITHUB_TOKEN", model = "x", _source = "test" },
+    }, { generated_at = 0 })
+    _G.provider_catalog = catfix
+  end
   local uimod, S = run_ui_with({ 17 }, {
     agent = { turn = function() return true end, get_history = function() return {} end },
     config = { load = function()
@@ -11472,6 +11664,18 @@ end
 -- T191: the level reaches the request body of the wires that support it and
 -- touches nothing else (checked through the real api.stream transport seam).
 do
+  -- dynamic-provider-catalog: seed the wires under test.
+  local catfix = assert(loadfile("src/tether/providers/catalog.lua"))()
+  catfix.set_overlay({
+    agnes = { wire = "openai", base_url = "http://x",
+      api_key_env = "AGNES_API_KEY", model = "x", _source = "test" },
+    gemini = { wire = "gemini", base_url = "http://x",
+      api_key_env = "GEMINI_API_KEY", model = "x", _source = "test" },
+    anthropic = { wire = "anthropic", base_url = "http://x",
+      api_key_env = "ANTHROPIC_API_KEY", model = "x", _source = "test" },
+  }, { generated_at = 0 })
+  local orig_catalog = _G.provider_catalog
+  _G.provider_catalog = catfix
   local api = assert(loadfile("src/tether/api.lua"))()
   local orig_tether, orig_reactor = _G.tether, _G.reactor
   local function body_of(cfg)
@@ -11537,6 +11741,7 @@ do
     assert_true(tonumber(b:match('"max_tokens"[%s]*:%s*(%d+)')) == mt,
       "T191 anthropic max_tokens >= budget+4096 for " .. level)
   end
+  _G.provider_catalog = orig_catalog
   print("T191 reasoning reaches the request body: OK")
 end
 
@@ -11621,7 +11826,7 @@ do
   assert_eq(persisted[1] and persisted[1].keys.reasoning, "high",
     "T193 persist_keys carries reasoning")
   local ents = uimod._transcript.entries()
-  assert_true((ents[#ents].text or ""):find("→ мышление: high", 1, true) ~= nil,
+  assert_true((ents[#ents].text or ""):find("→ thinking: high", 1, true) ~= nil,
     "T193 system row echoes the level")
 
   uimod._execute_command("think", "turbo")
@@ -11641,7 +11846,7 @@ do
     "T193 the four levels are listed in order")
   local marked = false
   for _, it in ipairs(S.palette_items) do
-    if it.label == "high" and (it.desc or ""):find("текущий", 1, true) then
+    if it.label == "high" and (it.desc or ""):find("current", 1, true) then
       marked = true
     end
   end
@@ -11654,7 +11859,7 @@ do
   assert_false(S.palette_active, "T193 Enter closes the picker")
   assert_eq(S.cfg.reasoning, "medium", "T193 the pick applies")
   ents = uimod._transcript.entries()
-  assert_true((ents[#ents].text or ""):find("→ мышление: medium", 1, true) ~= nil,
+  assert_true((ents[#ents].text or ""):find("→ thinking: medium", 1, true) ~= nil,
     "T193 the pick appends its row")
 
   uimod._execute_command("think")
@@ -11725,6 +11930,458 @@ do
   assert_true(expanded:find("step one step two!", 1, true) ~= nil,
     "T194 expanded shows the reasoning body again")
   print("T194 reasoning reaches the transcript: OK")
+end
+
+-- T195: providers file verify + merge priority + env list resolution
+do
+  local catalog = assert(loadfile("src/tether/providers/catalog.lua"))()
+  local body = '{"schema":1,"generated_at":123,"providers":'
+    .. '{"a":{"wire":"openai","base_url":"https://x","api_key_env":["X"],'
+    .. '"model":"m","models":[{"id":"m","context":100}]}}}'
+  local tbl, err = catalog.parse_file(body)
+  assert_true(tbl ~= nil, "T195 valid file parses")
+  assert_eq(tbl.providers.a.wire, "openai", "T195 wire kept")
+  assert_eq(tbl.providers.a.models[1].context, 100, "T195 context kept")
+  local t2, e2 = catalog.parse_file('{"schema":2,"providers":{}}')
+  assert_true(t2 == nil and e2:find("unsupported", 1, true) ~= nil,
+    "T195 schema major rejected")
+  local t3 = catalog.parse_file("FETCH_FAILED timeout\n")
+  assert_true(t3 == nil, "T195 fetch marker rejected")
+  assert_true(catalog.parse_file("") == nil, "T195 empty rejected")
+  assert_true(catalog.parse_file("not json{{") == nil, "T195 garbage rejected")
+
+  local boot = { a = { wire = "openai", model = "b" } }
+  local cache = { a = { wire = "openai", model = "c" }, b = { wire = "openai" } }
+  local over = { b = { wire = "openai", model = "o" } }
+  local merged, meta = catalog.merge(boot, cache, over, 123)
+  assert_eq(merged.a.model, "c", "T195 cache wins over bootstrap")
+  assert_eq(merged.a._source, "cache", "T195 source stamped")
+  assert_eq(merged.b.model, "o", "T195 models.lua wins over cache")
+  assert_eq(merged.b._source, "models.lua", "T195 overlay source stamped")
+  assert_eq(boot.a.model, "b", "T195 inputs unmutated")
+  assert_eq(meta.generated_at, 123, "T195 meta carries generated_at")
+
+  assert_eq(catalog.env_name("PLAIN"), "PLAIN", "T195 string passthrough")
+  assert_eq(catalog.env_name({ "TETHER_DEF_UNSET_1", "HOME" }), "HOME",
+    "T195 first set wins")
+  assert_eq(catalog.env_name({ "TETHER_DEF_UNSET_1", "TETHER_DEF_UNSET_2" }),
+    "TETHER_DEF_UNSET_1", "T195 none set falls back to first")
+  print("T195 providers verify/merge/env: OK")
+end
+
+-- T196: sync_providers TTL + branches (fresh/bg/ok/stale/missing)
+do
+  local home = "/tmp/tether_t196_home"
+  os.execute("rm -rf '" .. home .. "' && mkdir -p '" .. home .. "/.tether'")
+  local commands = assert(loadfile("src/tether/commands.lua"))()
+  local catalog = assert(loadfile("src/tether/providers/catalog.lua"))()
+  local payload = '{"schema":1,"generated_at":456,"providers":'
+    .. '{"hub":{"wire":"openai","base_url":"https://h","api_key_env":["H"],'
+    .. '"model":"m","models":[]}}}'
+  local calls = { n = 0, bg = 0 }
+  local live_body = payload
+  local orig_tether = _G.tether
+  -- phase 1: sync path only (no fetch_bg) to exercise ok/stale/missing
+  _G.tether = host_mock{
+    http_get = function(url)
+      calls.n = calls.n + 1
+      assert_true(url:find("providers.json", 1, true) ~= nil, "T196 hits data URL")
+      if live_body then return live_body end
+      return nil, "boom"
+    end,
+  }
+
+  -- miss + live success -> ok, cache written with checked_at
+  assert_eq(commands.sync_providers(home), "ok", "T196 ok on miss")
+  assert_eq(calls.n, 1, "T196 one sync attempt")
+  local cp = catalog.cache_path(home)
+  local f = io.open(cp, "r")
+  local raw = f:read("*a")
+  f:close()
+  assert_true(raw:find('"checked_at"', 1, true) ~= nil, "T196 checked_at stored")
+  assert_true(raw:find('"generated_at":456', 1, true) ~= nil, "T196 payload stored")
+
+  -- fresh -> instant, zero network (stub would explode the count only)
+  assert_eq(commands.sync_providers(home), "fresh", "T196 fresh instant")
+  assert_eq(calls.n, 1, "T196 no network on fresh")
+
+  -- stale + live failure -> stale served with reason (sync path: no fetch_bg)
+  local old_raw = raw:gsub('"checked_at":(%d+)',
+    function(ts) return '"checked_at":' .. (tonumber(ts) - 13 * 3600) end)
+  local wf = io.open(cp, "w")
+  wf:write(old_raw)
+  wf:close()
+  live_body = nil
+  _G.tether = host_mock{
+    http_get = function()
+      calls.n = calls.n + 1
+      return nil, "boom"
+    end,
+  }
+  local st, serr = commands.sync_providers(home)
+  assert_eq(st, "stale", "T196 stale on failure")
+  assert_true(serr ~= nil, "T196 stale carries reason")
+
+  -- no cache + failure -> missing naming the cause
+  os.execute("rm -f '" .. cp .. "'")
+  local ms, merr = commands.sync_providers(home)
+  assert_eq(ms, "missing", "T196 missing without cache")
+  assert_true(merr ~= nil, "T196 missing carries reason")
+
+  -- schema mismatch body -> missing with schema reason
+  live_body = '{"schema":99,"providers":{}}'
+  _G.tether = host_mock{
+    http_get = function() return live_body end,
+  }
+  local sm, smerr = commands.sync_providers(home)
+  assert_eq(sm, "missing", "T196 schema mismatch not stored")
+  assert_true(smerr:find("unsupported", 1, true) ~= nil, "T196 schema reason")
+
+  -- background spawn path: stale cache serves while one spawn refreshes;
+  -- no duplicate while the marker lives. (No cache at all takes the sync
+  -- path instead so a first run can bootstrap: see commands.sync_providers.)
+  local stale_wrap = '{"checked_at":' .. (os.time() - 13 * 3600)
+    .. ',"schema":1,"generated_at":' .. (os.time() - 13 * 3600)
+    .. ',"providers":{}}'
+  local swf = io.open(cp, "w")
+  swf:write(stale_wrap)
+  swf:close()
+  os.execute("rm -f '" .. cp .. ".pending'")
+  _G.tether = host_mock{
+    http_get = function() error("T196 sync must not run with fetch_bg") end,
+    fetch_bg = function(url, headers, outpath, timeout)
+      calls.bg = calls.bg + 1
+      assert_eq(timeout, 20, "T196 bg timeout 20s")
+      local mf = io.open(outpath, "w")
+      if mf then mf:close() end
+      return true
+    end,
+  }
+  assert_eq(commands.sync_providers(home), "background", "T196 bg spawn")
+  assert_eq(commands.sync_providers(home), "background", "T196 bg no duplicate")
+  assert_eq(calls.bg, 1, "T196 exactly one spawn")
+
+  _G.tether = orig_tether
+  print("T196 sync_providers branches: OK")
+end
+
+-- T197: poll_providers consume (waiting/updated/settled + re-merge)
+do
+  local home = "/tmp/tether_t197_home"
+  os.execute("rm -rf '" .. home .. "' && mkdir -p '" .. home .. "/.tether'")
+  local commands = assert(loadfile("src/tether/commands.lua"))()
+  local catalog = assert(loadfile("src/tether/providers/catalog.lua"))()
+  local pend = catalog.pending_path(home)
+
+  -- empty marker -> waiting
+  local mf = io.open(pend, "w")
+  mf:close()
+  assert_eq(commands.poll_providers(home), "waiting", "T197 waiting on marker")
+
+  -- landed file -> updated, cache stored, re-merged into the view
+  local wf = io.open(pend, "w")
+  wf:write('{"schema":1,"generated_at":789,"providers":'
+    .. '{"polled":{"wire":"openai","base_url":"https://p",'
+    .. '"api_key_env":["P"],"model":"m","models":[]}}}')
+  wf:close()
+  assert_eq(commands.poll_providers(home), "updated", "T197 updated on land")
+  local cat2 = assert(loadfile("src/tether/providers/catalog.lua"))()
+  assert_eq(cat2.ensure(home), "ready", "T197 cache readable")
+  assert_true(cat2.get("polled") ~= nil, "T197 landed id in merged view")
+  assert_eq(cat2.overlay_meta().generated_at, 789, "T197 meta generated_at")
+
+  -- failure marker -> settled, old providers preserved, cooldown armed
+  local ff = io.open(pend, "w")
+  ff:write("FETCH_FAILED timeout\n")
+  ff:close()
+  assert_eq(commands.poll_providers(home), "settled", "T197 failure settles")
+  local cat3 = assert(loadfile("src/tether/providers/catalog.lua"))()
+  assert_eq(cat3.ensure(home), "ready", "T197 old cache survives")
+  assert_true(cat3.get("polled") ~= nil, "T197 old entry preserved")
+  assert_eq(commands.sync_providers(home), "fresh", "T197 cooldown armed")
+
+  -- nothing pending -> settled
+  assert_eq(commands.poll_providers(home), "settled", "T197 quiet settles")
+  print("T197 poll_providers: OK")
+end
+
+-- T198: models.lua overlay + startup gate
+do
+  local home = "/tmp/tether_t198_home"
+  os.execute("rm -rf '" .. home .. "' && mkdir -p '" .. home .. "/.tether'")
+  local commands = assert(loadfile("src/tether/commands.lua"))()
+  local catalog = assert(loadfile("src/tether/providers/catalog.lua"))()
+
+  -- overlay defines a custom id and overrides a cached one wholesale
+  local mf = io.open(home .. "/.tether/models.lua", "w")
+  mf:write('return { providers = { ["my-proxy"] = { wire = "openai",'
+    .. ' base_url = "https://corp.example/v1", api_key_env = "CORP_KEY",'
+    .. ' model = "corp-model", models = {} } } }')
+  mf:close()
+  assert_eq(catalog.ensure(home), "ready", "T198 overlay loads")
+  local e = catalog.get("my-proxy")
+  assert_true(e ~= nil, "T198 custom id resolves")
+  assert_eq(e.base_url, "https://corp.example/v1", "T198 custom endpoint")
+  assert_eq(e._source, "models.lua", "T198 custom source stamped")
+  local found = false
+  for _, id in ipairs(catalog.ids()) do
+    if id == "my-proxy" then found = true end
+  end
+  assert_true(found, "T198 custom id in picker ids")
+
+  -- bootstrap-local id passes the gate with no cache at all
+  local cat2 = assert(loadfile("src/tether/providers/catalog.lua"))()
+  _G.provider_catalog = cat2
+  -- NOTE: pre-4.4 bootstrap still carries the full Tier-A list; "llama" is
+  -- the current local id (4.4 trims to llama-cpp + Tier-B).
+  assert_true(commands.check_providers(home, "llama") == true,
+    "T198 bootstrap-local passes offline")
+  -- unknown id with no cache anywhere -> error names the cache file
+  -- (fresh home: no cache, no models.lua — nothing to fall back to)
+  local bare = "/tmp/tether_t198_bare"
+  os.execute("rm -rf '" .. bare .. "' && mkdir -p '" .. bare .. "/.tether'")
+  local ok, err = commands.check_providers(bare, "definitely-not-a-provider")
+  assert_true(ok == nil, "T198 gate fails without catalog")
+  assert_true(err:find("providers_cache.json", 1, true) ~= nil,
+    "T198 error names the cache file")
+
+  -- malformed models.lua warns and is ignored: the pipeline catalog still
+  -- serves (t197 home holds a cache; garbage overlay must not break it)
+  local badhome = "/tmp/tether_t197_home"
+  local bf = io.open(badhome .. "/.tether/models.lua", "w")
+  bf:write("return { providers = { broken = = = } }\n")
+  bf:close()
+  local cat4 = assert(loadfile("src/tether/providers/catalog.lua"))()
+  assert_eq(cat4.ensure(badhome), "ready", "T198 broken overlay ignored")
+  assert_true(cat4.get("polled") ~= nil, "T198 cache serves past broken overlay")
+  os.remove(badhome .. "/.tether/models.lua")
+  _G.provider_catalog = nil
+  print("T198 models.lua overlay + gate: OK")
+end
+
+-- T200: pipeline models[] in the listing fallback chain (4.1)
+do
+  local home = "/tmp/tether_t200_home"
+  os.execute("rm -rf '" .. home .. "' && mkdir -p '" .. home .. "/.tether'")
+  local f = io.open(home .. "/.tether/providers_cache.json", "w")
+  f:write('{"checked_at":' .. os.time() .. ',"schema":1,"generated_at":'
+    .. os.time() .. ',"providers":{"groq":{"wire":"openai",'
+    .. '"base_url":"https://api.groq.com/openai/v1",'
+    .. '"api_key_env":["GROQ_API_KEY"],"model":"llama-3.3-70b-versatile",'
+    .. '"models":[{"id":"m-a","context":100},{"id":"m-b","context":null}]},'
+    .. '"openai":{"wire":"openai","base_url":"https://api.openai.com/v1",'
+    .. '"api_key_env":["OPENAI_API_KEY"],"model":"gpt-4o-mini","models":[]}}}')
+  f:close()
+  local catalog = assert(loadfile("src/tether/providers/catalog.lua"))()
+  assert_eq(catalog.ensure(home), "ready", "T200 cache loads")
+  _G.provider_catalog = catalog
+  local api = assert(loadfile("src/tether/api.lua"))()
+  local groq = api.list_models({ provider = "groq" })
+  assert_eq(#groq, 2, "T200 pipeline list served")
+  assert_eq(groq[1], "m-a", "T200 pipeline id")
+  -- curated native statics untouched
+  local oai = api.list_models({ provider = "openai" })
+  local has_mini = false
+  for _, m in ipairs(oai) do
+    if m == "gpt-4o-mini" then has_mini = true end
+  end
+  assert_true(has_mini, "T200 openai static kept")
+  -- renamed upstream pin: resolves verbatim, warns naming the id
+  local rpf = io.open(home .. "/.tether/renamed-cfg.lua", "w")
+  rpf:write('return { provider = "groq", model = "renamed-away" }\n')
+  rpf:close()
+  local errf = io.open(home .. "/.tether/stderr.txt", "w")
+  local old_err = io.stderr
+  io.stderr = errf
+  local cfgm2 = assert(loadfile("src/tether/config.lua"))()
+  local rc = cfgm2.load(home .. "/.tether/renamed-cfg.lua", home)
+  io.stderr = old_err
+  errf:close()
+  assert_eq(rc.model, "renamed-away", "T200 pin resolves verbatim")
+  local ef = io.open(home .. "/.tether/stderr.txt", "r")
+  local captured = ef:read("*a")
+  ef:close()
+  assert_true(captured:find("renamed-away", 1, true) ~= nil,
+    "T200 pin warning names id")
+  _G.provider_catalog = nil
+  print("T200 pipeline listing fallback: OK")
+end
+
+-- T201: per-model max_tokens chain for compaction (4.2)
+do
+  local home = "/tmp/tether_t201_home"
+  os.execute("rm -rf '" .. home .. "' && mkdir -p '" .. home .. "/.tether'")
+  local f = io.open(home .. "/.tether/providers_cache.json", "w")
+  f:write('{"checked_at":' .. os.time() .. ',"schema":1,"generated_at":'
+    .. os.time() .. ',"providers":{"testp":{"wire":"openai",'
+    .. '"base_url":"https://t","api_key_env":["T"],"model":"base-m",'
+    .. '"models":[{"id":"base-m","context":400},'
+    .. '{"id":"other-m","context":100}]}}}')
+  f:close()
+  local catalog = assert(loadfile("src/tether/providers/catalog.lua"))()
+  assert_eq(catalog.ensure(home), "ready", "T201 cache loads")
+  _G.provider_catalog = catalog
+  local agent = assert(loadfile("src/tether/agent.lua"))()
+  local hist = { { role = "user", content = string.rep("x", 320) } } -- est 80
+  -- reserve 0 isolates the fraction leg (default 16384 would fire first
+  -- on these tiny test budgets and mask the max_tokens under test).
+  local ctx0 = { reserve_tokens = 0 }
+
+  -- per-model limit applies: 0.7*100=70 < 80 (32768 would say false)
+  assert_true(agent.should_summarize(hist,
+    { provider = "testp", model = "other-m", context = ctx0 }),
+    "T201 per-model limit applies")
+  -- unknown model falls back to provider default: 0.7*400=280 > 80
+  assert_true(not agent.should_summarize(hist,
+    { provider = "testp", model = "nope", context = ctx0 }),
+    "T201 unknown model falls back")
+  -- user value wins over pipeline: 0.7*4000=2800 > 80
+  assert_true(not agent.should_summarize(hist,
+    { provider = "testp", model = "other-m",
+      context = { max_tokens = 4000, reserve_tokens = 0 } }),
+    "T201 user max_tokens wins")
+  -- no provider context at all: historic default path intact
+  assert_true(not agent.should_summarize(hist, { context = ctx0 }),
+    "T201 default path intact")
+  _G.provider_catalog = nil
+  print("T201 max_tokens chain: OK")
+end
+
+-- T202: keyless loopback listing, never remote (4.3)
+do
+  -- dynamic-provider-catalog: seed openai (remote-static assertions).
+  local catfix = assert(loadfile("src/tether/providers/catalog.lua"))()
+  catfix.set_overlay({
+    openai = { wire = "openai", base_url = "https://api.openai.com/v1",
+      api_key_env = "OPENAI_API_KEY", model = "gpt-4o-mini", _source = "test" },
+  }, { generated_at = 0 })
+  local orig_catalog = _G.provider_catalog
+  _G.provider_catalog = catfix
+  local api = assert(loadfile("src/tether/api.lua"))()
+  assert_true(api._is_loopback("http://127.0.0.1:8080/v1"), "T202 127 loopback")
+  assert_true(api._is_loopback("http://localhost:11434/v1"), "T202 localhost")
+  assert_true(api._is_loopback("http://[::1]:8080/v1"), "T202 v6 loopback")
+  assert_true(not api._is_loopback("https://api.openai.com/v1"), "T202 public no")
+  assert_true(not api._is_loopback("http://192.168.1.5:11434/v1"), "T202 lan no")
+  assert_true(not api._is_loopback(nil), "T202 nil no")
+  assert_true(not api._is_loopback("not a url"), "T202 garbage no")
+
+  local calls = { n = 0 }
+  local orig_tether = _G.tether
+  _G.tether = host_mock{
+    fchmod = function() return true end,
+    http_get = function(url)
+      calls.n = calls.n + 1
+      assert_true(url:find("127.0.0.1", 1, true) ~= nil, "T202 loopback URL")
+      return '{"data":[{"id":"local-m"}]}'
+    end,
+  }
+  -- loopback without key attempts live
+  local res, rerr = api.list_models_live(
+    { provider = "llama", base_url = "http://127.0.0.1:8080/v1", model = "m" },
+    "", 5)
+  assert_true(res ~= nil and res[1].id == "local-m", "T202 loopback live")
+  assert_eq(calls.n, 1, "T202 loopback attempted")
+  -- public without key is refused before any network
+  local res2, rerr2 = api.list_models_live(
+    { provider = "openai", base_url = "https://api.openai.com/v1", model = "m" },
+    "", 5)
+  assert_true(res2 == nil and rerr2 == "no api key", "T202 public refused")
+  assert_eq(calls.n, 1, "T202 public never attempted")
+  -- LAN without key is refused too
+  local res3 = api.list_models_live(
+    { provider = "x", base_url = "http://192.168.1.5:11434/v1", model = "m" },
+    "", 5)
+  assert_true(res3 == nil, "T202 lan refused")
+
+  -- commands level: loopback proceeds keyless, remote explains itself
+  local commands = assert(loadfile("src/tether/commands.lua"))()
+  local orig_api = _G.api
+  _G.api = api
+  local home = "/tmp/tether_t202_home"
+  os.execute("rm -rf '" .. home .. "' && mkdir -p '" .. home .. "/.tether'")
+  local m1 = commands.list_models(
+    { provider = "llama", base_url = "http://127.0.0.1:8080/v1", model = "m",
+      _auth_home = home }, "")
+  assert_eq(#m1, 1, "T202 commands loopback live")
+  assert_eq(m1[1].id, "local-m", "T202 commands loopback id")
+  local m2 = commands.list_models(
+    { provider = "openai", base_url = "https://api.openai.com/v1",
+      model = "m", _auth_home = home }, "")
+  assert_true(#m2 >= 10, "T202 commands remote static without key")
+  assert_eq(calls.n, 2, "T202 commands remote no network")
+  -- preset without static and without key explains itself (key hint)
+  local m2b, _, e2b = commands.list_models(
+    { provider = "groq", _auth_home = home }, "")
+  assert_eq(#m2b, 0, "T202 commands preset empty")
+  assert_true(e2b:find("no API key", 1, true) ~= nil, "T202 commands key hint")
+  -- runtime message when the loopback host is down (fresh home: no
+  -- models cache to mask the failure, like a first-ever open)
+  local down_home = "/tmp/tether_t202_down"
+  os.execute("rm -rf '" .. down_home .. "' && mkdir -p '" .. down_home .. "/.tether'")
+  _G.tether = host_mock{
+    fchmod = function() return true end,
+    http_get = function() return nil, "connection refused" end,
+  }
+  local m4, _, e4 = commands.list_models(
+    { provider = "llama", base_url = "http://127.0.0.1:8080/v1", model = "m",
+      _auth_home = down_home }, "")
+  assert_true(e4:find("local runtime", 1, true) ~= nil, "T202 runtime hint")
+  _G.api = orig_api
+  _G.tether = orig_tether
+  _G.provider_catalog = orig_catalog
+  print("T202 keyless loopback: OK")
+end
+
+-- T199: catalog age marks (providers_age branches + /model stale toast)
+do
+  local home = "/tmp/tether_t199_home"
+  os.execute("rm -rf '" .. home .. "' && mkdir -p '" .. home .. "/.tether'")
+  local commands = assert(loadfile("src/tether/commands.lua"))()
+  local catalog = assert(loadfile("src/tether/providers/catalog.lua"))()
+
+  -- missing cache -> no age
+  assert_true(commands.providers_age(home) == nil, "T199 no age without cache")
+
+  -- fresh cache -> age present, not stale
+  local now = os.time()
+  local f = io.open(catalog.cache_path(home), "w")
+  f:write('{"checked_at":' .. now .. ',"schema":1,"generated_at":' .. now
+    .. ',"providers":{}}')
+  f:close()
+  local young = commands.providers_age(home)
+  assert_true(young ~= nil and young.stale == false, "T199 fresh not stale")
+
+  -- old data -> stale with human text
+  local of = io.open(catalog.cache_path(home), "w")
+  of:write('{"checked_at":' .. (now - 13 * 3600) .. ',"schema":1,'
+    .. '"generated_at":' .. (now - 3 * 86400) .. ',"providers":{}}')
+  of:close()
+  local old = commands.providers_age(home)
+  assert_true(old ~= nil and old.stale == true, "T199 old is stale")
+  assert_eq(old.text, "3d", "T199 age text days")
+
+  -- /model open on a stale catalog sets the age toast (T78 pattern:
+  -- drive _handle_key directly, read state back)
+  local cfg_stub = {
+    load = function()
+      return { model = "test", workspace = "/tmp", _auth_home = home,
+        provider = "openai", ui = { input_max_lines = 8 } }
+    end,
+    api_key = function() return "" end,
+  }
+  local uimod = run_ui_with({ 17 }, { config = cfg_stub,
+    api = { list_models = function() return {} end } })
+  for i = 1, #"/model" do
+    uimod._handle_key({ kind = "text", char = ("/model"):sub(i, i) })
+  end
+  uimod._handle_key({ kind = "enter" })
+  local S = uimod._get_state()
+  assert_true(S.palette_mode == "model", "T199 model palette open")
+  assert_true(S.toast ~= nil
+    and S.toast:find("providers catalog 3d old", 1, true) ~= nil,
+    "T199 stale age toast set")
+  print("T199 catalog age marks: OK")
 end
 
 if failed > 0 then
