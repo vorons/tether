@@ -3262,6 +3262,11 @@ end
 -- M-fields (not chunk locals): ui.lua already sits at Lua's 200-locals
 -- limit for the main chunk.
 M._byte_stash = {}
+-- Wall-clock age of a stashed lone ESC prefix (seconds): the pump and the
+-- idle retry drive the decoder once per quantum, so a split sequence's tail
+-- lands within one; older than this with no tail, the ESC arrived alone.
+M._esc_stash_s = nil
+local ESC_AGE_S = 0.15
 function M._read_nb()
     if #M._byte_stash > 0 then return table.remove(M._byte_stash, 1) end
     return tether.read_char_nb()
@@ -3318,8 +3323,22 @@ local function decode_first_byte(c, nb)
             return b
         end
         local function incomplete()
-            if nb then return nil end
-            return { kind = "esc" }
+            if not nb then return { kind = "esc" } end
+            -- A split sequence's tail lands on the next tick (the pump and
+            -- the idle retry re-run the decoder every quantum). A lone ESC
+            -- that no tail follows past the age window is its own keypress:
+            -- stop re-stashing it and emit, instead of holding it until the
+            -- next key arrives.
+            if #consumed == 1 then
+                local now = M._paint_clock()
+                if M._esc_stash_s and now - M._esc_stash_s >= ESC_AGE_S then
+                    M._byte_stash = {}
+                    M._esc_stash_s = nil
+                    return { kind = "esc" }
+                end
+                M._esc_stash_s = M._esc_stash_s or now
+            end
+            return nil
         end
         local b2 = nb_read()
         if b2 == nil then return incomplete() end
@@ -4312,6 +4331,23 @@ pump_keys = function()
     return handled
 end
 M._pump_keys = function() if S then return pump_keys() end return false end
+
+-- Idle retry for a stashed escape prefix: the stdin drain fires only when
+-- fresh bytes arrive, so without a tick-driven retry (see run's on_tick) a
+-- lone Esc would sit in the stash until the next keypress. Same shape as the
+-- drain: decode everything currently readable, dispatch, count handled.
+M._drain_stash = function()
+    if not S or S.busy then return 0 end
+    local n = 0
+    while true do
+        local k = read_key_nb()
+        if not k then break end
+        n = n + 1
+        handle_key(k)
+        if not S or S.quit then break end
+    end
+    return n
+end
 
 -- Shared submit path for Enter / Alt+Enter while busy: user row now, queue
 -- FIFO, clear input. Does not start a turn.
@@ -5666,6 +5702,7 @@ function M.run(app_cfg)
     S = new_state()
     transcript.clear()
     M._byte_stash = {} -- drop any truncated-UTF-8 lookahead from a past run
+    M._esc_stash_s = nil
 
     S.cfg = app_cfg or (config and config.load and config.load()) or {}
     S.model_name = S.cfg.model or "gpt-4o-mini"
@@ -5836,6 +5873,10 @@ function M.run(app_cfg)
             -- host hook bound in run() covers the waits that still block it
             M._spinner_tick()
         else
+            -- a stashed escape prefix gets its retry here when no turn runs:
+            -- the stdin drain fires only on fresh bytes, so without it a
+            -- lone Esc would wait for the next keypress
+            if #M._byte_stash > 0 and M._drain_stash() > 0 then paint(true) end
             paint(false) -- throttled; picks up bg/resize/mouse changes
         end
         if S.quit then M._loop:stop() end

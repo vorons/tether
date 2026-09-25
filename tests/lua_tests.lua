@@ -12478,6 +12478,67 @@ do
   print("T205 loop error to banner: OK")
 end
 
+-- T206: a lone Esc during a busy turn (a tool command, a silent TTFT, a
+-- backoff) must decode as esc — the pump retries a stashed escape prefix
+-- every quantum, and one no tail follows within that window arrived alone
+-- instead of being re-stashed forever.
+do
+  local clock_ms = 1000
+  local fired
+  local orig_tether = _G.tether
+  _G.tether = setmetatable({
+      monotonic_ms = function() return clock_ms end,
+      read_char_nb = function() if not fired then fired = true; return 27 end return nil end,
+      read_char = function() if not fired then fired = true; return 27 end return nil end,
+    }, { __index = function() return function() return nil end end })
+  local uim, S = run_ui_with({ 17 }, {
+    agent = { turn = function() return true end, get_history = function() return {} end },
+  })
+  -- the module resolves `tether` at call time, so the post-run probes see
+  -- the mock above (the harness shadowed it only while the loop ran)
+  S.busy = true
+  S.input = "typed"
+  fired = false
+  assert_false(uim._pump_keys(), "T206 the lone Esc stashes, no key decoded yet")
+  assert_eq(#uim._byte_stash, 1, "T206 the Esc prefix waits for its tail")
+  clock_ms = 1000 + 200 -- past the retry window: the tail is not coming
+  assert_true(uim._pump_keys(), "T206 the aged-out Esc decodes as a key")
+  assert_eq(#uim._byte_stash, 0, "T206 the stash is drained")
+  _G.tether = orig_tether
+  print("T206 lone Esc decodes while busy: OK")
+end
+
+-- T207: the same lone Esc with no turn running: the stdin drain fires only on
+-- fresh bytes, so the stash gets a tick-driven retry (the same age window)
+-- instead of waiting for the next keypress.
+do
+  local clock_ms = 5000
+  local fired
+  local orig_tether = _G.tether
+  _G.tether = setmetatable({
+      monotonic_ms = function() return clock_ms end,
+      read_char_nb = function() if not fired then fired = true; return 27 end return nil end,
+      read_char = function() if not fired then fired = true; return 27 end return nil end,
+    }, { __index = function() return function() return nil end end })
+  local uim, S = run_ui_with({ 17 }, {
+    agent = { turn = function() return true end, get_history = function() return {} end },
+  })
+  S.busy = false
+  S.error_banner = "stale banner"
+  fired = false
+  if type(uim._drain_stash) ~= "function" then
+    assert_true(false, "T207 the idle stash retry seam exists")
+  else
+    assert_eq(uim._drain_stash(), 0, "T207 the lone Esc stashes, banner intact")
+    assert_eq(S.error_banner, "stale banner", "T207 nothing decoded before the window")
+    clock_ms = 5000 + 200
+    assert_eq(uim._drain_stash(), 1, "T207 the aged-out Esc decodes on the tick retry")
+    assert_eq(S.error_banner, nil, "T207 the Esc key cleared the banner")
+  end
+  _G.tether = orig_tether
+  print("T207 lone Esc decodes while idle: OK")
+end
+
 if failed > 0 then
     os.exit(1)
 end
