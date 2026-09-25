@@ -5836,7 +5836,15 @@ function M.run(app_cfg)
     -- backoff deadline) find this loop through the module and pump it
     -- nested instead of blocking the OS thread.
     M._reactor.set_active(M._loop)
-    M._loop:run()
+    -- Loop errors surface as the error banner, not as a stderr dump that
+    -- kills the session: a tick that raises is reported in place and the
+    -- next tick keeps the TUI live (the banner clears on the next Enter/Esc).
+    while not M._loop:stopped() do
+        local ok, err = pcall(M._loop.tick, M._loop)
+        if not ok and not M._loop:stopped() then
+            S.error_banner = tostring(err or "unknown error")
+        end
+    end
     M._reactor.set_active(nil)
     M._loop = nil
 

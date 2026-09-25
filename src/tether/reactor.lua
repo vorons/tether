@@ -109,7 +109,10 @@ function M.new(opts)
             local left = t.at - now
             if left < wait then wait = left end
         end
-        if wait < 0 then wait = 0 end
+        -- the host poll() takes an integer ms while the monotonic clock
+        -- carries sub-ms precision (and a fractional delay survives `after`),
+        -- so clamp non-negative and floor before handing the wait over.
+        wait = math.floor(wait < 0 and 0 or wait)
 
         local read_fds, write_fds = {}, {}
         if self._stdin_cb and self._stdin_armed then

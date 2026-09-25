@@ -11382,6 +11382,36 @@ do
     r:run()
     assert_true(r:stopped(), "T-reactor run returns after stop")
   end
+
+  -- T204: the poll timeout is always integral. The host clock is fractional
+  -- (tether.monotonic_ms carries sub-ms precision) and the C poll() takes an
+  -- integer ms, so a leftover fraction made luaL_optinteger throw and killed
+  -- the whole loop ("number has no integer representation").
+  do
+    local now = 1000.456789
+    local seen
+    local r = reactor.new({
+      poll = function(_, _, timeout) seen = timeout end,
+      clock = function() return now end,
+    })
+    r:after(50, function() end)
+    now = 1000.457001 -- under 1 ms elapsed: the wait is fractional
+    r:tick()
+    assert_true(seen ~= nil, "T204 poll received a timeout")
+    assert_eq(seen, math.floor(seen), "T204 clock-fraction poll timeout integral")
+  end
+  do
+    -- the other fraction source: a fractional timer delay (agent backoff:
+    -- loop:after(total * 1000) with sub-ms seconds)
+    local seen
+    local r = reactor.new({
+      poll = function(_, _, timeout) seen = timeout end,
+      clock = function() return 100 end,
+    })
+    r:after(33.5, function() end)
+    r:tick()
+    assert_eq(seen, math.floor(seen), "T204 delay-fraction poll timeout integral")
+  end
   print("T-reactor determinism: OK")
 end
 
@@ -12382,6 +12412,32 @@ do
     and S.toast:find("providers catalog 3d old", 1, true) ~= nil,
     "T199 stale age toast set")
   print("T199 catalog age marks: OK")
+end
+
+-- T205: a loop error becomes the error banner, never a stderr dump that
+-- kills the session — the failing tick is reported in place and the loop
+-- stays live (the banner clears on the next Enter/Esc).
+do
+  local function strip(s) return (s:gsub("\27%[[0-9;?%*]*[a-zA-Z]", "")) end
+  local polls = 0
+  local uim, S = run_ui_with({ 17 }, {
+    agent = { turn = function() return true end, get_history = function() return {} end },
+    tether = {
+      poll = function(rfds, wfds, timeout)
+        polls = polls + 1
+        if polls == 1 then error("synthetic loop error") end
+        return { read = { 0 }, write = {} }
+      end,
+    },
+  })
+  assert_true(polls >= 2, "T205 the loop survived the failing tick")
+  assert_notnil(S.error_banner, "T205 loop error reached the banner")
+  assert_true((S.error_banner or ""):find("synthetic loop error", 1, true) ~= nil,
+    "T205 banner carries the error text: " .. tostring(S.error_banner))
+  local L = uim._layout()
+  assert_true(strip(uim._row(L.error_row) or ""):find("synthetic loop error", 1, true) ~= nil,
+    "T205 banner painted, not thrown to the terminal")
+  print("T205 loop error to banner: OK")
 end
 
 if failed > 0 then
