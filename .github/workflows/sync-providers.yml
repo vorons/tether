@@ -1,0 +1,32 @@
+name: sync-providers
+
+on:
+  schedule:
+    # Daily Tier-A refresh from models.dev (see dynamic-provider-catalog).
+    - cron: "17 4 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Project models.dev api.json to data/providers.json
+        run: python3 tools/sync-providers.py
+      - name: Commit iff changed
+        run: |
+          if [ -z "$(git status --porcelain -- data/providers.json)" ]; then
+            echo "providers unchanged"
+          else
+            git config user.name "tether-sync"
+            git config user.email "tether-sync@users.noreply.github.com"
+            git add data/providers.json
+            git commit -m "data: refresh providers from models.dev"
+            git push
+          fi
