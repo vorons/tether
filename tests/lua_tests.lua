@@ -3238,7 +3238,7 @@ do
     return table.concat(rows, "\n"):gsub("\27%[[%d;]*m", "")
   end
   local joined = plain(uimod._render_all(80))
-  assert_true(joined:find("thinking · 0.0s", 1, true) ~= nil,
+  assert_true(joined:find("think · 0.0s", 1, true) ~= nil,
     "TFR thinking header carries elapsed")
   assert_true(joined:find("• answer here", 1, true) ~= nil,
     "TFR assistant rows use the • marker")
@@ -11613,7 +11613,7 @@ do
   local th = {}
   for _, r in ipairs(uimod._render_all(80)) do th[#th + 1] = r:gsub("\27%[[0-9;]*m", "") end
   assert_eq(#th, 1, "T188 empty thinking renders its header")
-  assert_true(th[1]:find("thinking", 1, true) ~= nil,
+  assert_true(th[1]:find("think ·", 1, true) ~= nil,
     "T188 thinking row starts with its header: " .. tostring(th[1]))
   print("T188 blank assistant row suppressed: OK")
 end
@@ -11944,7 +11944,7 @@ do
     return out
   end
   local joined = table.concat(rows(), "\n")
-  assert_true(joined:find("thinking · ", 1, true) ~= nil, "T194 thinking header painted")
+  assert_true(joined:find("think · ", 1, true) ~= nil, "T194 thinking header painted")
   assert_true(joined:find("step one step two!", 1, true) ~= nil, "T194 reasoning body painted")
   assert_true(joined:find("• the answer", 1, true) ~= nil, "T194 assistant row painted")
 
@@ -12566,6 +12566,89 @@ do
   })
   assert_true(quit_calls >= 3, "T208 the tick polled the host quit flag")
   print("T208 host quit flag honored: OK")
+end
+
+-- T209: a running tool row carries the • marker (not …), yellow while it
+-- runs; the done marker stays ✓ green and the error one ✗ red.
+do
+  local uimod, S = run_ui_with({ 17 },
+    { agent = { turn = function() return true end, get_history = function() return {} end } })
+  local function head_row()
+    for _, r in ipairs(uimod._render_all(80)) do
+      if r:find("run", 1, true) then return r end
+    end
+    return nil
+  end
+  uimod._handle_agent_event({ type = "tool_call_start", id = "t1",
+    name = "run", args = { command = "sleep 1" } })
+  local head = head_row()
+  assert_notnil(head, "T209 the pending run row is painted")
+  assert_true(head:find("•", 1, true) ~= nil, "T209 the pending marker is •")
+  assert_eq(head:find("…", 1, true), nil, "T209 the pending marker is no longer …")
+  assert_true(head:find("33;1", 1, true) ~= nil, "T209 the pending marker stays yellow")
+  uimod._handle_agent_event({ type = "tool_result", id = "t1",
+    summary = "done", body = "" })
+  head = head_row()
+  assert_notnil(head, "T209 the finished run row is painted")
+  assert_true(head:find("✓", 1, true) ~= nil, "T209 the done marker is still ✓")
+  assert_true(head:find("32m", 1, true) ~= nil, "T209 the done marker is green")
+  print("T209 run tool marker: OK")
+end
+
+-- T210: the think block carries a • marker — yellow while the model is still
+-- reasoning, green once it moved on — and the expanded header reads "think",
+-- never "thinking".
+do
+  local uimod, S = run_ui_with({ 17 },
+    { agent = { turn = function() return true end, get_history = function() return {} end } })
+  local function think_row()
+    for _, r in ipairs(uimod._render_all(80)) do
+      if r:find("think", 1, true) then return r end
+    end
+    return nil
+  end
+  uimod._handle_agent_event({ type = "reasoning_delta", text = "hmm" })
+  local head = think_row()
+  assert_notnil(head, "T210 the think row is painted")
+  assert_true(head:find("•", 1, true) ~= nil, "T210 the think row has the • marker")
+  assert_true(head:find("33;1", 1, true) ~= nil, "T210 the marker is yellow while thinking")
+  local joined = table.concat(uimod._render_all(80), "\n"):gsub("\27%[[0-9;]*m", "")
+  assert_true(joined:find("think ·", 1, true) ~= nil, "T210 the header reads think")
+  assert_eq(joined:find("thinking", 1, true), nil, "T210 no 'thinking' header anywhere")
+  -- the model moved on to the answer: the marker turns green
+  uimod._handle_agent_event({ type = "text_delta", text = "the answer" })
+  head = think_row()
+  assert_notnil(head, "T210 the think row survives the answer")
+  assert_true(head:find("32m", 1, true) ~= nil, "T210 the marker is green once done")
+  -- collapsed keeps the marker and the label
+  S.thinking_visible = false
+  uimod._invalidate_all()
+  head = think_row()
+  assert_notnil(head, "T210 the collapsed think row is painted")
+  assert_true(head:find("•", 1, true) ~= nil, "T210 the collapsed row keeps the marker")
+  assert_true((head:gsub("\27%[[0-9;]*m", "")):find("think ▸", 1, true) ~= nil,
+    "T210 the collapsed label is 'think ▸'")
+  print("T210 think block marker and label: OK")
+end
+
+-- T211: the think block gets a blank row above and below (block gap)
+do
+  local uimod, S = run_ui_with({ 17 },
+    { agent = { turn = function() return true end, get_history = function() return {} end } })
+  uimod._handle_agent_event({ type = "text_delta", text = "preface" })
+  uimod._handle_agent_event({ type = "reasoning_delta", text = "hmm" })
+  uimod._handle_agent_event({ type = "text_delta", text = "the answer" })
+  local rows = uimod._render_all(80)
+  local thi = nil
+  for i, r in ipairs(rows) do
+    if r:find("think ·", 1, true) then thi = i break end
+  end
+  assert_notnil(thi, "T211 the think row is painted")
+  assert_eq(rows[thi - 1], "", "T211 a blank row sits above the think block")
+  local thi_end = thi
+  while thi_end < #rows and rows[thi_end + 1] ~= "" do thi_end = thi_end + 1 end
+  assert_eq(rows[thi_end + 1], "", "T211 a blank row sits below the think block")
+  print("T211 think block padding: OK")
 end
 
 if failed > 0 then

@@ -220,6 +220,19 @@ end
 function M.handle(ev)
     if not ev or not ev.type then return false end
     local t = ev.type
+    if t ~= "reasoning_delta" then
+        -- anything other than reasoning freezes the thinking entries: the
+        -- model moved on (answer text, a tool call) or the turn ended, so
+        -- their marker stops signaling a live train of thought. Frozen once
+        -- and forever — a later reasoning_delta appends a fresh entry. The
+        -- touch invalidates the row cache, which keys on the entry version.
+        for _, e in ipairs(entries) do
+            if e.role == "thinking" and e.live ~= nil then
+                e.live = nil
+                M.touch(e)
+            end
+        end
+    end
     if t == "text_delta" then
         -- A delta belongs to the attempt that produced it: a retried attempt's
         -- rows have already been dropped, and a fresh attempt never appends to
@@ -241,7 +254,8 @@ function M.handle(ev)
         local stale = ev.attempt and last and last.attempt and last.attempt ~= ev.attempt
         if not last or last.role ~= "thinking" or stale then
             -- started_at once: later deltas must not reset the elapsed clock
-            last = M.append({ role = "thinking", text = "", started_at = os.time() })
+            last = M.append({ role = "thinking", text = "", started_at = os.time(),
+                live = true })
         end
         last.text = (last.text or "") .. (ev.text or "")
         last.attempt = ev.attempt or last.attempt

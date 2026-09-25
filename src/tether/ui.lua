@@ -2314,27 +2314,34 @@ local function render_entry(e, width, prev_role)
                 and "- " or "• "
             out = with_prefix(marker, 2, body)
         elseif role == "thinking" then
+            -- the marker color tracks liveness: yellow while reasoning may
+            -- still append to this entry, green once the model moved on (the
+            -- answer, a tool call, or the turn ending froze it — see
+            -- transcript.handle). Same glyph as a running tool.
+            local mark = e.live and yellow("•") or green("•")
             if not S.thinking_visible then
-                return { dim("think ▸ (Ctrl+T)") }
-            end
-            local secs = os.time() - (e.started_at or os.time())
-            if secs < 0 then secs = 0 end
-            local to = { dim(italic(string.format("thinking · %.1fs ▾", secs))) }
-            -- header only while no reasoning text has arrived: wrap("") yields
-            -- one empty line and would paint a stray blank row under the header
-            if (e.text or ""):find("%S") then
-                for _, l in ipairs(wrap(e.text, math.max(width - 2, 1))) do
-                    to[#to + 1] = "  " .. dim(l)
+                out = { mark .. " " .. dim("think ▸ (Ctrl+T)") }
+            else
+                local secs = os.time() - (e.started_at or os.time())
+                if secs < 0 then secs = 0 end
+                local to = { mark .. " " .. dim(italic(string.format("think · %.1fs ▾", secs))) }
+                -- header only while no reasoning text has arrived: wrap("")
+                -- yields one empty line and would paint a stray blank row
+                -- under the header
+                if (e.text or ""):find("%S") then
+                    for _, l in ipairs(wrap(e.text, math.max(width - 2, 1))) do
+                        to[#to + 1] = "  " .. dim(l)
+                    end
                 end
+                out = to
             end
-            out = to
         elseif role == "system" then
             out = { dim(e.text or "") }
         elseif role == "tool" then
             -- 3.1: leading status marker; a failed row appends its first error line
             -- (clipped) so the failure is visible without expanding.
             local marker
-            if e.status == "pending" then marker = yellow("…")
+            if e.status == "pending" then marker = yellow("•")
             elseif e.status == "error" then marker = red("✗")
             else marker = green("✓") end
             local head = marker .. " " .. sgr_role("accent", e.name or "?")
@@ -2401,13 +2408,18 @@ local function render_entry(e, width, prev_role)
     end
 
     -- Block gap: a blank row before top-level entities (separator, user,
-    -- assistant, system) — but not after a separator (the user row it labels
-    -- follows directly), not before the first entity, and not before virtual
-    -- tails (they emit their own leading blank). Empty entries get no gap.
-    local gap_roles = { separator = true, user = true, assistant = true, system = true }
+    -- assistant, system, thinking) — but not after a separator (the user row
+    -- it labels follows directly), not before the first entity, and not
+    -- before virtual tails (they emit their own leading blank). Empty
+    -- entries get no gap. A thinking block also gets a blank row AFTER it
+    -- (the think block is a visual block of its own), so an entry following
+    -- one gaps even when it would otherwise stay attached (a tool row).
+    local gap_roles = { separator = true, user = true, assistant = true,
+        system = true, thinking = true }
     local is_virt = e.virt == "ask" or e.virt == "placeholder" or e.virt == "confirm"
     local need_gap = (not is_virt) and prev_role ~= nil
-        and gap_roles[e.role or "system"] and prev_role ~= "separator"
+        and (gap_roles[e.role or "system"] or prev_role == "thinking")
+        and prev_role ~= "separator"
     if need_gap and #out > 0 then
         local gap = (S and S.cfg and S.cfg.ui and S.cfg.ui.block_gap)
         if gap == nil then gap = 1 end
