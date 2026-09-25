@@ -46,6 +46,9 @@ local function default_config()
         api_key_env = "OPENAI_API_KEY",
         base_url = "https://api.openai.com/v1",
         model = "gpt-4o-mini",
+        -- add-reasoning-level: reasoning effort; only these four levels are
+        -- valid (M.load normalizes anything else back to "off").
+        reasoning = "off",
         providers = catalog_providers(),
         workspace = nil,
         allow_outside_workspace = false,
@@ -83,6 +86,7 @@ local function default_config()
             editor_padding_x = 0,
             alt_screen = true, -- T48: fullscreen TUI; "false" keeps native scrollback
             turn_separators = true, -- 2.x: dim dividers between user turns; set false to disable
+            block_gap = 1, -- 6.x: blank rows before top-level transcript entities; 0 = compact
             path_completion = true, -- 4.3: Tab completes workspace path tokens
         },
         tools = { run_shell = { timeout = 120 } },
@@ -104,10 +108,10 @@ local function deep_merge(a, b)
     return a
 end
 
--- config-file-persist-settings: machine write-through of the two
+-- config-file-persist-settings: machine write-through of the three
 -- runtime-mutable keys. Targeted text patch (never load→modify→serialize,
 -- which would drop comments and break files with logic around the table).
--- Only top-level `provider`/`model` lines are touched; nested tables
+-- Only top-level `provider`/`model`/`reasoning` lines are touched; nested tables
 -- (providers.<id>.model), comments and unknown keys survive byte-for-byte.
 -- Missing keys append before the top-table close when the structure is
 -- recognizable, otherwise fail closed (return false, file untouched).
@@ -138,7 +142,7 @@ local function blank_strings(line)
     return table.concat(out)
 end
 
-local PERSIST_KEYS = { "provider", "model" }
+local PERSIST_KEYS = { "provider", "model", "reasoning" }
 
 function M.persist_keys(home, keys)
     return M._persist_keys_to_path(M._config_path(home), keys)
@@ -171,7 +175,9 @@ function M._persist_keys_to_path(path, keys)
             local cstart = blanked:find("--", 1, true)
             local code = cstart and blanked:sub(1, cstart - 1) or blanked
             if depth == 1 then
-                local key = code:match("^%s*(provider)%s*=") or code:match("^%s*(model)%s*=")
+                local key = code:match("^%s*(provider)%s*=")
+                    or code:match("^%s*(model)%s*=")
+                    or code:match("^%s*(reasoning)%s*=")
                 if key and want[key] then
                     local indent = line:match("^(%s*)")
                     local trail = ""
@@ -240,7 +246,7 @@ end
 -- Total function: returns false instead of raising; existing files are
 -- never touched (callers check existence first).
 local BOOTSTRAP_ORDER = {
-    "provider", "api_key_env", "base_url", "model",
+    "provider", "api_key_env", "base_url", "model", "reasoning",
     "workspace", "allow_outside_workspace", "auto_approve",
     "context", "retry", "ui", "tools",
     "system_prompt", "skills_dirs", "agents_files", "log_level",
@@ -251,6 +257,7 @@ local BOOTSTRAP_COMMENTS = {
     api_key_env = "legacy top-level key env (per-provider providers.<id>.api_key_env wins)",
     base_url = "legacy top-level endpoint (per-provider providers.<id>.base_url wins)",
     model = "legacy top-level model (per-provider providers.<id>.model wins; /model writes here)",
+    reasoning = "reasoning effort: off, low, medium, high (/think writes here)",
     workspace = "nil = process cwd at runtime (also: tether -w DIR)",
     allow_outside_workspace = "tools may touch paths outside the workspace",
     auto_approve = "extra always-approve patterns (the [A] key persists separately)",
@@ -503,6 +510,14 @@ function M.load(path, home)
             if e == pat then dup = true break end
         end
         if not dup then cfg.auto_approve[#cfg.auto_approve + 1] = pat end
+    end
+
+    -- add-reasoning-level: only the four levels are valid; a missing,
+    -- unknown or non-string value behaves as `off` without failing the
+    -- session (spec config: Defaults).
+    local reasoning_levels = { off = true, low = true, medium = true, high = true }
+    if type(cfg.reasoning) ~= "string" or not reasoning_levels[cfg.reasoning] then
+        cfg.reasoning = "off"
     end
     return cfg
 end

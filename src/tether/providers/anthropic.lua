@@ -102,16 +102,28 @@ local function tools_payload()
     return "[" .. table.concat(out, ",") .. "]"
 end
 
-function M.build_request(messages, model, max_tokens)
+-- add-reasoning-level: thinking budget per level. Anthropic requires
+-- `max_tokens` to stay above the budget with room left for the answer, so
+-- enabling a level raises the default 4096 window to budget + 4096.
+local THINK_BUDGET = { low = 4096, medium = 16384, high = 65536 }
+
+function M.build_request(messages, model, max_tokens, reasoning)
     local system, msgs = convert_messages(messages)
+    local budget = THINK_BUDGET[reasoning]
+    local mt = tonumber(max_tokens) or 4096
+    if budget and mt < budget + 4096 then mt = budget + 4096 end
     local parts = {
         string.format('"model":"%s"', jesc(model or "")),
-        string.format('"max_tokens":%d', tonumber(max_tokens) or 4096),
+        string.format('"max_tokens":%d', mt),
         string.format('"messages":%s', msgs),
         string.format('"tools":%s', tools_payload()),
         '"tool_choice":{"type":"auto"}',
         '"stream":true',
     }
+    if budget then
+        parts[#parts + 1] = string.format(
+            '"thinking":{"type":"enabled","budget_tokens":%d}', budget)
+    end
     if system ~= "" then
         parts[#parts + 1] = string.format('"system":"%s"', jesc(system))
     end
@@ -215,6 +227,18 @@ local function parse_sse_line(line, on_event)
                 text = json_unescape(text)
                 if text ~= "" then
                     on_event({ type = "text_delta", text = text })
+                end
+            end
+            return
+        end
+        if payload:find('"thinking_delta"', 1, true) then
+            -- add-reasoning-level: thinking blocks stream as reasoning_delta
+            -- (signature_delta below carries no text and emits nothing).
+            local th = payload:match('"thinking"[%s]*:[%s]*"(.-[^\\])"') or ""
+            if th ~= "" then
+                th = json_unescape(th)
+                if th ~= "" then
+                    on_event({ type = "reasoning_delta", text = th })
                 end
             end
             return

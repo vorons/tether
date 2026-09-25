@@ -128,11 +128,13 @@ local THEMES = {
         -- truecolor/256 render with the same palette. ponytail: no brighter
         -- per-depth variants; add one if a 256-color theme gets complaints.
         comment = "2;38", string = "32", number = "33", keyword = "36;1",
+        code = "35", heading = "36;1",
     },
     solarized = {
         accent = "36", warn = "33", error = "31", success = "32",
         dim = "2", italic = "3", reverse = "7", bold = "1",
         comment = "2;38", string = "32", number = "33", keyword = "36",
+        code = "35", heading = "36;1",
     },
     mono = {}, -- every role missing ⇒ no SGR emitted
 }
@@ -503,6 +505,10 @@ end
 -- NO_COLOR/TERM=dumb -> "none". Test seam: M._color_depth set in the ANSI
 -- section drives color_depth(); roles resolve via sgr_role (mono theme ⇒ raw text).
 
+function M.md_ansi(kind, text)
+    return sgr_role(kind, text)
+end
+
 -- ============================================================
 -- 7.2: per-line syntax token scanner (stateful for block comments)
 -- ============================================================
@@ -528,6 +534,16 @@ local HL_LANGS = {
 HL_LANGS.h = HL_LANGS.c
 HL_LANGS.bash = HL_LANGS.sh
 HL_LANGS.ts = HL_LANGS.js
+-- common aliases (spec delta): share the canonical tokenizer/table
+HL_LANGS.javascript, HL_LANGS.tsx, HL_LANGS.jsx = HL_LANGS.js, HL_LANGS.js, HL_LANGS.js
+HL_LANGS.py = HL_LANGS.python
+HL_LANGS.shell, HL_LANGS.zsh = HL_LANGS.sh, HL_LANGS.sh
+HL_LANGS["c++"], HL_LANGS.cpp, HL_LANGS.cc, HL_LANGS.cxx = HL_LANGS.c, HL_LANGS.c, HL_LANGS.c, HL_LANGS.c
+HL_LANGS.rs = HL_LANGS.rust
+HL_LANGS.golang = HL_LANGS.go
+-- supported languages with no keyword set: string literals and numbers only
+HL_LANGS.yaml = { kw = _kwset({}), strq = { "'", '"' } }
+HL_LANGS.yml, HL_LANGS.rb = HL_LANGS.yaml, HL_LANGS.yaml
 -- string quotes per language family
 HL_LANGS.c.strq, HL_LANGS.h.strq = { '"', "'" }, { '"', "'" }
 HL_LANGS.go.strq = { '"', "'", '`' }
@@ -672,19 +688,27 @@ local function md_render(text, width, ansi_fn)
     local i = 1
     while i <= #lines do
         local line = lines[i]
-        local fence = line:match("^%s*%`%`%`%s*(%w*)%s*$")
+        -- fence: ``` optional lang (may carry trailing attributes) optional
+        local fence = line:match("^%s*%`%`%`%s*(.*)$")
         if fence then
-            -- code block: framed, soft-wrapped with continuation indent
-            local lang = fence ~= "" and (" " .. fence .. " ") or ""
+            -- strip an inline-closing fence (``` alone closes) from the info
+            -- string; the first token is the language, the rest are attributes.
+            local lang = fence:match("[%w%+%.#%-]+") or ""
             local inner = math.max(width - 4, 1)
-            out[#out + 1] = box.tl .. box.h .. lang
-                .. string.rep(box.h, math.max(inner - ulen(lang), 1)) .. box.tr
+            -- top border off-by-one fix: the frame spans exactly `width`
+            -- columns (body rows are v + inner + v = inner + 4), so the fill
+            -- is what's left after corners and the (readable) label. The
+            -- frame is dim; the language label stays in the default fg.
+            local prefix = dim(box.tl .. box.h)
+            if lang ~= "" then prefix = prefix .. " " .. lang .. " " end
+            local fill = math.max(width - vlen(prefix) - 1, 1)
+            out[#out + 1] = prefix .. dim(string.rep(box.h, fill) .. box.tr)
             -- 7.3: highlight when the fence lang is known (case-insensitive);
             -- unknown/absent langs render plain (7.5). Tokenize each source
             -- line, emit SGR-colored text, then run it through the existing
             -- SGR-aware wrap (zero-width SGR cells, so split boundaries never
             -- land inside a sequence).
-            local hl_state = HL_LANGS[fence:lower()] and highlight_enabled() and {} or nil
+            local hl_state = HL_LANGS[lang:lower()] and highlight_enabled() and {} or nil
             i = i + 1
             -- continuation indent needs room; absurdly narrow frames fall
             -- back to plain wrapping with no indent
@@ -693,26 +717,100 @@ local function md_render(text, width, ansi_fn)
             while i <= #lines and not lines[i]:match("^%s*%`%`%`%s*$") do
                 local body_line = lines[i]
                 if hl_state then
-                    body_line = M.highlight_line(body_line, fence, hl_state)
+                    body_line = M.highlight_line(body_line, lang, hl_state)
                 end
                 for _, seg in ipairs(wrap_words(body_line, inner, cpre, cw)) do
-                    out[#out + 1] = box.v .. " " .. seg
-                        .. string.rep(" ", math.max(inner - vlen(seg), 0)) .. " " .. box.v
+                    out[#out + 1] = dim(box.v) .. " " .. seg
+                        .. string.rep(" ", math.max(inner - vlen(seg), 0)) .. " " .. dim(box.v)
                 end
                 i = i + 1
             end
-            out[#out + 1] = box.bl .. string.rep(box.h, inner + 2) .. box.br
+            out[#out + 1] = dim(box.bl .. string.rep(box.h, inner + 2) .. box.br)
             i = i + 1 -- skip closing fence (or last line)
+        elseif line:match("^%s*|") then
+            -- table: consecutive source lines beginning with |
+            local tlines = {}
+            while i <= #lines and lines[i]:match("^%s*|") do
+                tlines[#tlines + 1] = lines[i]
+                i = i + 1
+            end
+            local rows = {}
+            for _, tl in ipairs(tlines) do
+                -- strip the enclosing pipes, then split: without this the
+                -- trailing pipe yields an empty extra cell and a dangling │
+                local inner = tl:match("^%s*%|(.*)%|%s*$") or tl
+                local cells = {}
+                local pos = 1
+                while true do
+                    local bar = inner:find("|", pos, true)
+                    local chunk = bar and inner:sub(pos, bar - 1) or inner:sub(pos)
+                    chunk = chunk:gsub("^%s*(.-)%s*$", "%1")
+                    cells[#cells + 1] = md_strip_inline(chunk, ansi_fn)
+                    if not bar then break end
+                    pos = bar + 1
+                end
+                rows[#rows + 1] = cells
+            end
+            local ncol = 0
+            for _, r in ipairs(rows) do ncol = math.max(ncol, #r) end
+            local colw = {}
+            for c = 1, ncol do
+                local mx = 0
+                for _, r in ipairs(rows) do
+                    if r[c] then mx = math.max(mx, vlen(r[c])) end
+                end
+                colw[c] = mx
+            end
+            for _, r in ipairs(rows) do
+                local is_sep = #r > 0
+                for c = 1, ncol do
+                    local cell = r[c] or ""
+                    if not cell:match("^:?%-+:?$") then is_sep = false end
+                end
+                if is_sep then
+                    local parts = {}
+                    for c = 1, ncol do parts[#parts + 1] = string.rep("─", colw[c]) end
+                    local rule = dim(table.concat(parts, "─┼─"))
+                    if vlen(rule) > width then rule = rule:sub(1, width) end
+                    out[#out + 1] = rule
+                else
+                    local cells = {}
+                    for c = 1, ncol do
+                        local cell = r[c] or ""
+                        cells[#cells + 1] = cell .. string.rep(" ", math.max(colw[c] - vlen(cell), 0))
+                    end
+                    local row = table.concat(cells, " │ ")
+                    if vlen(row) > width then row = row:sub(1, width) end
+                    out[#out + 1] = row
+                end
+            end
         else
-            local heading = line:match("^(#+)%s+(.*)")
-            if heading then
-                out[#out + 1] = md_strip_inline(select(2, line:match("^(#+)%s+(.*)")), ansi_fn)
-                out[#out + 1] = ""
+            local hashes, rest = line:match("^(#+)%s+(.*)")
+            if hashes and rest then
+                -- headings: wrap to width, heading role colour, no trailing blank
+                local htext = md_strip_inline(rest, ansi_fn)
+                htext = sgr_role("heading", htext)
+                for _, wl in ipairs(wrap(htext, width)) do
+                    out[#out + 1] = wl
+                end
+                i = i + 1
+            elseif line:match("^%s*%d+%.%s+") then
+                -- ordered list: numbered prefix + aligned continuation indent
+                local num = line:match("^%s*(%d+%.?)%s+")
+                local item = line:gsub("^%s*%d+%.%s+", "", 1)
+                local body = md_strip_inline(item, ansi_fn)
+                local prefix = num .. " "
+                local prew = vlen(prefix)
+                local wrapped = wrap(body, math.max(width - prew, 1))
+                for wi, wl in ipairs(wrapped) do
+                    out[#out + 1] = (wi == 1) and (prefix .. wl)
+                        or (string.rep(" ", prew) .. wl)
+                end
                 i = i + 1
             elseif line:match("^%s*[%-%*]%s+") then
                 local item = line:gsub("^%s*[%-%*]%s+", "", 1)
                 local body = md_strip_inline(item, ansi_fn)
-                local prefix = "  " .. bullet .. " "
+                local prefix = bullet .. " "
                 local prew = vlen(prefix)
                 local wrapped = wrap(body, math.max(width - prew, 1))
                 for wi, wl in ipairs(wrapped) do
@@ -729,7 +827,22 @@ local function md_render(text, width, ansi_fn)
             end
         end
     end
-    return out
+    -- collapse runs of blank rows to one, drop leading/trailing blanks
+    local collapsed = {}
+    local prev_blank = false
+    for _, r in ipairs(out) do
+        local blank = r == ""
+        if blank then
+            if not prev_blank and #collapsed > 0 then collapsed[#collapsed + 1] = r end
+            prev_blank = true
+        else
+            collapsed[#collapsed + 1] = r
+            prev_blank = false
+        end
+    end
+    while #collapsed > 0 and collapsed[1] == "" do table.remove(collapsed, 1) end
+    while #collapsed > 0 and collapsed[#collapsed] == "" do table.remove(collapsed) end
+    return collapsed
 end
 M.md_render = md_render
 
@@ -794,6 +907,8 @@ local SLASH_COMMANDS = {
     -- add-provider-login: OAuth/API-key store
     { label = "/login",   desc = "войти у провайдера (API key/OAuth)", cmd = "login" },
     { label = "/logout",  desc = "выйти у провайдера (удалить ключ)",  cmd = "logout" },
+    -- add-reasoning-level: reasoning effort picker
+    { label = "/think",   desc = "уровень мышления",                  cmd = "think" },
     -- unified-slash-palette: /skills removed — skills are entries of this list
 }
 M.SLASH_COMMANDS = SLASH_COMMANDS
@@ -1034,6 +1149,7 @@ local function new_state()
         _in_login_palette = nil, -- add-provider-login: bare /login provider picker
         _in_resume_palette = nil, -- palette-only: /resume session list
         _in_model_palette = nil,  -- palette-only: /model list
+        _in_think_palette = nil,  -- add-reasoning-level: bare /think level list
 
         -- 5.4: one-shot confirmation; cleared on the next keypress in handle_key
         toast = nil,
@@ -1229,13 +1345,12 @@ local function layout()
         want_palette_h = win + 2
     end
 
-    -- slim-footer-indicators: the dock runs, top to bottom — the box's top
-    -- rule, the input's rows, its bottom rule, the palette, and the footer's
-    -- single row (path + stats + transient flags left, model right-aligned).
-    -- Everything is reserved here so no region can overlap another; the error
-    -- banner keeps its row above the box.
+    -- slim-footer-indicators: the dock runs, top to bottom — a gap row above
+    -- the box, the box's top rule, the input's rows, its bottom rule, the
+    -- palette, and the footer's single row. Everything is reserved here so no
+    -- region can overlap another; the error banner keeps its row above the box.
     local function reserve(pal_h)
-        return 1 + shown_in + pal_h + 1 + 1
+        return 2 + shown_in + pal_h + 1 + 1
     end
     local function th_for(pal_h)
         local th = S.h - error_h - reserve(pal_h)
@@ -1259,7 +1374,9 @@ local function layout()
         th = th_for(0) or 1
     end
 
-    local rule_top_row = 1 + th + error_h
+    local error_row = 1 + th
+    local gap_row = error_row + error_h
+    local rule_top_row = gap_row + 1
     local rule_bottom_row = rule_top_row + 1 + shown_in
     local footer_row = rule_bottom_row + palette_h + 1
 
@@ -1267,8 +1384,9 @@ local function layout()
         w = S.w, h = S.h,
         transcript_row = 1,
         transcript_h = th,
-        error_row = 1 + th,
+        error_row = error_row,
         error_h = error_h,
+        gap_row = gap_row,
         rule_top_row = rule_top_row,
         input_row = rule_top_row + 1,
         input_h = shown_in,
@@ -1314,7 +1432,7 @@ M._row = function(row) return S and S.screen[row] or nil end
 -- unified-slash-palette 1.2: skill rows for the palette. Discovery is injected
 -- so tests can stub it (M._skills_stub, mirroring M._tools_stub); a discovery
 -- problem degrades to no rows instead of breaking the palette.
-local PALETTE_SKILL_HINT = "[задача]"
+local PALETTE_SKILL_HINT = "[skill]"
 
 local function discover_palette_skills()
     local ok, res
@@ -1384,6 +1502,7 @@ palette_sync = function()
     if S._in_login_palette then return end -- add-provider-login: same for picker
     if S._in_resume_palette then return end -- palette-only: /resume list is explicit
     if S._in_model_palette then return end  -- palette-only: /model list is explicit
+    if S._in_think_palette then return end  -- add-reasoning-level: /think picker
     local first = S.input
     local nl = first:find("\n", 1, true)
     if nl then first = first:sub(1, nl - 1) end
@@ -1613,7 +1732,8 @@ local function input_clear()
     -- 6.1: palette modes set explicitly (copy/skills/login) survive input_clear;
     -- palette_sync is a no-op for them via the _in_*_palette flags.
     if not S._in_copy_palette and not S._in_login_palette
-        and not S._in_resume_palette and not S._in_model_palette then
+        and not S._in_resume_palette and not S._in_model_palette
+        and not S._in_think_palette then
         palette_sync()
     end
 end
@@ -2078,7 +2198,7 @@ local function render_ask(width)
     out[#out + 1] = cyan("? ") .. (q.question or "") .. dim(progress)
 
     if q.description and q.description ~= "" then
-        for _, l in ipairs(md_render(q.description, inner)) do
+        for _, l in ipairs(md_render(q.description, inner, M.md_ansi)) do
             out[#out + 1] = "  " .. l
         end
     end
@@ -2150,129 +2270,162 @@ function M._tool_arg_label(name, args, path)
     return path
 end
 
-local function render_entry(e, width)
+local function render_entry(e, width, prev_role)
     -- Synthetic tail entries go through the same path as real entries so the
     -- height index, the scroll indicator and the parity helper stay consistent.
+    -- `prev_role` is the role of the preceding entry (or nil) — used to decide
+    -- the leading block gap (see transcript-visual-refresh).
+    local out
     if e.virt == "ask" then
-        return render_ask(width)
-    end
-    if e.virt == "placeholder" then
+        out = render_ask(width)
+    elseif e.virt == "placeholder" then
         -- turn-feedback-restyling: no waiting row in the transcript (the
         -- input box carries the Working indicator); kept as a no-op for any
         -- stale tail reference.
-        return {}
-    end
-    if e.virt == "confirm" then
+        out = {}
+    elseif e.virt == "confirm" then
         local c = S.confirmation
         if not c then return {} end
-        local out = { "", yellow("⚠ " .. (c.label or "подтверждение")) }
+        local co = { "", yellow("⚠ " .. (c.label or "подтверждение")) }
         for _, l in ipairs(wrap(c.body or "", width - 2)) do
-            out[#out + 1] = "  " .. l
+            co[#co + 1] = "  " .. l
         end
         for i, opt in ipairs(c.options or {}) do
             local t = "  " .. opt
-            out[#out + 1] = (i == S.confirmation_sel) and rev(t) or t
+            co[#co + 1] = (i == S.confirmation_sel) and rev(t) or t
         end
-        return out
-    end
-    local role = e.role or "system"
-    if role == "separator" then
-        -- tui: Turn separators — dim rule with the local submission time
-        local label = "── " .. (e.text or "") .. " "
-        local fill = width - vlen(label)
-        if fill < 1 then fill = 1 end
-        return { dim(label .. string.rep("─", fill)) }
-    elseif role == "user" then
-        return with_prefix(cyan("›") .. " ", 2,
-            wrap(e.text or "", math.max(width - 2, 1)))
-    elseif role == "assistant" then
-        if (e.text or "") == "" then return {} end
-        -- M8/R4: markdown-lite render; md_render handles wrap/width itself
-        local body = md_render(e.text, math.max(width - 2, 1))
-        -- assistant marker: • (ASCII `-`) — was `·`/spec's `●`; user choice
-        local marker = M.ascii_active(S.cfg and S.cfg.ui and S.cfg.ui.ascii)
-            and "- " or "• "
-        return with_prefix(marker, 2, body)
-    elseif role == "thinking" then
-        if not S.thinking_visible then
-            return { dim("think ▸ (Ctrl+T)") }
-        end
-        local secs = os.time() - (e.started_at or os.time())
-        if secs < 0 then secs = 0 end
-        local out = { dim(italic(string.format("thinking · %.1fs ▾", secs))) }
-        for _, l in ipairs(wrap(e.text or "", math.max(width - 2, 1))) do
-            out[#out + 1] = "  " .. dim(l)
-        end
-        return out
-    elseif role == "system" then
-        return { dim(e.text or "") }
-    elseif role == "tool" then
-        -- 3.1: leading status marker; a failed row appends its first error line
-        -- (clipped) so the failure is visible without expanding.
-        local marker
-        if e.status == "pending" then marker = yellow("…")
-        elseif e.status == "error" then marker = red("✗")
-        else marker = green("✓") end
-        local head = marker .. " " .. yellow(e.name or "?")
-        -- the call's primary argument (which file ran what): without it
-        -- `✓ read` / `✓ run` say nothing about what actually happened.
-        do
-            local label = M._tool_arg_label(e.name, e.args, e.path)
-            if label and label ~= "" then
-                label = sanitize_output(label:match("^[^\n]*") or "")
-                local budget = width - vlen(head) - 1
-                if budget >= 4 then head = head .. " " .. clip(label, budget) end
+        out = co
+    else
+        local role = e.role or "system"
+        if role == "separator" then
+            -- tui: Turn separators — dim rule with the local submission time
+            local label = "── " .. (e.text or "") .. " "
+            local fill = width - vlen(label)
+            if fill < 1 then fill = 1 end
+            out = { dim(label .. string.rep("─", fill)) }
+        elseif role == "user" then
+            out = with_prefix(cyan("›") .. " ", 2,
+                wrap(e.text or "", math.max(width - 2, 1)))
+        elseif role == "assistant" then
+            -- M8/R4: markdown-lite render; md_render handles wrap/width itself
+            local body = md_render(e.text or "", math.max(width - 2, 1), M.md_ansi)
+            -- No visible content → no row and no block gap: a whitespace- or
+            -- control-only text_delta (a lone newline/space right before a
+            -- tool call) must not paint a bare marker line — with_prefix
+            -- falls back to the prefix alone for an empty body, which is
+            -- exactly the stray `•` row this guards against.
+            local plain = table.concat(body):gsub("\27%[[0-9;]*m", "")
+            if not plain:find("%S") then return {} end
+            -- assistant marker: • (ASCII `-`) — was `·`/spec's `●`; user choice
+            local marker = M.ascii_active(S.cfg and S.cfg.ui and S.cfg.ui.ascii)
+                and "- " or "• "
+            out = with_prefix(marker, 2, body)
+        elseif role == "thinking" then
+            if not S.thinking_visible then
+                return { dim("think ▸ (Ctrl+T)") }
             end
-        end
-        if e.status == "pending" then
-            -- M8/R3: pending tools show live elapsed time
-            if e.started_at then
-                local secs = os.time() - e.started_at
-                head = head .. "  " .. dim(string.format(" %.1fs", secs))
-            end
-        elseif e.status == "error" then
-            local raw = (e.body ~= nil and e.body ~= "") and e.body or (e.summary or "")
-            raw = sanitize_output(raw):gsub("^✗%s*", "")
-            local first = raw:match("^[^\n]*") or ""
-            local budget = width - vlen(head) - 1
-            if budget >= 1 then head = head .. " " .. red(clip(first, budget)) end
-            head = trunc(head, width)
-        elseif e.summary and e.summary ~= "" then
-            head = head .. "  " .. dim(e.summary)
-        end
-        -- 4.4: the write/patch row carries the +N -M meter.
-        if e.status ~= "error" and (e.name == "write" or e.name == "patch") and diff_mod then
-            local add, del
-            if e.projection then
-                add, del = e.projection.add, e.projection.del
-            else
-                local a, d = (e.summary or ""):match("^%+(%d+) −(%d+)")
-                add, del = tonumber(a), tonumber(d)
-            end
-            if add then
-                local ab, db = diff_mod.meter(add, del or 0)
-                if ab > 0 then head = head .. " " .. green(string.rep("━", ab)) end
-                if db > 0 then head = head .. red(string.rep("━", db)) end
-            end
-        end
-        local out = { head }
-        -- 3.3: the full body (including a failed call's error text and a
-        -- pending write/patch projection) is behind expansion.
-        if e.body and e.body ~= "" and entry_expanded(e) then
-            local bl = render_tool_body(e.name, e, math.max(width - 2, 1))
-            local cap = e.collapse_lines
-                or M.tool_collapse_cap(e.name, S.cfg and S.cfg.ui and S.cfg.ui.collapse, 200)
-            for i, l in ipairs(bl) do
-                if i > cap then
-                    out[#out + 1] = "  " .. dim("… (" .. (#bl - i + 1) .. " строк скрыто)")
-                    break
+            local secs = os.time() - (e.started_at or os.time())
+            if secs < 0 then secs = 0 end
+            local to = { dim(italic(string.format("thinking · %.1fs ▾", secs))) }
+            -- header only while no reasoning text has arrived: wrap("") yields
+            -- one empty line and would paint a stray blank row under the header
+            if (e.text or ""):find("%S") then
+                for _, l in ipairs(wrap(e.text, math.max(width - 2, 1))) do
+                    to[#to + 1] = "  " .. dim(l)
                 end
-                out[#out + 1] = "  " .. l
             end
+            out = to
+        elseif role == "system" then
+            out = { dim(e.text or "") }
+        elseif role == "tool" then
+            -- 3.1: leading status marker; a failed row appends its first error line
+            -- (clipped) so the failure is visible without expanding.
+            local marker
+            if e.status == "pending" then marker = yellow("…")
+            elseif e.status == "error" then marker = red("✗")
+            else marker = green("✓") end
+            local head = marker .. " " .. sgr_role("accent", e.name or "?")
+            -- the call's primary argument (which file ran what): without it
+            -- `✓ read` / `✓ run` say nothing about what actually happened.
+            do
+                local label = M._tool_arg_label(e.name, e.args, e.path)
+                if label and label ~= "" then
+                    label = sanitize_output(label:match("^[^\n]*") or "")
+                    local budget = width - vlen(head) - 1
+                    if budget >= 4 then head = head .. " " .. clip(label, budget) end
+                end
+            end
+            if e.status == "pending" then
+                -- M8/R3: pending tools show live elapsed time
+                if e.started_at then
+                    local secs = os.time() - e.started_at
+                    head = head .. "  " .. dim(string.format(" %.1fs", secs))
+                end
+            elseif e.status == "error" then
+                local raw = (e.body ~= nil and e.body ~= "") and e.body or (e.summary or "")
+                raw = sanitize_output(raw):gsub("^✗%s*", "")
+                local first = raw:match("^[^\n]*") or ""
+                local budget = width - vlen(head) - 1
+                if budget >= 1 then head = head .. " " .. red(clip(first, budget)) end
+                head = trunc(head, width)
+            elseif e.summary and e.summary ~= "" then
+                head = head .. "  " .. dim(e.summary)
+            end
+            -- 4.4: the write/patch row carries the +N -M meter.
+            if e.status ~= "error" and (e.name == "write" or e.name == "patch") and diff_mod then
+                local add, del
+                if e.projection then
+                    add, del = e.projection.add, e.projection.del
+                else
+                    local a, d = (e.summary or ""):match("^%+(%d+) −(%d+)")
+                    add, del = tonumber(a), tonumber(d)
+                end
+                if add then
+                    local ab, db = diff_mod.meter(add, del or 0)
+                    if ab > 0 then head = head .. " " .. green(string.rep("━", ab)) end
+                    if db > 0 then head = head .. red(string.rep("━", db)) end
+                end
+            end
+            local to = { head }
+            -- 3.3: the full body (including a failed call's error text and a
+            -- pending write/patch projection) is behind expansion.
+            if e.body and e.body ~= "" and entry_expanded(e) then
+                local bl = render_tool_body(e.name, e, math.max(width - 2, 1))
+                local cap = e.collapse_lines
+                    or M.tool_collapse_cap(e.name, S.cfg and S.cfg.ui and S.cfg.ui.collapse, 200)
+                for i, l in ipairs(bl) do
+                    if i > cap then
+                        to[#to + 1] = "  " .. dim("… (" .. (#bl - i + 1) .. " строк скрыто)")
+                        break
+                    end
+                    to[#to + 1] = "  " .. l
+                end
+            end
+            out = to
+        else
+            out = {}
         end
-        return out
     end
-    return {}
+
+    -- Block gap: a blank row before top-level entities (separator, user,
+    -- assistant, system) — but not after a separator (the user row it labels
+    -- follows directly), not before the first entity, and not before virtual
+    -- tails (they emit their own leading blank). Empty entries get no gap.
+    local gap_roles = { separator = true, user = true, assistant = true, system = true }
+    local is_virt = e.virt == "ask" or e.virt == "placeholder" or e.virt == "confirm"
+    local need_gap = (not is_virt) and prev_role ~= nil
+        and gap_roles[e.role or "system"] and prev_role ~= "separator"
+    if need_gap and #out > 0 then
+        local gap = (S and S.cfg and S.cfg.ui and S.cfg.ui.block_gap)
+        if gap == nil then gap = 1 end
+        if gap and gap > 0 then
+            local merged = {}
+            for _ = 1, gap do merged[#merged + 1] = "" end
+            for _, r in ipairs(out) do merged[#merged + 1] = r end
+            out = merged
+        end
+    end
+    return out
 end
 
 -- Wire render_entry + viewport cache bound into the transcript module. Must
@@ -2679,6 +2832,15 @@ local function render_palette(L)
     local n = #S.palette_items
     local win, off = palette_window(L.h, n, S.palette_sel)
     local last = L.footer_row - 1
+    -- descriptions align: the name column is padded to the widest name+hint
+    -- across all listed entries (computed once per paint)
+    local label_w = 0
+    for _, it in ipairs(S.palette_items) do
+        local l = it.label or ""
+        if it.hint then l = l .. " " .. it.hint end
+        local vw = vlen(l)
+        if vw > label_w then label_w = vw end
+    end
     for i = 1, win do
         local row = L.palette_row + i
         if row > last then break end
@@ -2687,7 +2849,8 @@ local function render_palette(L)
             -- 3.1: the argument hint sits after the name when the entry has one
             local label = it.label or ""
             if it.hint then label = label .. " " .. it.hint end
-            local text = trunc(string.format(" %-10s %s", label, it.desc or ""), L.w - 2)
+            local pad = string.rep(" ", math.max(label_w - vlen(label), 0))
+            local text = trunc(string.format(" %s%s %s", label, pad, it.desc or ""), L.w - 2)
             set_row(row, (off + i - 1 == S.palette_sel) and sgr_role("accent", text) or dim(text))
         end
     end
@@ -2881,10 +3044,14 @@ local function render_footer(L)
         end
     end
 
-    -- right-aligned cell: provider/model (provider omitted when unknown)
+    -- right-aligned cell: provider/model · <level> (provider omitted when
+    -- unknown; the level always shows, `off` included — spec tui: Footer)
     local provider = (type(S.cfg) == "table" and S.cfg.provider) or nil
-    local model_cell = provider and (provider .. "/" .. (S.model_name or "?"))
-        or (S.model_name or "?")
+    local level = (type(S.cfg) == "table" and type(S.cfg.reasoning) == "string"
+        and S.cfg.reasoning) or "off"
+    local model_cell = provider
+        and (provider .. "/" .. (S.model_name or "?") .. " · " .. level)
+        or ((S.model_name or "?") .. " · " .. level)
     set_row(L.footer_row, M.footer_stats(left, dim(model_cell), width))
 end
 
@@ -2908,6 +3075,7 @@ local function redraw()
 
     render_transcript(L)
     render_error_banner(L)
+    if L.gap_row then set_row(L.gap_row, "") end
     render_input(L)
     render_palette(L)
     render_footer(L)
@@ -3714,6 +3882,25 @@ function pick.model(item, provider)
     transcript.append({ role = "system", text = "→ модель: " .. where .. model_id })
     bump_transcript()
 end
+-- add-reasoning-level: apply a level from /think or its picker — in-memory
+-- first, then best-effort persistence (a failed write keeps the session on
+-- the picked level), then the echo row, exactly like pick.model.
+function pick.think(level)
+    if S.cfg then S.cfg.reasoning = level end
+    do
+        local cfgmod = rawget(_G, "config")
+        if type(cfgmod) ~= "table" or type(cfgmod.persist_keys) ~= "function" then
+            local chunk = loadfile("src/tether/config.lua")
+            cfgmod = (chunk and chunk()) or nil
+        end
+        if cfgmod and cfgmod.persist_keys then
+            local home = (S.cfg and S.cfg._auth_home) or os.getenv("HOME") or ""
+            pcall(cfgmod.persist_keys, home, { reasoning = level })
+        end
+    end
+    transcript.append({ role = "system", text = "→ мышление: " .. level })
+    bump_transcript()
+end
 
 -- add-llm-compaction: `rest` is the free text after the command word
 -- (e.g. focus instructions for /compact).
@@ -3886,6 +4073,35 @@ local function execute_command(cmd, rest)
             text = "→ logout " .. provider .. ": stored credential removed",
         })
         bump_transcript()
+        return
+    end
+    -- add-reasoning-level: reasoning level — a level argument applies
+    -- directly, no argument opens the level picker in the shared palette.
+    if cmd == "think" then
+        local level = (type(rest) == "string" and rest:match("^%s*(.-)%s*$")) or ""
+        if level == "" then
+            local ORDER = { "off", "low", "medium", "high" }
+            local cur = (S.cfg and S.cfg.reasoning) or "off"
+            local items = {}
+            for _, lv in ipairs(ORDER) do
+                items[#items + 1] = { label = lv,
+                    desc = (lv == cur) and "текущий" or "" }
+            end
+            S.error_banner = nil
+            S.palette_mode = "think"
+            S.palette_active = true
+            S.palette_items = items
+            S.palette_sel = 1
+            S._in_think_palette = true
+            return
+        end
+        level = level:lower()
+        local known = { off = true, low = true, medium = true, high = true }
+        if not known[level] then
+            S.error_banner = "неизвестный уровень мышления: " .. level
+            return
+        end
+        pick.think(level)
         return
     end
 end
@@ -5067,6 +5283,13 @@ handle_key = function(k)
                             S._in_model_palette = nil
                             pick.model(it)
                             bump_transcript()
+                        elseif S.palette_mode == "think" and it.label then
+                            S.palette_active = false
+                            S.palette_mode = "command"
+                            S.palette_items = {}
+                            S.palette_sel = 1
+                            S._in_think_palette = nil
+                            pick.think(it.label)
                         end
                     end
                     return
@@ -5213,6 +5436,36 @@ handle_key = function(k)
                 return
             elseif k.kind == "esc" then
                 close_model_palette()
+                return
+            elseif k.kind == "special" then
+                local n = #S.palette_items
+                if k.name == "up" then
+                    S.palette_sel = math.max(1, S.palette_sel - 1)
+                elseif k.name == "down" and n > 0 then
+                    S.palette_sel = math.min(n, S.palette_sel + 1)
+                end
+                return
+            end
+            return
+        elseif S.palette_mode == "think" then
+            -- add-reasoning-level: level picker — Enter applies, Esc closes;
+            -- no fall-through for text (list is modal while active).
+            local function close_think_palette()
+                S.palette_active = false
+                S.palette_mode = "command"
+                S.palette_items = {}
+                S.palette_sel = 1
+                S._in_think_palette = nil
+            end
+            if k.kind == "enter" then
+                local it = S.palette_items[S.palette_sel]
+                close_think_palette()
+                if it and it.label then
+                    pick.think(it.label)
+                end
+                return
+            elseif k.kind == "esc" then
+                close_think_palette()
                 return
             elseif k.kind == "special" then
                 local n = #S.palette_items

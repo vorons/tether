@@ -913,10 +913,13 @@ with_modules(base_env, function(mods)
     assert_notnil(ui.set_theme, "T31 ui.set_theme exported")
     assert_notnil(ui.THEMES, "T31 THEMES exported")
 
-    -- default theme exists with core roles
+    -- default theme exists with core roles (spec delta: at least accent,
+    -- warn, error, success, dim, italic, reverse, bold, comment, string,
+    -- number, keyword, code, heading)
     local t = ui.THEMES["default"]
     assert_notnil(t, "T31 default theme exists")
-    for _, role in ipairs({ "accent", "warn", "error", "success", "dim", "reverse" }) do
+    for _, role in ipairs({ "accent", "warn", "error", "success", "dim", "reverse",
+        "italic", "bold", "comment", "string", "number", "keyword", "code", "heading" }) do
         assert_notnil(t[role], "T31 default role " .. role)
     end
 
@@ -929,6 +932,8 @@ with_modules(base_env, function(mods)
     assert_eq(ui._theme_name, "mono", "T31 mono selected")
     local s = ui.sgr_role("accent", "x")
     assert_eq(s, "x", "T31 mono strips SGR")
+    assert_eq(ui.sgr_role("heading", "x"), "x", "T31 mono leaves heading raw")
+    assert_eq(ui.sgr_role("code", "x"), "x", "T31 mono leaves code raw")
 
     ui.set_theme("default")
     local s2 = ui.sgr_role("accent", "x")
@@ -980,9 +985,9 @@ with_modules(base_env, function(mods)
     assert_true(joined:find("bold", 1, true) ~= nil, "T32 bold text kept")
     assert_true(joined:find("%*%*", 1, true) == nil, "T32 ** stripped")
 
-    -- heading
+    -- heading (no trailing blank: collapse handles spacing)
     out = render("# Title", 40)
-    assert_eq(#out, 2, "T32 heading + blank line")
+    assert_eq(#out, 1, "T32 heading one row")
     assert_true(out[1]:find("Title", 1, true) ~= nil, "T32 heading text")
 
     -- list items get bullet prefix
@@ -1010,6 +1015,65 @@ with_modules(base_env, function(mods)
         assert_true(out[1]:byte(i) <= 0x7F, "T32 ascii bullet bytes")
     end
     ui._ascii_mode = nil
+
+    -- code frame: the top border, the body rails and the bottom border all
+    -- share the display width (no one-off narrow top edge)
+    out = render("```lua\nlocal x = 1\n```", 40)
+    assert_eq(#out, 3, "T32 bare frame has top, body, bottom")
+    assert_eq(ui.vlen(out[1]), 40, "T32 frame top border spans the width")
+    assert_eq(ui.vlen(out[2]), 40, "T32 frame body spans the width")
+    assert_eq(ui.vlen(out[3]), 40, "T32 frame bottom border spans the width")
+
+    -- tables: cells padded to the widest cell, the separator row renders as
+    -- a rule, and every row shares the column grid
+    out = render("| a | bb |\n| --- | --- |\n| 1 | 22 |", 40)
+    assert_eq(#out, 3, "T32 table renders three rows")
+    assert_true(out[1]:find("a   │ bb", 1, true) ~= nil, "T32 table cells padded to widest cell")
+    assert_true(out[2]:find("─┼─", 1, true) ~= nil, "T32 table separator renders as a rule")
+    assert_eq(out[1]:find("│", 1, true), out[3]:find("│", 1, true),
+        "T32 table columns align")
+    assert_eq(ui.vlen(out[1]), ui.vlen(out[3]), "T32 table rows share the grid")
+
+    -- ordered lists: numbered prefix, continuation aligned to the prefix
+    out = render("1. first\n2. second", 40)
+    assert_eq(#out, 2, "T32 ordered list renders two items")
+    assert_true(out[1]:find("1. first", 1, true) ~= nil, "T32 ordered prefix on item one")
+    assert_true(out[2]:find("2. second", 1, true) ~= nil, "T32 ordered prefix on item two")
+    out = render("1. lorem ipsum dolor sit amet", 20)
+    assert_true(#out > 1, "T32 ordered item wraps")
+    assert_eq(out[2]:sub(1, 3), "   ", "T32 ordered continuation indent")
+
+    -- blank runs collapse to a single row; leading/trailing blanks drop
+    out = render("a\n\n\n\nb\n\n", 40)
+    assert_eq(#out, 3, "T32 blank runs collapse to a single row")
+    assert_eq(out[2], "", "T32 the collapsed blank row sits between content")
+    out = render("\n\na\n\n", 40)
+    assert_eq(#out, 1, "T32 leading and trailing blanks are dropped")
+
+    -- headings wrap to the width
+    out = render("# alpha beta gamma delta epsilon", 16)
+    assert_true(#out > 1, "T32 heading wraps to several rows")
+    for _, hl in ipairs(out) do
+        assert_true(ui.vlen(hl) <= 16, "T32 heading row fits the width")
+    end
+    assert_true(table.concat(out, " "):find("epsilon", 1, true) ~= nil,
+        "T32 heading text survives the wrap")
+
+    -- role colours for inline markup and headings (depth 256; ansi_fn wired
+    -- exactly like the assistant and ask call sites pass M.md_ansi)
+    ui._color_depth = "256"
+    out = render("run `npm test` now", 40, ui.md_ansi)
+    joined = table.concat(out)
+    assert_true(joined:find("\27[35m", 1, true) ~= nil, "T32 inline code takes the code role")
+    assert_true(joined:find("`", 1, true) == nil, "T32 inline code marker stripped when coloured")
+    out = render("**bold** and *italic*", 40, ui.md_ansi)
+    joined = table.concat(out)
+    assert_true(joined:find("\27[1m", 1, true) ~= nil, "T32 bold takes the bold role")
+    assert_true(joined:find("\27[3m", 1, true) ~= nil, "T32 italic takes the italic role")
+    out = render("# Heading colours", 40)
+    assert_true(table.concat(out):find("\27[36;1m", 1, true) ~= nil,
+        "T32 heading takes the heading role")
+    ui._color_depth = "none"
 end)
 
 -- M11/T54: word wrap on display width + code soft-wrap (readability)
@@ -1065,10 +1129,10 @@ with_modules(base_env, function(mods)
         assert_true(ui.vlen(l) <= 30, "T54 frame rows fit width")
     end
 
-    -- list continuation aligns to content start (display columns, not bytes)
+    -- list continuation aligns to content start (2-column prefix now)
     out = ui.md_render("- lorem ipsum dolor sit amet", 20)
     assert_eq(#out, 2, "T54 list wraps to two rows")
-    assert_eq(out[2]:sub(1, 4), "    ", "T54 continuation indent")
+    assert_eq(out[2]:sub(1, 2), "  ", "T54 continuation indent")
 
     -- wrap=false still truncates to one line
     ui.set_wrap(false)
@@ -1267,8 +1331,10 @@ do
            "T39 /" .. tostring(m.cmd) .. " must be removed")
   end
   -- unified-slash-palette: /skills is gone — skills are entries of this list
-  -- add-provider-login adds /login /logout → 7 + 2 = 9
-  assert(#(ui.SLASH_COMMANDS or {}) == 9, "T39 slash commands = base 7 + login/logout")
+  -- add-provider-login adds /login /logout, add-reasoning-level adds /think
+  -- → 7 + 2 + 1 = 10
+  assert(#(ui.SLASH_COMMANDS or {}) == 10,
+    "T39 slash commands = base 7 + login/logout + think")
   print("T39 M9 cleanups: OK")
 end
 
@@ -2708,6 +2774,24 @@ do
   for _, m in ipairs({ role = "user", content = "q1" }) do
     assert_true(m.role ~= "separator", "T62 no separator in agent history messages")
   end
+
+  -- block-gap parity (transcript-visual-refresh): full render and viewport
+  -- index agree; for a separator that follows another entity (the second
+  -- turn) a blank row precedes it, while NO blank sits between it and the
+  -- user row it labels.
+  local full = uimod._render_all(80)
+  assert_eq(uimod.transcript_height(80), #full, "T62 gap: index == full render")
+  local sep_row, user_row
+  for i, r in ipairs(full) do
+    local plain = (r:gsub("\27%[[0-9;]*m", ""))
+    if plain:find("──", 1, true) then
+      local next_plain = full[i + 1] and (full[i + 1]:gsub("\27%[[0-9;]*m", "")) or ""
+      if next_plain:find("q2", 1, true) then sep_row = i; user_row = i + 1 end
+    end
+  end
+  assert_true(sep_row ~= nil and user_row ~= nil, "T62 gap: second separator + user row rendered")
+  assert_eq(user_row, sep_row + 1, "T62 gap: no blank between separator and its user row")
+  assert_eq((full[sep_row - 1]:gsub("\27%[[0-9;]*m", "")), "", "T62 gap: blank row before separator")
   print("T62 2.1 turn separators: OK")
 end
 
@@ -2935,9 +3019,9 @@ do
   end
 
   -- type "/" to open palette with empty filter
-  -- add-provider-login: /login /logout added → base 7 + 2 = 9
+  -- add-provider-login: /login /logout; add-reasoning-level: /think → 10
   local _, S1 = open_palette("/")
-  assert_eq(#S1.palette_items, 9, "T69 empty filter: all 9 commands listed")
+  assert_eq(#S1.palette_items, 10, "T69 empty filter: all 10 commands listed")
   assert_eq(S1.palette_items[1].cmd, "clear", "T69 first = /clear")
 
   -- type "/z" — no match
@@ -3593,7 +3677,7 @@ do
   uimod._handle_key({ kind = "text", char = "/" })
   local S = uimod._get_state()
   assert_true(S.palette_active, "T71 palette active after typing /")
-  assert_eq(#S.palette_items, 9, "T71 nine commands listed (+login/logout)")
+  assert_eq(#S.palette_items, 10, "T71 ten commands listed (+login/logout/think)")
   assert_true(S.palette_items[1].desc ~= "", "T71 first item has a description")
   assert_true(S.palette_items[1].label ~= "", "T71 first item has a label")
   -- narrow terminal: rows truncate, never overflow past L.w
@@ -4989,15 +5073,15 @@ do
   } end
 
   -- commands in declared order, then skills in discovery order
-  -- add-provider-login: 9 commands (base 7 + login/logout) + 2 skills = 11
+  -- add-provider-login: /login /logout; add-reasoning-level: /think → 10 + 2
   local uimod = boot(two_skills)
   type_text(uimod, "/")
   local S = uimod._get_state()
-  assert_eq(#S.palette_items, 11, "T79 commands + skills share one list")
+  assert_eq(#S.palette_items, 12, "T79 commands + skills share one list")
   assert_eq(S.palette_items[1].cmd, "clear", "T79 first entry is the first command")
-  assert_eq(S.palette_items[9].cmd, "logout", "T79 the last command precedes the skills")
-  assert_eq(S.palette_items[10].name, "deploy", "T79 first skill follows the commands")
-  assert_eq(S.palette_items[11].name, "review", "T79 skills keep discovery order")
+  assert_eq(S.palette_items[10].cmd, "think", "T79 the last command precedes the skills")
+  assert_eq(S.palette_items[11].name, "deploy", "T79 first skill follows the commands")
+  assert_eq(S.palette_items[12].name, "review", "T79 skills keep discovery order")
 
   -- a skill is found by typing its own name
   type_text(uimod, "dep")
@@ -5012,7 +5096,7 @@ do
   } end)
   type_text(collided, "/")
   S = collided._get_state()
-  assert_eq(#S.palette_items, 10, "T79 a colliding skill is not listed")
+  assert_eq(#S.palette_items, 11, "T79 a colliding skill is not listed")
   for _, it in ipairs(S.palette_items) do
     assert_true(it.name ~= "Copy", "T79 no row for the colliding skill")
   end
@@ -5031,7 +5115,7 @@ do
   local broken = boot(function() error("discovery exploded") end)
   type_text(broken, "/")
   S = broken._get_state()
-  assert_eq(#S.palette_items, 9, "T79 discovery failure degrades to commands")
+  assert_eq(#S.palette_items, 10, "T79 discovery failure degrades to commands")
   assert_true(S.palette_active, "T79 the palette survives a discovery failure")
 
   -- the production path: the host registers modules as globals (main.c
@@ -5041,8 +5125,8 @@ do
   local real = boot(nil)
   type_text(real, "/")
   S = real._get_state()
-  assert_eq(#S.palette_items, 11, "T79 skills resolve through the context global")
-  assert_eq(S.palette_items[10].name, "deploy", "T79 the global path lists the skill")
+  assert_eq(#S.palette_items, 12, "T79 skills resolve through the context global")
+  assert_eq(S.palette_items[11].name, "deploy", "T79 the global path lists the skill")
   _G.context = orig_context
 
   print("T79 unified palette list: OK")
@@ -5072,7 +5156,7 @@ do
   type_text(uimod, "/dep")
   local S = uimod._get_state()
   assert_eq(S.palette_items[1].label, "/deploy", "T80 skill row is the slash name")
-  assert_eq(S.palette_items[1].hint, "[задача]", "T80 skill row carries its hint")
+  assert_eq(S.palette_items[1].hint, "[skill]", "T80 skill row carries its hint")
   uimod._handle_key({ kind = "enter" })
   S = uimod._get_state()
   assert_eq(S.input, "/deploy ", "T80 Enter composes the skill name")
@@ -5204,6 +5288,20 @@ do
   assert_eq(#unk, 1, "T83 unknown lang single token")
   assert_eq(unk[1].kind, "plain", "T83 unknown lang kind")
   assert_eq(unk[1].text, "whatever", "T83 unknown lang text")
+  -- supported aliases share the canonical tokenizer (case-insensitive)
+  assert_true(eqkinds(kinds("var x = 1", "javascript"),
+    { "keyword", "plain", "number" }), "T83 javascript alias kinds")
+  assert_true(eqkinds(kinds("var x = 1", "JAVASCRIPT"),
+    { "keyword", "plain", "number" }), "T83 javascript alias case-insensitive")
+  assert_true(eqkinds(kinds("int x = 1", "c++"),
+    { "keyword", "plain", "number" }), "T83 c++ alias kinds")
+  assert_true(eqkinds(kinds("s = 'v'", "py"),
+    { "plain", "string" }), "T83 py alias string")
+  -- supported languages with no keyword set: strings and numbers only
+  assert_true(eqkinds(kinds("port: 8080", "yaml"),
+    { "plain", "number" }), "T83 yaml no-keyword-set number")
+  assert_true(eqkinds(kinds('k: "v"', "rb"),
+    { "plain", "string" }), "T83 rb no-keyword-set string")
   print("T83 7.2 tokenizer: OK")
 end
 
@@ -5255,13 +5353,31 @@ do
     for _ = 1, #s do if s:byte(_) == 27 then return true end end
     return false
   end
+  -- the frame may be dim (spec: frame renders dim), but an unknown/absent
+  -- language must carry no token-color SGR — only dim (2) / reset (0).
+  local function only_frame_sgr(s)
+    for seq in s:gmatch("\27%[([0-9;]*)m") do
+      if seq ~= "2" and seq ~= "0" and seq ~= "" then return false end
+    end
+    return true
+  end
   ui._color_depth = "256"
   local out = ui.md_render("```zfoobar\nabc\n```", 40)
-  assert_true(not has_esc(table.concat(out, "\n")), "T86 unknown fence lang: no SGR")
+  assert_true(only_frame_sgr(table.concat(out, "\n")),
+    "T86 unknown fence lang: no token SGR")
   assert_true(table.concat(out, "\n"):find("abc", 1, true) ~= nil,
     "T86 unknown fence lang: text present")
   local out2 = ui.md_render("```\nabc\n```", 40)
-  assert_true(not has_esc(table.concat(out2, "\n")), "T86 absent fence lang: no SGR")
+  assert_true(only_frame_sgr(table.concat(out2, "\n")),
+    "T86 absent fence lang: no token SGR")
+  -- supported aliases colour tokens inside the frame
+  local out_js = ui.md_render("```javascript\nvar x = 1\n```", 40)
+  assert_true(not only_frame_sgr(table.concat(out_js, "\n")),
+    "T86 javascript alias: token SGR present")
+  -- no-keyword-set languages colour string literals
+  local out_yaml = ui.md_render("```yaml\nk: \"v\"\n```", 40)
+  assert_true(not only_frame_sgr(table.concat(out_yaml, "\n")),
+    "T86 yaml: string token SGR present")
   local lines = {}
   for i = 1, 500 do lines[i] = "local x" .. i .. " = " .. i end
   local big = "```lua\n" .. table.concat(lines, "\n") .. "\n```"
@@ -6699,14 +6815,14 @@ do
     return out
   end
 
-  -- 2.2/2.3: 21 entries on a 24-row terminal → an 8-row window plus indicator
-  -- add-provider-login: 9 commands + 12 skills = 21
+  -- 2.2/2.3: 22 entries on a 24-row terminal → an 8-row window plus indicator
+  -- add-provider-login: /login /logout; add-reasoning-level: /think → 10 + 12
   local uimod = boot(many_skills)
   type_text(uimod, "/")
   uimod._paint(true)
   local S = uimod._get_state()
   local L = uimod._layout()
-  assert_eq(#S.palette_items, 21, "T83 twelve skills join the nine commands")
+  assert_eq(#S.palette_items, 22, "T83 twelve skills join the ten commands")
   local win, off = uimod._palette_window(S.h, #S.palette_items, S.palette_sel)
   assert_eq(win, 8, "T83 eight window rows")
   assert_eq(off, 1, "T83 the first entry starts the window")
@@ -6715,7 +6831,7 @@ do
     if strip(uimod._row(L.palette_row + i)):find("/", 1, true) then painted = painted + 1 end
   end
   assert_eq(painted, win, "T83 every window row is painted")
-  assert_true(strip(uimod._row(L.palette_row + win + 1)):match("^%s*1/21%s*$") ~= nil,
+  assert_true(strip(uimod._row(L.palette_row + win + 1)):match("^%s*1/22%s*$") ~= nil,
     "T83 the indicator is digits and a slash")
   assert_true(L.palette_row + win + 1 <= L.footer_row - 1, "T83 the indicator row is inside the region")
 
@@ -6728,7 +6844,7 @@ do
   assert_eq(#rows_with(uimod, S, "/clear"), 0, "T83 the first entry is no longer painted")
   assert_true(#rows_with(uimod, S, S.palette_items[S.palette_sel].label) > 0,
     "T83 the selected entry is painted")
-  assert_true(strip(uimod._row(L.palette_row + win2 + 1)):match("^%s*11/21%s*$") ~= nil,
+  assert_true(strip(uimod._row(L.palette_row + win2 + 1)):match("^%s*11/22%s*$") ~= nil,
     "T83 the indicator follows the selection")
   assert_true(strip(uimod._row(L.rule_bottom_row)):find("─", 1, true) ~= nil,
     "T83 the box bottom rule survives the palette")
@@ -6736,12 +6852,13 @@ do
     "T83 the stats footer keeps its content")
 
   -- 3.1: the hint is on the skill row only
-  -- add-provider-login: 9 commands + 1 skill = 10 > win 8 — command (pos 1)
-  -- and skill (pos 10) never share one window; check each via its own filter.
+  -- add-provider-login + add-reasoning-level: 10 commands + 1 skill = 11 > win 8
+  -- — command (pos 1) and skill (pos 11) never share one window; check each
+  -- via its own filter.
   local one = boot(function() return {
     { name = "deploy", description = "deploy stuff", path = "/tmp/skills/deploy/SKILL.md" } } end)
   type_text(one, "/")
-  assert_eq(#one._get_state().palette_items, 10, "T83 ten entries listed")
+  assert_eq(#one._get_state().palette_items, 11, "T83 eleven entries listed")
   -- skill row: narrow to the skill, paint, require the hint
   type_text(one, "dep")
   one._paint(true)
@@ -6749,8 +6866,8 @@ do
   local L1 = one._layout()
   local skill_rows = rows_with(one, S1, "/deploy")
   assert_eq(#skill_rows, 1, "T83 the skill row is painted")
-  assert_true(strip(one._row(skill_rows[1])):find("[задача]", 1, true) ~= nil,
-    "T83 the skill row shows [задача]")
+  assert_true(strip(one._row(skill_rows[1])):find("[skill]", 1, true) ~= nil,
+    "T83 the skill row shows [skill]")
   -- command row: fresh palette, no filter, top window has /clear without a hint
   local cmdui = boot(function() return {
     { name = "deploy", description = "deploy stuff", path = "/tmp/skills/deploy/SKILL.md" } } end)
@@ -6762,6 +6879,32 @@ do
   assert_eq(#command_rows, 1, "T83 the command row is painted")
   assert_true(strip(cmdui._row(command_rows[1])):find("[", 1, true) == nil,
     "T83 the command row shows no hint")
+  -- descriptions align: the name column is padded to the widest name+hint
+  -- across ALL listed entries, so command rows and the hinted skill row
+  -- start their descriptions at the same column.
+  local function widest_label(items)
+    local lw = 0
+    for _, it in ipairs(items) do
+      local l = it.label or ""
+      if it.hint then l = l .. " " .. it.hint end
+      if #l > lw then lw = #l end
+    end
+    return lw
+  end
+  local lwcmd = widest_label(SCmd.palette_items)
+  local _, offcmd = cmdui._palette_window(SCmd.h, #SCmd.palette_items, SCmd.palette_sel)
+  for i = 1, 8 do
+    local it = SCmd.palette_items[offcmd + i - 1]
+    if it and it.desc and it.desc ~= "" then
+      local row = strip(cmdui._row(LCmd.palette_row + i))
+      local col = row:find(it.desc, 1, true)
+      assert_eq(col, lwcmd + 3,
+        "T83 descriptions align on row " .. i .. " (" .. it.label .. "), col " .. tostring(col))
+    end
+  end
+  local lwski = widest_label(S1.palette_items)
+  assert_eq(strip(one._row(skill_rows[1])):find("deploy stuff", 1, true), lwski + 3,
+    "T83 the skill description aligns after the [skill] hint")
   -- 10 > 8: an indicator is expected on the scrolling window
   local _, off0 = cmdui._palette_window(SCmd.h, #SCmd.palette_items, SCmd.palette_sel)
   assert_true(off0 == 1 and #SCmd.palette_items > 8,
@@ -6770,10 +6913,10 @@ do
     "T83 the indicator is painted for a scrolling window")
 
   -- 2.5: a click is resolved through the window offset
-  -- 21 items: 11 downs → sel=12, off=8, third painted row = item 10 = first skill
+  -- 22 items: 12 downs → sel=13, off=9, third painted row = item 11 = first skill
   local m = boot(many_skills)
   type_text(m, "/")
-  for _ = 1, 11 do m._handle_key({ kind = "special", name = "down" }) end
+  for _ = 1, 12 do m._handle_key({ kind = "special", name = "down" }) end
   local Sm = m._get_state()
   local Lm = m._layout()
   local _, offm = m._palette_window(Sm.h, #Sm.palette_items, Sm.palette_sel)
@@ -7006,6 +7149,29 @@ do
     "T119 the retry row names the reason")
   assert_notnil(S.retry_wait, "T119 the pending retry is tracked")
   assert_eq(S.retry_wait and S.retry_wait.attempt, 1, "T119 the pending attempt number")
+
+  -- block gap (transcript-visual-refresh): the retry row is a top-level
+  -- system entity, so after a user row a blank row precedes it, and the
+  -- viewport index stays at parity with the full render.
+  local qb = {}
+  for c in ("q1"):gmatch(".") do qb[#qb + 1] = c:byte() end
+  qb[#qb + 1] = 13
+  qb[#qb + 1] = 17
+  local uig = run_ui_with(qb, { agent = agent_stub })
+  uig._handle_agent_event({ type = "text_delta", text = "half an ans", attempt = 1 })
+  uig._handle_agent_event({ type = "retry", attempt = 1, delay = 4.0, reason = "server error" })
+  local gfull = uig._render_all(80)
+  assert_eq(uig.transcript_height(80), #gfull, "T119d gap: index == full render")
+  local grow
+  for i, r in ipairs(gfull) do
+    if (r:gsub("\27%[[0-9;]*m", "")):find("повтор 1", 1, true) then grow = i end
+  end
+  assert_notnil(grow, "T119d the retry row is rendered")
+  local before = grow and gfull[grow - 1]
+  assert_eq(before and (before:gsub("\27%[[0-9;]*m", "")) or nil, "",
+    "T119d a blank row precedes the retry row")
+  assert_true(grow > 2 and (gfull[grow - 2] or ""):find("q1", 1, true) ~= nil,
+    "T119d the user row sits directly before the gap")
 
   uimod._paint(true)
   local L119 = uimod._layout()
@@ -8618,7 +8784,8 @@ do
     local Le = uimod._layout()
     assert_eq(Le.error_h, 1, "pi 2.1 error banner reserves one row")
     assert_eq(Le.error_row, 1 + Le.transcript_h, "pi 2.1 error row is directly below the transcript")
-    assert_eq(Le.rule_top_row, Le.error_row + 1, "pi 2.1 box starts below the error banner")
+    assert_eq(Le.gap_row, Le.error_row + Le.error_h, "pi 2.1 gap row follows the error banner")
+    assert_eq(Le.rule_top_row, Le.error_row + 2, "pi 2.1 box starts below the gap row")
     local erow = strip(uimod._row(Le.error_row))
     assert_true(erow:find("boom", 1, true) ~= nil, "pi 2.1 error banner paints its message")
     uimod._set_error_banner(nil)
@@ -10885,8 +11052,15 @@ do
   -- 3. UI: begin_login with a device flow requests the code and polls to grant
   local catalog = dofile("src/tether/providers/catalog.lua")
   _G.provider_catalog = catalog
+  -- route the store into the temp home (same seam as T165/T153/T156): the
+  -- UI grants call auth.set(nil, ...) which would otherwise write the stubbed
+  -- token into the real ~/.tether/auth.json
+  local orig_path187 = auth.path
+  auth.path = function() return home .. "/.tether/auth.json" end
   responses = {
     '{"device_code":"DC-UI","user_code":"USER-CODE","verification_uri":"https://example.com/activate","interval":0,"expires_in":900}',
+    '{"error":"authorization_pending"}',
+    '{"error":"authorization_pending"}',
     '{"access_token":"ghu-ui","token_type":"bearer"}',
   }
   local uimod, S = run_ui_with({ 17 }, {
@@ -10917,9 +11091,13 @@ do
   assert_eq(S.login_flow.device_code, "DC-UI", "T187 UI requested the device code")
   assert_eq(S.login_flow.user_code, "USER-CODE", "T187 UI carries the user code")
   -- hint shows the activation URL and user code, no "paste token"
+  -- the paint path runs one device poll tick before rendering (interval 0 →
+  -- immediate), so the first pending response is consumed here while the
+  -- secret mode — and therefore the hint — stays up
   uimod._paint(true)
   local L187 = uimod._layout()
   local hint_row = strip(uimod._row(L187.input_row) or "")
+  assert_true(S.login_secret ~= nil, "T187 paint keeps waiting on a pending poll")
   assert_true(hint_row:find("USER%-CODE", 1, false) ~= nil,
     "T187 hint shows the user code: " .. hint_row)
   -- poll tick: first pending, then granted
@@ -10929,6 +11107,7 @@ do
   local stored2 = auth.get(home, "github-copilot")
   assert_eq(stored2 and stored2.access_token, "ghu-ui", "T187 UI stored the granted token")
   assert_true(S.login_secret == nil, "T187 secret mode exits on grant")
+  auth.path = orig_path187
   _G.auth = orig_auth
   _G.provider_catalog = nil
   print("T187 device flow: OK")
@@ -11163,6 +11342,389 @@ do
   _G.tether, _G.reactor = orig.tether, orig.reactor
   _G.agent, _G.turn = orig.agent, orig.turn
   print("T3.1 incremental stream: OK")
+end
+
+-- T188: an assistant entry with no visible content — a whitespace-only
+-- text_delta (a lone newline/space is common right before a tool call) —
+-- renders no row at all: no lone `•` marker line and no block-gap blank
+-- in front of it. Thinking keeps its own header row and never degrades
+-- into a bare bullet.
+do
+  local agent_stub = { turn = function() return true end, get_history = function() return {} end }
+  local function rows_for(txt)
+    local uimod = run_ui_with({}, { agent = agent_stub })
+    local T = uimod._transcript
+    T.reset({})
+    T.append({ role = "tool", id = "t1", name = "list", status = "ok", summary = "17 записей" })
+    T.handle({ type = "text_delta", text = txt, attempt = 1 })
+    T.append({ role = "tool", id = "t2", name = "read", status = "ok", summary = "449 стр." })
+    local rows = {}
+    for _, r in ipairs(uimod._render_all(80)) do
+      rows[#rows + 1] = r:gsub("\27%[[0-9;]*m", "")
+    end
+    return rows
+  end
+  local function has_bullet(rows)
+    for _, r in ipairs(rows) do
+      local bare = r:match("^%s*[•-]%s*$")
+      if bare then return true end
+    end
+    return false
+  end
+  for _, txt in ipairs({ "\n", " ", "\t", " \n", "\n\n", "\13", "\27[31m" }) do
+    local q = string.format("%q", txt)
+    local rows = rows_for(txt)
+    assert_eq(#rows, 2, "T188 whitespace-only delta adds no row (" .. q .. ")")
+    assert_false(has_bullet(rows), "T188 no lone bullet row (" .. q .. ")")
+  end
+  -- visible text still renders with the assistant marker
+  local ok = rows_for("hello")
+  local bullet_row
+  for _, r in ipairs(ok) do if r:find("• hello", 1, true) then bullet_row = r end end
+  assert_notnil(bullet_row, "T188 visible text keeps its bullet row")
+
+  -- thinking never degrades into a bare bullet: it carries its own header
+  local uimod = run_ui_with({}, { agent = agent_stub })
+  uimod._transcript.reset({})
+  uimod._transcript.append({ role = "thinking", text = "", started_at = os.time() })
+  local th = {}
+  for _, r in ipairs(uimod._render_all(80)) do th[#th + 1] = r:gsub("\27%[[0-9;]*m", "") end
+  assert_eq(#th, 1, "T188 empty thinking renders its header")
+  assert_true(th[1]:find("thinking", 1, true) ~= nil,
+    "T188 thinking row starts with its header: " .. tostring(th[1]))
+  print("T188 blank assistant row suppressed: OK")
+end
+
+-- T189: add-reasoning-level — the config key defaults to `off`, normalizes
+-- at load (unknown/missing/non-string never fails the session), and the
+-- bootstrap file carries it.
+do
+  local cfgmod = assert(loadfile("src/tether/config.lua"))()
+  local home = "/tmp/tether_t189_home"
+  os.execute("rm -rf '" .. home .. "' && mkdir -p '" .. home .. "/.tether'")
+  local cfgpath = home .. "/.tether/config.lua"
+  local c0 = cfgmod.load(cfgpath, home)
+  assert_eq(c0.reasoning, "off", "T189 fresh config defaults to off")
+  local f0 = assert(io.open(cfgpath, "r"))
+  local disk0 = f0:read("*a")
+  f0:close()
+  assert_true(disk0:find("reasoning", 1, true) ~= nil,
+    "T189 bootstrap carries the reasoning key")
+  local function write(s)
+    local f = assert(io.open(cfgpath, "w"))
+    f:write(s)
+    f:close()
+  end
+  write('return { reasoning = "medium" }\n')
+  assert_eq(cfgmod.load(cfgpath, home).reasoning, "medium", "T189 valid level loads")
+  write('return { reasoning = "turbo" }\n')
+  assert_eq(cfgmod.load(cfgpath, home).reasoning, "off",
+    "T189 unknown level falls back to off")
+  write('return { reasoning = 42 }\n')
+  assert_eq(cfgmod.load(cfgpath, home).reasoning, "off",
+    "T189 non-string level falls back to off")
+  write('return { }\n')
+  assert_eq(cfgmod.load(cfgpath, home).reasoning, "off",
+    "T189 missing level defaults to off")
+  print("T189 config reasoning default and normalization: OK")
+end
+
+-- T190: persist_keys writes the reasoning level through the same
+-- byte-preserving rewriter: only that line changes, comments/unknown keys
+-- survive, and a config without the key gets it appended before the close.
+do
+  local cfgmod = assert(loadfile("src/tether/config.lua"))()
+  local home = "/tmp/tether_t190_home"
+  os.execute("rm -rf '" .. home .. "' && mkdir -p '" .. home .. "/.tether'")
+  local cfgpath = home .. "/.tether/config.lua"
+  local function write(s)
+    local f = assert(io.open(cfgpath, "w"))
+    f:write(s)
+    f:close()
+  end
+  local function read()
+    local f = assert(io.open(cfgpath, "r"))
+    local d = f:read("*a")
+    f:close()
+    return d
+  end
+  write('-- keep me\nreturn {\n  provider = "openai",\n  model = "gpt-4o", -- pinned\n'
+    .. '  reasoning = "off",\n  providers = {\n    anthropic = { model = "custom-claude" },\n  },\n}\n')
+  assert_true(cfgmod.persist_keys(home, { reasoning = "medium" }),
+    "T190 persist_keys writes reasoning")
+  local d1 = read()
+  assert_true(d1:find('reasoning = "medium"', 1, true) ~= nil, "T190 reasoning line patched")
+  assert_true(d1:find("-- keep me", 1, true) ~= nil, "T190 comment survives")
+  assert_true(d1:find('model = "gpt-4o"', 1, true) ~= nil, "T190 model untouched")
+  assert_true(d1:find("pinned", 1, true) ~= nil, "T190 trailing comment kept")
+  assert_true(d1:find("custom-claude", 1, true) ~= nil, "T190 nested table untouched")
+  -- config without the key: appended before the top-table close
+  write('-- only model\nreturn {\n  model = "gpt-4o",\n}\n')
+  assert_true(cfgmod.persist_keys(home, { reasoning = "high" }),
+    "T190 persist_keys appends the missing key")
+  local d2 = read()
+  assert_true(d2:find('reasoning = "high"', 1, true) ~= nil, "T190 key appended")
+  assert_true(d2:find("-- only model", 1, true) ~= nil, "T190 comment survives the append")
+  assert_true(d2:find('model = "gpt-4o"', 1, true) ~= nil, "T190 existing keys survive the append")
+  print("T190 persist reasoning: OK")
+end
+
+-- T191: the level reaches the request body of the wires that support it and
+-- touches nothing else (checked through the real api.stream transport seam).
+do
+  local api = assert(loadfile("src/tether/api.lua"))()
+  local orig_tether, orig_reactor = _G.tether, _G.reactor
+  local function body_of(cfg)
+    local captured
+    _G.reactor = nil
+    _G.tether = host_mock{
+      http_stream = function(_, _, _, body, on_line)
+        local path = tostring(body):match("^@(.+)$")
+        if path then
+          local f = io.open(path, "r")
+          if f then captured = f:read("*a"); f:close() end
+        end
+        on_line('data: {"choices":[{"delta":{"content":"x"},"finish_reason":"stop"}]}')
+        return true
+      end,
+      http_get = function() return nil, "not used" end,
+      sleep = function() end,
+    }
+    local ok = api.stream(cfg, "key", { { role = "user", content = "hi" } },
+      function() end)
+    _G.tether, _G.reactor = orig_tether, orig_reactor
+    assert_true(ok, "T191 stream succeeds for " .. tostring(cfg.provider))
+    return captured or ""
+  end
+  local base = { base_url = "http://x", model = "m" }
+  local function with(t)
+    local c = {}
+    for k, v in pairs(base) do c[k] = v end
+    for k, v in pairs(t) do c[k] = v end
+    return c
+  end
+  -- openai wire: reasoning_effort, absent for off/unknown
+  local hi = body_of(with{ provider = "agnes", reasoning = "high" })
+  assert_true(hi:find('"reasoning_effort":"high"', 1, true) ~= nil,
+    "T191 openai body carries reasoning_effort")
+  assert_true(hi:find('"model":"m"', 1, true) ~= nil, "T191 request still carries the model")
+  local lo = body_of(with{ provider = "agnes", reasoning = "low" })
+  assert_true(lo:find('"reasoning_effort":"low"', 1, true) ~= nil, "T191 effort low")
+  local md = body_of(with{ provider = "agnes", reasoning = "medium" })
+  assert_true(md:find('"reasoning_effort":"medium"', 1, true) ~= nil, "T191 effort medium")
+  local off = body_of(with{ provider = "agnes", reasoning = "off" })
+  assert_eq(off:find("reasoning_effort", 1, true), nil, "T191 off omits the parameter")
+  local unk = body_of(with{ provider = "agnes", reasoning = "turbo" })
+  assert_eq(unk:find("reasoning_effort", 1, true), nil, "T191 unknown level omits it")
+  local nilv = body_of(with{ provider = "agnes" })
+  assert_eq(nilv:find("reasoning_effort", 1, true), nil, "T191 unset level omits it")
+  -- unsupported wire keeps the request it sends today
+  local gem = body_of(with{ provider = "gemini", reasoning = "high" })
+  assert_eq(gem:find("reasoning_effort", 1, true), nil, "T191 gemini sends no effort")
+  assert_eq(gem:find('"thinking"', 1, true), nil, "T191 gemini sends no thinking")
+  -- anthropic wire: thinking budget + max_tokens at least budget+4096
+  local aoff = body_of(with{ provider = "anthropic", reasoning = "off" })
+  assert_eq(aoff:find('"thinking"', 1, true), nil, "T191 anthropic off omits thinking")
+  assert_true(aoff:find('"max_tokens":4096', 1, true) ~= nil,
+    "T191 anthropic default max_tokens unchanged")
+  local expect = { low = { 4096, 8192 }, medium = { 16384, 20480 },
+                   high = { 65536, 69632 } }
+  for _, level in ipairs({ "low", "medium", "high" }) do
+    local b = body_of(with{ provider = "anthropic", reasoning = level })
+    local budget, mt = expect[level][1], expect[level][2]
+    assert_true(b:find('{"type":"enabled","budget_tokens":' .. budget .. "}", 1, true)
+      ~= nil, "T191 anthropic budget for " .. level)
+    assert_true(tonumber(b:match('"max_tokens"[%s]*:%s*(%d+)')) == mt,
+      "T191 anthropic max_tokens >= budget+4096 for " .. level)
+  end
+  print("T191 reasoning reaches the request body: OK")
+end
+
+-- T192: reasoning chunks become reasoning_delta, never text_delta, and a
+-- signature chunk emits nothing.
+do
+  local openai = assert(loadfile("src/tether/providers/openai.lua"))()
+  local anthropic = assert(loadfile("src/tether/providers/anthropic.lua"))()
+  local function collect(mod, lines)
+    mod.reset_stream()
+    local evs = {}
+    for _, l in ipairs(lines) do
+      mod.parse_sse_line(l, function(ev) evs[#evs + 1] = ev end)
+    end
+    return evs
+  end
+  local evs = collect(openai, {
+    'data: {"choices":[{"delta":{"reasoning_content":"let us plan"}}]}',
+    'data: {"choices":[{"delta":{"reasoning":"second step"}}]}',
+    'data: {"choices":[{"delta":{"content":"Hello"}}]}',
+  })
+  local rtext, ttext, nr, nt = {}, {}, 0, 0
+  for _, ev in ipairs(evs) do
+    if ev.type == "reasoning_delta" then nr = nr + 1; rtext[#rtext + 1] = ev.text end
+    if ev.type == "text_delta" then nt = nt + 1; ttext[#ttext + 1] = ev.text end
+  end
+  assert_eq(nr, 2, "T192 openai emits two reasoning_delta")
+  assert_eq(nt, 1, "T192 openai text stays text_delta")
+  assert_eq(table.concat(rtext, "|"), "let us plan|second step",
+    "T192 reasoning text is unescaped exactly once")
+  assert_eq(table.concat(ttext), "Hello", "T192 answer text carries no reasoning")
+
+  local aevs = collect(anthropic, {
+    'data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"hmm"}}',
+    'data: {"type":"content_block_delta","index":0,"delta":{"type":"signature_delta","signature":"abc"}}',
+    'data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hello"}}',
+  })
+  local seen, texts = {}, {}
+  for _, ev in ipairs(aevs) do
+    seen[ev.type] = (seen[ev.type] or 0) + 1
+    texts[#texts + 1] = ev.type .. ":" .. tostring(ev.text or "")
+  end
+  assert_eq(seen.reasoning_delta, 1, "T192 thinking_delta -> one reasoning_delta")
+  assert_eq(seen.text_delta, 1, "T192 text_delta unaffected")
+  assert_eq(table.concat(texts, "|"), "reasoning_delta:hmm|text_delta:Hello",
+    "T192 signature_delta emits nothing: " .. table.concat(texts, "|"))
+  print("T192 reasoning stream mapping: OK")
+end
+
+-- T193: /think — direct apply, unknown level, the picker, and the footer
+-- right cell carrying `provider/model · <level>` always.
+do
+  local persisted = {}
+  local cfg_stub = {
+    load = function()
+      return { model = "test", workspace = "/tmp", provider = "openai",
+        ui = { input_max_lines = 8 }, _auth_home = "/tmp/tether_t193_home" }
+    end,
+    api_key = function() return "" end,
+    persist_keys = function(home, keys)
+      persisted[#persisted + 1] = { home = home, keys = keys }
+      return true
+    end,
+  }
+  local uimod, S = run_ui_with({ 17 }, {
+    config = cfg_stub,
+    agent = { turn = function() return true end, get_history = function() return {} end },
+  })
+  -- run_ui_with restores _G.config after ui.run returns, while pick.think
+  -- resolves the module through the global at call time — stub it here too.
+  local orig_config = _G.config
+  _G.config = cfg_stub
+  local listed = false
+  for _, c in ipairs(uimod.SLASH_COMMANDS) do
+    if c.cmd == "think" and c.label == "/think" then listed = true end
+  end
+  assert_true(listed, "T193 /think is a listed built-in")
+
+  uimod._execute_command("think", "high")
+  assert_eq(S.cfg.reasoning, "high", "T193 /think high applies")
+  assert_eq(#persisted, 1, "T193 the level is persisted")
+  assert_eq(persisted[1] and persisted[1].keys.reasoning, "high",
+    "T193 persist_keys carries reasoning")
+  local ents = uimod._transcript.entries()
+  assert_true((ents[#ents].text or ""):find("→ мышление: high", 1, true) ~= nil,
+    "T193 system row echoes the level")
+
+  uimod._execute_command("think", "turbo")
+  assert_eq(S.cfg.reasoning, "high", "T193 unknown level changes nothing")
+  assert_notnil(S.error_banner, "T193 unknown level raises a banner")
+  assert_true((S.error_banner or ""):find("turbo", 1, true) ~= nil,
+    "T193 banner names the bad level")
+  assert_eq(#persisted, 1, "T193 unknown level persists nothing")
+
+  S.error_banner = nil
+  uimod._execute_command("think")
+  assert_true(S.palette_active, "T193 bare /think opens the picker")
+  assert_eq(S.palette_mode, "think", "T193 palette mode is think")
+  local labels = {}
+  for _, it in ipairs(S.palette_items or {}) do labels[#labels + 1] = it.label end
+  assert_eq(table.concat(labels, ","), "off,low,medium,high",
+    "T193 the four levels are listed in order")
+  local marked = false
+  for _, it in ipairs(S.palette_items) do
+    if it.label == "high" and (it.desc or ""):find("текущий", 1, true) then
+      marked = true
+    end
+  end
+  assert_true(marked, "T193 the current level is marked in its description")
+
+  uimod._handle_key({ kind = "special", name = "down" })
+  uimod._handle_key({ kind = "special", name = "down" })
+  assert_eq(S.palette_sel, 3, "T193 selection moves to medium")
+  uimod._handle_key({ kind = "enter" })
+  assert_false(S.palette_active, "T193 Enter closes the picker")
+  assert_eq(S.cfg.reasoning, "medium", "T193 the pick applies")
+  ents = uimod._transcript.entries()
+  assert_true((ents[#ents].text or ""):find("→ мышление: medium", 1, true) ~= nil,
+    "T193 the pick appends its row")
+
+  uimod._execute_command("think")
+  uimod._handle_key({ kind = "esc" })
+  assert_false(S.palette_active, "T193 Esc closes the picker")
+  assert_eq(S.cfg.reasoning, "medium", "T193 Esc changes nothing")
+
+  -- footer: provider/model · <level>, always, whole cell ends the row
+  local function strip(s) return (s or ""):gsub("\27%[[%d;]*m", "") end
+  local function footer()
+    uimod._paint(true)
+    return strip(uimod._row(uimod._layout().footer_row))
+  end
+  S.cfg.reasoning = "medium"
+  local f1 = footer()
+  assert_true(f1:find("openai/test · medium", 1, true) ~= nil,
+    "T193 footer carries provider/model · level: " .. f1)
+  assert_eq(f1:sub(-#"· medium"), "· medium", "T193 level ends the footer row")
+  S.cfg.reasoning = "off"
+  local f2 = footer()
+  assert_eq(f2:sub(-#"· off"), "· off", "T193 level shown even when off: " .. f2)
+  S.cfg.reasoning = nil
+  local f3 = footer()
+  assert_eq(f3:sub(-#"· off"), "· off", "T193 unset level renders off: " .. f3)
+  _G.config = orig_config
+  print("T193 /think command, picker and footer: OK")
+end
+
+-- T194: reasoning_delta events build one thinking entry, the assistant row
+-- carries the answer only, and ui.thinking governs the body visibility.
+do
+  local uimod, S = run_ui_with({ 17 },
+    { agent = { turn = function() return true end, get_history = function() return {} end } })
+  uimod._handle_agent_event({ type = "reasoning_delta", text = "step one " })
+  uimod._handle_agent_event({ type = "reasoning_delta", text = "step two" })
+  uimod._handle_agent_event({ type = "reasoning_delta", text = "!" })
+  uimod._handle_agent_event({ type = "text_delta", text = "the answer" })
+  local th, th_n, asst = "", 0, nil
+  for _, e in ipairs(uimod._transcript.entries()) do
+    if e.role == "thinking" then th_n = th_n + 1; th = e.text end
+    if e.role == "assistant" then asst = e.text end
+  end
+  assert_eq(th_n, 1, "T194 reasoning accumulates into one thinking entry")
+  assert_eq(th, "step one step two!", "T194 the joined reasoning body")
+  assert_eq(asst, "the answer", "T194 the assistant row excludes the reasoning")
+  local function rows()
+    local out = {}
+    for _, r in ipairs(uimod._render_all(80)) do
+      out[#out + 1] = r:gsub("\27%[[0-9;]*m", "")
+    end
+    return out
+  end
+  local joined = table.concat(rows(), "\n")
+  assert_true(joined:find("thinking · ", 1, true) ~= nil, "T194 thinking header painted")
+  assert_true(joined:find("step one step two!", 1, true) ~= nil, "T194 reasoning body painted")
+  assert_true(joined:find("• the answer", 1, true) ~= nil, "T194 assistant row painted")
+
+  S.thinking_visible = false
+  uimod._invalidate_all()
+  local collapsed = table.concat(rows(), "\n")
+  assert_true(collapsed:find("think ▸ (Ctrl+T)", 1, true) ~= nil,
+    "T194 collapsed shows the placeholder")
+  assert_eq(collapsed:find("step one step two!", 1, true), nil,
+    "T194 collapsed hides the reasoning body")
+  uimod._handle_key({ kind = "ctrl", code = 20 })
+  assert_true(S.thinking_visible, "T194 Ctrl+T expands the thinking")
+  local expanded = table.concat(rows(), "\n")
+  assert_true(expanded:find("step one step two!", 1, true) ~= nil,
+    "T194 expanded shows the reasoning body again")
+  print("T194 reasoning reaches the transcript: OK")
 end
 
 if failed > 0 then

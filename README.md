@@ -301,8 +301,7 @@ discovered skill as `/skill-name`. Filtering is a case-insensitive
 subsequence match over the whole list; when the list is longer than the
 window the palette scrolls (at most 8 rows and at most half the terminal
 height) so the selected row stays visible, with a dim `N/total` indicator on
-the row below the entries. Skill rows show a `[задача]` hint for the task text
-that follows the name. Enter runs the highlighted command, or completes
+the row below the entries. Skill rows show a `[skill]` hint after the name. Enter runs the highlighted command, or completes
 `/<name> ` into the input for a skill — submitting that then sends the name to
 the agent as an ordinary message, and the agent reads the skill file through
 the skills index in its prompt.

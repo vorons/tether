@@ -2,7 +2,7 @@
 -- Holds the original api.lua request/SSE logic verbatim; the shared
 -- transport (curl pipe, retry, temp files) lives in api.lua and calls
 -- this module through the provider interface:
---   build_request(messages, model, max_tokens) -> body string
+--   build_request(messages, model, max_tokens, reasoning) -> body string
 --   stream_url(cfg, model, api_key) -> url
 --   header_lines(api_key) -> array of "Name: value" header lines
 --   parse_sse_line(line, on_event)
@@ -190,6 +190,21 @@ local function parse_sse_line(line, on_event)
         end
     end
 
+    -- add-reasoning-level: reasoning arrives beside content as
+    -- `reasoning_content` (deepseek-style) or its `reasoning` alias, and is
+    -- emitted as reasoning_delta — never as answer text. The leading quote
+    -- in the pattern keeps `"reasoning_content"` from matching a plain
+    -- `"content"` key.
+    local reasoning = payload:match('"reasoning_content"[%s]*:[%s]*"(.-[^\\])"')
+        or payload:match('"reasoning"[%s]*:[%s]*"(.-[^\\])"')
+        or ""
+    if reasoning ~= "" then
+        reasoning = json_unescape(reasoning)
+        if reasoning ~= "" then
+            on_event({ type = "reasoning_delta", text = reasoning })
+        end
+    end
+
     -- tool calls: "tool_calls":[{"index":0,"id":"...","function":{"name":"...","arguments":"..."}}]
     -- M7/D2a: continuation chunks carry only {"index":N,"function":{"arguments":"..."}}
     -- (no "id"). Match name via a bounded class (OpenAI names are [A-Za-z0-9_-]) so
@@ -286,11 +301,21 @@ local function tools_payload()
     return out
 end
 
-function M.build_request(messages, model, _max_tokens)
+-- add-reasoning-level: chat-completions wires take the effort as a flat
+-- `reasoning_effort`. Only the four spec levels are recognized — `off`,
+-- nil and anything unknown emit no parameter at all.
+local function reasoning_param(reasoning)
+    if reasoning == "low" or reasoning == "medium" or reasoning == "high" then
+        return string.format(',"reasoning_effort":"%s"', reasoning)
+    end
+    return ""
+end
+
+function M.build_request(messages, model, _max_tokens, reasoning)
     return string.format(
-        '{"model":"%s","messages":%s,"tools":%s,"tool_choice":"auto","stream":true}',
+        '{"model":"%s","messages":%s,"tools":%s,"tool_choice":"auto","stream":true%s}',
         jesc(model or ""), encode_messages(messages),
-        common.json_encode(tools_payload()))
+        common.json_encode(tools_payload()), reasoning_param(reasoning))
 end
 
 function M.stream_url(cfg, _model, _api_key)

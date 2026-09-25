@@ -376,21 +376,24 @@ function M.entry_at(i)
 end
 
 -- Rows this entry would occupy when wrapped to `width`; measured without
--- retaining the rows.
-local function entry_height(e, width)
-    if e.height ~= nil and e.h_w == width and e.h_ver == (e.ver or 0) then
+-- retaining the rows. `prev_role` is the role of the preceding entry (or nil
+-- for the first), threaded so the render can decide its own leading gap.
+local function entry_height(e, width, prev_role)
+    if e.height ~= nil and e.h_w == width and e.h_ver == (e.ver or 0)
+        and e.h_prev == (prev_role or false) then
         return e.height
     end
-    if e.rows and e.rows_w == width and e.rows_ver == (e.ver or 0) then
-        e.height, e.h_w, e.h_ver = #e.rows, width, (e.ver or 0)
+    if e.rows and e.rows_w == width and e.rows_ver == (e.ver or 0)
+        and e.rows_prev == (prev_role or false) then
+        e.height, e.h_w, e.h_ver, e.h_prev = #e.rows, width, (e.ver or 0), (prev_role or false)
         return e.height
     end
     if not render_fn then
-        e.height, e.h_w, e.h_ver = 0, width, (e.ver or 0)
+        e.height, e.h_w, e.h_ver, e.h_prev = 0, width, (e.ver or 0), (prev_role or false)
         return 0
     end
-    local rows = render_fn(e, width)
-    e.height, e.h_w, e.h_ver = #rows, width, (e.ver or 0)
+    local rows = render_fn(e, width, prev_role)
+    e.height, e.h_w, e.h_ver, e.h_prev = #rows, width, (e.ver or 0), (prev_role or false)
     return e.height
 end
 
@@ -419,19 +422,20 @@ local function evict_cached_rows()
     end
 end
 
-local function entry_rows(e, width)
-    if e.rows and e.rows_w == width and e.rows_ver == (e.ver or 0) then
+local function entry_rows(e, width, prev_role)
+    if e.rows and e.rows_w == width and e.rows_ver == (e.ver or 0)
+        and e.rows_prev == (prev_role or false) then
         use_counter = use_counter + 1
         e.used = use_counter
         return e.rows
     end
     if not render_fn then return {} end
-    local rows = render_fn(e, width)
+    local rows = render_fn(e, width, prev_role)
     if #rows > cache_bound() / 2 then
         return rows -- too big to cache; re-rendered on the next repaint
     end
     if e.rows then cached_rows = cached_rows - #e.rows end
-    e.rows, e.rows_w, e.rows_ver = rows, width, (e.ver or 0)
+    e.rows, e.rows_w, e.rows_ver, e.rows_prev = rows, width, (e.ver or 0), (prev_role or false)
     use_counter = use_counter + 1
     e.used = use_counter
     cached_rows = cached_rows + #rows
@@ -457,7 +461,8 @@ function M.ensure_index(width)
     end
     for i = from, n do
         local e = M.entry_at(i)
-        local h = e and entry_height(e, width) or 0
+        local prev = (i > 1) and (M.entry_at(i - 1) or {}).role or nil
+        local h = e and entry_height(e, width, prev) or 0
         index_h[i] = h
         rows = rows + h
         index_start[i] = rows - h + 1
@@ -489,7 +494,8 @@ function M.row_text(k, width)
     if not i then return "" end
     local e = M.entry_at(i)
     if not e then return "" end
-    local rows = entry_rows(e, width)
+    local prev = (i > 1) and (M.entry_at(i - 1) or {}).role or nil
+    local rows = entry_rows(e, width, prev)
     return rows[k - (index_start[i] or 0) + 1] or ""
 end
 
@@ -501,7 +507,8 @@ function M.render_all(width)
     for i = 1, M.visible_count() do
         local e = M.entry_at(i)
         if e then
-            for _, r in ipairs(entry_rows(e, width)) do out[#out + 1] = r end
+            local prev = (i > 1) and (M.entry_at(i - 1) or {}).role or nil
+            for _, r in ipairs(entry_rows(e, width, prev)) do out[#out + 1] = r end
         end
     end
     return out

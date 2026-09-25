@@ -37,40 +37,86 @@ top rule, the input's content rows, its bottom rule, the palette rows
 - **THEN** the box's two rules and the footer's single row are the last three rows of the screen, in that order, with no other region between them
 
 ### Requirement: Markdown-lite rendering
-Assistant text SHALL render inline code, bold, italic, lists, and
-headings; fenced code blocks SHALL render inside a bordered frame
-using box-drawing characters (or ASCII in ascii mode). Text SHALL
-word-wrap to the terminal width when `ui.wrap` is on: prose wraps
-on word boundaries (greedy), and fenced code blocks soft-wrap
-inside the frame with a continuation indent instead of truncating.
-No visible content SHALL be lost to truncation when `ui.wrap` is
-on. A single token longer than the available width (no spaces to
-break on) SHALL be cut hard. Wrap width SHALL be counted in
-display columns (wide East-Asian characters count as 2, ANSI
-sequences as 0). When `ui.wrap` is off, lines SHALL be truncated
-with a cut marker as before.
+Assistant text SHALL render inline code, bold, italic, ordered and unordered
+lists, tables, and headings; fenced code blocks SHALL render inside a bordered
+frame using box-drawing characters (or ASCII in ascii mode). Inline code,
+bold and italic SHALL take role colours from the active theme (`code`, `bold`,
+`italic`). Headings SHALL be wrapped to the width and SHALL take the `heading`
+role colour. Tables SHALL be detected from consecutive source lines beginning
+with `|`: columns SHALL be left-aligned to the widest cell, a separator row
+(`| --- |`) SHALL render as a dim rule, and the rendered block SHALL be clipped
+to the terminal width. Ordered lists (`1. `) SHALL be parsed alongside the
+existing `-`/`*` items; list items SHALL use a two-column prefix (`• ` in
+unicode, `- ` in ascii) and a two-column continuation indent. Runs of blank
+lines in the source SHALL collapse to a single blank row, and leading and
+trailing blank rows SHALL be dropped.
+
+Text SHALL word-wrap to the terminal width when `ui.wrap` is on: prose wraps on
+word boundaries (greedy), and fenced code blocks soft-wrap inside the frame
+with a continuation indent instead of truncating. No visible content SHALL be
+lost to truncation when `ui.wrap` is on. A single token longer than the
+available width (no spaces to break on) SHALL be cut hard. Wrap width SHALL be
+counted in display columns (wide East-Asian characters count as 2, ANSI
+sequences as 0). When `ui.wrap` is off, lines SHALL be truncated with a cut
+marker as before.
 
 #### Scenario: Code block framed
+
 - **WHEN** the assistant emits a fenced ```lua block
 - **THEN** it renders inside a box-drawing border; long lines inside soft-wrap within the frame instead of truncating
 
+#### Scenario: Code block frame is closed and labelled
+
+- **WHEN** a fenced block of any inner width is rendered
+- **THEN** the top border, the body side rails, and the bottom border all share the same display width (no one-off narrow top edge) and the language label is visible on the top border
+
+#### Scenario: Inline markup is coloured
+
+- **WHEN** the assistant emits `code`, **bold** or *italic*
+- **THEN** each is rendered with its theme role colour (`code`, `bold`, `italic`) and no backtick or asterisk markers remain
+
+#### Scenario: Headings wrap and are coloured
+
+- **WHEN** the assistant emits a `# Heading` wider than the transcript width
+- **THEN** it wraps to several lines and takes the `heading` role colour
+
+#### Scenario: Tables align
+
+- **WHEN** the assistant emits a `| a | b |` table with a `| --- | --- |` separator row
+- **THEN** columns are left-aligned to the widest cell, the separator renders as a dim rule, and the block fits the width
+
+#### Scenario: Ordered lists parse
+
+- **WHEN** the assistant emits `1. first` / `2. second`
+- **THEN** each item renders with a numbered prefix and a continuation indent aligned to the prefix width
+
 #### Scenario: Prose wraps on word boundaries
+
 - **WHEN** the assistant emits a sentence longer than the transcript width
 - **THEN** no line breaks inside a word; the break falls on a space, and every rendered line fits the width
 
 #### Scenario: Code block soft-wraps inside the frame
+
 - **WHEN** the assistant emits a fenced block with a line longer than the frame inner width
 - **THEN** the line renders on several framed lines with a continuation indent, the full content stays visible, and no cut marker appears
 
 #### Scenario: Wide characters count double
+
 - **WHEN** text contains East-Asian wide characters
 - **THEN** wrapping accounts 2 columns per such character and no line overflows the width
 
 #### Scenario: Overlong token is cut hard
+
 - **WHEN** a single token without spaces exceeds the available width
 - **THEN** it is cut hard at the width boundary
 
+#### Scenario: Blank lines collapse
+
+- **WHEN** the source contains several consecutive blank lines or a trailing blank line
+- **THEN** they collapse to a single blank row and no leading or trailing blank row is rendered
+
 #### Scenario: Wrap off still truncates
+
 - **WHEN** `ui.wrap` is off and a line exceeds the width
 - **THEN** the line renders truncated to one row with the cut marker
 
@@ -109,6 +155,7 @@ the agent history, not on screen):
 - `/clear` SHALL clear the transcript display only; the agent keeps its history, so the next turn still sees full context.
 - `/compact` SHALL force an immediate compaction (ignoring the threshold) and append a summary line to the transcript. Optional free text after `/compact` SHALL be passed to the summary request as focus instructions. On LLM success the row SHALL show the generated summary (or its stable marker when empty); on fallback the existing `── summary ──` row behavior applies.
 - `/login [provider]` and `/logout [provider]` SHALL be registered as built-in slash commands: `/login` with a named provider starts the login flow for that provider; `/login` with no argument opens a provider picker in the shared palette (same mechanism as the slash menu / `/copy` — never a full-screen overlay, never a silent default). Selecting a provider enters login secret mode (`S.login_secret = { buf }`): the secret buffer owns the keyboard while open, is masked on screen, and never appears in `S.input` or a transcript row (see Login secret mode). `/logout` clears the stored credential for the named or active provider. Neither command SHALL print token material to the transcript. Unknown provider names SHALL show an error banner. The palette listing SHALL include both commands with short descriptions.
+- `/think [level]` SHALL be registered as a built-in slash command for the reasoning level (`off`, `low`, `medium`, `high`): with a level argument it SHALL apply that level directly; with no argument it SHALL open a level picker in the shared palette, the same mechanism as `/model` (never a full-screen overlay, never a silent default). Applying a level SHALL set the effective `reasoning`, persist it to `~/.tether/config.lua` (best-effort, like the model pick), and append a system row echoing the choice (`→ мышление: medium`). An unknown level SHALL show an error banner and change nothing. The palette listing SHALL include `/think` with a short description.
 
 #### Scenario: New session starts clean
 - **WHEN** the user runs `/new` with a non-empty transcript
@@ -133,6 +180,22 @@ the agent history, not on screen):
 #### Scenario: Compact reports fallback
 - **WHEN** `/compact` runs and the summary request fails
 - **THEN** the transcript still gains a `── summary ──` row (truncation fallback) and no error banner is raised for the summary failure alone
+
+#### Scenario: /think appears in palette
+- **WHEN** the user opens the slash palette
+- **THEN** `/think` is listed among the built-in commands with its short description
+
+#### Scenario: Direct level apply
+- **WHEN** the user runs `/think high`
+- **THEN** the effective level becomes `high`, it is persisted to `config.lua`, and the transcript gains a `→ мышление: high` row
+
+#### Scenario: Bare /think opens the level picker
+- **WHEN** the user runs `/think` and picks `medium` in the palette
+- **THEN** the palette closes, the effective level becomes `medium`, and the transcript gains a `→ мышление: medium` row; Esc instead closes it and changes nothing
+
+#### Scenario: Unknown level is rejected
+- **WHEN** the user runs `/think turbo`
+- **THEN** an error banner names the bad level and the effective level is unchanged
 
 ### Requirement: Scroll position indicator
 When the user scrolled up, the TUI SHALL report how many transcript
@@ -228,7 +291,8 @@ expansion. Every decision (including Esc) SHALL clear the menu.
 ### Requirement: Palette
 Typing `/` as the first non-blank character of the first input line
 SHALL open a command palette listing the available slash entries: the
-built-in commands (`/clear /compact /model /resume /new /quit /copy`) in
+built-in commands (`/clear /compact /model /resume /new /quit /copy
+/login /logout /think`) in
 declared order, followed by the skills discovered by the
 context-injection discovery rules, each rendered as `/<name>` in
 discovery order. A skill whose name matches a built-in command name
@@ -237,8 +301,10 @@ and case SHALL NOT decide which of the two it is.
 
 Each row SHALL render the entry name, its short description, and, after
 the name, the entry's argument hint when it has one. A skill row SHALL
-show the hint `[задача]`; an entry that takes no arguments SHALL NOT show
-a hint.
+show the hint `[skill]`; an entry that takes no arguments SHALL NOT show
+a hint. The name column SHALL be padded to the widest name+hint across
+all listed entries so command and skill descriptions align in the same
+column.
 
 Filtering SHALL be a case-insensitive subsequence match over the entry
 name (the command name or the skill name): prefix matches SHALL rank
@@ -325,7 +391,11 @@ holds the commands only.
 
 #### Scenario: Argument hints are rendered
 - **WHEN** the palette renders a skill row and a command row
-- **THEN** the skill row shows its `[задача]` hint and the command row shows none
+- **THEN** the skill row shows its `[skill]` hint and the command row shows none
+
+#### Scenario: Descriptions align
+- **WHEN** the palette lists both commands and skills
+- **THEN** every description starts at the same column regardless of the name length or the `[skill]` hint
 
 #### Scenario: The window follows the selection
 - **WHEN** 20 entries are listed and the user moves the selection to the 10th row
@@ -580,8 +650,13 @@ pending-retry indicators so no stale spinner or backoff stays on screen.
 - **THEN** no placeholder, caret, elapsed field or pending-retry field remains
 
 ### Requirement: Themes
-The TUI SHALL support a set of named themes applied to roles,
-code, and system lines; `ui.theme` selects the active one.
+The TUI SHALL support a set of named themes applied to roles, code, and
+system lines; `ui.theme` selects the active one. The theme table SHALL
+define at least the roles `accent`, `warn`, `error`, `success`, `dim`,
+`italic`, `reverse`, `bold`, `comment`, `string`, `number`, `keyword`,
+`code` and `heading`; `mono` SHALL leave every role missing (no SGR).
+The `code` role SHALL colour inline code, and the `heading` role SHALL
+colour markdown headings.
 
 #### Scenario: Theme switch
 - **WHEN** the user changes `ui.theme` in config and restarts
@@ -675,6 +750,19 @@ The TUI SHALL show turn progress while the agent works, without waiting for the 
 
 - **WHEN** a confirmation menu is open and the user presses Enter
 - **THEN** only the confirmation handler acts; no steering message is queued
+
+### Requirement: Reasoning streams as thinking rows
+
+When the provider stream carries `reasoning_delta` events, the transcript SHALL render them as thinking rows: the deltas of one attempt SHALL accumulate into a single `thinking` entry whose body shows the joined reasoning under the live elapsed-time header, and its visibility SHALL follow `ui.thinking` — `collapsed` shows the `think ▸ (Ctrl+T)` placeholder instead of the body until Ctrl+T expands it. Reasoning text SHALL NOT appear as answer text: the assistant row carries only `text_delta` content. Thinking rows SHALL follow the block-gap and attempt-scoping rules like any other row, and SHALL NOT be sent to the agent or added to its history.
+
+#### Scenario: Reasoning renders as one thinking row
+- **WHEN** the stream emits three `reasoning_delta` chunks and then `text_delta` chunks
+- **THEN** the transcript holds one thinking row with the joined reasoning under its `thinking · Ns` header, followed by the assistant row with the answer text only
+
+#### Scenario: Collapsed thinking stays reachable
+- **WHEN** `ui.thinking` is `collapsed` and reasoning streams
+- **THEN** the transcript shows the `think ▸ (Ctrl+T)` placeholder instead of the reasoning body, and Ctrl+T expands the row
+
 ### Requirement: Retry and continuation notices
 While a turn is being retried or continued the TUI SHALL keep the user
 informed with dim system rows, painted as the events arrive and without
@@ -699,13 +787,13 @@ always shows the turn spinner while the turn is running).
 
 These rows SHALL behave as transcript rows for scrolling and the
 transcript height, SHALL NOT be sent to the agent, and SHALL NOT be
-added to the agent history. In ASCII mode they SHALL use ASCII glyphs
-and SHALL NOT introduce a non-ASCII glyph.
+added to the agent history, and SHALL gain the block-gap blank row
+before them (per the Turn separators gap rule). In ASCII mode they SHALL
+use ASCII glyphs and SHALL NOT introduce a non-ASCII glyph.
 
 #### Scenario: The failed attempt's rows are dropped
 - **WHEN** an attempt streams `half an ans` and then fails retryably
-- **THEN** that text is gone from the transcript and the retry row is
-  the last row before the next attempt's output
+- **THEN** that text is gone from the transcript and the retry row is the last row before the next attempt's output
 
 #### Scenario: The successful attempt's rows are kept
 - **WHEN** the attempt after a retry streams an answer
@@ -713,8 +801,7 @@ and SHALL NOT introduce a non-ASCII glyph.
 
 #### Scenario: Retry row content
 - **WHEN** the third attempt fails and the next wait is 8 seconds
-- **THEN** one dim row names attempt 3, the 8-second wait and the
-  failure reason
+- **THEN** one dim row names attempt 3, the 8-second wait and the failure reason
 
 #### Scenario: Continuation row
 - **WHEN** a truncated answer is continued
@@ -722,13 +809,11 @@ and SHALL NOT introduce a non-ASCII glyph.
 
 #### Scenario: Status line during the wait
 - **WHEN** the TUI waits 60 seconds before the next attempt
-- **THEN** the retry row names the 60-second wait and the input box's
-  top rule keeps showing the ordinary turn indicator
+- **THEN** the retry row names the 60-second wait and the input box's top rule keeps showing the ordinary turn indicator
 
 #### Scenario: Painted without a keypress
 - **WHEN** a retry or continuation event arrives
-- **THEN** the row is painted while the turn is still running, without
-  requiring a keypress
+- **THEN** the row is painted while the turn is still running, without requiring a keypress
 
 #### Scenario: Retry rows are not agent input
 - **WHEN** the retry row is on screen and the turn continues
@@ -736,8 +821,7 @@ and SHALL NOT introduce a non-ASCII glyph.
 
 #### Scenario: ASCII mode
 - **WHEN** ASCII mode is active during a retry
-- **THEN** the retry row and the top-rule notice use ASCII glyphs and
-  introduce no non-ASCII character
+- **THEN** the retry row and the top-rule notice use ASCII glyphs and introduce no non-ASCII character
 
 ### Requirement: Ctrl+C during a turn
 Pressing Ctrl+C while a turn is running SHALL stop that turn. The byte is
@@ -780,6 +864,13 @@ submission time is available for them. `/clear` SHALL drop separators
 together with the rest of the transcript and `/new` SHALL drop them
 with the previous session.
 
+A blank row SHALL separate a separator row from the preceding transcript
+entity, but a separator SHALL NOT add a blank row between itself and the
+user row it labels. `ui.block_gap` (default 1; 0 = compact) SHALL control
+the number of blank rows inserted between top-level entities (separator,
+user, assistant, system); tool and thinking rows SHALL stay attached to
+the preceding entity.
+
 #### Scenario: One separator per turn
 - **WHEN** the user submits two messages in a session
 - **THEN** the transcript holds two separator rows, each immediately before its user row, in chronological order
@@ -799,6 +890,10 @@ with the previous session.
 #### Scenario: ASCII mode
 - **WHEN** ASCII mode is active and a turn separator is rendered
 - **THEN** it is rendered as `-- HH:MM --` with no non-ASCII glyphs
+
+#### Scenario: Block gaps
+- **WHEN** `ui.block_gap` is 1 and a user turn follows an assistant reply
+- **THEN** one blank row separates the assistant block from the turn separator, and no blank row is added between the separator and its user row
 
 ### Requirement: Path completion
 With `ui.path_completion` on (default) and a non-empty input, pressing
@@ -920,10 +1015,20 @@ it SHALL NOT depend on a background timer.
 Fenced code blocks SHALL be rendered with per-language token coloring
 when the fence info string names a supported language: `lua`, `c`
 (and `h`), `sh` (and `bash`), `python`, `js` (and `ts`), `go`, `rust`
-and `json`. The language name in the fence SHALL match
-case-insensitively and SHALL stay visible in the frame. Coloring SHALL
+and `json`, plus the common aliases `javascript`, `py`, `tsx`, `jsx`,
+`shell`, `zsh`, `c++`, `cpp`, `cc`, `cxx`, `rs`, `yaml`, `yml`,
+`golang`, `rb`. The language name in the fence SHALL match
+case-insensitively, MAY carry trailing attributes (e.g. ```python
+title=…), and SHALL stay visible in the frame. Coloring SHALL
 distinguish at minimum comments, string literals, numbers and
 language keywords, and SHALL take its colors from the active theme.
+A supported language with no keyword set (`yaml`, `yml`, `rb`) SHALL
+still highlight string literals and numbers, so the block is not
+colourless.
+
+The frame SHALL be rendered dim (box-drawing or ASCII) with the
+language label readable in the default foreground; the frame SHALL
+NOT itself be coloured.
 
 Highlighting SHALL NOT change the block's text or geometry: removing
 ANSI sequences from the highlighted rows SHALL reproduce the
@@ -1306,14 +1411,17 @@ accumulated output tokens as `↓<count>` (each omitted while zero,
 joined to each other by one space); the context cell
 `used/max (pct%)`; any active transient flags joined by a single
 space (the one-shot toast and the scroll indicator only — no
-mouse-mode or keyboard-protocol icons); and the model cell
-`provider/model` (provider omitted when unknown) right-aligned on
+mouse-mode or keyboard-protocol icons); and the right-hand cell
+`provider/model · <level>`, where `<level>` is the effective reasoning
+level (`off`, `low`, `medium`, `high`) shown always (provider omitted
+when unknown) right-aligned on
 the same row, at least two columns away from the left side. No `≈`
 or other estimate marker SHALL precede the context cell. Counts SHALL use the compact form: plain below
 1000, one decimal with `k` below 10000, a rounded `k` below 1000000,
-and `M` above. The model name SHALL end in the row's last column
-whenever both sides fit; when they cannot both fit, the model name
-SHALL be truncated from its left so its tail survives, and dropped
+and `M` above. The right-hand cell SHALL end in the row's last column
+whenever both sides fit; when they cannot both fit, the cell
+SHALL be truncated from its left so its tail survives (the model name
+loses its start first; the level label at the tail survives), and dropped
 entirely only when nothing of it fits. When the left content alone
 exceeds the available width, SHALL truncate in this order: path from
 the right with a dim `...`, then transient flags dropped (toast
@@ -1327,11 +1435,21 @@ non-ASCII glyph SHALL be introduced by the footer.
 
 #### Scenario: Idle footer
 - **WHEN** no turn is running, no flag is active, and the session has used 3000 input and 1000 output tokens
-- **THEN** the single footer row starts with the `~`-abbreviated workspace followed by `↑3.0k ↓1.0k` and the context cell, and ends with the model name
+- **THEN** the single footer row starts with the `~`-abbreviated workspace followed by `↑3.0k ↓1.0k` and the context cell, and ends with the right-hand cell `provider/model · <level>`
 
 #### Scenario: Model is right-aligned
 - **WHEN** the model name fits beside the left side
 - **THEN** it ends in the last column of the footer row and at least two blank columns separate it from the left side
+
+#### Scenario: Reasoning level follows the model
+
+- **WHEN** the effective level is `medium` and the active provider is `agnes` with model `agnes-2.5-flash`
+- **THEN** the right-hand cell reads `agnes/agnes-2.5-flash · medium` and still ends in the row's last column when it fits
+
+#### Scenario: Level is shown even when off
+
+- **WHEN** the effective level is `off`
+- **THEN** the right-hand cell still ends with `· off`
 
 #### Scenario: Counters accumulate across turns
 - **WHEN** one turn reports 1200 prompt and 300 completion tokens and a later turn reports 800 and 200
@@ -1351,7 +1469,7 @@ non-ASCII glyph SHALL be introduced by the footer.
 
 #### Scenario: Narrow terminal drops the model name
 - **WHEN** the model name cannot fit beside the left side of the footer
-- **THEN** the left side is rendered intact and the model name is truncated from its left, or omitted if nothing of it fits
+- **THEN** the left side is rendered intact and the right-hand cell is truncated from its left — the model name loses its start first while the ` · <level>` tail survives, and the cell is omitted only if nothing of it fits
 
 #### Scenario: ASCII mode
 - **WHEN** ASCII mode is active and counters are shown

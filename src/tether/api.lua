@@ -336,7 +336,9 @@ local function http_request(cfg, api_key, messages, on_event)
     local pname, P = provider_of(cfg)
     local model = cfg.model
     local url = expand_url(P.stream_url(cfg, model, api_key), cfg)
-    local req = P.build_request(messages, model, nil)
+    -- add-reasoning-level: the normalized level rides as the 4th argument;
+    -- adapters that predate it ignore the extra arg.
+    local req = P.build_request(messages, model, nil, cfg.reasoning)
 
     -- Optional adapter preflight (missing compound credentials, unexpanded
     -- URL placeholders): fails the attempt before any request is issued.
