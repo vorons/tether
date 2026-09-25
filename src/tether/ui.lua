@@ -2336,7 +2336,13 @@ local function render_entry(e, width, prev_role)
                 out = to
             end
         elseif role == "system" then
-            out = { dim(e.text or "") }
+            -- wrapped, not dumped raw: the llm compaction summary is
+            -- multi-paragraph text, and one unwrapped row both writes past
+            -- the terminal width and shifts the screen at its newlines
+            out = {}
+            for _, l in ipairs(wrap(e.text or "", math.max(width, 1))) do
+                out[#out + 1] = dim(l)
+            end
         elseif role == "tool" then
             -- 3.1: leading status marker; a failed row appends its first error line
             -- (clipped) so the failure is visible without expanding.

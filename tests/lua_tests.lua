@@ -12651,6 +12651,24 @@ do
   print("T211 think block padding: OK")
 end
 
+-- T212: a compaction summary is wrapped like any other row. The llm body is
+-- multi-paragraph text; a single unwrapped row writes past the terminal width
+-- and its embedded newlines shift the screen, which is what broke the TUI.
+do
+  local uimod, S = run_ui_with({ 17 },
+    { agent = { turn = function() return true end, get_history = function() return {} end } })
+  local para = string.rep("word ", 40)
+  uimod._handle_agent_event({ type = "context_compressed", mode = "llm",
+    summary = "[summary]\n" .. para .. "\n\n" .. para })
+  local rows = uimod._render_all(40)
+  assert_true(#rows > 1, "T212 the multi-paragraph summary spans several rows")
+  for _, r in ipairs(rows) do
+    assert_true(uimod.vlen(r) <= 40, "T212 every summary row fits the width")
+    assert_eq(r:find("\n", 1, true), nil, "T212 no row carries a raw newline")
+  end
+  print("T212 compaction summary wraps: OK")
+end
+
 if failed > 0 then
     os.exit(1)
 end
