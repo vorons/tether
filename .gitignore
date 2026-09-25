@@ -34,4 +34,6 @@ CONTEXT.md
 .opencode/
 openspec/
 docs/
-data/
+data/*
+!data/providers.json
+!data/overrides/
