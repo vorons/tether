@@ -12414,6 +12414,44 @@ do
   print("T199 catalog age marks: OK")
 end
 
+-- T203: login secret-mode hint resolves api_key_env lists — dynamic-catalog
+-- entries (e.g. `opencode`) carry a list of vars, not a string; painting the
+-- hint concatenated the table raw and crashed the whole render.
+do
+  local function strip(s) return (s:gsub("\27%[[0-9;?%*]*[a-zA-Z]", "")) end
+  local catfix = assert(loadfile("src/tether/providers/catalog.lua"))()
+  catfix.set_overlay({
+    opencode = { wire = "openai", base_url = "https://opencode.ai/zen/v1",
+      api_key_env = { "OPENCODE_API_KEY" }, model = "kimi-k2.6",
+      _source = "test" },
+  }, { generated_at = 0 })
+  local orig_catalog = _G.provider_catalog
+  _G.provider_catalog = catfix
+  local uim, S = run_ui_with({ 17 }, {
+    agent = { turn = function() return true end, get_history = function() return {} end },
+  })
+  uim._execute_command("login", "opencode")
+  assert_notnil(S.login_secret, "T203 secret mode open")
+  local L = uim._layout()
+  -- catalog branch: the hint names the var instead of crashing on the list
+  uim._paint(true)
+  assert_true(strip(uim._row(L.input_row) or ""):find("OPENCODE_API_KEY", 1, true) ~= nil,
+    "T203 catalog-list hint names the env var")
+  -- cfg.providers branch: config.catalog_providers copies cache entries
+  -- verbatim, so a loaded cfg carries the same list
+  S.cfg.providers = { opencode = { api_key_env = { "OPENCODE_API_KEY" } } }
+  uim._paint(true)
+  assert_true(strip(uim._row(L.input_row) or ""):find("OPENCODE_API_KEY", 1, true) ~= nil,
+    "T203 cfg-list hint names the env var")
+  -- a keyless preset (empty list) paints without a var and without crashing
+  S.cfg.providers = { opencode = { api_key_env = {} } }
+  uim._paint(true)
+  assert_true(strip(uim._row(L.input_row) or ""):find("paste API key", 1, true) ~= nil,
+    "T203 keyless hint has no var suffix")
+  _G.provider_catalog = orig_catalog
+  print("T203 login hint env list: OK")
+end
+
 -- T205: a loop error becomes the error banner, never a stderr dump that
 -- kills the session — the failing tick is reported in place and the loop
 -- stays live (the banner clears on the next Enter/Esc).

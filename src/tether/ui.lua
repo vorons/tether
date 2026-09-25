@@ -2744,15 +2744,24 @@ local function render_input(L)
         -- the secret line names what to paste: env var when the provider
         -- takes an API key, device URL for device flows, auth code otherwise.
         local hint = "paste API key"
+        local env_name
         if S.cfg and S.cfg.providers and S.cfg.providers[S.login_provider]
-            and S.cfg.providers[S.login_provider].api_key_env
-            and S.cfg.providers[S.login_provider].api_key_env ~= "" then
-            hint = hint .. " (" .. S.cfg.providers[S.login_provider].api_key_env .. ")"
+            and S.cfg.providers[S.login_provider].api_key_env then
+            env_name = S.cfg.providers[S.login_provider].api_key_env
         elseif M._provider_catalog and M._provider_catalog.get then
             local entry = M._provider_catalog.get(S.login_provider or "")
-            if entry and entry.api_key_env and entry.api_key_env ~= "" then
-                hint = hint .. " (" .. entry.api_key_env .. ")"
-            end
+            if entry then env_name = entry.api_key_env end
+        end
+        -- dynamic-provider-catalog: api_key_env is a list of vars ("first
+        -- set wins") for pipeline presets like opencode — resolve to one
+        -- name before concatenating. Nil/"" stays keyless (OAuth/store).
+        if M._provider_catalog and M._provider_catalog.env_name then
+            env_name = M._provider_catalog.env_name(env_name)
+        elseif type(env_name) == "table" then
+            env_name = type(env_name[1]) == "string" and env_name[1] or nil
+        end
+        if env_name and env_name ~= "" then
+            hint = hint .. " (" .. env_name .. ")"
         end
         if S.login_flow and S.login_flow.device and S.login_flow.device_code then
             -- full device flow: the TUI polls; the user just authorizes
