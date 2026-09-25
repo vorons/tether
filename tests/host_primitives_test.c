@@ -905,6 +905,62 @@ static int call0(lua_State *L, const char *name)
     return 1;
 }
 
+/* A Ctrl+C while a tool command runs must end the wait: tether.exec blocks
+   the turn for the whole command (the `run` tool, up to 120 s), so without
+   the input watch the keystroke sits unread and only takes effect once the
+   command exits. The wait must notice 0x03, kill the command and return
+   with the interrupt flag still set, like the sleep and transfer paths. */
+static void test_exec_interrupt(lua_State *L)
+{
+    int fds[2];
+    if (pipe(fds) != 0 || dup2(fds[0], STDIN_FILENO) < 0) {
+        failures++;
+        fprintf(stderr, "FAIL: cannot point stdin at the exec interrupt pipe\n");
+        return;
+    }
+    close(fds[0]);
+    g_interrupt = 0;
+    g_stdin_eof = 0;
+    g_pending_len = g_pending_pos = 0;
+
+    pid_t writer = fork();
+    if (writer == 0) {
+        struct timespec nap = { 0, 300 * 1000 * 1000 }; /* 300 ms in */
+        nanosleep(&nap, NULL);
+        if (write(fds[1], "\003", 1) < 0) { /* parent already gone */ }
+        _exit(0);
+    }
+
+    g_tick_n = 0;
+    bind_tick_hook(L, tick_stub);
+    double t0 = now_seconds();
+    if (call1(L, "exec", "sleep 3")) {
+        check(lua_toboolean(L, -1) == 0, "an interrupted exec reports failure");
+        lua_pop(L, 1);
+    }
+    double elapsed = now_seconds() - t0;
+    check(g_tick_n >= 2, "the exec wait ticks while the command runs");
+    check(elapsed < 1.0, "Ctrl+C ends a running tool command (not its timeout)");
+
+    if (call0(L, "abort_requested")) {
+        check(lua_toboolean(L, -1) == 1, "the interrupt flag survives the exec");
+        lua_pop(L, 1);
+    }
+
+    if (writer > 0) {
+        int status = 0;
+        waitpid(writer, &status, 0);
+    }
+    close(fds[1]);
+    if (call0(L, "clear_abort")) lua_pop(L, 1);
+    int devnull = open("/dev/null", O_RDONLY);
+    if (devnull >= 0) {
+        if (dup2(devnull, STDIN_FILENO) < 0) { /* best effort */ }
+        close(devnull);
+    }
+    clear_tick_hook(L);
+}
+
 /* A Ctrl+C during an in-flight transfer must abort it: the progress callback
    watches stdin, so the turn ends when the user asks rather than when the
    provider's stream happens to finish. The server streams for ~1.2 s, so an
@@ -1485,6 +1541,7 @@ int main(void)
     test_spinner_tick_rate(L);
     test_sleep_ticks(L);
     test_exec_ticks(L);
+    test_exec_interrupt(L);
     test_http_get_ticks(L);
     test_tls_verification(L);
     test_interrupt_watch(L);

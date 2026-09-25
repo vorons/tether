@@ -340,8 +340,12 @@ static int l_exec(lua_State *L)
     /* fork/exec instead of system(): system() blocks Lua (and the spinner)
        for the whole command — the agent `run` tool allows up to 120 s. The
        parent waits in spinner quanta and ticks, so the indicator animates
-       while the tool works. Contract unchanged: no kill on Ctrl+C (the
-       interrupt surfaces at the next checkpoint), same (ok, exit_code). */
+       while the tool works. The input watch ends the wait early on Ctrl+C
+       (0x03): the command's process group is killed and the wait returns
+       with the interrupt flag still set, so the keystroke stops the tool it
+       was meant for instead of landing after it finishes. Every other typed
+       byte is queued for read_char(_nb) — no keystroke is lost. Contract for
+       a clean exit unchanged: (ok, exit_code). */
     pid_t pid = fork();
     if (pid < 0) {
         lua_pushboolean(L, 0);
@@ -349,21 +353,41 @@ static int l_exec(lua_State *L)
         return 2;
     }
     if (pid == 0) {
+        /* own process group so an interrupt kills the whole command tree
+           (timeout, its child, the command), not just the shell */
+        setpgid(0, 0);
         execl("/bin/sh", "sh", "-c", cmd, (char *)NULL);
         _exit(127);
     }
     int st = 0;
+    struct timespec ts;
+    ts.tv_sec = 0;
+    ts.tv_nsec = (long)SPINNER_QUANTUM_MS * 1000L * 1000L;
     for (;;) {
         pid_t w = waitpid(pid, &st, WNOHANG);
         if (w == pid)
             break;
         if (w < 0 && errno != EINTR)
             break; /* lost child: report through the status below */
-        {
-            struct timespec ts;
-            ts.tv_sec = 0;
-            ts.tv_nsec = (long)SPINNER_QUANTUM_MS * 1000L * 1000L;
-            nanosleep(&ts, NULL);
+        nanosleep(&ts, NULL);
+        if (poll_interrupt()) {
+            kill(-pid, SIGTERM);
+            /* short grace (timeout's own contract is SIGTERM), then force */
+            int i;
+            for (i = 0; i < 12; i++) {
+                pid_t g = waitpid(pid, &st, WNOHANG);
+                if (g == pid || (g < 0 && errno != EINTR))
+                    break;
+                struct timespec grace;
+                grace.tv_sec = 0;
+                grace.tv_nsec = 25L * 1000L * 1000L;
+                nanosleep(&grace, NULL);
+            }
+            if (i == 12) {
+                kill(-pid, SIGKILL);
+                while (waitpid(pid, &st, 0) < 0 && errno == EINTR) { }
+            }
+            break;
         }
         spinner_tick_call(L);
     }
