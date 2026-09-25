@@ -1,5 +1,7 @@
 # tether
 
+> Alpha version under active development. It may contain bugs.
+
 Terminal-based AI coding agent, single Lua + C binary.
 
 ## Build
