@@ -1,0 +1,93 @@
+{
+  "agnes-cn": {
+    "wire": "openai",
+    "base_url": "https://api.agnes-ai.cn/v1",
+    "api_key_env": ["AGNES_CN_API_KEY"],
+    "model": "agnes-2.5-flash",
+    "models": []
+  },
+  "ant-ling": {
+    "wire": "openai",
+    "base_url": "https://api.ant-ling.com/v1",
+    "api_key_env": ["ANT_LING_API_KEY"],
+    "model": "Ling-2.6-flash",
+    "models": []
+  },
+  "azure-openai": {
+    "wire": "azure-openai",
+    "base_url": "",
+    "api_key_env": ["AZURE_OPENAI_API_KEY"],
+    "model": "gpt-4o",
+    "models": []
+  },
+  "kimi-coding": {
+    "wire": "anthropic",
+    "base_url": "https://api.kimi.com/coding",
+    "api_key_env": ["KIMI_API_KEY"],
+    "model": "kimi-for-coding",
+    "models": []
+  },
+  "llama-cpp": {
+    "wire": "openai",
+    "base_url": "http://127.0.0.1:8080/v1",
+    "api_key_env": ["LLAMA_API_KEY"],
+    "model": "",
+    "models": []
+  },
+  "ollama": {
+    "wire": "openai",
+    "base_url": "http://localhost:11434/v1",
+    "api_key_env": ["OLLAMA_API_KEY"],
+    "model": "",
+    "models": []
+  },
+  "openai-codex": {
+    "wire": "openai-codex",
+    "base_url": "https://chatgpt.com/backend-api",
+    "api_key_env": [],
+    "model": "gpt-5.3-codex",
+    "models": []
+  },
+  "qwen-token-plan": {
+    "wire": "openai",
+    "base_url": "https://token-plan.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1",
+    "api_key_env": ["QWEN_TOKEN_PLAN_API_KEY"],
+    "model": "qwen-max",
+    "models": []
+  },
+  "qwen-token-plan-cn": {
+    "wire": "openai",
+    "base_url": "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1",
+    "api_key_env": ["QWEN_TOKEN_PLAN_CN_API_KEY"],
+    "model": "qwen-max",
+    "models": []
+  },
+  "qwen-token-plan-individual": {
+    "wire": "openai",
+    "base_url": "https://token-plan.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1",
+    "api_key_env": ["QWEN_TOKEN_PLAN_API_KEY"],
+    "model": "qwen-max",
+    "models": []
+  },
+  "radius": {
+    "wire": "radius",
+    "base_url": "https://radius.pi.dev",
+    "api_key_env": ["RADIUS_API_KEY"],
+    "model": "",
+    "models": []
+  },
+  "vercel-ai-gateway": {
+    "wire": "anthropic",
+    "base_url": "https://ai-gateway.vercel.sh",
+    "api_key_env": ["AI_GATEWAY_API_KEY"],
+    "model": "anthropic/claude-sonnet-4",
+    "models": []
+  },
+  "zai-coding-cn": {
+    "wire": "openai",
+    "base_url": "https://open.bigmodel.cn/api/coding/paas/v4",
+    "api_key_env": ["ZAI_CODING_CN_API_KEY"],
+    "model": "glm-4.5",
+    "models": []
+  }
+}

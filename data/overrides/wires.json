@@ -1,0 +1,7 @@
+{
+  "amazon-bedrock": "amazon-bedrock",
+  "azure": "azure-openai",
+  "azure-cognitive-services": "azure-openai",
+  "cloudflare-ai-gateway": "cloudflare-ai-gateway",
+  "google-vertex": "google-vertex"
+}
