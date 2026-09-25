@@ -84,6 +84,7 @@ local function host_mock(fields)
     -- poll below with byte-aware readiness.
     fields.poll = fields.poll or function() return { read = { 0 }, write = {} } end
     fields.monotonic_ms = fields.monotonic_ms or function() return 0 end
+    fields.quit_requested = fields.quit_requested or function() return false end
     return fields
 end
 
@@ -12537,6 +12538,34 @@ do
   end
   _G.tether = orig_tether
   print("T207 lone Esc decodes while idle: OK")
+end
+
+-- T208: the host raises a quit flag while a turn blocks (a Ctrl+Q during an
+-- exec/sleep/transfer — the UI is not reading stdin then, so the host watches
+-- it itself); the tick honors it and the app exits instead of sitting on the
+-- turn the keystroke just aborted.
+do
+  local polls, quit_calls = 0, 0
+  run_ui_with({}, {
+    tether = {
+      -- no scripted bytes: the loop lives on ticks alone, and after the quit
+      -- window stdin drains to EOF so a missing fix still unwinds (a red
+      -- test must hang nowhere)
+      poll = function()
+        polls = polls + 1
+        if polls > 6 then return { read = { 0 }, write = {} } end
+        return { read = {}, write = {} }
+      end,
+      read_char = function() return nil end,
+      read_char_nb = function() return nil end,
+      quit_requested = function()
+        quit_calls = quit_calls + 1
+        return quit_calls > 2
+      end,
+    },
+  })
+  assert_true(quit_calls >= 3, "T208 the tick polled the host quit flag")
+  print("T208 host quit flag honored: OK")
 end
 
 if failed > 0 then

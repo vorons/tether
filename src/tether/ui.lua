@@ -3136,7 +3136,13 @@ M._paint = paint
 -- (M-fields, not chunk locals: ui.lua sits at Lua's 200-locals limit.)
 M._last_spinner_tick_s = nil
 function M._spinner_tick()
-    if not S or not S.busy then return end
+    if not S or S.quit then return end
+    -- a Ctrl+Q that arrived while the turn blocks in the host (a tool
+    -- command, a backoff, a transfer): the host raised it because the UI is
+    -- not reading stdin here, and this tick is the only Lua entry while the
+    -- wait spins
+    if tether.quit_requested() then S.quit = true; return end
+    if not S.busy then return end
     if S.confirmation or S.ask or S.login_secret then return end
     -- Drain keys here too, not only on agent events: while a turn waits
     -- silently (TTFT/backoff) no event fires, so without this a wheel tick
@@ -5861,6 +5867,9 @@ function M.run(app_cfg)
     end)
     M._loop:on_tick(function()
         M._poll_models_bg()
+        -- a Ctrl+Q raised by the host while a turn blocked: the turn has
+        -- unwound by now, so this is the exit the keystroke asked for
+        if tether.quit_requested() then S.quit = true end
         if tether.resize_requested() then
             local sz = tether.get_terminal_size()
             if sz then S.w, S.h = sz.width, sz.height end

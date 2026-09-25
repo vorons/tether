@@ -41,18 +41,21 @@
 static struct termios orig_termios;
 static int termios_active = 0;
 
-/* --- Ctrl+C while a turn blocks -------------------------------------------
+/* --- Ctrl+C / Ctrl+Q while a turn blocks -----------------------------------
    Raw mode clears ISIG, so an in-terminal Ctrl+C arrives as byte 0x03 rather
    than SIGINT, and the UI reads input only between turns — exactly when no turn
-   is running. While a turn blocks (tether.sleep, an in-flight HTTP transfer)
-   the host therefore watches stdin itself: 0x03 raises `g_interrupt`, and every
-   other byte is queued so read_char still delivers it. That way a Ctrl+C can
-   stop the turn it was meant for, without losing a keystroke. */
+   is running. While a turn blocks (tether.sleep, an in-flight HTTP transfer, a
+   tool command) the host therefore watches stdin itself: 0x03 raises
+   `g_interrupt` and 0x11 (Ctrl+Q, the UI's quit key) raises `g_quit` on top of
+   it — a quit stops the turn it lands on, not just the tool — and every other
+   byte is queued so read_char still delivers it. That way a Ctrl+C can stop the
+   turn it was meant for and a Ctrl+Q can leave, without losing a keystroke. */
 #define PENDING_CAP 256
 static unsigned char g_pending[PENDING_CAP];
 static size_t g_pending_len = 0; /* bytes queued */
 static size_t g_pending_pos = 0; /* bytes handed back */
-static int g_interrupt = 0;
+static int g_interrupt = 0; /* Ctrl+C: abort the running turn */
+static int g_quit = 0;      /* Ctrl+Q: abort and exit */
 static int g_stdin_eof = 0; /* stop watching once input is exhausted */
 
 /* Take one queued byte, if any. */
@@ -87,6 +90,13 @@ static int poll_interrupt(void)
         }
         for (ssize_t i = 0; i < n; i++) {
             if (buf[i] == 3) {
+                g_interrupt = 1;
+            } else if (buf[i] == 17) {
+                /* Ctrl+Q: a quit aborts the turn and exits, so both flags —
+                   the interrupt stops the turn, the quit tells the UI to
+                   leave instead of parking on an aborted state. The byte is
+                   consumed like the interrupt's: the flag is the signal. */
+                g_quit = 1;
                 g_interrupt = 1;
             } else if (g_pending_len - g_pending_pos < PENDING_CAP) {
                 g_pending[g_pending_len++] = buf[i];
@@ -1865,6 +1875,17 @@ static int l_abort_requested(lua_State *L)
     return 1;
 }
 
+/* A Ctrl+Q that arrived while a turn blocked: the UI is not reading stdin
+   then, so the host watch raised it (alongside the interrupt that stops the
+   turn). Polled on the tick — once set it stays set, the app is on its way
+   out. */
+static int l_quit_requested(lua_State *L)
+{
+    poll_interrupt();
+    lua_pushboolean(L, g_quit != 0);
+    return 1;
+}
+
 /* TW2: monotonic wall-clock milliseconds. The spinner frame must derive from
    elapsed time (pi's Loader animates on an 80 ms interval), not from the paint
    counter — a frame per event made the spinner a slideshow whose speed
@@ -1942,6 +1963,7 @@ static luaL_Reg tether_api[] = {
     {"resize_requested", l_resize_requested},
     {"sleep",         l_sleep},
     {"abort_requested", l_abort_requested},
+    {"quit_requested",  l_quit_requested},
     {"clear_abort",   l_clear_abort},
     {"detect_kb_protocol", l_detect_kb_protocol},
     {"monotonic_ms",  l_monotonic_ms},
