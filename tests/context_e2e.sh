@@ -123,6 +123,16 @@ return {
 }
 CFGEOF
 
+# Seed a minimal providers cache so the startup gate resolves the Tier-A
+# `openai` id without a network fetch (the base_url override above still
+# points at the local stub; the catalog entry only has to exist).
+cat > "$HOME_DIR/.tether/providers_cache.json" <<CACEOF
+{"schema": 1, "generated_at": 0, "providers": {
+  "openai": {"wire": "openai", "base_url": "https://api.openai.com",
+    "api_key_env": "OPENAI_API_KEY", "model": "gpt-4o-mini",
+    "models": [{"id": "gpt-4o-mini", "context": 128000}]}}}
+CACEOF
+
 HOME="$HOME_DIR" \
 OPENAI_API_KEY=stub \
     "$BIN" --workspace "$WS" --print "ping" \

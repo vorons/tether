@@ -139,7 +139,10 @@ test: tether
 	@luac -p src/tether/tools.lua
 	@luac -p src/tether/diff.lua
 	@echo "=== luac ok ==="
-	lua tests/lua_tests.lua
+	@LUA_HOME=$$(mktemp -d); rm -rf "$$LUA_HOME"; mkdir -p "$$LUA_HOME"; \
+		HOME="$$LUA_HOME" TETHER_HOME="$$LUA_HOME" lua tests/lua_tests.lua; rc=$$?; \
+		rm -rf "$$LUA_HOME"; \
+		if [ $$rc -ne 0 ]; then exit $$rc; fi
 	@CTX_H=$$(mktemp -d); CTX_W=$$(mktemp -d); \
 		rm -rf "$$CTX_H" "$$CTX_W"; mkdir -p "$$CTX_H" "$$CTX_W"; \
 		HOME="$$CTX_H" TETHER_TEST_WORKSPACE="$$CTX_W" lua tests/context_tests.lua; rc=$$?; \
