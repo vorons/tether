@@ -28,3 +28,10 @@ vendor/zlib/*
 !vendor/zlib/*.c
 !vendor/zlib/*.h
 !vendor/zlib/LICENSE
+
+CONTEXT.md
+.pi/
+.opencode/
+openspec/
+docs/
+data/
