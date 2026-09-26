@@ -2,449 +2,91 @@
 
 > Alpha version under active development. It may contain bugs.
 
-Terminal-based AI coding agent, single Lua + C binary.
+Terminal-based AI coding agent in a single Lua + C binary. Think Claude Code or
+Codex CLI, but the whole thing — agent loop, tools, TUI and in-process HTTPS — is
+one self-contained executable that links only `libc` and `libm`.
+
+## What it does
+
+`tether` runs an LLM coding agent in your terminal: it reads, writes and searches
+your project, applies patches, runs shell commands, and asks before doing
+anything destructive. Everything happens inside a workspace; actions outside it
+need an explicit confirmation. Sessions are journaled to disk, so a run can be
+resumed where it stopped.
+
+## Capabilities
+
+- **Tools**: `read`, `list`, `glob`, `grep` (vendored krep engine, respects
+  `.gitignore`), `write`, `patch` (unified diffs), `run` (shell via `/bin/sh`),
+  `ask` (structured questions to the user) and `subagent` (parallel child runs).
+- **Providers**: OpenAI-compatible, Anthropic and Gemini wire protocols plus
+  adapters for Azure OpenAI, Amazon Bedrock, Google Vertex, Cloudflare AI
+  Gateway, Radius and OpenAI Codex. Local-first by default (`llama-cpp`, `ollama`,
+  `lmstudio`); 200+ cloud providers arrive through a synced catalog. Credentials
+  come from env vars or an in-app `/login` — never from argv.
+- **Steering**: `AGENTS.md` files and discoverable skills (`SKILL.md`) are folded
+  into the system prompt at session start.
+- **Sessions**: JSONL journal under `~/.tether/sessions/`, resumable with `-r` or
+  the `/resume` palette.
+- **TUI**: streaming transcript with markdown-lite rendering, syntax-highlighted
+  code blocks, unified-diff previews, mouse scrolling, slash palette, per-project
+  input history and OSC-52 clipboard. Degrades to ASCII on `TERM=dumb`/`NO_COLOR`.
 
 ## Build
 
+Requirements: a C compiler, `ar`, and a `lua` interpreter (used by the embed
+generator at build time only). All libraries — Lua 5.4.6, libcurl, mbedTLS, zlib
+and krep — are vendored; nothing is downloaded during the build.
+
 ```sh
-make          # build tether binary
-make test     # luac + lua tests + host smoke
+make          # build the tether binary (~40 s from scratch)
+make test     # luac + lua unit tests + context e2e + host smoke + C primitives
 make clean    # wipe build artifacts
 ```
 
-## Usage
+`make test` additionally needs `luac`; the TLS test uses `openssl s_server` and
+skips itself when the CLI is absent.
+
+## Install
+
+There is no `make install` target; just build and copy the binary somewhere on
+your `PATH`:
 
 ```sh
-./tether                  # interactive TUI
-./tether --workspace ~/myproj
-./tether --model claude-opus
-./tether --print "prompt"  # non-interactive one-shot; or pipe stdin
-./tether --resume         # resume latest session for this workspace
-./tether -r -w ~/proj -m o3
-./tether --agents-file ~/my-rules.md  # extra instruction file(s), repeatable
-./tether --version        # print version and exit
-./tether --debug          # verbose logging to ~/.tether/log/tether.log
+make && sudo cp tether /usr/local/bin/
 ```
 
-## AGENTS.md and skills
+The binary is self-contained — `ldd tether` shows only `libc` and `libm` — so it
+also runs fine straight out of the build directory or from a USB stick. Point
+`TETHER_HOME` at a directory to keep `~/.tether` somewhere else (portable
+installs, test isolation).
 
-The system prompt is composed at session start from several sources, in this
-order:
-
-1. The base: `system_prompt` from `~/.tether/config.lua` when set, otherwise
-   the built-in tool description.
-2. `AGENTS.md` auto-discovered at `$HOME/.tether/AGENTS.md`, then
-   `<workspace>/AGENTS.md` (missing files ignored; unreadable files warn on
-   stderr). Each AGENTS.md file is capped at 16 KB.
-3. Explicit agents files: `agents_files` from the config, then the repeatable
-   `--agents-file <path>` CLI flag (config entries first, flag entries in the
-   order given). Unreadable paths warn and are skipped.
-4. The skills index (below).
+## First run
 
 ```sh
-./tether --agents-file ~/my-rules.md --agents-file ./extra.md
+tether                       # interactive TUI in the current directory
+tether --workspace ~/myproj
+tether --print "prompt"      # non-interactive one-shot; or pipe stdin
+tether --resume              # resume the latest session for this workspace
+tether --model claude-opus-4-6
+tether --agents-file ./rules.md   # extra instructions; repeatable
+tether --version
 ```
 
-### Skills
-
-A skill is a directory containing a `SKILL.md` with YAML frontmatter
-(`name`, `description`). Discovered from, in order (first-wins on name
-collision):
-
-- `~/.tether/skills/<name>/SKILL.md`
-- `<workspace>/.tether/skills/<name>/SKILL.md`
-- `~/.agents/skills/<name>/SKILL.md`
-- `<workspace>/.agents/skills/<name>/SKILL.md`
-
-Set `skills_dirs` in the config (list of directory paths) to replace the
-default set.
-
-Only the skill *index* (name, description, file path) is injected into the
-prompt. The full `SKILL.md` body is not auto-loaded. The agent reads the file
-with the `read` tool when a task matches the skill's description. A `SKILL.md`
-without frontmatter, or missing `description`, is listed with an empty
-description and the directory name as its name.
-
-```markdown
----
-name: deploy
-description: Ship the app to staging
----
-# Deploy
-Run `make release` then ...
-```
-
-The model list depends on your OpenAI-compatible provider; `/model` falls
-back to a static list. Set `model = "..."` in `~/.tether/config.lua` for
-direct control.
-
-## The `ask` tool
-
-The model can stop and ask instead of guessing. `ask(questions)` renders a
-question block in the transcript with options, an always-available freeform answer
-and per-option notes. The user's answer comes back to the model as a tool result
-carrying a JSON payload:
-
-```json
-{"answers":[{"id":"framework","question":"Which framework?","selected":["React"],"other":"typed by hand","notes":[{"option":"Vue","note":"too heavy"}]}]}
-```
-
-The argument is an array of questions:
-
-```json
-{
-  "questions": [{
-    "id": "framework",
-    "question": "Which framework should we use?",
-    "description": "Optional markdown context rendered above the options",
-    "recommended": 2,
-    "options": [{ "label": "React" }, { "label": "Vue" },
-                { "label": "Svelte", "description": "smallest bundle" }]
-  }, {
-    "id": "constraints",
-    "question": "Which constraints apply?",
-    "multi": true,
-    "options": [{ "label": "No breaking changes" }, { "label": "Zero dependencies" }]
-  }]
-}
-```
-
-- Up to 8 questions and 12 options each; one call is one answer set, shown one
-  question at a time with an `N/M` indicator.
-- Keys: `↑`/`↓` move across the options and the freeform row, `Enter` submits a
-  single-answer question (or accepts a `multi` selection and moves on), a digit
-  `1..9` picks that option, `Space` toggles an option of a `multi` question, `Tab`
-  edits the highlighted option's note (or the freeform answer), `←` returns to
-  the previous question with its answer intact, `Esc` cancels the whole set.
-- The last row is always `Other (ввести свой вариант)`: Enter opens it, Enter
-  commits the text, and once text is committed Enter submits the question. It is
-  also how a question with no usable options is answered.
-- A note belongs to the option it was written on and is returned even when that
-  option was not selected; `recommended` only flags the model's suggestion and
-  never preselects it.
-- `Esc` cancels without stopping the turn. The model can proceed or ask
-  differently, and a cancel raises no error banner.
-- Under `--print` there is nobody to ask: the call returns an error result saying
-  so, the model decides on its own, and the run still prints its answer.
-
-## Providers
-
-`tether` speaks three wire protocols plus dedicated adapters through one
-canonical event stream (`src/tether/providers/`): `openai` (any
-OpenAI-compatible `/chat/completions` endpoint), `anthropic` (Claude
-Messages API) and `gemini` (Google `streamGenerateContent` with
-`generateContent` fallback). Most providers are presets: a catalog
-entry that reuses one of the three wire modules with its own base URL,
-key env var and default model. No new code per provider. Six providers
-have their own adapters: `azure-openai`, `amazon-bedrock` (Converse +
-SigV4/bearer), `google-vertex` (ADC/API key), `cloudflare-ai-gateway`
-(`cf-aig-authorization`), `radius`, `openai-codex` (ChatGPT backend).
-The agent loop, tools and confirmations are identical on all
-providers. Presets resolve model lists live via `/models`, falling back
-to the pipeline model list and then to empty; the big three keep their
-curated static lists. `/model` lists models of every provider holding a
-credential (active first, each tagged with its provider) from a fresh
-disk cache instantly, refreshing stale lists in a background child (no
-TUI freeze); picking another provider's model switches the provider and
-re-resolves the key. With no keys anywhere the list is empty with a
-`/login` hint. No attribution headers are sent.
-
-Cloud (Tier-A) providers are not hardcoded: a daily pipeline
-(`.github/workflows/sync-providers.yml`) projects
-`https://models.dev/api.json` into `data/providers.json`
-(plus reviewed `data/overrides/`), and the client caches it at
-`~/.tether/providers_cache.json` (12h TTL, stale served offline).
-The binary bundles only local runtimes (`llama-cpp`, `ollama`,
-`lmstudio`, the default is local-first) and the Tier-B adapters.
-Custom providers go in `~/.tether/models.lua`:
-```lua
--- ~/.tether/models.lua (optional, never machine-written)
-return { providers = {
-  ["my-proxy"] = { wire = "openai", base_url = "https://corp.example/v1",
-    api_key_env = "CORP_KEY", model = "corp-model", models = {} },
-} }
-```
-
-Two operational knobs: `providers_url` (top-level `config.lua` key)
-overrides the sync source (default: the `data/providers.json` published
-by the workflow, point it at a mirror or a local file to pin the
-catalog); `TETHER_HOME` overrides `HOME` for the providers cache and
-`models.lua` paths (portable installs, test isolation).
+Without a config the default provider is `llama-cpp` (a local llama.cpp server).
+To use a cloud provider, set its key env var or run `/login` in the TUI, and pick
+it in `~/.tether/config.lua`:
 
 ```lua
 -- ~/.tether/config.lua
 return {
-  provider = "llama-cpp", -- local llama.cpp; cloud ids come from the cache
+  provider = "anthropic",
   providers = {
-    anthropic = { api_key_env = "ANTHROPIC_API_KEY",
-                  model = "claude-sonnet-4-6" },
-  },
-  -- optional: replace the default skill-dir discovery set
-  -- skills_dirs = { "~/my-skills", "./project-skills" },
-  -- optional: persistent agents instruction files (merged before --agents-file)
-  -- agents_files = { "~/shared/rules.md" },
-}
-```
-
-Resolution per provider: `providers.<name>.{api_key_env,base_url,model}`
-wins, otherwise the merged catalog value (`models.lua` whole entry beats
-the pipeline cache; the top-level `model` is only the active pick).
-`--model/-m` and `/model` operate on the active provider; an unknown
-`provider` warns on stderr and behaves as the default provider.
-Keys never appear in argv: OpenAI/Anthropic go through a
-`chmod 600` header file (`x-api-key` for Anthropic, `Authorization:
-Bearer` for OAuth/`ANTHROPIC_AUTH_TOKEN`), Gemini uses the
-`?key=` query convention without logging the command line.
-Local runtimes (loopback base URLs) list models with no key at all.
-
-### Provider catalog
-
-The effective entry is the merge of thin bootstrap < pipeline cache <
-`models.lua` < `config.lua providers.<id>` (per field). `wire` is the
-protocol module (`openai`/`anthropic`/`gemini` shared, otherwise a
-dedicated adapter). `{VAR}` placeholders resolve from stored-entry env,
-then process env. The bundled bootstrap holds only:
-
-| id | wire | key env | base URL |
-|---|---|---|---|
-| `llama-cpp` | openai | `LLAMA_API_KEY` | `http://127.0.0.1:8080/v1` |
-| `ollama` | openai | `OLLAMA_API_KEY` | `http://localhost:11434/v1` |
-| `lmstudio` | openai | `LMSTUDIO_API_KEY` | `http://127.0.0.1:1234/v1` |
-| `azure-openai` | azure-openai | `AZURE_OPENAI_API_KEY` | `` |
-| `amazon-bedrock` | amazon-bedrock | `AWS_BEARER_TOKEN_BEDROCK` | `` |
-| `google-vertex` | google-vertex | `GOOGLE_CLOUD_API_KEY` | `` |
-| `cloudflare-ai-gateway` | cloudflare-ai-gateway | `CLOUDFLARE_API_KEY` | `https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/openai` |
-| `radius` | radius | `RADIUS_API_KEY` | `https://radius.pi.dev` |
-| `openai-codex` | openai-codex | `(OAuth/store)` | `https://chatgpt.com/backend-api` |
-
-Everything else (200+ cloud ids, endpoints, default models, full model
-lists with context limits) arrives via the pipeline cache. See
-`data/providers.json` for the current generated list.
-
-Compound credentials: `cloudflare-*` also need
-`CLOUDFLARE_ACCOUNT_ID` (+ `CLOUDFLARE_GATEWAY_ID` for the gateway),
-from the stored entry `env` or process env. `google-vertex` accepts
-`GOOGLE_CLOUD_API_KEY` or ADC (`GOOGLE_APPLICATION_CREDENTIALS` or
-`~/.config/gcloud/application_default_credentials.json`) plus
-`GOOGLE_CLOUD_PROJECT`/`GOOGLE_CLOUD_LOCATION` (project also as
-`GCLOUD_PROJECT`). `amazon-bedrock` accepts a bearer token, static
-`AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` (+`AWS_SESSION_TOKEN`),
-`AWS_PROFILE`, or ECS/IRSA ambient sources (region via `AWS_REGION` /
-`AWS_DEFAULT_REGION`, default `us-east-1`). Anthropic also
-recognizes `ANTHROPIC_AUTH_TOKEN` (Bearer) and `ANTHROPIC_OAUTH_TOKEN`.
-`opencode`/`opencode-go` require a session (`x-opencode-session` is sent
-automatically). `llama-cpp`/`ollama`/`lmstudio` target local runtimes.
-Pick the loaded model via `/model` (keyless live listing on loopback).
-
-### Credentials: env, `/login`, `/logout`
-
-Credentials resolve in one place (`config.api_key`) for both the TUI and
-`--print`:
-
-1. stored OAuth access token in `~/.tether/auth.json` (unexpired; one
-   refresh attempt when expired and a `refresh_token` is present)
-2. stored `kind = "api_key"` entry from the same file
-3. env `api_key_env` for the active provider (then the legacy top-level
-   name)
-4. empty string
-
-`/login` with no argument opens a provider picker in the shared palette
-(same dropdown as the slash menu); `/login <provider>`
-starts a masked credential dialog (secret is never typed into the chat
-input or shown in the transcript). Paste an API key / access token and
-Enter to store it; if the provider has an OAuth app configured
-(`providers.<name>.oauth_client_id` plus authorize/token URLs, Gemini
-ships Google defaults), the dialog shows the authorize URL, tries to open
-a browser, and exchanges a pasted redirect URL / code for refreshable
-tokens. `/logout [provider]` removes only that provider's stored entry
-(env keys are untouched). Confirmations never echo token material.
-
-Security note: `~/.tether/auth.json` is created with mode `0600`
-before any secret is written (same discipline as the API header temp
-file). The file holds live OAuth tokens and pasted keys in plaintext
-under your home directory: do not copy it into backups, dotfile repos,
-or bug reports; treat a leak the same as a leaked API key and rotate the
-credential. A missing or corrupt store simply falls through to env.
-Startup never fails on it.
-
-Optional OAuth app keys (non-secret client id; secret only if your
-provider issues one):
-
-```lua
--- ~/.tether/config.lua (excerpt)
-return {
-  providers = {
-    gemini = {
-      oauth_client_id = "your-google-oauth-client-id",
-      -- oauth_client_secret / oauth_authorize_url / oauth_token_url /
-      -- oauth_redirect_uri / oauth_scope override the Google defaults
-    },
-    -- openai/anthropic also need oauth_authorize_url + oauth_token_url
+    anthropic = { api_key_env = "ANTHROPIC_API_KEY", model = "claude-sonnet-4-6" },
   },
 }
 ```
 
-## Slash commands
+## License
 
-`/clear /compact /model /resume /new /quit /copy /login /logout`
-
-Typing `/` opens one palette listing those commands followed by every
-discovered skill as `/skill-name`. Filtering is a case-insensitive
-subsequence match over the whole list; when the list is longer than the
-window the palette scrolls (at most 8 rows and at most half the terminal
-height) so the selected row stays visible, with a dim `N/total` indicator on
-the row below the entries. Skill rows show a `[skill]` hint after the name. Enter runs the highlighted command, or completes
-`/<name> ` into the input for a skill. Submitting that then sends the name to
-the agent as an ordinary message, and the agent reads the skill file through
-the skills index in its prompt.
-
-- `/clear` clears the transcript display only. The agent keeps its
-  history, so the next turn still sees the full context. `/new`
-  starts a truly fresh session (history and transcript are dropped).
-- `/resume` opens a palette of recent sessions for the workspace.
-- Confirmation menu for `write`/`patch`/`run` outside workspace: `[y] once`,
-  `[a] session`, `[A] always` (persists to `~/.tether/auto_approve.lua`),
-  `[n] deny`, `Esc` cancels the turn. Digits `1..5` work too.
-
-## TUI features
-
-- Input history: `↑`/`↓` recall previously submitted messages, the
-  newest entry first, `↓` past it clears the input (`Ctrl+↑`/`Ctrl+↓` do the
-  same). History is stored per project folder: entries are saved to
-  `~/.tether/history.jsonl` with the workspace path and only that folder's
-  entries are recalled. Inside a multi-line input `↑`/`↓` move the caret
-  instead (`Shift+↑`/`Shift+↓` is the explicit caret navigation).
-- Transcript scrolling on `PgUp`/`PgDn` and the mouse wheel (3 rows
-  per wheel tick).
-- Markdown-lite rendering of assistant replies: code blocks in a frame,
-  inline code, bold/italic, lists, headings.
-- Syntax highlighting in fenced code blocks: lua, c, sh, python, js, go,
-  rust, json (`ui.highlight`, on by default for truecolor/256-color terminals,
-  off for mono/ascii).
-- Tool result rows: a leading `✓`/`✗`/pending marker with a one-line
-  summary; a failed call shows its first error line clipped to the row, with
-  the full error behind expansion. Expanded `read`/`grep` bodies are
-  syntax-highlighted from the file extension.
-- Expansion: `Ctrl+O` toggles the newest tool result visible in the
-  viewport, `Ctrl+Shift+O` toggles all results at once (on terminals that
-  report the Shift modifier); with `ui.mouse = "on"` a left click toggles the
-  clicked result. On plain terminals `Ctrl+O` keeps its expand-all meaning.
-- Diffs for `write`/`patch`: the result body renders as a unified diff
-  with old/new line numbers, add/remove colours and word-level emphasis; the
-  row summary reports `+N −M` with a proportional meter and whether the file
-  was created or overwritten. While the call is pending, the projected diff
-  is previewed before the tool runs.
-- Turn separators: a dim `── HH:MM ──` row before each user turn
-  (`ui.turn_separators`;
-  set `false` to hide).
-- `@path` tab completion in the input line: Tab completes the
-  workspace-relative path token under the cursor to workspace entries (an
-  `@` prefix is preserved); `ui.path_completion` sets `false` to disable.
-- Live turn feedback: replies repaint as they stream (with a `▌` caret on
-  the newest line), and a `✻ tether думает…` placeholder plus a spinner and
-  elapsed time in the input box's top rule cover the wait before the first
-  token.
-- Token usage in the single footer row as `4.1k/32k (13%)`: used over
-  budget, colored by threshold (green → yellow at summarize threshold → red
-  at 90%+).
-- Mouse modes (`ui.mouse` in `~/.tether/config.lua`):
-  `"auto"` (default: mouse tracking is always on so the wheel scrolls the
-  transcript; without capture, terminals translate wheel ticks into Up/Down
-  arrow keys, which would recall input history into the field),
-  `"on"` (always), `"off"` (never), `"selection"` (off + manual copy).
-  Wheel up scrolls to older rows, wheel down returns to the bottom. Hold
-  `Shift` while dragging to use terminal-native selection.
-- Alt-screen by default (`ui.alt_screen = true`): the TUI repaints in the
-  alternate screen buffer, so shell scrollback stays intact behind it;
-  `false` opts back into in-place rendering.
-- ASCII fallback: on `TERM=dumb`/`NO_COLOR` all glyphs degrade to ASCII.
-- `/copy`: copies the last assistant answer, last tool output, last
-  code block, or the full transcript to the clipboard.
-- Slash palette with skills: `/` lists the commands and every discovered
-  skill as `/name` (with the skill's argument hint); the list scrolls in a
-  window with an `N/total` indicator, and picking a skill only writes
-  `/<name> ` into the input. Submitting `/<name>` sends it to the agent as a
-  normal message; `/skills` no longer exists.
-- Retry and continuation notices: a failed attempt that is about to be
-  retried drops the rows it already painted and leaves one dim
-  `↻ retry N (waiting Xs): reason` row, with the pending retry also shown in the
-  input box's top rule; a truncated answer that is continued leaves a dim
-  `↻ продолжение (лимит вывода)` row, and an answer that stayed empty after its
-  nudge ends the turn with an error instead of silence. Ctrl+C still aborts,
-  including while the agent waits between attempts.
-
-## Config keys
-
-UI keys live under `ui = { ... }` in `~/.tether/config.lua`:
-
-- `ui.highlight = "auto"`: syntax highlighting in fenced code blocks and in
-  expanded `read`/`grep` tool bodies. Values: `"auto"` / `"on"` / `"off"`.
-  `auto` turns highlighting on when the terminal color depth is above 16
-  colors, off for mono/ascii.
-- `ui.turn_separators = true`: dim `── HH:MM ──` dividers before consecutive
-  user turns; set `false` to disable.
-- `ui.path_completion = true`: Tab completes the workspace-relative path
-  token in the input line; set `false` to disable.
-- `ui.ascii = "auto"`: ASCII glyphs and no color. `"auto"` follows
-  `NO_COLOR=1`/`TERM=dumb`; `"on"`/`true` forces it, `"off"`/`false` disables it.
-- `ui.theme = "default"`: `default`, `solarized` or `mono`; every UI role,
-  including syntax highlighting, follows the theme (`mono` emits no color).
-
-Retry behavior is a top-level `retry = { ... }` table, not a UI key:
-
-- `retry.base_delay_ms = 2000`: wait before the first retry.
-- `retry.max_delay_ms = 60000`: the cap the exponential wait grows to.
-- `retry.multiplier = 2`: how fast the wait grows; a value below 1 counts
-  as 1, and an invalid value falls back to the default.
-- `retry.max_failures_at_max_delay = 3`: failures at the capped wait allowed
-  before the turn gives up. The loop also stops immediately on a permanent
-  failure (invalid API key, model not found) or an exhausted quota / session
-  limit / budget; a connection error, a 429/5xx, a 400/413, stream exhaustion
-  or a credit error is retried.
-- `retry.max_attempts`: optional hard cap on the attempts in one turn. The
-  legacy top-level `retries = N` still does the same thing; there is no
-  default attempt cap.
-
-With the defaults the waits are 2s → 4s → 8s → 16s → 32s → 60s → 60s → 60s,
-so a turn makes at most nine attempts. A `Retry-After` from the server
-replaces the wait for the next attempt.
-
-## Architecture
-
-- C host (`src/host/main.c`): embeds Lua 5.4.6, exports narrow syscall API:
-  `tether.exec` (the only shell primitive, used by the `run` tool), `tether.getcwd`,
-  `tether.realpath`, `tether.get_terminal_size`, `tether.is_tty`, `tether.write`,
-  `tether.read_char`, `tether.sleep`, the filesystem primitives `tether.mkdirp`/`tether.fchmod`/`tether.readdir`/`tether.stat`,
-  the krep grep backend `tether.krep_search`, and the in-process HTTP client
-  `tether.http_stream`/`tether.http_get`. The binary is self-contained: `ldd ./tether`
-  shows only `libc` and `libm`
-- Lua modules (`src/tether/`): loaded as globals via `lua_setglobal`
-  - `config`: configuration loading, validation
-  - `tools`: file I/O: `read`, `list`, `glob`, `grep`, `write`, `patch`, `run`
-  - `ask`: the `ask` tool's pure rules: question normalisation and bounds, the
-    answer payload, the transcript summary
-  - `diff`: pure-Lua unified-diff engine (hunks, parsing, word pairing, meter)
-  - `api`: SSE streaming to LLM via the in-process HTTPS transport
-  - `agent`: tool dispatch loop, conversation history
-  - `session`: JSONL journal, auto-save, resume by workspace
-  - `ui`: TUI rendering, input handling, confirmation menu, error banner, palette modes, masked login secret
-  - `app`: CLI argument parsing, session lifecycle, error handling
-
-## Key design decisions
-
-- In-process HTTPS: `api.lua` uses `tether.http_stream` (per-line callback) and
-  `tether.http_get`, backed by vendored libcurl + mbedTLS + zlib. No `curl`
-  subprocess, no external CLI tools (grep runs the vendored krep engine)
-- Lua-only logic: All agent logic lives in Lua; C host has zero AI knowledge
-- No `load`: all JSON parsing is hand-rolled recursive descent or gmatch patterns
-- Secrets: the API key is passed to the HTTP client via a private header file
-  (`tether.fchmod` 600), never in argv or in the environment; `/login` stores
-  credentials in `~/.tether/auth.json` (also 0600 from creation). See the security
-  note under Providers
-- Shell injection: `tools.run` uses `env TETHER_WORKSPACE=<dir> sh -c` with `timeout`
-
-## Testing
-
-- `luac -p` validates all Lua modules on every `make test`
-- `tests/lua_tests.lua`: unit tests for json_encode, parse_json_str, path resolution, glob matching
-- `tests/host_smoke.sh`: end-to-end pipe/EOF tests
+MIT. See `LICENSE`.
