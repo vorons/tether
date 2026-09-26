@@ -123,7 +123,7 @@ end
 local THEMES = {
     default = {
         accent = "36;1", warn = "33;1", error = "31;1", success = "32",
-        dim = "2", muted = "2;90", italic = "3", reverse = "7", bold = "1",
+        dim = "2", muted = "90", italic = "3", reverse = "7", bold = "1",
         -- 7.1: syntax roles (token kinds); default to 16-color codes so
         -- truecolor/256 render with the same palette. ponytail: no brighter
         -- per-depth variants; add one if a 256-color theme gets complaints.
@@ -132,7 +132,7 @@ local THEMES = {
     },
     solarized = {
         accent = "36", warn = "33", error = "31", success = "32",
-        dim = "2", muted = "2;90", italic = "3", reverse = "7", bold = "1",
+        dim = "2", muted = "90", italic = "3", reverse = "7", bold = "1",
         comment = "2;38", string = "32", number = "33", keyword = "36",
         code = "35", heading = "36;1",
     },

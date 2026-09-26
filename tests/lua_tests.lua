@@ -12855,10 +12855,10 @@ do
     if r:find("read", 1, true) then pend = r end
   end
   assert_notnil(think, "T216 the think header is painted")
-  assert_true(think:find("%[2;90m\27%[3m%d+%.%ds", 1) ~= nil,
+  assert_true(think:find("%[90m\27%[3m%d+%.%ds", 1) ~= nil,
     "T216 the think time is muted")
   assert_notnil(pend, "T216 the pending tool row is painted")
-  assert_true(pend:find("%[2;90m%d+%.%ds", 1) ~= nil,
+  assert_true(pend:find("%[90m%d+%.%ds", 1) ~= nil,
     "T216 the pending tool time is muted")
   assert_true(pend:find("[2msrc/x.lua", 1, true) ~= nil,
     "T216 the tool argument is dim")
@@ -12870,7 +12870,7 @@ do
     if r:find("read", 1, true) then done = r end
   end
   assert_notnil(done, "T216 the done tool row is painted")
-  assert_true(done:find("[2;90m25 matches", 1, true) ~= nil,
+  assert_true(done:find("[90m25 matches", 1, true) ~= nil,
     "T216 the result count is muted")
   print("T216 muted times, counts and dim args: OK")
 end
