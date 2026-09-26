@@ -12669,6 +12669,110 @@ do
   print("T212 compaction summary wraps: OK")
 end
 
+-- T213: resume restores the tool rows the journal carries — the name and the
+-- one-line summary, not a `?` marker leaking the body's first line — and a
+-- resumed history that hits the compaction threshold still hands the model
+-- the latest request, not the first one.
+with_modules(base_env, function(mods)
+  local agent, session, ui = mods.agent, mods.session, mods.ui
+  local commands = assert(loadfile("src/tether/commands.lua"))()
+  local tmpdir = "/tmp/tether_t213_sessions"
+  os.execute("rm -rf " .. tmpdir)
+  session._session_dir = tmpdir
+  local id = session.new_session("/tmp/ws", "m")
+  local function msg(role, content)
+    session.append(id, { ts = os.date(), type = "message", role = role, content = content })
+  end
+  msg("user", "first request")
+  msg("assistant", "first answer")
+  msg("user", "second request")
+  session.append(id, { ts = os.date(), type = "tool_call", tool_call_id = "tc1",
+    name = "grep", args = { pattern = "opencode" } })
+  session.append(id, { ts = os.date(), type = "tool_result", tool_call_id = "tc1",
+    name = "grep",
+    result = { summary = "3 matches",
+      body = "src/tether/providers/openai.lua:330: if provider == \"opencode\"\n"
+        .. "src/tether/api.lua:150: local function extra_header_lines" } })
+  msg("assistant", "second answer")
+  msg("user", "latest request")
+  for i = 1, 30 do
+    msg("assistant", "padding answer number " .. i .. " with enough text to cross the threshold")
+    msg("user", "padding request number " .. i)
+  end
+  msg("user", "the real latest request")
+
+  local sid, messages = commands.resume(id)
+  assert_notnil(sid, "T213 the session resumed")
+
+  -- bug 3: the tool's name and summary survive the rebuild
+  local tool_entry = nil
+  for _, m in ipairs(agent.get_history()) do
+    if m.role == "tool" then tool_entry = m end
+  end
+  assert_notnil(tool_entry, "T213 the tool result is in history")
+  assert_eq(tool_entry.name, "grep", "T213 the tool name is restored")
+  assert_eq(tool_entry.summary, "3 matches", "T213 the tool summary is restored")
+
+  -- and the transcript renders the row, not a `?` leak: the -r startup seeds
+  -- from the rebuilt history, so the render sees what resume put there
+  local uimod, S = run_ui_with({}, {
+    agent = { get_history = function() return agent.get_history() end,
+      turn = function() return true end },
+  })
+  local plain = table.concat(uimod._render_all(80), "\n"):gsub("\27%[[0-9;]*m", "")
+  assert_true(plain:find("✓ grep", 1, true) ~= nil, "T213 the row leads with the tool name")
+  assert_eq(plain:find("✓ ?", 1, true), nil, "T213 no `?` marker on resume")
+  assert_true(plain:find("3 matches", 1, true) ~= nil, "T213 the summary is shown")
+  assert_eq(plain:find("extra_header_lines", 1, true), nil,
+    "T213 the body's first line is not the summary")
+
+  -- bug 1: a compaction run on the freshly resumed history — before the first
+  -- turn re-inserts the system prompt — must not promote the first user
+  -- message into the system role; that promotion is what made the model
+  -- answer the session's first request instead of the latest one.
+  local compacted, _, cmode = agent.compact_history(agent.get_history(),
+    { workspace = "/tmp/ws", context = { keep_recent_messages = 2 } }, "k", nil, true)
+  assert_true(cmode == "llm" or cmode == "truncation", "T213 compaction ran")
+  assert_eq(compacted[1].role, "system", "T213 the compacted history leads with a system role")
+  assert_true(type(compacted[1].content) == "string"
+    and compacted[1].content:find("You are tether", 1, true) ~= nil,
+    "T213 the real system prompt leads the compacted history")
+  assert_eq((compacted[1].content or ""):find("the real latest request", 1, true), nil,
+    "T213 a user message did not become the prompt")
+
+  -- bug 1 (live path): compaction on the resumed history keeps the latest
+  -- request last
+  local seen = nil
+  mods.api.stream = function(c, key, messages, on_event)
+    seen = messages
+    on_event({ type = "text_delta", text = "ok" })
+    on_event({ type = "done", reason = "stop" })
+    return true
+  end
+  mods.api.summarize = function() return "compacted summary" end
+  agent.turn({ workspace = "/tmp/ws", _session_id = id,
+      context = { max_tokens = 400, keep_recent_messages = 2 } },
+    "k", "new request", function() end)
+  assert_notnil(seen, "T213 the turn reached the provider")
+  local has_summary = false
+  for _, m in ipairs(seen) do
+    if m.role == "system" and type(m.content) == "string"
+      and m.content:find("summary", 1, true) then has_summary = true end
+  end
+  assert_true(has_summary, "T213 compaction fired on the resumed history")
+  local last_user = nil
+  for _, m in ipairs(seen) do
+    if m.role == "user" then last_user = m.content end
+  end
+  assert_eq(last_user, "new request",
+    "T213 the model sees the latest request, not the first")
+  local first = seen[1] and seen[1].content
+  assert_true(type(first) == "string" and #first > 0,
+    "T213 the system prompt leads the compacted history")
+  os.execute("rm -rf " .. tmpdir)
+  print("T213 resume restores tools and the latest request: OK")
+end)
+
 if failed > 0 then
     os.exit(1)
 end

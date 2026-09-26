@@ -3845,7 +3845,7 @@ local pick = {}
 function pick.resume(id)
     if not id then return end
     -- §6.8 /resume: actually load the picked session
-    local sid, messages = commands.resume(id)
+    local sid, messages = commands.resume(id, nil, S.cfg)
     if sid then
         S.session_id = sid
         if S.cfg then S.cfg._session_id = sid end

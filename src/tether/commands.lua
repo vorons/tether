@@ -10,7 +10,7 @@ local M = {}
 
 -- Resolve a session id (explicit, or latest for the workspace), rebuild the
 -- agent history from the journal, and return (session_id, messages).
-function M.resume(id, workspace)
+function M.resume(id, workspace, cfg)
     local sid = id
     if not sid and workspace and session and session.latest then
         sid = session.latest(workspace)
@@ -35,12 +35,21 @@ function M.resume(id, workspace)
                     if agent.add_assistant then agent.add_assistant(msg.content) end
                 end
             elseif msg.role == "tool" then
+                -- name/summary/error rebuild the transcript's tool row and the
+                -- history entry a live turn would have (the journal keeps them
+                -- on the result, not on the message)
                 if agent.add_tool_result then
-                    agent.add_tool_result(msg.tool_call_id, msg.content or "")
+                    agent.add_tool_result(msg.tool_call_id,
+                        { content = msg.content or "", error = msg.error },
+                        msg.name, msg.summary)
                 end
             end
         end
     end
+    -- the rebuilt history must be indistinguishable from a live one: with no
+    -- leading prompt, the first compaction would promote the first user
+    -- message into the system role (see agent.ensure_prompt)
+    if agent and agent.ensure_prompt then agent.ensure_prompt(cfg) end
     return sid, messages
 end
 

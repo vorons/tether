@@ -127,11 +127,18 @@ function M.add_assistant(content)
     table.insert(M.history, { role = "assistant", content = content })
 end
 
-function M.add_tool_result(tool_call_id, result)
+function M.add_tool_result(tool_call_id, result, name, summary)
+    local r = (type(result) == "table") and result
+        or { content = tostring(result or "") }
+    -- name/summary ride along so a resumed history re-seeds the transcript
+    -- with the tool row it had (the live path carries them via events)
     table.insert(M.history, {
         role = "tool",
         tool_call_id = tool_call_id,
-        content = type(result) == "table" and (result.content or result.error or "") or tostring(result or ""),
+        name = r.name or name,
+        summary = r.summary or summary,
+        error = r.error,
+        content = r.content or r.error or "",
     })
 end
 
@@ -1083,22 +1090,30 @@ local function main_loop(cfg, api_key, on_event)
     return true
 end
 
-function M.turn(cfg, api_key, user_text, on_event, skip_user)
-    if not (M.history[1] and M.history[1].role == "system") then
-        local sp = nil
-        -- Composed prompt (context-injection): base + AGENTS.md + agents files
-        -- + skills index. Falls back to the legacy config path when the
-        -- context module is unavailable (e.g. old embedded build).
-        if context and context.compose then
-            sp = context.compose(cfg, {
-                workspace = cfg.workspace,
-                agents_files = cfg._cli_agents_files,
-            })
-        elseif config and config.get_system_prompt then
-            sp = config.get_system_prompt(cfg)
-        end
-        table.insert(M.history, 1, { role = "system", content = sp or M.builtin_prompt })
+-- The system prompt leads the history. A resumed history is replayed without
+-- one (the journal never stores it), so this runs after the replay as well:
+-- without it, compaction on a promptless history promotes the first user
+-- message into the system role (split_span peels history[1] as the prompt)
+-- and the model answers the session's first request instead of the latest.
+function M.ensure_prompt(cfg)
+    if M.history[1] and M.history[1].role == "system" then return end
+    local sp = nil
+    -- Composed prompt (context-injection): base + AGENTS.md + agents files
+    -- + skills index. Falls back to the legacy config path when the
+    -- context module is unavailable (e.g. old embedded build).
+    if context and context.compose then
+        sp = context.compose(cfg, {
+            workspace = cfg and cfg.workspace,
+            agents_files = cfg and cfg._cli_agents_files,
+        })
+    elseif config and config.get_system_prompt then
+        sp = config.get_system_prompt(cfg)
     end
+    table.insert(M.history, 1, { role = "system", content = sp or M.builtin_prompt })
+end
+
+function M.turn(cfg, api_key, user_text, on_event, skip_user)
+    M.ensure_prompt(cfg)
     if not skip_user then
         M.add_user(user_text)
         log_message(cfg, "user", user_text)

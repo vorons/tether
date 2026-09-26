@@ -190,7 +190,7 @@ local function run_inner()
     -- Resume logic (design §10): only with -r
     local resume_id = nil
     if opts.resume then
-        local sid = commands.resume(nil, cfg.workspace)
+        local sid = commands.resume(nil, cfg.workspace, cfg)
         if sid then
             resume_id = sid
         else
