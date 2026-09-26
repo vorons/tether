@@ -2319,11 +2319,11 @@ local function render_entry(e, width, prev_role)
             -- answer, a tool call, or the turn ending froze it — see
             -- transcript.handle). Same glyph as a running tool.
             local mark = e.live and yellow("•") or green("•")
+            local secs = os.time() - (e.started_at or os.time())
+            if secs < 0 then secs = 0 end
             if not S.thinking_visible then
-                out = { mark .. " " .. dim("think ▸ (Ctrl+T)") }
+                out = { mark .. " " .. dim(string.format("think · %.1fs · (ctrl+t) ▸", secs)) }
             else
-                local secs = os.time() - (e.started_at or os.time())
-                if secs < 0 then secs = 0 end
                 local to = { mark .. " " .. dim(italic(string.format("think · %.1fs ▾", secs))) }
                 -- header only while no reasoning text has arrived: wrap("")
                 -- yields one empty line and would paint a stray blank row
@@ -2746,7 +2746,7 @@ end
 -- busy. Leading space separates the indicator from the rule's left edge.
 local function turn_status()
     if S.busy then
-        return " " .. cyan(spinner_glyph()) .. dim(" Working...") .. " "
+        return " " .. cyan(spinner_glyph()) .. dim(" Working...")
     end
     return nil
 end

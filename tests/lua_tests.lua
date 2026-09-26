@@ -11951,8 +11951,10 @@ do
   S.thinking_visible = false
   uimod._invalidate_all()
   local collapsed = table.concat(rows(), "\n")
-  assert_true(collapsed:find("think ▸ (Ctrl+T)", 1, true) ~= nil,
-    "T194 collapsed shows the placeholder")
+  assert_true(collapsed:find("think · %d+%.%ds · %(ctrl%+t%) ▸") ~= nil,
+    "T194 collapsed shows the timed placeholder")
+  assert_eq(collapsed:find("Ctrl+T", 1, true), nil,
+    "T194 collapsed hint is lowercase")
   assert_eq(collapsed:find("step one step two!", 1, true), nil,
     "T194 collapsed hides the reasoning body")
   uimod._handle_key({ kind = "ctrl", code = 20 })
@@ -12626,8 +12628,9 @@ do
   head = think_row()
   assert_notnil(head, "T210 the collapsed think row is painted")
   assert_true(head:find("•", 1, true) ~= nil, "T210 the collapsed row keeps the marker")
-  assert_true((head:gsub("\27%[[0-9;]*m", "")):find("think ▸", 1, true) ~= nil,
-    "T210 the collapsed label is 'think ▸'")
+  local cplain = head:gsub("\27%[[0-9;]*m", "")
+  assert_true(cplain:find("think · %d+%.%ds · %(ctrl%+t%) ▸") ~= nil,
+    "T210 the collapsed header carries time and the hint")
   print("T210 think block marker and label: OK")
 end
 
@@ -12772,6 +12775,45 @@ with_modules(base_env, function(mods)
   os.execute("rm -rf " .. tmpdir)
   print("T213 resume restores tools and the latest request: OK")
 end)
+
+-- T214: the think header format — collapsed `• think · Ns · (ctrl+t) ▸`,
+-- expanded `• think · Ns ▾` — with a controlled clock.
+do
+  local uimod, S = run_ui_with({ 17 },
+    { agent = { turn = function() return true end, get_history = function() return {} end } })
+  uimod._handle_agent_event({ type = "reasoning_delta", text = "hmm" })
+  uimod._handle_agent_event({ type = "text_delta", text = "the answer" })
+  local th = nil
+  for _, e in ipairs(uimod._transcript.entries()) do
+    if e.role == "thinking" then th = e end
+  end
+  assert_notnil(th, "T214 the thinking entry exists")
+  th.started_at = os.time() - 1003
+  local function head()
+    for _, r in ipairs(uimod._render_all(80)) do
+      if r:find("think", 1, true) then return (r:gsub("\27%[[0-9;]*m", "")) end
+    end
+    return nil
+  end
+  S.thinking_visible = false
+  uimod._invalidate_all()
+  local c = head()
+  assert_notnil(c, "T214 the collapsed header is painted")
+  local csecs = c:match("think · (%d+)%.%ds · %(ctrl%+t%) ▸")
+  assert_notnil(csecs, "T214 collapsed shape 'think · Ns · (ctrl+t) ▸': " .. c)
+  assert_true(tonumber(csecs) >= 1003 and tonumber(csecs) <= 1004,
+    "T214 collapsed shows the elapsed seconds")
+  assert_eq(c:find("Ctrl+T", 1, true), nil, "T214 collapsed hint is lowercase")
+  S.thinking_visible = true
+  uimod._invalidate_all()
+  local x = head()
+  assert_notnil(x, "T214 the expanded header is painted")
+  local xsecs = x:match("think · (%d+)%.%ds ▾")
+  assert_notnil(xsecs, "T214 expanded shape 'think · Ns ▾': " .. x)
+  assert_true(tonumber(xsecs) >= 1003 and tonumber(xsecs) <= 1004,
+    "T214 expanded shows the elapsed seconds")
+  print("T214 think header format: OK")
+end
 
 if failed > 0 then
     os.exit(1)
