@@ -1000,18 +1000,20 @@ M.KEYMAP = KEYMAP
 -- add-ask-tool: the question block's own bindings, as data. While the block is
 -- open it owns the keyboard, so these are its meanings for the shared keys:
 -- the arrows move across the option rows and the freeform row, a digit picks
--- that option (toggling it on a `multi` question), Space toggles a `multi`
--- option, Enter submits/accepts, Tab edits the highlighted row (a note on an
--- option, the freeform answer on its row), ← returns to the previous question
--- and Esc cancels the set without stopping the turn.
+-- that option (toggling it on a `multi` question), Space picks the highlighted
+-- option of a single question (toggling it on a `multi` one), Enter submits/
+-- accepts, Tab edits the highlighted row (a note on an option, the freeform
+-- answer on its row), ←/→ walk the question set and Esc cancels it without
+-- stopping the turn.
 local ASK_KEYS = {
     ["up"]        = "previous option",
     ["down"]      = "next option",
     ["enter"]     = "submit / accept the question",
     ["1"]         = "pick option 1",
-    ["space"]     = "toggle an option of a multi question",
+    ["space"]     = "pick the highlighted option (toggle on a multi question)",
     ["tab"]       = "edit the highlighted option's note / the freeform answer",
     ["left"]      = "previous question",
+    ["right"]     = "next question",
     ["esc"]       = "cancel the question set",
     ["backspace"] = "edit the open note / freeform editor",
 }
@@ -2236,10 +2238,11 @@ function M._ask_hint(a, q)
         return "type answer · Enter save · Esc discard"
     end
     local back = (a.qidx > 1) and " · ← back" or ""
+    local fwd = (a.qidx < #a.questions) and " · → next" or ""
     if q.multi then
-        return "↑↓ move · Space toggle · Enter accept · Tab note" .. back .. " · Esc cancel"
+        return "↑↓ move · Space toggle · Enter accept · Tab note" .. back .. fwd .. " · Esc cancel"
     end
-    return "↑↓ move · Enter select · 1-N pick · Tab note" .. back .. " · Esc cancel"
+    return "↑↓ move · Enter/Space select · 1-N pick · Tab note" .. back .. fwd .. " · Esc cancel"
 end
 
 -- The question block's rows. Rendered from S.ask directly, so the highlight and
@@ -5239,6 +5242,12 @@ local function handle_ask_key(k)
             a.qidx = a.qidx - 1
             a.sel = 1
             sync_tail()
+        elseif k.name == "right" and a.qidx < #a.questions then
+            -- on to the next question: an unanswered one keeps its place, an
+            -- answered one keeps its answer
+            a.qidx = a.qidx + 1
+            a.sel = 1
+            sync_tail()
         end
         return
     end
@@ -5283,10 +5292,19 @@ local function handle_ask_key(k)
     end
     if k.kind == "text" then
         local c = k.char or ""
-        if c == " " and q.multi then
+        if c == " " then
+            -- Space picks the highlighted option: on a single question it
+            -- selects and moves on (like a digit), on a multi question it
+            -- toggles without submitting. The freeform row is never picked
+            -- by Space -- Enter opens its editor there.
             if a.sel <= n then
-                ask_toggle(answer, q.options[a.sel])
-                sync_tail()
+                if q.multi then
+                    ask_toggle(answer, q.options[a.sel])
+                    sync_tail()
+                else
+                    answer.selected = { q.options[a.sel].label }
+                    ask_advance()
+                end
             end
             return
         end

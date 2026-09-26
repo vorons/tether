@@ -8969,6 +8969,37 @@ do
   assert_notnil(rec.answer, "T125 the last question submits the whole set")
   assert_eq(#rec.answer, 2, "T125 both answers are reported")
 
+  -- → moves to the next question without answering; ← comes back again
+  rec.answer = nil
+  local right = { kind = "special", name = "right" }
+  local m6b, S6b = boot(two)
+  m6b._handle_key(right)
+  assert_eq(S6b.ask.qidx, 2, "T125 → moves to the next question")
+  assert_eq(rec.answer, nil, "T125 → does not submit the set")
+  m6b._handle_key(left)
+  assert_eq(S6b.ask.qidx, 1, "T125 ← returns again")
+  -- → at the last question neither submits nor closes the block
+  m6b._handle_key(right)
+  m6b._handle_key(right)
+  assert_eq(S6b.ask.qidx, 2, "T125 → at the last question stays put")
+  assert_eq(rec.answer, nil, "T125 → at the last question submits nothing")
+
+  -- Space selects the highlighted option of a single question (like a digit)
+  rec.answer = nil
+  local m6c, S6c = boot(two)
+  m6c._handle_key(down) -- highlight option 2 ("b")
+  m6c._handle_key(text(" "))
+  assert_eq(S6c.ask.qidx, 2, "T125 Space selects and advances")
+  assert_eq(S6c.ask.answers[1].selected[1], "b", "T125 Space selects the highlighted option")
+  assert_eq(rec.answer, nil, "T125 Space does not submit the set before its last question")
+  -- Space on the freeform row selects nothing and opens no editor
+  rec.answer = nil
+  local m6d, S6d = boot(one) -- 3 options, freeform row is 4
+  m6d._handle_key(down); m6d._handle_key(down); m6d._handle_key(down)
+  m6d._handle_key(text(" "))
+  assert_notnil(S6d.ask, "T125 Space on the freeform row keeps the block open")
+  assert_eq(rec.answer, nil, "T125 Space on the freeform row submits nothing")
+
   -- the waiting state stays clear while the block is open
   local m7, S7 = boot(one)
   local ph125 = tph(m7)
@@ -9120,7 +9151,7 @@ do
   _G.agent = agent_stub
 
   assert_notnil(uimod.ASK_KEYS, "T127 the block's bindings are exported")
-  for _, key in ipairs({ "up", "down", "enter", "1", "space", "tab", "left", "esc", "backspace" }) do
+  for _, key in ipairs({ "up", "down", "enter", "1", "space", "tab", "left", "right", "esc", "backspace" }) do
     assert_notnil(uimod.ASK_KEYS[key], "T127 the block documents " .. key)
   end
 
@@ -9204,13 +9235,14 @@ do
   assert_true(qj:find("Agent asks", 1, true) == nil, "T228 no Agent asks label in multi sets either")
 
   -- 3.1: hint rows per mode name the handled keys; every named key is in ASK_KEYS
-  for _, k in ipairs({ "up", "down", "enter", "space", "tab", "left", "esc" }) do
+  for _, k in ipairs({ "up", "down", "enter", "space", "tab", "left", "right", "esc" }) do
     assert_notnil(m.ASK_KEYS[k], "T228 hint coverage: ASK_KEYS documents " .. k)
   end
-  assert_true(j:find("Enter select", 1, true) ~= nil, "T228 single hint names select")
+  assert_true(j:find("Enter", 1, true) ~= nil, "T228 single hint names select")
+  assert_true(j:find("Space", 1, true) ~= nil, "T228 single hint names space select")
   assert_true(j:find("Tab note", 1, true) ~= nil, "T228 single hint names note editing")
   assert_true(j:find("Esc cancel", 1, true) ~= nil, "T228 single hint names cancel")
-  assert_true(j:find("Space", 1, true) == nil, "T228 single hint names no toggle key")
+  assert_true(j:find("toggle", 1, true) == nil, "T228 single hint names no toggle key")
   assert_true(mj:find("Space toggle", 1, true) ~= nil, "T228 multi hint names toggle")
   assert_true(mj:find("Enter accept", 1, true) ~= nil, "T228 multi hint names accept")
   assert_true(mj:find("1-N", 1, true) == nil, "T228 multi hint names no single pick key")
