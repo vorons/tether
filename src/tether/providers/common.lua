@@ -240,6 +240,13 @@ function M.tools_schema()
           parameters = { type = "object",
             properties = { command = str, cwd = str, timeout = num },
             required = { "command", _array = true } } },
+        { name = "ask",
+          description = "Ask the user to choose: "
+            .. "[{question, options:[{label, description?}], "
+            .. "id?, description?, multi?, recommended?}]",
+          parameters = { type = "object",
+            properties = { questions = { type = "array" } },
+            required = { "questions", _array = true } } },
         { name = "subagent",
           description = "Delegate work to a child agent run (single task, or "
             .. "a parallel batch via tasks[]). Exactly one of task / tasks is "

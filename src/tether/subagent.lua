@@ -12,6 +12,7 @@ local M = {}
 M.KNOWN_TOOLS = {
     read = true, list = true, glob = true, grep = true,
     write = true, patch = true, run = true, subagent = true,
+    ask = true,
 }
 
 local function is_nonempty_str(v)
