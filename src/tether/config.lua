@@ -96,6 +96,9 @@ local function default_config()
             path_completion = true, -- 4.3: Tab completes workspace path tokens
         },
         tools = { run_shell = { timeout = 120 } },
+        -- subagent: child-run orchestration (max concurrent children,
+        -- per-task timeout, fork depth limit).
+        subagents = { max_parallel = 4, timeout = 600, max_depth = 1 },
         system_prompt = nil,
         skills_dirs = nil, -- nil = default discovery set (see context.lua)
         agents_files = {}, -- explicit agents-instruction files, merged before CLI --agents-file
@@ -272,6 +275,7 @@ local BOOTSTRAP_COMMENTS = {
     retry = "backoff policy for failed requests",
     ui = "interface: theme, wrap, mouse, keyboard, palette, footer",
     tools = "tool timeouts",
+    subagents = "subagent child runs: max_parallel, timeout, max_depth",
     system_prompt = "nil = built-in prompt (inline text or /path/to/file)",
     skills_dirs = "nil = default discovery set",
     agents_files = "explicit agents-instruction files",
@@ -551,6 +555,25 @@ function M.load(path, home)
             if e == pat then dup = true break end
         end
         if not dup then cfg.auto_approve[#cfg.auto_approve + 1] = pat end
+    end
+
+    -- subagent: max_parallel floors at 1; non-numeric values fall back
+    -- without failing the session (spec config: Subagent configuration).
+    if type(cfg.subagents) ~= "table" then
+        cfg.subagents = default_config().subagents
+    else
+        local def_sub = default_config().subagents
+        local mp = tonumber(cfg.subagents.max_parallel)
+        if mp == nil then
+            cfg.subagents.max_parallel = def_sub.max_parallel
+        else
+            cfg.subagents.max_parallel = math.max(1, math.floor(mp))
+        end
+        local to = tonumber(cfg.subagents.timeout)
+        cfg.subagents.timeout = (to and to >= 1) and to or def_sub.timeout
+        local md = tonumber(cfg.subagents.max_depth)
+        cfg.subagents.max_depth = (md and math.floor(md) >= 0)
+            and math.floor(md) or def_sub.max_depth
     end
 
     -- add-reasoning-level: only the four levels are valid; a missing,

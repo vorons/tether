@@ -1146,8 +1146,11 @@ local function new_state()
         palette_items = {},
         palette_sel = 1,
         palette_skills = nil,    -- 1.3: skill rows, resolved once per palette open
+        palette_query = nil,     -- palette-fuzzy-search: typed filter for model/login palettes
+        _palette_all = nil,      -- palette-fuzzy-search: unfiltered rows while a query is active
         _in_copy_palette = nil,  -- 5.2: set when the /copy palette is open
         _in_login_palette = nil, -- add-provider-login: bare /login provider picker
+        _in_logout_palette = nil, -- logout-picker: bare /logout stored-credentials picker
         _in_resume_palette = nil, -- palette-only: /resume session list
         _in_model_palette = nil,  -- palette-only: /model list
         _in_think_palette = nil,  -- add-reasoning-level: bare /think level list
@@ -1332,7 +1335,14 @@ local function layout()
 
     local error_h = S.error_banner and 1 or 0
     local want_palette_h = 0
-    if S.palette_active and #S.palette_items > 0 then
+    -- palette-fuzzy-search: an active modal query reserves its row even with
+    -- zero matches, so the "> query (no matches)" notice has a place to
+    -- paint (same win+2 budget shape, win is 0). Other modes keep the
+    -- collapse-when-empty behavior.
+    local modal_query = (S.palette_mode == "model" or S.palette_mode == "login"
+        or S.palette_mode == "logout")
+        and (S.palette_query or "") ~= ""
+    if S.palette_active and (#S.palette_items > 0 or modal_query) then
         -- 2.4: the reserved region follows the window (items + 2); the indicator
         -- row the palette may paint fits inside it (see render_palette)
         local win = palette_window(S.h, #S.palette_items, S.palette_sel)
@@ -1495,6 +1505,7 @@ end
 palette_sync = function()
     if S._in_copy_palette then return end -- 5.2: copy palette is set explicitly
     if S._in_login_palette then return end -- add-provider-login: same for picker
+    if S._in_logout_palette then return end -- logout-picker: stored-credentials picker
     if S._in_resume_palette then return end -- palette-only: /resume list is explicit
     if S._in_model_palette then return end  -- palette-only: /model list is explicit
     if S._in_think_palette then return end  -- add-reasoning-level: /think picker
@@ -1535,6 +1546,41 @@ palette_sync = function()
     if S.palette_sel < 1 then S.palette_sel = 1 end
     if S.palette_sel > #items then S.palette_sel = #items end
     if #items == 0 then S.palette_sel = 1 end
+end
+
+-- palette-fuzzy-search: filter helper for modal list palettes (model/login).
+-- The full rows live in S._palette_all; labels are ranked with the same
+-- M.fuzzy_rank primitive as the slash palette, S.palette_items becomes the
+-- ranked visible rows, and the selection resets to the top. A module field
+-- (not a file-local) so the chunk's local budget is untouched; exported as
+-- a test seam like _build_model_items / _palette_window.
+function M._palette_apply_query()
+    local all = S._palette_all or {}
+    local labels = {}
+    for _, it in ipairs(all) do labels[#labels + 1] = it.label or "" end
+    local items = {}
+    for _, idx in ipairs(M.fuzzy_rank(S.palette_query or "", labels)) do
+        items[#items + 1] = all[idx]
+    end
+    S.palette_items = items
+    S.palette_sel = 1
+end
+
+-- logout-picker: delete one stored credential and confirm with a
+-- transcript/system line (provider name only — never token material).
+-- Module field (not a file-local) so the chunk's local budget is untouched.
+function M._logout_delete(provider)
+    S.login_provider = nil
+    S.login_flow = nil
+    local auth_mod = _G.auth
+    if auth_mod and auth_mod.delete then
+        auth_mod.delete(nil, provider)
+    end
+    transcript.append({
+        role = "system",
+        text = "→ logout " .. provider .. ": stored credential removed",
+    })
+    bump_transcript()
 end
 
 -- ============================================================
@@ -1727,6 +1773,7 @@ local function input_clear()
     -- 6.1: palette modes set explicitly (copy/skills/login) survive input_clear;
     -- palette_sync is a no-op for them via the _in_*_palette flags.
     if not S._in_copy_palette and not S._in_login_palette
+        and not S._in_logout_palette
         and not S._in_resume_palette and not S._in_model_palette
         and not S._in_think_palette then
         palette_sync()
@@ -2846,7 +2893,17 @@ local function render_input(L)
 end
 
 local function render_palette(L)
-    if not S.palette_active or #S.palette_items == 0 then return end
+    if not S.palette_active then return end
+    -- palette-fuzzy-search: modal query row. Only the model/login palettes
+    -- ever set S.palette_query, so the command palette's digits-only
+    -- indicator path below is untouched. The query row paints even with
+    -- zero matches (unlike entry rows) so the typed filter stays visible.
+    local q = ""
+    if S.palette_mode == "model" or S.palette_mode == "login"
+        or S.palette_mode == "logout" then
+        q = S.palette_query or ""
+    end
+    if #S.palette_items == 0 and q == "" then return end
     -- M9: no frame; selected item is accent-colored, not reverse-video
     -- 2.2/2.3: a window over the ranked list, shifted so the selected row is
     -- inside it, plus a dim pos/total row when the list overflows it. The
@@ -2879,7 +2936,15 @@ local function render_palette(L)
         end
     end
     local irow = L.palette_row + win + 1
-    if n > win and irow <= last then
+    if q ~= "" and irow <= last then
+        local txt = "> " .. q
+        if n == 0 then
+            txt = txt .. " (no matches)"
+        elseif n > win then
+            txt = txt .. string.format(" (%d/%d)", S.palette_sel, n)
+        end
+        set_row(irow, dim(trunc(" " .. txt, L.w - 2)))
+    elseif n > win and irow <= last then
         set_row(irow, dim(trunc(string.format(" %d/%d", S.palette_sel, n), L.w - 2)))
     end
 end
@@ -4045,6 +4110,8 @@ local function execute_command(cmd, rest)
         S.palette_mode = "model"
         S.palette_active = true
         S.palette_items = M._build_model_items(models)
+        S._palette_all = S.palette_items
+        S.palette_query = ""
         S.palette_sel = 1
         S._in_model_palette = true
         -- an empty palette explains itself (no key, dead endpoint, ...).
@@ -4111,6 +4178,8 @@ local function execute_command(cmd, rest)
             S.palette_mode = "login"
             S.palette_active = true
             S.palette_items = items
+            S._palette_all = items
+            S.palette_query = ""
             S.palette_sel = 1
             S._in_login_palette = true
             return
@@ -4125,24 +4194,61 @@ local function execute_command(cmd, rest)
     end
     if cmd == "logout" then
         local provider = (type(rest) == "string" and rest:match("^%s*(.-)%s*$")) or ""
-        if provider == "" then provider = S.cfg and S.cfg.provider or "openai" end
+        -- logout-picker: bare /logout opens a stored-only picker in the
+        -- shared palette (never a silent default to the active provider).
+        if provider == "" then
+            local auth_mod = _G.auth
+            local store = (auth_mod and auth_mod.load) and auth_mod.load(nil) or {}
+            local names = {}
+            if type(store) == "table" then
+                for name in pairs(store) do
+                    if type(name) == "string" and name ~= "" then
+                        names[#names + 1] = name
+                    end
+                end
+            end
+            table.sort(names)
+            if #names == 0 then
+                S.error_banner = "no stored credentials"
+                return
+            end
+            local active = (S.cfg and S.cfg.provider) or nil
+            local items = {}
+            for _, name in ipairs(names) do
+                local entry = store[name]
+                local kind = (type(entry) == "table" and type(entry.kind) == "string")
+                    and entry.kind or ""
+                local desc = kind
+                if name == active then
+                    desc = (desc ~= "" and desc .. " • " or "") .. "active"
+                end
+                items[#items + 1] = { label = name, desc = desc }
+            end
+            S.error_banner = nil
+            S.palette_mode = "logout"
+            S.palette_active = true
+            S.palette_items = items
+            S._palette_all = items
+            S.palette_query = ""
+            S.palette_sel = 1
+            S._in_logout_palette = true
+            return
+        end
         if not is_known_provider(provider) then
             S.error_banner = "unknown provider: " .. provider
             return
         end
         provider = provider:lower()
-        S.login_provider = nil
-        S.login_flow = nil
+        -- logout-picker: named path stays direct (no picker, no confirm),
+        -- but honest — a missing entry reports instead of a false "removed".
         local auth_mod = _G.auth
-        if auth_mod and auth_mod.delete then
-            auth_mod.delete(nil, provider)
+        local stored = auth_mod and auth_mod.load
+            and auth_mod.load(nil) or {}
+        if type(stored) ~= "table" or stored[provider] == nil then
+            S.error_banner = "no stored credential for " .. provider
+            return
         end
-        -- confirmation line: provider name only — never token material
-        transcript.append({
-            role = "system",
-            text = "→ logout " .. provider .. ": stored credential removed",
-        })
-        bump_transcript()
+        M._logout_delete(provider)
         return
     end
     -- add-reasoning-level: reasoning level — a level argument applies
@@ -5354,8 +5460,19 @@ handle_key = function(k)
                             S.palette_items = {}
                             S.palette_sel = 1
                             S._in_login_palette = nil
+                            S.palette_query = nil
+                            S._palette_all = nil
                             begin_login(it.label)
                             bump_transcript()
+                        elseif S.palette_mode == "logout" and it.label then
+                            S.palette_active = false
+                            S.palette_mode = "command"
+                            S.palette_items = {}
+                            S.palette_sel = 1
+                            S._in_logout_palette = nil
+                            S.palette_query = nil
+                            S._palette_all = nil
+                            M._logout_delete(it.label)
                         elseif S.palette_mode == "resume" and it.id then
                             S.palette_active = false
                             S.palette_mode = "command"
@@ -5370,6 +5487,8 @@ handle_key = function(k)
                             S.palette_items = {}
                             S.palette_sel = 1
                             S._in_model_palette = nil
+                            S.palette_query = nil
+                            S._palette_all = nil
                             pick.model(it)
                             bump_transcript()
                         elseif S.palette_mode == "think" and it.label then
@@ -5515,15 +5634,23 @@ handle_key = function(k)
                 S.palette_items = {}
                 S.palette_sel = 1
                 S._in_model_palette = nil
+                S.palette_query = nil
+                S._palette_all = nil
             end
             if k.kind == "enter" then
                 local it = S.palette_items[S.palette_sel]
+                if not it then return end
                 close_model_palette()
                 if it and it.label then
                     pick.model(it)
                 end
                 return
             elseif k.kind == "esc" then
+                if (S.palette_query or "") ~= "" then
+                    S.palette_query = ""
+                    M._palette_apply_query()
+                    return
+                end
                 close_model_palette()
                 return
             elseif k.kind == "special" then
@@ -5533,6 +5660,18 @@ handle_key = function(k)
                 elseif k.name == "down" and n > 0 then
                     S.palette_sel = math.min(n, S.palette_sel + 1)
                 end
+                return
+            elseif k.kind == "text" then
+                S.palette_query = (S.palette_query or "") .. (k.char or "")
+                M._palette_apply_query()
+                return
+            elseif k.kind == "backspace" then
+                S.palette_query = (S.palette_query or ""):sub(1, math.max(0, #(S.palette_query or "") - 1))
+                M._palette_apply_query()
+                return
+            elseif k.kind == "paste" then
+                S.palette_query = (S.palette_query or "") .. (k.text or "")
+                M._palette_apply_query()
                 return
             end
             return
@@ -5575,9 +5714,12 @@ handle_key = function(k)
                 S.palette_items = {}
                 S.palette_sel = 1
                 S._in_login_palette = nil
+                S.palette_query = nil
+                S._palette_all = nil
             end
             if k.kind == "enter" then
                 local it = S.palette_items[S.palette_sel]
+                if not it then return end
                 close_login_palette()
                 if it and it.label then
                     begin_login(it.label)
@@ -5585,6 +5727,11 @@ handle_key = function(k)
                 end
                 return
             elseif k.kind == "esc" then
+                if (S.palette_query or "") ~= "" then
+                    S.palette_query = ""
+                    M._palette_apply_query()
+                    return
+                end
                 close_login_palette()
                 return
             elseif k.kind == "special" then
@@ -5594,6 +5741,70 @@ handle_key = function(k)
                 elseif k.name == "down" and n > 0 then
                     S.palette_sel = math.min(n, S.palette_sel + 1)
                 end
+                return
+            elseif k.kind == "text" then
+                S.palette_query = (S.palette_query or "") .. (k.char or "")
+                M._palette_apply_query()
+                return
+            elseif k.kind == "backspace" then
+                S.palette_query = (S.palette_query or ""):sub(1, math.max(0, #(S.palette_query or "") - 1))
+                M._palette_apply_query()
+                return
+            elseif k.kind == "paste" then
+                S.palette_query = (S.palette_query or "") .. (k.text or "")
+                M._palette_apply_query()
+                return
+            end
+            return
+        elseif S.palette_mode == "logout" then
+            -- logout-picker: stored-credentials picker — Enter deletes the
+            -- highlighted entry immediately (no confirmation step); Esc is
+            -- two-stage and Enter dead on no match, like model/login.
+            local function close_logout_palette()
+                S.palette_active = false
+                S.palette_mode = "command"
+                S.palette_items = {}
+                S.palette_sel = 1
+                S._in_logout_palette = nil
+                S.palette_query = nil
+                S._palette_all = nil
+            end
+            if k.kind == "enter" then
+                local it = S.palette_items[S.palette_sel]
+                if not it then return end
+                local label = it.label
+                close_logout_palette()
+                if label then
+                    M._logout_delete(label)
+                end
+                return
+            elseif k.kind == "esc" then
+                if (S.palette_query or "") ~= "" then
+                    S.palette_query = ""
+                    M._palette_apply_query()
+                    return
+                end
+                close_logout_palette()
+                return
+            elseif k.kind == "special" then
+                local n = #S.palette_items
+                if k.name == "up" then
+                    S.palette_sel = math.max(1, S.palette_sel - 1)
+                elseif k.name == "down" and n > 0 then
+                    S.palette_sel = math.min(n, S.palette_sel + 1)
+                end
+                return
+            elseif k.kind == "text" then
+                S.palette_query = (S.palette_query or "") .. (k.char or "")
+                M._palette_apply_query()
+                return
+            elseif k.kind == "backspace" then
+                S.palette_query = (S.palette_query or ""):sub(1, math.max(0, #(S.palette_query or "") - 1))
+                M._palette_apply_query()
+                return
+            elseif k.kind == "paste" then
+                S.palette_query = (S.palette_query or "") .. (k.text or "")
+                M._palette_apply_query()
                 return
             end
             return
@@ -5852,7 +6063,8 @@ function M.run(app_cfg)
                 if models == nil then
                     models, _, merr = commands.list_models(S.cfg, S.api_key or "")
                 end
-                S.palette_items = M._build_model_items(models)
+                S._palette_all = M._build_model_items(models)
+                M._palette_apply_query()
                 local n = #S.palette_items
                 if (S.palette_sel or 1) > n and n > 0 then
                     S.palette_sel = n

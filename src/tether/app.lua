@@ -21,6 +21,7 @@ local function parse_args()
         print_prompt = nil,
         debug = false,
         agents_files = {},
+        tools_allowlist = {},
     }
     local i = 1
     while i <= #args do
@@ -46,6 +47,16 @@ local function parse_args()
             local path = args[i + 1]
             if path and not path:match("^%-") then
                 opts.agents_files[#opts.agents_files + 1] = path
+                i = i + 1
+            end
+        elseif a == "--tools" then
+            -- subagent allowlist: comma-separated tool names for this run.
+            -- Only honored in --print (child) runs; interactive use ignores it.
+            local csv = args[i + 1]
+            if csv and not csv:match("^%-") then
+                for name in csv:gmatch("[^,%s]+") do
+                    opts.tools_allowlist[#opts.tools_allowlist + 1] = name
+                end
                 i = i + 1
             end
         elseif a == "--version" or a == "-v" then
@@ -88,6 +99,44 @@ local function run_inner()
         -- after cfg.agents_files by context.compose).
         if #opts.agents_files > 0 then
             cfg._cli_agents_files = opts.agents_files
+        end
+        -- subagent depth + allowlist composition (2.3): depth travels in
+        -- TETHER_SUBAGENT_DEPTH (0 top, ++ per fork); at the limit the
+        -- child schema omits `subagent`. Unknown/deep values behave as
+        -- at-limit, never as deeper. Provider payload builders take no
+        -- cfg, so the composed filter rides module state (see
+        -- set_tools_filter); the dispatch guard reads cfg directly.
+        local depth = tonumber(os.getenv("TETHER_SUBAGENT_DEPTH")) or 0
+        if depth < 0 then depth = 0 end
+        cfg._subagent_depth = depth
+        local max_depth = (cfg.subagents and tonumber(cfg.subagents.max_depth)) or 1
+        if #opts.tools_allowlist > 0 then
+            cfg._tools_allowlist = opts.tools_allowlist
+        end
+        if cfg._tools_allowlist ~= nil or depth >= max_depth then
+            local common = rawget(_G, "provider_common")
+            if not common then
+                local chunk = loadfile("src/tether/providers/common.lua")
+                common = chunk and chunk()
+            end
+            if common then
+                local keep = {}
+                if cfg._tools_allowlist then
+                    for _, n in ipairs(cfg._tools_allowlist) do
+                        if type(n) == "string" and n ~= "" then keep[n] = true end
+                    end
+                else
+                    for _, t in ipairs(common.tools_schema()) do
+                        if type(t.name) == "string" then keep[t.name] = true end
+                    end
+                end
+                if depth >= max_depth then keep["subagent"] = nil end
+                local list = {}
+                for n in pairs(keep) do list[#list + 1] = n end
+                if common.set_tools_filter then
+                    common.set_tools_filter(list)
+                end
+            end
         end
         cfg.debug = opts.debug
         -- add-ask-tool: a print run has nobody to answer `ask`, so the agent

@@ -727,6 +727,97 @@ with_modules(base_env, function(mods)
     assert_true(more2 == false, "T26 false when queue empty")
 end)
 
+-- T221: subagent — confirmations degrade to deny in non-interactive runs
+-- (mirrors the ask degradation): no confirmation event, deny tool result,
+-- the loop continues instead of parking forever.
+with_modules(base_env, function(mods)
+    local api, agent = mods.api, mods.agent
+    local cfg = { workspace = "/tmp/ws", _session_id = "s1", auto_approve = {},
+                  non_interactive = true }
+    local ncalls = 0
+    api.stream = function(c, key, messages, on_event)
+        ncalls = ncalls + 1
+        if ncalls == 1 then
+            on_event({ type = "tool_call_start", id = "c1", name = "write" })
+            on_event({ type = "tool_call_delta", id = "c1",
+                       arguments = '{"path":"/etc/a","content":"x"}' })
+            on_event({ type = "done", reason = "tool_calls" })
+        else
+            on_event({ type = "text_delta", text = "denied, moving on" })
+            on_event({ type = "done", reason = "stop" })
+        end
+        return true
+    end
+    agent.clear()
+    local events = {}
+    agent.turn(cfg, "k", "write outside", function(ev) events[#events + 1] = ev end)
+    local saw_conf, saw_deny = false, false
+    for _, ev in ipairs(events) do
+        if ev.type == "confirmation" then saw_conf = true end
+        if ev.type == "tool_result" and ev.name == "write" and ev.error
+            and ev.error:find("no interactive user", 1, true) then saw_deny = true end
+    end
+    assert_false(saw_conf, "T221 no confirmation event without a user")
+    assert_true(saw_deny, "T221 deny tool result without a user")
+    assert_true(ncalls >= 2, "T221 loop continues after the deny")
+    print("T221 non-interactive deny: OK")
+end)
+
+-- T222: subagent guards — allowlist refusal and depth rejection both speak
+-- the unknown-tool contract; the loop continues with the error result.
+with_modules(base_env, function(mods)
+    local api, agent = mods.api, mods.agent
+    local cfg = { workspace = "/tmp/ws", _session_id = "s1", auto_approve = {},
+                  _tools_allowlist = { "list" } }
+    local ncalls = 0
+    api.stream = function(c, key, messages, on_event)
+        ncalls = ncalls + 1
+        if ncalls == 1 then
+            on_event({ type = "tool_call_start", id = "c1", name = "write" })
+            on_event({ type = "tool_call_delta", id = "c1",
+                       arguments = '{"path":"/tmp/ws/f","content":"x"}' })
+            on_event({ type = "done", reason = "tool_calls" })
+        else
+            on_event({ type = "text_delta", text = "refused, moving on" })
+            on_event({ type = "done", reason = "stop" })
+        end
+        return true
+    end
+    agent.clear()
+    local events = {}
+    agent.turn(cfg, "k", "try a write", function(ev) events[#events + 1] = ev end)
+    local saw_refusal = false
+    for _, ev in ipairs(events) do
+        if ev.type == "tool_result" and ev.name == "write" and ev.error
+            and ev.error:find("unknown tool: write", 1, true) then saw_refusal = true end
+    end
+    assert_true(saw_refusal, "T222 non-allowlisted tool refused as unknown")
+    assert_true(ncalls >= 2, "T222 loop continues after the refusal")
+    print("T222 allowlist dispatch guard: OK")
+end)
+with_modules(base_env, function(mods)
+    local api, agent = mods.api, mods.agent
+    local cfg = { workspace = "/tmp/ws", _session_id = "s1", auto_approve = {},
+                  _subagent_depth = 1 }
+    api.stream = function(c, key, messages, on_event)
+        on_event({ type = "tool_call_start", id = "c1", name = "subagent" })
+        on_event({ type = "tool_call_delta", id = "c1",
+                   arguments = '{"task":"recurse"}' })
+        on_event({ type = "done", reason = "tool_calls" })
+        return true
+    end
+    agent.clear()
+    local events = {}
+    agent.turn(cfg, "k", "spawn down", function(ev) events[#events + 1] = ev end)
+    local saw_depth = false
+    for _, ev in ipairs(events) do
+        if ev.type == "tool_result" and ev.name == "subagent" and ev.error
+            and ev.error:find("unknown tool: subagent", 1, true) then saw_depth = true end
+    end
+    assert_true(saw_depth, "T222 subagent at depth limit is unknown")
+    print("T222 depth dispatch guard: OK")
+end)
+
 -- T26b: split tool_call chunks (gateway style: id+name first, arguments in
 -- index-only continuation deltas) assemble exactly. Dropped fragments made
 -- the tool run on fallback {} while the echoed arguments went out truncated
@@ -2057,7 +2148,324 @@ do
   print("T49b scroll not insert: OK")
 end
 
--- T50: providers — anthropic/gemini mapping, dispatch fallback, config resolution
+-- T220: subagent allowlist — set_tools_filter restricts the offered schema;
+-- nil restores everything. The module table is shared: always reset.
+do
+  local common = assert(loadfile("src/tether/providers/common.lua"))()
+  local function names()
+    local out = {}
+    for _, t in ipairs(common.tools_schema()) do out[#out + 1] = t.name end
+    return out
+  end
+  assert_true(#names() >= 7, "T220 unfiltered schema has all tools")
+  assert_true(common.set_tools_filter({ "read", "grep" }), "T220 filter accepts a list")
+  local kept = names()
+  assert_eq(#kept, 2, "T220 filtered schema keeps two")
+  assert_eq(kept[1], "read", "T220 read kept")
+  assert_eq(kept[2], "grep", "T220 grep kept")
+  assert_true(common.set_tools_filter(nil), "T220 nil resets the filter")
+  assert_true(#names() >= 7, "T220 reset restores all tools")
+  assert_false(common.set_tools_filter("read"), "T220 non-table filter rejected")
+  assert_true(#names() >= 7, "T220 rejected filter changes nothing")
+  print("T220 tools allowlist filter: OK")
+end
+
+-- T223: subagent schema entry — task/tasks/model/cwd/tools/timeout params.
+do
+  local common = assert(loadfile("src/tether/providers/common.lua"))()
+  local entry = nil
+  for _, t in ipairs(common.tools_schema()) do
+    if t.name == "subagent" then entry = t end
+  end
+  assert_notnil(entry, "T223 subagent in schema")
+  local props = entry.parameters and entry.parameters.properties or {}
+  assert_notnil(props.task, "T223 task param")
+  assert_notnil(props.tasks, "T223 tasks param")
+  assert_notnil(props.model, "T223 model param")
+  assert_notnil(props.cwd, "T223 cwd param")
+  assert_notnil(props.tools, "T223 tools param")
+  assert_notnil(props.timeout, "T223 timeout param")
+  assert_true(common.set_tools_filter({ "read", "subagent" }), "T223 filter keeps subagent")
+  local kept = {}
+  for _, t in ipairs(common.tools_schema()) do kept[#kept + 1] = t.name end
+  assert_eq(#kept, 2, "T223 filtered pair")
+  assert_true(common.set_tools_filter(nil), "T223 reset")
+  print("T223 subagent schema entry: OK")
+end
+
+-- T224: subagent orchestrator — call/item validation, command build,
+-- single-task wait (mocked host): done/timeout/cancel paths.
+do
+  local orig_tether, orig_tools = _G.tether, _G.tools
+  _G.tools = {
+    _resolve = function(p, cfg) return p end,
+    _within = function(abs, cfg)
+      return abs == "/ws" or abs:sub(1, 4) == "/ws/"
+    end,
+  }
+  local sub = assert(loadfile("src/tether/subagent.lua"))()
+  local ctx = { cfg = { workspace = "/ws" }, workspace = "/ws",
+                model = "parent-m", timeout_default = 600, depth = 0 }
+  -- normalize_call: task xor tasks
+  local only, err = sub.normalize_call({ task = "do it" })
+  assert_notnil(only, "T224 single task normalizes")
+  assert_eq(only[1].task, "do it", "T224 task kept")
+  assert_true(sub.normalize_call({}) == nil, "T224 neither errors")
+  assert_true(sub.normalize_call({ task = "a", tasks = { { task = "b" } } }) == nil, "T224 both errors")
+  assert_true(sub.normalize_call({ tasks = {} }) == nil, "T224 empty tasks errors")
+  -- validate_item: defaults + fail-cheap checks
+  local it = assert(sub.validate_item({ task = "go" }, {}, ctx))
+  assert_eq(it.model, "parent-m", "T224 model falls back to parent")
+  assert_eq(it.cwd, "/ws", "T224 cwd falls back to workspace")
+  assert_eq(it.timeout, 600, "T224 timeout falls back to default")
+  local it2 = assert(sub.validate_item(
+    { task = "go", model = "m2", tools = { "read" } }, {}, ctx))
+  assert_eq(it2.model, "m2", "T224 item model wins")
+  assert_true(sub.validate_item({ task = "go", tools = { "teleport" } }, {}, ctx) == nil, "T224 unknown allowlist tool fails")
+  assert_true(sub.validate_item({ task = "go", cwd = "/etc" }, {}, ctx) == nil, "T224 outside cwd fails before spawn")
+  -- build_command shape
+  local cmd, outfile = sub.build_command(
+    { task = "fix it", model = "m", cwd = "/ws", timeout = 5 }, ctx)
+  assert_true(cmd:find("tether", 1, true) ~= nil, "T224 cmd names the binary")
+  assert_true(cmd:find("--print", 1, true) ~= nil, "T224 cmd print mode")
+  assert_true(cmd:find("TETHER_SUBAGENT_DEPTH=1", 1, true) ~= nil,
+    "T224 cmd carries depth+1")
+  assert_true(cmd:find("--model", 1, true) ~= nil, "T224 cmd carries model")
+  assert_true(cmd:find("fix it", 1, true) ~= nil, "T224 cmd carries the task")
+  assert_true(cmd:find(outfile, 1, true) ~= nil, "T224 cmd captures to outfile")
+  local cmd2 = (sub.build_command(
+    { task = "- review the diff", cwd = "/ws", timeout = 5 }, ctx))
+  assert_true(cmd2:find("printf", 1, true) ~= nil,
+    "T224 leading-dash task goes through a pipe")
+  -- wait_task: done path with a mocked host
+  local polls = 0
+  _G.tether = {
+    exec_bg_poll = function(h, ms)
+      polls = polls + 1
+      if polls < 3 then return "running" end
+      return "done", 0
+    end,
+    exec_bg_free = function(h) return true end,
+    exec_bg_kill = function(h) return true end,
+    abort_requested = function() return false end,
+    monotonic_ms = function() return 1000 end,
+  }
+  local outpath = os.tmpname()
+  local f = io.open(outpath, "w")
+  f:write("hello-child")
+  f:close()
+  local res = sub.wait_task(
+    { handle = {}, outfile = outpath, item = { model = "m" }, started_ms = 1000 }, 600)
+  assert_eq(res.status, "ok", "T224 done status")
+  assert_eq(res.output, "hello-child", "T224 outfile content returned")
+  assert_eq(res.exit_code, 0, "T224 exit code carried")
+  assert_true(io.open(outpath, "r") == nil, "T224 outfile removed")
+  -- failed child with empty output names the exit code
+  _G.tether = {
+    exec_bg_poll = function(h, ms) return "done", 1 end,
+    exec_bg_free = function(h) return true end,
+    exec_bg_kill = function(h) return true end,
+    abort_requested = function() return false end,
+    monotonic_ms = function() return 1000 end,
+  }
+  local outpath0 = os.tmpname()
+  local f0 = io.open(outpath0, "w")
+  f0:write("")
+  f0:close()
+  local res0 = sub.wait_task(
+    { handle = {}, outfile = outpath0, item = { model = "m" }, started_ms = 1000 }, 600)
+  assert_eq(res0.status, "error", "T224 empty failure is an error")
+  assert_true(res0.output:find("subagent exited 1", 1, true) ~= nil,
+    "T224 empty failure names the exit code")
+  -- timeout path
+  local killed = false
+  _G.tether = {
+    exec_bg_poll = function(h, ms) return "running" end,
+    exec_bg_free = function(h) return true end,
+    exec_bg_kill = function(h) killed = true return true end,
+    abort_requested = function() return false end,
+    monotonic_ms = function() return 2000000000 end,
+  }
+  local outpath2 = os.tmpname()
+  local res2 = sub.wait_task(
+    { handle = {}, outfile = outpath2, item = {}, started_ms = 1000 }, 600)
+  assert_eq(res2.status, "error", "T224 timeout is an error")
+  assert_true(killed, "T224 timeout kills the group")
+  assert_true(res2.output:find("timeout", 1, true) ~= nil, "T224 timeout names the limit")
+  -- cancel path
+  local killed2 = false
+  _G.tether = {
+    exec_bg_poll = function(h, ms) return "running" end,
+    exec_bg_free = function(h) return true end,
+    exec_bg_kill = function(h) killed2 = true return true end,
+    abort_requested = function() return true end,
+    monotonic_ms = function() return 1000 end,
+  }
+  local outpath3 = os.tmpname()
+  local res3 = sub.wait_task(
+    { handle = {}, outfile = outpath3, item = {}, started_ms = 1000 }, 600)
+  assert_eq(res3.status, "error", "T224 cancel is an error")
+  assert_true(killed2, "T224 cancel kills the group")
+  assert_true(res3.output:find("cancelled", 1, true) ~= nil, "T224 cancel says cancelled")
+  _G.tether, _G.tools = orig_tether, orig_tools
+  print("T224 subagent single-task orchestration: OK")
+end
+
+-- T225: subagent batch — bounded parallelism, task-order combination,
+-- abort cancels running and queued tasks.
+do
+  local orig_tether, orig_tools = _G.tether, _G.tools
+  _G.tools = {
+    _resolve = function(p, cfg) return p end,
+    _within = function(abs, cfg)
+      return abs == "/ws" or abs:sub(1, 4) == "/ws/"
+    end,
+  }
+  local sub = assert(loadfile("src/tether/subagent.lua"))()
+  local live, max_live, spawned = 0, 0, 0
+  local scripts = {}
+  local abort_now = false
+  _G.tether = {
+    exec_bg_poll = function(h, ms)
+      local sc = scripts[h]
+      sc.i = sc.i + 1
+      if sc.i >= 2 then
+        live = live - 1
+        return "done", 0
+      end
+      return "running"
+    end,
+    exec_bg_free = function(h) return true end,
+    exec_bg_kill = function(h) return true end,
+    abort_requested = function() return abort_now end,
+    monotonic_ms = function() return 1000 end,
+  }
+  -- spawn at the spawn_task seam: fake handles + real outfiles with content.
+  local orig_spawn = sub.spawn_task
+  sub.spawn_task = function(item, ctx)
+    spawned = spawned + 1
+    local id = spawned
+    live = live + 1
+    if live > max_live then max_live = live end
+    local h = { id = id }
+    scripts[h] = { i = 0 }
+    local p = os.tmpname()
+    local f = io.open(p, "w")
+    f:write("out" .. id)
+    f:close()
+    return { handle = h, outfile = p, item = item, started_ms = 1000 }
+  end
+  local function mkitems(n)
+    local items = {}
+    for i = 1, n do
+      items[i] = { task = "t" .. i, cwd = "/ws", timeout = 600 }
+    end
+    return items
+  end
+  -- outfiles are pre-created at spawn (consume reads them on completion).
+  local ctx = { cfg = { workspace = "/ws" }, max_parallel = 2,
+                timeout_default = 600, depth = 0 }
+  local res = sub.run_batch(mkitems(3), ctx)
+  assert_eq(#res, 3, "T225 three results")
+  assert_eq(res[1].output, "out1", "T225 task order kept (1)")
+  assert_eq(res[2].output, "out2", "T225 task order kept (2)")
+  assert_eq(res[3].output, "out3", "T225 task order kept (3)")
+  assert_true(max_live <= 2, "T225 concurrency respects the cap")
+  assert_eq(spawned, 3, "T225 all tasks spawned")
+  -- abort cancels running and queued
+  live, max_live, spawned = 0, 0, 0
+  scripts = {}
+  abort_now = true
+  local res2 = sub.run_batch(mkitems(3), ctx)
+  assert_eq(#res2, 3, "T225 abort yields three results")
+  for i = 1, 3 do
+    assert_eq(res2[i].status, "error", "T225 aborted task errors")
+    assert_true(res2[i].output:find("cancelled", 1, true) ~= nil,
+      "T225 aborted task says cancelled")
+  end
+  assert_eq(spawned, 0, "T225 abort before spawn starts nothing")
+  abort_now = false
+  sub.spawn_task = orig_spawn
+  _G.tether, _G.tools = orig_tether, orig_tools
+  print("T225 subagent parallel batch: OK")
+end
+
+-- T226: subagent dispatch — model emits subagent, execute_tool routes to the
+-- orchestrator, the child output reaches the tool result body and history.
+do
+  local orig_sm = _G.subagent
+  local sub = assert(loadfile("src/tether/subagent.lua"))()
+  _G.subagent = sub
+  -- run_call validation needs no spawn: bad input fails cheap
+  local cfg0 = { workspace = "/tmp/ws", model = "m" }
+  local r0, e0 = sub.run_call({}, cfg0)
+  assert_true(r0 == nil, "T226 empty call fails")
+  assert_true(e0:find("task", 1, true) ~= nil, "T226 error names the contract")
+  local r0b = sub.run_call({ task = "x", tasks = { { task = "y" } } }, cfg0)
+  assert_true(r0b == nil, "T226 task+tasks fails")
+end
+with_modules(base_env, function(mods)
+  local api, agent = mods.api, mods.agent
+  local sub = assert(loadfile("src/tether/subagent.lua"))()
+  local orig_sm = _G.subagent
+  _G.subagent = sub
+  local orig_tools = _G.tools
+  _G.tools = {
+    _resolve = function(p, cfg) return p end,
+    _within = function(abs, cfg)
+      return abs == "/tmp/ws" or abs:sub(1, 8) == "/tmp/ws/"
+    end,
+    _workspace = function(cfg) return "/tmp/ws" end,
+  }
+  -- fake spawn with a real outfile; host polls done on the second round
+  local orig_spawn = sub.spawn_task
+  local polls = 0
+  sub.spawn_task = function(item, ctx)
+    local p = os.tmpname()
+    local f = io.open(p, "w")
+    f:write("child says hi")
+    f:close()
+    return { handle = {}, outfile = p, item = item, started_ms = 0 }
+  end
+  _G.tether.exec_bg_poll = function(h, ms)
+    polls = polls + 1
+    if polls < 2 then return "running" end
+    return "done", 0
+  end
+  _G.tether.exec_bg_free = function(h) return true end
+  _G.tether.exec_bg_kill = function(h) return true end
+  _G.tether.abort_requested = function() return false end
+  local ncalls = 0
+  api.stream = function(c, key, messages, on_event)
+    ncalls = ncalls + 1
+    if ncalls == 1 then
+      on_event({ type = "tool_call_start", id = "c1", name = "subagent" })
+      on_event({ type = "tool_call_delta", id = "c1",
+                 arguments = '{"task":"do research"}' })
+      on_event({ type = "done", reason = "tool_calls" })
+    else
+      on_event({ type = "text_delta", text = "noted" })
+      on_event({ type = "done", reason = "stop" })
+    end
+    return true
+  end
+  agent.clear()
+  local cfg = { workspace = "/tmp/ws", _session_id = "s1", auto_approve = {},
+                model = "parent-m" }
+  local events = {}
+  agent.turn(cfg, "k", "delegate it", function(ev) events[#events + 1] = ev end)
+  local saw_body = false
+  for _, ev in ipairs(events) do
+    if ev.type == "tool_result" and ev.name == "subagent" and ev.body
+      and ev.body:find("child says hi", 1, true) then saw_body = true end
+  end
+  assert_true(saw_body, "T226 child output reaches the tool result")
+  assert_true(ncalls >= 2, "T226 loop continues after the subagent result")
+  sub.spawn_task = orig_spawn
+  _G.subagent = orig_sm
+  _G.tools = orig_tools
+  print("T226 subagent dispatch end-to-end: OK")
+end)
 do
   local anthropic = assert(loadfile("src/tether/providers/anthropic.lua"))()
   local gemini = assert(loadfile("src/tether/providers/gemini.lua"))()
@@ -3102,6 +3510,32 @@ do
   print("T87b partial ui keeps editor_padding_x: OK")
 end
 
+-- T227: subagent config — subagents defaults, malformed fallback, partial
+-- override, max_parallel floor.
+do
+  local cfg = assert((function() return loadfile("src/tether/config.lua")() end)())
+  local d = cfg.load("/nonexistent/t227_missing.lua")
+  assert_eq(d.subagents.max_parallel, 4, "T227 default max_parallel")
+  assert_eq(d.subagents.timeout, 600, "T227 default timeout")
+  assert_eq(d.subagents.max_depth, 1, "T227 default max_depth")
+  local home = "/tmp/tether_t227_home"
+  os.execute("rm -rf " .. home .. " && mkdir -p " .. home .. "/.tether")
+  local f = assert(io.open(home .. "/.tether/config.lua", "w"))
+  f:write('return { subagents = { max_parallel = "many", timeout = 60 } }\n')
+  f:close()
+  local d2 = cfg.load(home .. "/.tether/config.lua", home)
+  assert_eq(d2.subagents.max_parallel, 4, "T227 malformed max_parallel falls back")
+  assert_eq(d2.subagents.timeout, 60, "T227 partial timeout applies")
+  assert_eq(d2.subagents.max_depth, 1, "T227 sibling default kept")
+  local f2 = assert(io.open(home .. "/.tether/config.lua", "w"))
+  f2:write('return { subagents = { max_parallel = 0 } }\n')
+  f2:close()
+  local d3 = cfg.load(home .. "/.tether/config.lua", home)
+  assert_eq(d3.subagents.max_parallel, 1, "T227 zero max_parallel floors to 1")
+  os.execute("rm -rf " .. home)
+  print("T227 subagents config defaults: OK")
+end
+
 -- ============================================================
 -- Section 9: live turn feedback
 -- ============================================================
@@ -4021,15 +4455,41 @@ do
 
   local openai = assert(loadfile("src/tether/providers/openai.lua"))()
   -- opencode session routing header (pi opencode-headers.ts)
+  -- zen-honest-headers: full honest set (session trio + identity pair)
   local ohl = openai.header_lines("k", { provider = "opencode", session_id = "s-1" })
-  local has_session = false
+  local has_session, has_sid, has_aff = false, false, false
+  local has_ua, has_client, has_project = false, false, false
   for _, ln in ipairs(ohl) do
     if ln == "x-opencode-session: s-1" then has_session = true end
+    if ln == "X-Session-Id: s-1" then has_sid = true end
+    if ln == "x-session-affinity: s-1" then has_aff = true end
+    if ln == "User-Agent: tether" then has_ua = true end
+    if ln == "x-opencode-client: tether" then has_client = true end
+    if ln:find("x-opencode-project", 1, true) then has_project = true end
     assert_true(ln:find("HTTP-Referer", 1, true) == nil, "T162 no attribution headers")
   end
-  assert_true(has_session, "T162 opencode session header")
+  assert_true(has_session and has_sid and has_aff, "T162 opencode session trio")
+  assert_true(has_ua and has_client, "T162 opencode honest identity")
+  assert_true(not has_project, "T162 no x-opencode-project")
   local ohl2 = openai.header_lines("k", { provider = "opencode" })
-  assert_eq(#ohl2, 1, "T162 session header omitted (never empty) without session id")
+  assert_eq(#ohl2, 3, "T162 session trio omitted (never empty) without session id")
+  local ohl2_ua, ohl2_client = false, false
+  for _, ln in ipairs(ohl2) do
+    if ln == "User-Agent: tether" then ohl2_ua = true end
+    if ln == "x-opencode-client: tether" then ohl2_client = true end
+    assert_true(ln:find("x-opencode-session", 1, true) == nil, "T162 no session header without id")
+    assert_true(ln:find("X-Session-Id", 1, true) == nil, "T162 no X-Session-Id without id")
+    assert_true(ln:find("x-session-affinity", 1, true) == nil, "T162 no affinity without id")
+    assert_true(ln:find("x-opencode-project", 1, true) == nil, "T162 no project without id")
+  end
+  assert_true(ohl2_ua and ohl2_client, "T162 identity pair present without session id")
+  local ogo = openai.header_lines("k", { provider = "opencode-go", session_id = "s-2" })
+  local go_sid, go_client = false, false
+  for _, ln in ipairs(ogo) do
+    if ln == "X-Session-Id: s-2" then go_sid = true end
+    if ln == "x-opencode-client: tether" then go_client = true end
+  end
+  assert_true(go_sid and go_client, "T162 opencode-go shares honest header set")
   -- copilot dynamic headers (pi github-copilot-headers.ts)
   local chl = openai.header_lines("k", { provider = "github-copilot",
     messages = { { role = "user", content = "hi" } } })
@@ -9874,6 +10334,100 @@ do
   auth.path = orig_path
   _G.auth = orig_auth2
 
+  -- T219: logout-picker — bare /logout lists stored-only ids in a picker;
+  -- Enter deletes immediately (no confirmation); empty store and
+  -- named-without-entry report instead of acting.
+  local home9 = tmp .. "_h9"
+  os.execute("rm -rf '" .. home9 .. "' && mkdir -p '" .. home9 .. "/.tether'")
+  auth.set(home9, "openai", { kind = "api_key", access_token = "sk-logout-9" })
+  auth.set(home9, "gemini", { kind = "oauth", access_token = "tok-logout-9" })
+  local orig_auth9 = _G.auth
+  _G.auth = auth
+  local orig_path9 = auth.path
+  auth.path = function() return home9 .. "/.tether/auth.json" end
+  local uim9, S9 = run_ui_with({ 17 }, {
+    agent = { turn = function() return true end, get_history = function() return {} end },
+    config = { load = function()
+        return { model = "m", provider = "gemini",
+                 base_url = "https://models.example/v1",
+                 workspace = "/tmp", ui = { input_max_lines = 8 } }
+      end,
+      api_key = function() return "" end },
+  })
+  uim9._execute_command("logout", "")
+  assert_true(S9.palette_active, "T219 bare /logout opens the picker")
+  assert_eq(S9.palette_mode, "logout", "T219 picker mode is logout")
+  local labels9 = {}
+  for _, it in ipairs(S9.palette_items or {}) do labels9[#labels9 + 1] = it.label end
+  assert_eq(#labels9, 2, "T219 picker lists stored ids only")
+  assert_eq(labels9[1], "gemini", "T219 stored ids sorted")
+  assert_eq(labels9[2], "openai", "T219 stored ids sorted")
+  local descs9 = {}
+  for _, it in ipairs(S9.palette_items) do descs9[it.label] = it.desc or "" end
+  assert_true(descs9.gemini:find("oauth", 1, true) ~= nil, "T219 row shows kind")
+  assert_true(descs9.gemini:find("active", 1, true) ~= nil, "T219 active provider marked")
+  assert_true(descs9.openai:find("api_key", 1, true) ~= nil, "T219 row shows kind")
+  assert_true(descs9.openai:find("sk-logout-9", 1, true) == nil, "T219 no token text in rows")
+  -- filter narrows; Esc clears first, closes second; store untouched
+  for i = 1, #"ope" do
+    uim9._handle_key({ kind = "text", char = ("ope"):sub(i, i) })
+  end
+  assert_eq(S9.palette_query, "ope", "T219 picker query accumulates")
+  assert_eq(#S9.palette_items, 1, "T219 picker filter narrows")
+  assert_eq(S9.palette_items[1].label, "openai", "T219 picker match wins")
+  assert_eq(S9.input, "", "T219 picker filter does not touch main input")
+  uim9._handle_key({ kind = "esc" })
+  assert_true(S9.palette_active, "T219 picker Esc clears first")
+  assert_eq(#S9.palette_items, 2, "T219 cleared query restores rows")
+  uim9._handle_key({ kind = "esc" })
+  assert_true(S9.palette_active == false, "T219 picker second Esc closes")
+  assert_notnil(auth.get(home9, "openai"), "T219 Esc deletes nothing")
+  -- named provider without an entry reports instead of removing
+  uim9._execute_command("logout", "anthropic")
+  assert_true((S9.error_banner or ""):find("no stored credential", 1, true) ~= nil,
+    "T219 missing entry banner names the state")
+  assert_notnil(auth.get(home9, "gemini"), "T219 missing entry deletes nothing")
+  -- unknown provider keeps its banner
+  uim9._execute_command("logout", "azure")
+  assert_true((S9.error_banner or ""):find("azure", 1, true) ~= nil,
+    "T219 unknown provider banner")
+  -- Enter on a picked row deletes immediately with a token-free system row
+  local entries9 = #uim9._transcript.entries()
+  uim9._execute_command("logout", "")
+  uim9._handle_key({ kind = "enter" })
+  assert_true(S9.palette_active == false, "T219 picker Enter closes")
+  assert_true(auth.get(home9, "gemini") == nil, "T219 Enter deletes the picked entry")
+  assert_notnil(auth.get(home9, "openai"), "T219 other entries untouched")
+  local after9 = uim9._transcript.entries()
+  local saw9, leaked9 = false, false
+  for i = entries9 + 1, #after9 do
+    local t = tostring(after9[i].text or "")
+    if t:find("logout", 1, true) and t:find("gemini", 1, true) then saw9 = true end
+    if t:find("tok-logout-9", 1, true) then leaked9 = true end
+  end
+  assert_true(saw9, "T219 system row confirms the removal")
+  assert_false(leaked9, "T219 system row has no token text")
+  auth.path = orig_path9
+  _G.auth = orig_auth9
+  -- empty store: no picker, banner instead
+  local home9b = tmp .. "_h9b"
+  os.execute("rm -rf '" .. home9b .. "' && mkdir -p '" .. home9b .. "/.tether'")
+  local orig_auth9b = _G.auth
+  _G.auth = auth
+  local orig_path9b = auth.path
+  auth.path = function() return home9b .. "/.tether/auth.json" end
+  local uim9b, S9b = run_ui_with({ 17 }, {
+    agent = { turn = function() return true end, get_history = function() return {} end },
+  })
+  uim9b._execute_command("logout", "")
+  assert_true(S9b.palette_active == false, "T219 empty store opens no picker")
+  assert_true((S9b.error_banner or ""):find("no stored credentials", 1, true) ~= nil,
+    "T219 empty store banner names the state")
+  auth.path = orig_path9b
+  _G.auth = orig_auth9b
+
+  print("T219 logout stored-only picker: OK")
+
   -- T151: refresh-on-401 in agent attempt loop (one refresh, then retry once)
   local names = {"agent", "session", "config", "api", "tools", "context", "tether", "retry", "auth"}
   local orig = {}
@@ -10642,6 +11196,133 @@ do
   _G.config = orig_config
 
   print("T160b cross-provider pick re-resolves endpoint: OK")
+end
+
+-- T218: palette-fuzzy-search — /model and bare /login filter as you type
+-- with the same fuzzy_rank primitive as the slash palette. Query row lives
+-- in the indicator slot; Esc clears the query first and closes second;
+-- Enter on an empty match list does nothing.
+do
+  local strip = function(s) return (s:gsub("\27%[[0-9;?%*]*[a-zA-Z]", "")) end
+  local orig_commands = _G.commands
+  _G.commands = {
+    list_sessions = function() return {} end,
+    resume = function() return nil end,
+    new = function() return "new-sid" end,
+    list_models = function()
+      return {
+        { id = "gpt-4o", name = "GPT-4o" },
+        { id = "gpt-4o-mini", name = "GPT-4o mini" },
+        { id = "claude-sonnet", name = "Claude Sonnet" },
+      }
+    end,
+    compact = function() return "", "noop" end,
+  }
+  local function type_text(u, text)
+    for i = 1, #text do u._handle_key({ kind = "text", char = text:sub(i, i) }) end
+  end
+  local uim, S = run_ui_with({ 17 }, {
+    agent = { turn = function() return true end, get_history = function() return {} end },
+  })
+  local before_model = S.model_name
+  uim._execute_command("model")
+  assert_eq(S.palette_query, "", "T218 query starts empty")
+  assert_eq(#S.palette_items, 3, "T218 empty query lists all")
+  -- arrows move, then typing resets the selection to the top match
+  uim._handle_key({ kind = "special", name = "down" })
+  assert_eq(S.palette_sel, 2, "T218 arrows move before typing")
+  type_text(uim, "cld")
+  assert_eq(S.palette_query, "cld", "T218 query accumulates text")
+  assert_eq(#S.palette_items, 1, "T218 filter narrows to one")
+  assert_eq(S.palette_items[1].label, "claude-sonnet", "T218 fuzzy match wins")
+  assert_eq(S.palette_sel, 1, "T218 selection resets on query change")
+  -- query row paint in the indicator slot
+  uim._paint(true)
+  local L = uim._layout()
+  local win = uim._palette_window(S.h, #S.palette_items, S.palette_sel)
+  assert_true(strip(uim._row(L.palette_row + win + 1)):find("> cld", 1, true) ~= nil,
+    "T218 query row shows the typed filter")
+  -- backspace edits the query and restores rows
+  uim._handle_key({ kind = "backspace" })
+  assert_eq(S.palette_query, "cl", "T218 backspace edits the query")
+  assert_eq(#S.palette_items, 1, "T218 shorter query still matches")
+  -- Esc clears first, closes second; model untouched throughout
+  uim._handle_key({ kind = "esc" })
+  assert_true(S.palette_active, "T218 first Esc keeps the palette open")
+  assert_eq(S.palette_query, "", "T218 first Esc clears the query")
+  assert_eq(#S.palette_items, 3, "T218 cleared query restores the full list")
+  uim._handle_key({ kind = "esc" })
+  assert_true(S.palette_active == false, "T218 second Esc closes")
+  assert_eq(S.model_name, before_model, "T218 Esc never changes the model")
+  -- Enter on an empty match list does nothing
+  uim._execute_command("model")
+  type_text(uim, "zzz")
+  assert_eq(#S.palette_items, 0, "T218 no match, no rows")
+  uim._handle_key({ kind = "enter" })
+  assert_true(S.palette_active, "T218 Enter on no match keeps the palette open")
+  assert_eq(S.model_name, before_model, "T218 Enter on no match changes nothing")
+  uim._handle_key({ kind = "esc" })
+  uim._handle_key({ kind = "esc" })
+  -- no-match notice in a fresh harness: each /model open echoes into the
+  -- transcript and pushes the palette down, so a used harness may have no
+  -- room left for the query row (correctly omitted then).
+  -- NOTE: ui captures _G.commands at load, so the mock must stay installed
+  -- until after run_ui_with below.
+  local uim_n, Sn = run_ui_with({ 17 }, {
+    agent = { turn = function() return true end, get_history = function() return {} end },
+  })
+  uim_n._execute_command("model")
+  type_text(uim_n, "zzz")
+  assert_eq(#Sn.palette_items, 0, "T218 fresh harness no match, no rows")
+  uim_n._paint(true)
+  local Ln = uim_n._layout()
+  local winn = uim_n._palette_window(Sn.h, #Sn.palette_items, Sn.palette_sel)
+  assert_true(strip(uim_n._row(Ln.palette_row + winn + 1)):find("> zzz (no matches)", 1, true) ~= nil,
+    "T218 no-match notice names the query")
+  _G.commands = orig_commands
+
+  -- bare /login filters provider ids the same way (catalog comes from
+  -- whatever overlay earlier tests left, so the query is derived from a
+  -- real label instead of assuming one)
+  local uim2, S2 = run_ui_with({ 17 }, {
+    agent = { turn = function() return true end, get_history = function() return {} end },
+  })
+  uim2._execute_command("login", "")
+  assert_eq(S2.palette_mode, "login", "T218 login picker opens")
+  local n_all = #S2.palette_items
+  assert_true(n_all >= 1, "T218 login lists the catalog")
+  local target = nil
+  for _, it in ipairs(S2.palette_items) do
+    if #(it.label or "") >= 4 then target = it.label; break end
+  end
+  assert_notnil(target, "T218 login has a filterable label")
+  type_text(uim2, target)
+  assert_eq(S2.palette_query, target, "T218 login query accumulates text")
+  local found = false
+  for _, it in ipairs(S2.palette_items) do
+    if it.label == target then found = true end
+    assert_notnil(uim2.fuzzy_score(S2.palette_query, it.label or ""),
+      "T218 every listed login row matches the query")
+  end
+  assert_true(found, "T218 login filter keeps the source label")
+  assert_true(#S2.palette_items <= n_all, "T218 login filter never widens")
+  assert_eq(S2.palette_sel, 1, "T218 login selection resets on query change")
+  assert_eq(S2.input, "", "T218 login filter does not touch main input")
+  -- no-match + Esc restore
+  type_text(uim2, "-zzz-no-such-provider")
+  assert_eq(#S2.palette_items, 0, "T218 login no match, no rows")
+  uim2._handle_key({ kind = "enter" })
+  assert_true(S2.palette_active, "T218 login Enter on no match keeps the picker open")
+  assert_eq(S2.login_secret, nil, "T218 no match starts no login flow")
+  uim2._handle_key({ kind = "esc" })
+  assert_true(S2.palette_active, "T218 login Esc clears first")
+  assert_eq(S2.palette_query, "", "T218 login query cleared")
+  assert_eq(#S2.palette_items, n_all, "T218 login full list restored")
+  uim2._handle_key({ kind = "esc" })
+  assert_true(S2.palette_active == false, "T218 login second Esc closes")
+  assert_eq(S2.login_secret, nil, "T218 closed picker starts no login flow")
+
+  print("T218 modal palette fuzzy search: OK")
 end
 
 -- T176: non-ASCII input (e.g. Russian) must not crash the TUI.

@@ -192,11 +192,27 @@ end
 
 -- Canonical static tool schema (OpenAI function format). Anthropic/Gemini
 -- adapters convert FROM this shape; agent.execute_tool names must match.
+--
+-- subagent allowlist: optional exact-name filter over the offered schema.
+-- Set once per process (child --print runs via --tools); nil = everything.
+-- Module state (not cfg) because provider payload builders take no cfg.
+-- Tests must reset with set_tools_filter(nil): the module table is shared.
+local tools_filter = nil
+function M.set_tools_filter(names)
+    if names == nil then tools_filter = nil return true end
+    if type(names) ~= "table" then return false end
+    local keep = {}
+    for _, n in ipairs(names) do
+        if type(n) == "string" and n ~= "" then keep[n] = true end
+    end
+    tools_filter = keep
+    return true
+end
 function M.tools_schema()
     local str = { type = "string" }
     local num = { type = "number" }
     local bool = { type = "boolean" }
-    return {
+    local out = {
         { name = "read", description = "Read file contents",
           parameters = { type = "object",
             properties = { path = str, offset = num, limit = num },
@@ -224,7 +240,24 @@ function M.tools_schema()
           parameters = { type = "object",
             properties = { command = str, cwd = str, timeout = num },
             required = { "command", _array = true } } },
+        { name = "subagent",
+          description = "Delegate work to a child agent run (single task, or "
+            .. "a parallel batch via tasks[]). Exactly one of task / tasks is "
+            .. "required. Each tasks[] item takes task plus optional model, "
+            .. "cwd, tools, timeout. Optional model overrides the run model, "
+            .. "cwd defaults to the workspace, tools restricts the child tool "
+            .. "set, timeout caps seconds per task.",
+          parameters = { type = "object",
+            properties = { task = str, tasks = { type = "array" },
+              model = str, cwd = str, tools = { type = "array" },
+              timeout = num } } },
     }
+    if tools_filter == nil then return out end
+    local kept = {}
+    for _, t in ipairs(out) do
+        if tools_filter[t.name] then kept[#kept + 1] = t end
+    end
+    return kept
 end
 
 -- Percent-encode for OAuth authorize URLs and form bodies (RFC 3986).

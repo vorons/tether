@@ -184,6 +184,9 @@ local function tool_summary(name, result)
         return (result.count or 0) .. " matches"
     elseif name == "run" then
         return "exit " .. tostring(result.exit_code or "?") .. ", " .. fmt_ms(result.elapsed_ms)
+    elseif name == "subagent" then
+        return string.format("%d task(s), exit %s, %s", result.tasks or 1,
+            tostring(result.exit_code or "?"), fmt_ms(result.elapsed_ms))
     elseif name == "write" then
         return "+" .. tostring(result.bytes or 0) .. " B"
     elseif name == "patch" then
@@ -208,6 +211,7 @@ local function tool_body(name, result)
     if not result or result.error then return nil end
     if name == "read" then return result.content end
     if name == "run" then return result.output end
+    if name == "subagent" then return result.output end
     if name == "list" then
         local parts = {}
         for _, e in ipairs(result.entries or {}) do parts[#parts + 1] = e end
@@ -241,8 +245,29 @@ local function tool_body(name, result)
     return nil
 end
 
+-- subagent depth + allowlist guard (module field, not a file-local: the
+-- chunk's local budget is reserved for state). At or above max_depth the
+-- `subagent` tool does not exist; outside an allowlist nothing does.
+-- Both report the unknown-tool contract so the model sees one rule.
+function M._tool_permitted(name, cfg)
+    if name == "subagent" then
+        local depth = (cfg and tonumber(cfg._subagent_depth)) or 0
+        local maxd = (cfg and cfg.subagents and tonumber(cfg.subagents.max_depth)) or 1
+        if depth >= maxd then return false end
+    end
+    local allow = cfg and cfg._tools_allowlist
+    if allow == nil then return true end
+    for _, n in ipairs(allow) do
+        if n == name then return true end
+    end
+    return false
+end
+
 local function execute_tool(name, args, cfg)
     -- 1.3: every tool receives cfg so -w/config.workspace applies uniformly
+    if not M._tool_permitted(name, cfg) then
+        return nil, "unknown tool: " .. tostring(name)
+    end
     if name == "read" then return tools.read(args, cfg)
     elseif name == "write" then return tools.write(args, cfg)
     elseif name == "list" then return tools.list(args, cfg)
@@ -250,6 +275,10 @@ local function execute_tool(name, args, cfg)
     elseif name == "grep" then return tools.grep(args, cfg)
     elseif name == "run" then return tools.run(args, cfg)
     elseif name == "patch" then return tools.patch(args.patch or args, cfg)
+    elseif name == "subagent" then
+        local sm = rawget(_G, "subagent")
+        if not sm or not sm.run_call then return nil, "unknown tool: subagent" end
+        return sm.run_call(args, cfg)
     else return nil, "unknown tool: " .. name
     end
 end
@@ -643,6 +672,15 @@ local function drive_pending(cfg, on_event)
         elseif call.confirm_emitted then
             -- already waiting on the user for this call; stay parked
             return false
+        elseif cfg and cfg.non_interactive then
+            -- subagent: a run with no interactive user has nobody to
+            -- confirm — deny and continue (mirrors the ask degradation)
+            -- instead of parking the turn forever.
+            record_ask_result(cfg, on_event, call,
+                "denied (no interactive user to confirm)",
+                "✗ denied (no interactive user to confirm)", true)
+            call.done = true
+            p.idx = p.idx + 1
         else
             -- needs user confirmation
             call.confirm_emitted = true

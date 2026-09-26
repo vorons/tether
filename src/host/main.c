@@ -1737,6 +1737,201 @@ static int l_fetch_bg(lua_State *L)
     _exit(0);
 }
 
+/* --- background process spawn for the subagent orchestrator ----------------
+ *
+ * tether.exec_bg_start(cmd) -> handle | nil, err
+ * tether.exec_bg_poll(handle, timeout_ms) -> "running"
+ *    | "done", exit_code | "failed", err
+ * tether.exec_bg_kill(handle) -> true (idempotent; reaps)
+ * tether.exec_bg_free(handle) -> true (kills + reaps a live child first)
+ *
+ * Unlike tether.exec (blocking, spinner quanta, Ctrl+C wired in), the bg
+ * family never blocks the loop and never touches stdin: the Lua side polls
+ * between reactor ticks and polls tether.abort_requested() itself, killing
+ * on abort. Children get their own process group so kill(-pid) ends the
+ * whole tree, mirroring l_exec; the parent repeats the setpgid best-effort
+ * to narrow the fork/exec race (either side targets the same group id).
+ * Handles reap exactly once (poll/kill/free/__gc share the helpers); a
+ * live child handed to free (or dropped for __gc) is killed first so no
+ * zombie or orphan accumulates. Stdout/stderr routing is the caller's job
+ * (the orchestrator appends shell redirection like tools.run does) — the
+ * host stays dumb. A killed child reports "done", 127; the Lua layer owns
+ * cancellation semantics (it knows it killed). */
+
+struct exec_proc {
+    pid_t pid;
+    int done;
+    int exit_code;
+    char err[128];
+};
+
+static struct exec_proc *check_exec_proc(lua_State *L, int idx)
+{
+    struct exec_proc **pp = luaL_checkudata(L, idx, "tether.exec_proc");
+    if (pp == NULL || *pp == NULL)
+        luaL_argerror(L, idx, "freed exec handle");
+    return *pp;
+}
+
+/* waitpid once (non-blocking); on exit mark done. Returns 1 when reaped.
+ * Idempotent: an already-done handle is never reaped again (a second
+ * waitpid would report ECHILD and clobber err with "lost child"). */
+static int exec_proc_reap(struct exec_proc *p)
+{
+    int st = 0;
+    pid_t w;
+    if (p->done)
+        return 1;
+    w = waitpid(p->pid, &st, WNOHANG);
+    if (w == p->pid) {
+        p->done = 1;
+        p->exit_code = WIFEXITED(st) ? WEXITSTATUS(st) : 127;
+        return 1;
+    }
+    if (w < 0 && errno != EINTR) {
+        /* lost child (reaped elsewhere): report through the status */
+        p->done = 1;
+        p->exit_code = 127;
+        snprintf(p->err, sizeof(p->err), "lost child");
+        return 1;
+    }
+    return 0;
+}
+
+/* SIGTERM the group, short grace (mirrors l_exec), then SIGKILL; reaps. */
+static void exec_proc_kill(struct exec_proc *p)
+{
+    int i;
+    if (p->done)
+        return;
+    if (exec_proc_reap(p))
+        return; /* already exited */
+    kill(-p->pid, SIGTERM);
+    for (i = 0; i < 12; i++) {
+        if (exec_proc_reap(p))
+            break;
+        {
+            struct timespec grace;
+            grace.tv_sec = 0;
+            grace.tv_nsec = 25L * 1000L * 1000L;
+            nanosleep(&grace, NULL);
+        }
+    }
+    if (p->done)
+        return;
+    kill(-p->pid, SIGKILL);
+    {
+        int st = 0;
+        pid_t w;
+        while ((w = waitpid(p->pid, &st, 0)) < 0 && errno == EINTR) { }
+        p->done = 1;
+        if (w == p->pid) {
+            p->exit_code = WIFEXITED(st) ? WEXITSTATUS(st) : 127;
+        } else {
+            p->exit_code = 127;
+            snprintf(p->err, sizeof(p->err), "lost child");
+        }
+    }
+}
+
+static int l_exec_bg_start(lua_State *L)
+{
+    const char *cmd = luaL_checkstring(L, 1);
+    pid_t pid = fork();
+    if (pid < 0) {
+        lua_pushnil(L);
+        lua_pushstring(L, strerror(errno));
+        return 2;
+    }
+    if (pid == 0) {
+        setpgid(0, 0);
+        execl("/bin/sh", "sh", "-c", cmd, (char *)NULL);
+        _exit(127);
+    }
+    setpgid(pid, pid); /* best effort: narrows the fork/exec race, see above */
+    struct exec_proc *p = calloc(1, sizeof(*p));
+    if (p == NULL) {
+        /* leak-free failure: the child is already running; kill + reap it */
+        kill(-pid, SIGKILL);
+        {
+            int st = 0;
+            while (waitpid(pid, &st, 0) < 0 && errno == EINTR) { }
+        }
+        lua_pushnil(L);
+        lua_pushstring(L, "out of memory");
+        return 2;
+    }
+    p->pid = pid;
+    struct exec_proc **pp = lua_newuserdatauv(L, sizeof(*pp), 0);
+    *pp = p;
+    luaL_getmetatable(L, "tether.exec_proc");
+    lua_setmetatable(L, -2);
+    return 1;
+}
+
+static int l_exec_bg_poll(lua_State *L)
+{
+    struct exec_proc *p = check_exec_proc(L, 1);
+    long timeout_ms = luaL_optinteger(L, 2, 50);
+    long waited = 0;
+    struct timespec quantum;
+    if (timeout_ms < 0)
+        timeout_ms = 0;
+    quantum.tv_sec = 0;
+    quantum.tv_nsec = 10L * 1000L * 1000L;
+    for (;;) {
+        if (exec_proc_reap(p))
+            break;
+        if (waited >= timeout_ms)
+            break;
+        nanosleep(&quantum, NULL);
+        waited += 10;
+    }
+    if (p->done) {
+        if (p->err[0] != '\0') {
+            lua_pushstring(L, "failed");
+            lua_pushstring(L, p->err);
+            return 2;
+        }
+        lua_pushstring(L, "done");
+        lua_pushinteger(L, p->exit_code);
+        return 2;
+    }
+    lua_pushstring(L, "running");
+    return 1;
+}
+
+static int l_exec_bg_kill(lua_State *L)
+{
+    struct exec_proc *p = check_exec_proc(L, 1);
+    exec_proc_kill(p);
+    lua_pushboolean(L, 1);
+    return 1;
+}
+
+static int l_exec_bg_free(lua_State *L)
+{
+    struct exec_proc **pp = luaL_checkudata(L, 1, "tether.exec_proc");
+    if (pp != NULL && *pp != NULL) {
+        exec_proc_kill(*pp); /* no-op when already done; reaps */
+        free(*pp);
+        *pp = NULL;
+    }
+    lua_pushboolean(L, 1);
+    return 1;
+}
+
+static int l_exec_proc_gc(lua_State *L)
+{
+    struct exec_proc **pp = luaL_checkudata(L, 1, "tether.exec_proc");
+    if (pp != NULL && *pp != NULL) {
+        exec_proc_kill(*pp);
+        free(*pp);
+        *pp = NULL;
+    }
+    return 0;
+}
+
 /* tether.http_get(url, headers, timeout_s) -> body | nil, err
  *
  * timeout_s is the total request timeout in seconds (default 30). A status of
@@ -1960,6 +2155,10 @@ static luaL_Reg tether_api[] = {
     {"poll",        l_poll},
     {"set_tick_hook", l_set_tick_hook},
     {"fetch_bg",    l_fetch_bg},
+    {"exec_bg_start", l_exec_bg_start},
+    {"exec_bg_poll",  l_exec_bg_poll},
+    {"exec_bg_kill",  l_exec_bg_kill},
+    {"exec_bg_free",  l_exec_bg_free},
     {"resize_requested", l_resize_requested},
     {"sleep",         l_sleep},
     {"abort_requested", l_abort_requested},
@@ -1978,6 +2177,10 @@ static void open_tether_api(lua_State *L)
     lua_setglobal(L, "tether");
     luaL_newmetatable(L, "tether.http_xfer");
     lua_pushcfunction(L, l_xfer_gc);
+    lua_setfield(L, -2, "__gc");
+    lua_pop(L, 1);
+    luaL_newmetatable(L, "tether.exec_proc");
+    lua_pushcfunction(L, l_exec_proc_gc);
     lua_setfield(L, -2, "__gc");
     lua_pop(L, 1);
 }
@@ -2059,6 +2262,8 @@ int main(int argc, char **argv)
         { ui_lua,     "ui"     },
         { config_lua, "config" },
         { tools_lua,  "tools"  },
+        /* subagent: child-run orchestrator for the subagent tool */
+        { subagent_lua,  "subagent"  },
         /* provider_catalog: preset table api/config/ui resolve (Tier-A adds no modules) */
         { provider_openai_lua,    "provider_openai"    },
         { provider_anthropic_lua, "provider_anthropic" },

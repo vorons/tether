@@ -1487,6 +1487,156 @@ static void test_read_char_nb_never_waits(lua_State *L)
     }
 }
 
+static void test_exec_bg(lua_State *L)
+{
+    /* start("true") -> poll to done, exit 0, free */
+    lua_getglobal(L, "tether");
+    lua_getfield(L, -1, "exec_bg_start");
+    lua_remove(L, -2);
+    lua_pushstring(L, "true");
+    if (lua_pcall(L, 1, 2, 0) != LUA_OK) {
+        report_lua_error(L, "exec_bg_start");
+        return;
+    }
+    if (lua_isnil(L, -2)) {
+        check(0, "exec_bg_start(true) spawns");
+        lua_pop(L, 2);
+        return;
+    }
+    lua_pop(L, 1); /* drop nil error slot */
+    check(luaL_testudata(L, -1, "tether.exec_proc") != NULL,
+          "exec_bg_start returns a proc handle");
+    int hidx = lua_gettop(L);
+    const char *status = "running";
+    int code = -1, i;
+    for (i = 0; i < 200 && strcmp(status, "running") == 0; i++) {
+        lua_getglobal(L, "tether");
+        lua_getfield(L, -1, "exec_bg_poll");
+        lua_remove(L, -2);
+        lua_pushvalue(L, hidx);
+        lua_pushinteger(L, 50);
+        if (lua_pcall(L, 2, 2, 0) != LUA_OK) {
+            report_lua_error(L, "exec_bg_poll");
+            break;
+        }
+        status = lua_tostring(L, -2);
+        if (status != NULL && strcmp(status, "done") == 0)
+            code = (int)lua_tointeger(L, -1);
+        lua_pop(L, 2);
+    }
+    check(status != NULL && strcmp(status, "done") == 0,
+          "exec_bg short command completes");
+    check(code == 0, "exec_bg true exits 0");
+    lua_getglobal(L, "tether");
+    lua_getfield(L, -1, "exec_bg_free");
+    lua_remove(L, -2);
+    lua_pushvalue(L, hidx);
+    if (lua_pcall(L, 1, 1, 0) != LUA_OK) {
+        report_lua_error(L, "exec_bg_free");
+    } else {
+        check(lua_toboolean(L, -1) == 1, "exec_bg_free reports success");
+        lua_pop(L, 1);
+    }
+    lua_pop(L, 1); /* drop the freed handle */
+
+    /* start("sleep 30") -> poll(0) running -> kill -> done; free */
+    lua_getglobal(L, "tether");
+    lua_getfield(L, -1, "exec_bg_start");
+    lua_remove(L, -2);
+    lua_pushstring(L, "sleep 30");
+    if (lua_pcall(L, 1, 2, 0) != LUA_OK) {
+        report_lua_error(L, "exec_bg_start");
+        return;
+    }
+    if (lua_isnil(L, -2)) {
+        check(0, "exec_bg_start(sleep) spawns");
+        lua_pop(L, 2);
+        return;
+    }
+    lua_pop(L, 1);
+    hidx = lua_gettop(L);
+    lua_getglobal(L, "tether");
+    lua_getfield(L, -1, "exec_bg_poll");
+    lua_remove(L, -2);
+    lua_pushvalue(L, hidx);
+    lua_pushinteger(L, 0);
+    if (lua_pcall(L, 2, 1, 0) != LUA_OK) {
+        report_lua_error(L, "exec_bg_poll");
+    } else {
+        check(lua_tostring(L, -1) != NULL && strcmp(lua_tostring(L, -1), "running") == 0,
+              "exec_bg long command still running on zero-timeout poll");
+        lua_pop(L, 1);
+    }
+    lua_getglobal(L, "tether");
+    lua_getfield(L, -1, "exec_bg_kill");
+    lua_remove(L, -2);
+    lua_pushvalue(L, hidx);
+    if (lua_pcall(L, 1, 1, 0) != LUA_OK) {
+        report_lua_error(L, "exec_bg_kill");
+    } else {
+        check(lua_toboolean(L, -1) == 1, "exec_bg_kill reports success");
+        lua_pop(L, 1);
+    }
+    status = "running";
+    code = -1;
+    for (i = 0; i < 40 && strcmp(status, "running") == 0; i++) {
+        lua_getglobal(L, "tether");
+        lua_getfield(L, -1, "exec_bg_poll");
+        lua_remove(L, -2);
+        lua_pushvalue(L, hidx);
+        lua_pushinteger(L, 100);
+        if (lua_pcall(L, 2, 2, 0) != LUA_OK) {
+            report_lua_error(L, "exec_bg_poll");
+            break;
+        }
+        status = lua_tostring(L, -2);
+        if (status != NULL && strcmp(status, "done") == 0)
+            code = (int)lua_tointeger(L, -1);
+        lua_pop(L, 2);
+    }
+    check(status != NULL && strcmp(status, "done") == 0,
+          "exec_bg killed child reports done");
+    check(code == 127, "exec_bg signal death maps to 127");
+    lua_getglobal(L, "tether");
+    lua_getfield(L, -1, "exec_bg_free");
+    lua_remove(L, -2);
+    lua_pushvalue(L, hidx);
+    if (lua_pcall(L, 1, 1, 0) != LUA_OK) {
+        report_lua_error(L, "exec_bg_free");
+    } else {
+        lua_pop(L, 1);
+    }
+    lua_pop(L, 1);
+
+    /* free on a live child kills + reaps without hanging the caller */
+    lua_getglobal(L, "tether");
+    lua_getfield(L, -1, "exec_bg_start");
+    lua_remove(L, -2);
+    lua_pushstring(L, "sleep 30");
+    if (lua_pcall(L, 1, 2, 0) != LUA_OK) {
+        report_lua_error(L, "exec_bg_start");
+        return;
+    }
+    if (lua_isnil(L, -2)) {
+        check(0, "exec_bg_start(sleep) spawns");
+        lua_pop(L, 2);
+        return;
+    }
+    lua_pop(L, 1);
+    hidx = lua_gettop(L);
+    lua_getglobal(L, "tether");
+    lua_getfield(L, -1, "exec_bg_free");
+    lua_remove(L, -2);
+    lua_pushvalue(L, hidx);
+    if (lua_pcall(L, 1, 1, 0) != LUA_OK) {
+        report_lua_error(L, "exec_bg_free");
+    } else {
+        check(lua_toboolean(L, -1) == 1, "exec_bg_free on a live child succeeds");
+        lua_pop(L, 1);
+    }
+    lua_pop(L, 1);
+}
+
 int main(void)
 {
     char dir[256], nested[512], f1[512], f2[512];
@@ -1609,6 +1759,7 @@ int main(void)
     test_tls_verification(L);
     test_interrupt_watch(L);
     test_interrupt_aborts_transfer(L);
+    test_exec_bg(L);
 
     lua_close(L);
 

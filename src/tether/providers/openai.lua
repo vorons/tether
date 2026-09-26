@@ -330,9 +330,18 @@ function M.header_lines(api_key, ctx)
     if provider == "opencode" or provider == "opencode-go" then
         -- pi providers/opencode-headers.ts: required per-conversation
         -- routing header; omitted (never empty) when no session id.
+        -- zen-honest-headers: full honest header set. X-Session-Id and
+        -- x-session-affinity carry the same session id upstream (session
+        -- correlation + sticky routing); User-Agent / x-opencode-client
+        -- identify tether honestly (never mimic opencode-cli/* or cli).
+        -- x-opencode-project is NOT sent: no honest equivalent exists.
+        lines[#lines + 1] = "User-Agent: tether"
+        lines[#lines + 1] = "x-opencode-client: tether"
         local sid = (type(ctx) == "table" and ctx.session_id) or nil
         if type(sid) == "string" and sid ~= "" then
             lines[#lines + 1] = "x-opencode-session: " .. sid
+            lines[#lines + 1] = "X-Session-Id: " .. sid
+            lines[#lines + 1] = "x-session-affinity: " .. sid
         end
     elseif provider == "github-copilot" then
         -- pi api/github-copilot-headers.ts + COPILOT_STATIC_HEADERS.

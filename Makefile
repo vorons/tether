@@ -2,7 +2,7 @@ CC      ?= cc
 CFLAGS  ?= -std=c11 -Wall -Wextra -Werror -O2 -D_POSIX_C_SOURCE=200809L
 LUA_DIR = vendor/lua-5.4.6/src
 EMBED_OUT = src/host/embed.c
-LUA_MODS = src/tether/app.lua src/tether/ui.lua src/tether/transcript.lua src/tether/commands.lua src/tether/turn.lua src/tether/config.lua src/tether/session.lua src/tether/api.lua src/tether/agent.lua src/tether/tools.lua src/tether/diff.lua src/tether/retry.lua src/tether/ask.lua src/tether/confirm_policy.lua src/tether/auth.lua src/tether/reactor.lua src/tether/providers/common.lua src/tether/providers/catalog.lua src/tether/providers/openai.lua src/tether/providers/anthropic.lua src/tether/providers/gemini.lua src/tether/providers/azure-openai.lua src/tether/providers/amazon-bedrock.lua src/tether/providers/google-vertex.lua src/tether/providers/cloudflare-ai-gateway.lua src/tether/providers/radius.lua src/tether/providers/openai-codex.lua
+LUA_MODS = src/tether/app.lua src/tether/ui.lua src/tether/transcript.lua src/tether/commands.lua src/tether/turn.lua src/tether/config.lua src/tether/session.lua src/tether/api.lua src/tether/agent.lua src/tether/tools.lua src/tether/subagent.lua src/tether/diff.lua src/tether/retry.lua src/tether/ask.lua src/tether/confirm_policy.lua src/tether/auth.lua src/tether/reactor.lua src/tether/providers/common.lua src/tether/providers/catalog.lua src/tether/providers/openai.lua src/tether/providers/anthropic.lua src/tether/providers/gemini.lua src/tether/providers/azure-openai.lua src/tether/providers/amazon-bedrock.lua src/tether/providers/google-vertex.lua src/tether/providers/cloudflare-ai-gateway.lua src/tether/providers/radius.lua src/tether/providers/openai-codex.lua
 
 LUA_SRCS = lapi.c lauxlib.c lbaselib.c lcode.c lcorolib.c lctype.c \
            ldblib.c ldebug.c ldo.c ldump.c lfunc.c lgc.c linit.c \
@@ -107,6 +107,7 @@ $(EMBED_OUT): $(LUA_MODS) tools/embed.lua
 		context_lua src/tether/context.lua \
 		agent_lua src/tether/agent.lua \
 		tools_lua src/tether/tools.lua \
+		subagent_lua src/tether/subagent.lua \
 		diff_lua src/tether/diff.lua
 
 test: tether
@@ -137,6 +138,7 @@ test: tether
 	@luac -p src/tether/reactor.lua
 	@luac -p src/tether/context.lua
 	@luac -p src/tether/tools.lua
+	@luac -p src/tether/subagent.lua
 	@luac -p src/tether/diff.lua
 	@echo "=== luac ok ==="
 	@LUA_HOME=$$(mktemp -d); rm -rf "$$LUA_HOME"; mkdir -p "$$LUA_HOME"; \
