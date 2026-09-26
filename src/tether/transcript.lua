@@ -476,7 +476,22 @@ function M.ensure_index(width)
     local from, rows = 1, 0
     if index_w == width and index_dirty_from and index_dirty_from <= n then
         from = index_dirty_from
-        rows = (from > 1) and (index_start[from - 1] or 0) or 0
+        -- Resume AFTER the last clean entry, not on its start row:
+        -- index_start[i] is the row entry i begins on, so entries 1..from-1
+        -- occupy index_start[from-1] .. index_start[from-1]+index_h[from-1]-1.
+        -- Anchoring at the start row instead re-anchored every rebuilt entry
+        -- index_h[from-1]-1 rows too high, so the last clean entry's tail was
+        -- clobbered by the rebuilt block's leading gap (a frozen think's gap
+        -- swallowed the user row, which then "came back" on the next full
+        -- rebuild — a floating misplacement after any think-then-tool-call).
+        if from > 1 then
+            local ps, ph = index_start[from - 1], index_h[from - 1]
+            if ps and ph then
+                rows = ps + ph - 1
+            else
+                from = 1 -- index gap (invariant broke): rebuild from the top
+            end
+        end
     else
         index_start, index_h = {}, {}
     end

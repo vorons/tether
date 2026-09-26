@@ -12444,6 +12444,76 @@ do
   print("T188 blank assistant row suppressed: OK")
 end
 
+-- T188b: the incremental height index must resume from the row AFTER the last
+-- clean entry, not from that entry's START row. Regression for the floating
+-- "user row vanishes when think ends" bug: tool_call_start's bump() raised
+-- index_dirty_from while the index was already clean (the think block had been
+-- frozen by the preceding text_delta, so no touch pulled dirty_from back to
+-- 1). The rebuild then re-anchored every following entry index_h[from-1]-1
+-- rows too high: the think block's leading gap swallowed the user row (it
+-- vanished from the chat) and later rows overlapped. The next full rebuild
+-- repaired it, which is why the row "came back" on the following tool call.
+do
+  local function str_bytes(s)
+    local b = {}
+    for i = 1, #s do b[#b + 1] = s:byte(i) end
+    return b
+  end
+  local function merge(a, b) for _, x in ipairs(b) do a[#a + 1] = x end return a end
+  -- viewport path (row_text, height-indexed) must equal the full render, row
+  -- for row — that parity is what keeps the painted screen on the truth
+  local function parity(uimod, width)
+    local tr = uimod._transcript
+    local total = tr.height(width)
+    local full = tr.render_all(width)
+    if total ~= #full then
+      return false, string.format("height %d vs render_all %d", total, #full)
+    end
+    for k = 1, #full do
+      local got = tr.row_text(k, width)
+      if got ~= full[k] then
+        return false, string.format("row %d: viewport %q vs render %q", k, got, full[k])
+      end
+    end
+    return true
+  end
+
+  local bytes = merge(merge(str_bytes("hello there"), { 13 }), { 17 })
+  local uimod, S = run_ui_with(bytes,
+    { agent = { turn = function() return true end, get_history = function() return {} end } })
+  assert_eq(#tentries(uimod), 2, "T188b submit leaves separator + user")
+
+  -- think streams, then ends on an assistant text delta (freezes the think
+  -- block, appends an assistant row), then the tool call bumps the index
+  uimod._handle_agent_event({ type = "reasoning_delta", text = "planning the work" })
+  uimod._paint(true)
+  local ok, why = parity(uimod, 80)
+  assert_true(ok, "T188b parity while think streams: " .. tostring(why))
+
+  uimod._handle_agent_event({ type = "text_delta", text = "let me read the file" })
+  uimod._paint(true)
+  ok, why = parity(uimod, 80)
+  assert_true(ok, "T188b parity after think freezes: " .. tostring(why))
+
+  uimod._handle_agent_event({ type = "tool_call_start", id = "t1", name = "read",
+    args = { path = "/tmp/foo.txt" } })
+  uimod._paint(true)
+  ok, why = parity(uimod, 80)
+  assert_true(ok, "T188b parity after the tool call: " .. tostring(why))
+
+  -- the user row specifically must still map to its own content
+  local full = uimod._render_all(80)
+  local user_row
+  for k, r in ipairs(full) do
+    if (r:gsub("\27%[[%d;]*m", "")):find("› hello there", 1, true) then user_row = k end
+  end
+  assert_notnil(user_row, "T188b the user row is rendered")
+  local mapped = user_row and uimod._transcript.row_text(user_row, 80) or ""
+  assert_true((mapped:gsub("\27%[[%d;]*m", "")):find("hello there", 1, true) ~= nil,
+    "T188b the user row maps to itself under the height index")
+  print("T188b incremental index resumes after the last clean entry: OK")
+end
+
 -- T189: add-reasoning-level — the config key defaults to `off`, normalizes
 -- at load (unknown/missing/non-string never fails the session), and the
 -- bootstrap file carries it.
