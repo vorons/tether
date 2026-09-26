@@ -61,7 +61,7 @@ local function reset_sandbox()
     -- wipe skill + agents files
     os.execute("rm -rf " .. WS .. "/.tether/skills " .. WS .. "/.agents/skills")
     os.execute("rm -rf " .. HOME .. "/.tether/skills " .. HOME .. "/.agents/skills")
-    os.execute("rm -f " .. WS .. "/AGENTS.md " .. HOME .. "/AGENTS.md")
+    os.execute("rm -f " .. WS .. "/AGENTS.md " .. HOME .. "/.tether/AGENTS.md")
     os.execute("mkdir -p " .. WS .. "/.tether/skills " .. WS .. "/.agents/skills")
     os.execute("mkdir -p " .. HOME .. "/.tether/skills " .. HOME .. "/.agents/skills")
 end
@@ -129,7 +129,7 @@ local ctx = load_context()
 -- ============ 1. AGENTS.md discovery order ============
 do
     reset_sandbox()
-    write_file(HOME .. "/AGENTS.md", "home-rules")
+    write_file(HOME .. "/.tether/AGENTS.md", "home-rules")
     write_file(WS .. "/AGENTS.md", "ws-rules")
 
     local auto = ctx.load_agents_files(WS)
@@ -236,7 +236,7 @@ end
 -- ============ 6. compose ordering & content ============
 do
     reset_sandbox()
-    write_file(HOME .. "/AGENTS.md", "home-rules")
+    write_file(HOME .. "/.tether/AGENTS.md", "home-rules")
     write_file(WS .. "/AGENTS.md", "ws-rules")
     os.execute("mkdir -p " .. WS .. "/.tether/skills/deploy")
     write_file(WS .. "/.tether/skills/deploy/SKILL.md",

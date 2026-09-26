@@ -33,7 +33,7 @@ order:
 
 1. The base: `system_prompt` from `~/.tether/config.lua` when set, otherwise
    the built-in tool description.
-2. `AGENTS.md` auto-discovered at `$HOME/AGENTS.md`, then
+2. `AGENTS.md` auto-discovered at `$HOME/.tether/AGENTS.md`, then
    `<workspace>/AGENTS.md` (missing files ignored; unreadable files warn on
    stderr). Each AGENTS.md file is capped at 16 KB.
 3. Explicit agents files: `agents_files` from the config, then the repeatable

@@ -149,7 +149,7 @@ function M.load_agents_files(workspace)
     local home = os.getenv("HOME") or ""
     local sections = {}
     local candidates = {
-        { label = "home", path = home ~= "" and (home .. "/AGENTS.md") or nil },
+        { label = "home", path = home ~= "" and (home .. "/.tether/AGENTS.md") or nil },
         { label = "workspace", path = workspace and (workspace .. "/AGENTS.md") or nil },
     }
     for _, c in ipairs(candidates) do

@@ -22,7 +22,7 @@ EXPECTED="$SB/expected_system.md"
 mkdir -p "$WS/.tether/skills/deploy" "$HOME_DIR/.tether/skills"
 
 # --- fixtures ---------------------------------------------------------------
-printf 'home-rules-marker\n' > "$HOME_DIR/AGENTS.md"
+printf 'home-rules-marker\n' > "$HOME_DIR/.tether/AGENTS.md"
 printf 'ws-rules-marker\n' > "$WS/AGENTS.md"
 printf -- '---\nname: deploy\ndescription: Ship the app\n---\n# Deploy skill body\n' \
     > "$WS/.tether/skills/deploy/SKILL.md"
