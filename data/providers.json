@@ -1,5 +1,5 @@
 {
- "generated_at": 1790356078,
+ "generated_at": 1790414442,
  "providers": {
   "302ai": {
    "api_key_env": [
@@ -7045,6 +7045,10 @@
      "id": "cloudflare/@cf/zai-org/glm-4.7-flash"
     },
     {
+     "context": 128000,
+     "id": "cohere/c4ai-aya-expanse-32b"
+    },
+    {
      "context": 288000,
      "id": "cohere/command-a-03-2025"
     },
@@ -7183,6 +7187,10 @@
     {
      "context": 262144,
      "id": "deepinfra/tencent/Hy3"
+    },
+    {
+     "context": 1048576,
+     "id": "deepinfra/tencent/Hy4-preview"
     },
     {
      "context": 524288,
@@ -8629,10 +8637,6 @@
      "id": "accounts/fireworks/routers/deepseek-flash-latest"
     },
     {
-     "context": 1000000,
-     "id": "accounts/fireworks/routers/deepseek-pro-latest"
-    },
-    {
      "context": 1048575,
      "id": "accounts/fireworks/routers/glm-5p2-fast"
     },
@@ -8773,10 +8777,6 @@
     {
      "context": 1000000,
      "id": "accounts/fireworks/routers/deepseek-flash-latest"
-    },
-    {
-     "context": 1000000,
-     "id": "accounts/fireworks/routers/deepseek-pro-latest"
     },
     {
      "context": 1048575,
@@ -12243,7 +12243,7 @@
     "KILO_API_KEY"
    ],
    "base_url": "https://api.kilo.ai/api/gateway",
-   "model": "fireworks/ember-1",
+   "model": "perceptron/perceptron-mk1.5",
    "models": [
     {
      "context": 131072,
@@ -12292,10 +12292,6 @@
     {
      "context": 32768,
      "id": "anthracite-org/magnum-v4-72b"
-    },
-    {
-     "context": 200000,
-     "id": "anthropic/claude-3-haiku"
     },
     {
      "context": 1000000,
@@ -13214,6 +13210,10 @@
      "id": "perceptron/perceptron-mk1"
     },
     {
+     "context": 36864,
+     "id": "perceptron/perceptron-mk1.5"
+    },
+    {
      "context": 127072,
      "id": "perplexity/sonar"
     },
@@ -13718,11 +13718,7 @@
      "id": "z-ai/glm-5.2"
     },
     {
-     "context": 131072,
-     "id": "z-ai/glm-5.2:free"
-    },
-    {
-     "context": 1048575,
+     "context": 1048576,
      "id": "z-ai/glm-5.3"
     },
     {
@@ -13758,7 +13754,7 @@
      "id": "~anthropic/claude-sonnet-latest"
     },
     {
-     "context": 1048576,
+     "context": 1040000,
      "id": "~deepseek/deepseek-flash-latest"
     },
     {
@@ -17868,6 +17864,10 @@
      "id": "TEE/qwen3.8-27b"
     },
     {
+     "context": 262144,
+     "id": "TEE/qwen3.8-27b-uncensored"
+    },
+    {
      "context": 128000,
      "id": "THUDM/GLM-4-32B-0414"
     },
@@ -19334,6 +19334,10 @@
     {
      "context": 32768,
      "id": "perceptron/perceptron-mk1"
+    },
+    {
+     "context": 36864,
+     "id": "perceptron/perceptron-mk1.5"
     },
     {
      "context": 128000,
@@ -23125,10 +23129,6 @@
      "id": "anthracite-org/magnum-v4-72b"
     },
     {
-     "context": 200000,
-     "id": "anthropic/claude-3-haiku"
-    },
-    {
      "context": 1000000,
      "id": "anthropic/claude-fable-5"
     },
@@ -24037,6 +24037,10 @@
      "id": "perceptron/perceptron-mk1"
     },
     {
+     "context": 36864,
+     "id": "perceptron/perceptron-mk1.5"
+    },
+    {
      "context": 127072,
      "id": "perplexity/sonar"
     },
@@ -24389,11 +24393,11 @@
      "id": "thedrummer/unslopnemo-12b"
     },
     {
-     "context": 1048576,
+     "context": 524288,
      "id": "thinkingmachines/inkling"
     },
     {
-     "context": 1048576,
+     "context": 524288,
      "id": "thinkingmachines/inkling-small"
     },
     {
@@ -24469,7 +24473,7 @@
      "id": "xiaomi/mimo-v2.6-flash"
     },
     {
-     "context": 1048576,
+     "context": 1050000,
      "id": "xiaomi/mimo-v2.6-pro"
     },
     {
@@ -24519,10 +24523,6 @@
     {
      "context": 1048576,
      "id": "z-ai/glm-5.2"
-    },
-    {
-     "context": 131072,
-     "id": "z-ai/glm-5.2:free"
     },
     {
      "context": 1310720,
