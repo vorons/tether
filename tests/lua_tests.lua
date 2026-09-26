@@ -12840,6 +12840,41 @@ do
   print("T215 turn timestamp block gap: OK")
 end
 
+-- T216: the muted role (darker than dim) carries tool times, think times and
+-- tool result counts; tool arguments stay dim.
+do
+  local uimod, S = run_ui_with({ 17 },
+    { agent = { turn = function() return true end, get_history = function() return {} end } })
+  uimod._handle_agent_event({ type = "reasoning_delta", text = "hmm" })
+  uimod._handle_agent_event({ type = "tool_call_start", id = "t1", name = "read",
+    args = { path = "src/x.lua" } })
+  local rows = uimod._render_all(80)
+  local think, pend = nil, nil
+  for _, r in ipairs(rows) do
+    if r:find("think ·", 1, true) then think = r end
+    if r:find("read", 1, true) then pend = r end
+  end
+  assert_notnil(think, "T216 the think header is painted")
+  assert_true(think:find("%[2;30m\27%[3m%d+%.%ds", 1) ~= nil,
+    "T216 the think time is muted")
+  assert_notnil(pend, "T216 the pending tool row is painted")
+  assert_true(pend:find("%[2;30m%d+%.%ds", 1) ~= nil,
+    "T216 the pending tool time is muted")
+  assert_true(pend:find("[2msrc/x.lua", 1, true) ~= nil,
+    "T216 the tool argument is dim")
+  uimod._handle_agent_event({ type = "tool_result", id = "t1",
+    summary = "25 matches", body = "" })
+  rows = uimod._render_all(80)
+  local done = nil
+  for _, r in ipairs(rows) do
+    if r:find("read", 1, true) then done = r end
+  end
+  assert_notnil(done, "T216 the done tool row is painted")
+  assert_true(done:find("[2;30m25 matches", 1, true) ~= nil,
+    "T216 the result count is muted")
+  print("T216 muted times, counts and dim args: OK")
+end
+
 if failed > 0 then
     os.exit(1)
 end

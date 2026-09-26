@@ -123,7 +123,7 @@ end
 local THEMES = {
     default = {
         accent = "36;1", warn = "33;1", error = "31;1", success = "32",
-        dim = "2", italic = "3", reverse = "7", bold = "1",
+        dim = "2", muted = "2;30", italic = "3", reverse = "7", bold = "1",
         -- 7.1: syntax roles (token kinds); default to 16-color codes so
         -- truecolor/256 render with the same palette. ponytail: no brighter
         -- per-depth variants; add one if a 256-color theme gets complaints.
@@ -132,7 +132,7 @@ local THEMES = {
     },
     solarized = {
         accent = "36", warn = "33", error = "31", success = "32",
-        dim = "2", italic = "3", reverse = "7", bold = "1",
+        dim = "2", muted = "2;30", italic = "3", reverse = "7", bold = "1",
         comment = "2;38", string = "32", number = "33", keyword = "36",
         code = "35", heading = "36;1",
     },
@@ -163,6 +163,7 @@ local function yellow(s) return sgr_role("warn",    s) end
 local function red(s)    return sgr_role("error",   s) end
 local function green(s)  return sgr_role("success", s) end
 local function dim(s)    return sgr_role("dim",     s) end
+local function muted(s)  return sgr_role("muted",   s) end
 local function italic(s) return sgr_role("italic",  s) end
 local function rev(s)    return sgr_role("reverse", s) end
 
@@ -1425,7 +1426,8 @@ M._row = function(row) return S and S.screen[row] or nil end
 -- unified-slash-palette 1.2: skill rows for the palette. Discovery is injected
 -- so tests can stub it (M._skills_stub, mirroring M._tools_stub); a discovery
 -- problem degrades to no rows instead of breaking the palette.
-local PALETTE_SKILL_HINT = "[skill]"
+-- (the "[skill]" row hint is inlined at its single use site to stay under
+-- Lua's 200-locals-per-chunk limit alongside the theme role helpers)
 
 local function discover_palette_skills()
     local ok, res
@@ -1461,7 +1463,7 @@ local function palette_skill_rows()
             rows[#rows + 1] = {
                 label = "/" .. name,
                 desc = sk.description or "",
-                hint = PALETTE_SKILL_HINT,
+                hint = "[skill]",
                 skill = true,
                 name = name,
                 path = sk.path or "",
@@ -2322,9 +2324,11 @@ local function render_entry(e, width, prev_role)
             local secs = os.time() - (e.started_at or os.time())
             if secs < 0 then secs = 0 end
             if not S.thinking_visible then
-                out = { mark .. " " .. dim(string.format("think · %.1fs · (ctrl+t) ▸", secs)) }
+                out = { mark .. " " .. dim("think · ") .. muted(string.format("%.1fs", secs))
+                    .. dim(" · (ctrl+t) ▸") }
             else
-                local to = { mark .. " " .. dim(italic(string.format("think · %.1fs ▾", secs))) }
+                local to = { mark .. " " .. dim(italic("think · "))
+                    .. muted(italic(string.format("%.1fs", secs))) .. dim(italic(" ▾")) }
                 -- header only while no reasoning text has arrived: wrap("")
                 -- yields one empty line and would paint a stray blank row
                 -- under the header
@@ -2358,14 +2362,14 @@ local function render_entry(e, width, prev_role)
                 if label and label ~= "" then
                     label = sanitize_output(label:match("^[^\n]*") or "")
                     local budget = width - vlen(head) - 1
-                    if budget >= 4 then head = head .. " " .. clip(label, budget) end
+                    if budget >= 4 then head = head .. " " .. dim(clip(label, budget)) end
                 end
             end
             if e.status == "pending" then
                 -- M8/R3: pending tools show live elapsed time
                 if e.started_at then
                     local secs = os.time() - e.started_at
-                    head = head .. "  " .. dim(string.format("%.1fs", secs))
+                    head = head .. "  " .. muted(string.format("%.1fs", secs))
                 end
             elseif e.status == "error" then
                 local raw = (e.body ~= nil and e.body ~= "") and e.body or (e.summary or "")
@@ -2375,7 +2379,7 @@ local function render_entry(e, width, prev_role)
                 if budget >= 1 then head = head .. " " .. red(clip(first, budget)) end
                 head = trunc(head, width)
             elseif e.summary and e.summary ~= "" then
-                head = head .. "  " .. dim(e.summary)
+                head = head .. "  " .. muted(e.summary)
             end
             -- 4.4: the write/patch row carries the +N -M meter.
             if e.status ~= "error" and (e.name == "write" or e.name == "patch") and diff_mod then
@@ -2707,8 +2711,8 @@ end
 
 -- A rule row: the box's top and bottom rules. It can carry the turn's status at
 -- the left (pi's "── status ────") and a centered "N more" label naming the
--- input rows the window hides. Always exactly `width` columns, dim in every
--- theme; the ASCII rules come from GLYPH_MAP through dim().
+-- input rows the window hides. Always exactly `width` columns, muted in every
+-- theme; the ASCII rules come from GLYPH_MAP through muted().
 local function rule_row(width, status, label)
     if width <= 0 then return "" end
     local function fill(n) return string.rep(RULE_GLYPH, math.max(0, n)) end
@@ -2721,12 +2725,12 @@ local function rule_row(width, status, label)
             local left_block = 3 + sw + 1
             -- the label survives only when it clears the status by a column
             if lw + 2 <= width and start - left_block >= 1 then
-                return dim(fill(3)) .. status ..
-                    dim(" " .. fill(start - left_block) .. label ..
+                return muted(fill(3)) .. status ..
+                    muted(" " .. fill(start - left_block) .. label ..
                         fill(width - start - lw))
             end
         end
-        return dim(fill(3)) .. status .. dim(" " .. fill(rest))
+        return muted(fill(3)) .. status .. muted(" " .. fill(rest))
     end
     if status and sw > 0 then
         -- too narrow for the "── " head: the status alone, truncated to fit
@@ -2739,7 +2743,7 @@ local function rule_row(width, status, label)
             return dim(fill(start) .. label .. fill(width - start - lw))
         end
     end
-    return dim(fill(width))
+    return muted(fill(width))
 end
 
 -- The turn's status for the box's top rule: the spinner with Working... while
@@ -2989,10 +2993,10 @@ local function render_footer(L)
 
     local stats = {}
     if (S.tokens_in or 0) > 0 then
-        stats[#stats + 1] = dim("↑" .. M.format_count(S.tokens_in))
+        stats[#stats + 1] = muted("↑" .. M.format_count(S.tokens_in))
     end
     if (S.tokens_out or 0) > 0 then
-        stats[#stats + 1] = dim("↓" .. M.format_count(S.tokens_out))
+        stats[#stats + 1] = muted("↓" .. M.format_count(S.tokens_out))
     end
     if S.tokens_max and S.tokens_max > 0 then
         local summarize_at = (S.cfg.context and S.cfg.context.summarize_at) or 0.7
@@ -3001,7 +3005,7 @@ local function render_footer(L)
         stats[#stats + 1] = M.token_usage(S.tokens_used, S.tokens_max, summarize_at)
     end
     -- blocks joined by `·` separators: path · stats · flags (user request)
-    local stats_str = table.concat(stats, dim(" · "))
+    local stats_str = table.concat(stats, muted(" · "))
 
     local flags = static_flags()
     local flags_str = #flags > 0 and to_ascii(table.concat(flags, " ")) or ""
@@ -3011,7 +3015,7 @@ local function render_footer(L)
     -- Truncation order (spec): path first (to_ascii so ASCII mode gets
     -- "..." not "…"), then toast, then stats — each step
     -- re-fits the path into the room that opened up.
-    local SEP = dim(" · ")
+    local SEP = muted(" · ")
     local function join(path_s, s_str, f_str)
         local parts = {}
         if path_s ~= "" then parts[#parts + 1] = path_s end
@@ -3028,7 +3032,7 @@ local function render_footer(L)
         if f_str ~= "" then rest = rest + 3 + vlen(f_str) end
         local room = width - rest
         if room < 1 then return "" end
-        return to_ascii(trunc(dim(ws), room))
+        return to_ascii(trunc(muted(ws), room))
     end
 
     local f_str, s_str = flags_str, stats_str
