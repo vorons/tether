@@ -2816,22 +2816,23 @@ do
   end
 
   -- block-gap parity (transcript-visual-refresh): full render and viewport
-  -- index agree; for a separator that follows another entity (the second
-  -- turn) a blank row precedes it, while NO blank sits between it and the
-  -- user row it labels.
+  -- index agree; a separator that follows another entity (the second turn)
+  -- stands as its own block — a blank row above it and a blank row below,
+  -- with the user row after the bottom gap.
   local full = uimod._render_all(80)
   assert_eq(uimod.transcript_height(80), #full, "T62 gap: index == full render")
-  local sep_row, user_row
+  local sep_row
   for i, r in ipairs(full) do
     local plain = (r:gsub("\27%[[0-9;]*m", ""))
     if plain:find("──", 1, true) then
       local next_plain = full[i + 1] and (full[i + 1]:gsub("\27%[[0-9;]*m", "")) or ""
-      if next_plain:find("q2", 1, true) then sep_row = i; user_row = i + 1 end
+      local after = full[i + 2] and (full[i + 2]:gsub("\27%[[0-9;]*m", "")) or ""
+      if next_plain == "" and after:find("q2", 1, true) then sep_row = i end
     end
   end
-  assert_true(sep_row ~= nil and user_row ~= nil, "T62 gap: second separator + user row rendered")
-  assert_eq(user_row, sep_row + 1, "T62 gap: no blank between separator and its user row")
+  assert_true(sep_row ~= nil, "T62 gap: second separator rendered with bottom gap")
   assert_eq((full[sep_row - 1]:gsub("\27%[[0-9;]*m", "")), "", "T62 gap: blank row before separator")
+  assert_eq((full[sep_row + 1]:gsub("\27%[[0-9;]*m", "")), "", "T62 gap: blank row after separator")
   print("T62 2.1 turn separators: OK")
 end
 
@@ -12813,6 +12814,30 @@ do
   assert_true(tonumber(xsecs) >= 1003 and tonumber(xsecs) <= 1004,
     "T214 expanded shows the elapsed seconds")
   print("T214 think header format: OK")
+end
+
+-- T215: every `── status ────` marker stands as its own block — the turn
+-- timestamp gets a blank row below it as well as above.
+do
+  local bytes = { string.byte("q"), string.byte("1"), 13,
+                  string.byte("q"), string.byte("2"), 13, 17 }
+  local uimod, S = run_ui_with(bytes,
+    { agent = { turn = function() return true end, get_history = function() return {} end } })
+  local rows = {}
+  for _, r in ipairs(uimod._render_all(80)) do
+    rows[#rows + 1] = r:gsub("\27%[[0-9;]*m", "")
+  end
+  local seps = {}
+  for i, r in ipairs(rows) do
+    if r:find("──", 1, true) then seps[#seps + 1] = i end
+  end
+  assert_eq(#seps, 2, "T215 two turns → two timestamp rows")
+  local si = seps[2]
+  assert_eq(rows[si - 1], "", "T215 a blank row sits above the timestamp")
+  assert_eq(rows[si + 1], "", "T215 a blank row sits below the timestamp")
+  assert_true(rows[si + 2]:find("q2", 1, true) ~= nil,
+    "T215 the user row follows the bottom gap")
+  print("T215 turn timestamp block gap: OK")
 end
 
 if failed > 0 then

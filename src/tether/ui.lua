@@ -2365,7 +2365,7 @@ local function render_entry(e, width, prev_role)
                 -- M8/R3: pending tools show live elapsed time
                 if e.started_at then
                     local secs = os.time() - e.started_at
-                    head = head .. "  " .. dim(string.format(" %.1fs", secs))
+                    head = head .. "  " .. dim(string.format("%.1fs", secs))
                 end
             elseif e.status == "error" then
                 local raw = (e.body ~= nil and e.body ~= "") and e.body or (e.summary or "")
@@ -2414,9 +2414,10 @@ local function render_entry(e, width, prev_role)
     end
 
     -- Block gap: a blank row before top-level entities (separator, user,
-    -- assistant, system, thinking) — but not after a separator (the user row
-    -- it labels follows directly), not before the first entity, and not
-    -- before virtual tails (they emit their own leading blank). Empty
+    -- assistant, system, thinking) and after a separator (every
+    -- `── status ────` marker — turn timestamps, the summary divider —
+    -- stands as a block of its own) — but not before the first entity, and
+    -- not before virtual tails (they emit their own leading blank). Empty
     -- entries get no gap. A thinking block also gets a blank row AFTER it
     -- (the think block is a visual block of its own), so an entry following
     -- one gaps even when it would otherwise stay attached (a tool row).
@@ -2425,7 +2426,6 @@ local function render_entry(e, width, prev_role)
     local is_virt = e.virt == "ask" or e.virt == "placeholder" or e.virt == "confirm"
     local need_gap = (not is_virt) and prev_role ~= nil
         and (gap_roles[e.role or "system"] or prev_role == "thinking")
-        and prev_role ~= "separator"
     if need_gap and #out > 0 then
         local gap = (S and S.cfg and S.cfg.ui and S.cfg.ui.block_gap)
         if gap == nil then gap = 1 end
