@@ -796,6 +796,10 @@ end
 -- the rows of an attempt that gets retried.
 local function run_attempt(cfg, api_key, attempt, on_event)
     local tool_calls, ordered, text_acc = {}, {}, {}
+    -- reasoning rides alongside the text: accumulated per attempt like text
+    -- so the caller can journal one thinking message per step (resume needs
+    -- what the transcript showed, not just what the model keeps)
+    local reasoning_acc = {}
     local stop_reason = "other"
     local ok, failure = api.stream(cfg, api_key, M.history, function(ev)
         if ev.type ~= "usage" and take_abort() then return end
@@ -803,6 +807,7 @@ local function run_attempt(cfg, api_key, attempt, on_event)
             text_acc[#text_acc + 1] = ev.text
             if on_event then ev.attempt = attempt; on_event(ev) end
         elseif ev.type == "reasoning_delta" then
+            reasoning_acc[#reasoning_acc + 1] = ev.text or ""
             if on_event then ev.attempt = attempt; on_event(ev) end
         elseif ev.type == "usage" then
             if on_event then on_event(ev) end
@@ -831,16 +836,19 @@ local function run_attempt(cfg, api_key, attempt, on_event)
         end
     end)
     return { text = table.concat(text_acc), tool_calls = tool_calls,
-             ordered = ordered, stop_reason = stop_reason }, ok, failure
+             ordered = ordered, stop_reason = stop_reason,
+             reasoning = table.concat(reasoning_acc) }, ok, failure
 end
 
 -- Run attempts until this iteration's answer is complete: retry a failed
 -- attempt per the policy, continue a truncated answer, nudge an empty one.
--- On success returns true plus { text, tool_calls, ordered, stop_reason }.
--- Otherwise returns false plus the failure table or "aborted"/"empty".
+-- On success returns true plus { text, tool_calls, ordered, stop_reason,
+-- reasoning }. Otherwise returns false plus the failure table or
+-- "aborted"/"empty".
 local function run_answer_segments(cfg, api_key, on_event, state, max_iterations)
     local p = retry.policy(cfg)
     local merged = {}
+    local merged_reasoning = {}
     local pending = nil
 
     while true do
@@ -863,6 +871,9 @@ local function run_answer_segments(cfg, api_key, on_event, state, max_iterations
 
         if ok then
             if result.text ~= "" then merged[#merged + 1] = result.text end
+            if result.reasoning ~= "" then
+                merged_reasoning[#merged_reasoning + 1] = result.reasoning
+            end
             local action = retry.continuation_action(state, result.stop_reason,
                 result.text ~= "", #result.ordered > 0)
             -- a continuation costs one iteration, like a tool round
@@ -907,7 +918,8 @@ local function run_answer_segments(cfg, api_key, on_event, state, max_iterations
                 return true, { text = table.concat(merged),
                                tool_calls = result.tool_calls,
                                ordered = result.ordered,
-                               stop_reason = result.stop_reason }
+                               stop_reason = result.stop_reason,
+                               reasoning = table.concat(merged_reasoning) }
             end
         else
             -- A failed attempt contributes nothing to the conversation.
@@ -1019,6 +1031,14 @@ local function main_loop(cfg, api_key, on_event)
 
         local tool_calls = result.tool_calls
         local ordered = result.ordered
+
+        -- the step's reasoning is journaled beside its answer: resume
+        -- restores the think block from it, the model never sees it
+        -- (commands.resume skips non-user/assistant/tool roles for history)
+        local reasoning = result.reasoning or ""
+        if reasoning ~= "" and reasoning:match("%S") then
+            slog(cfg, { ts = os.date(), type = "reasoning", text = reasoning })
+        end
 
         if next(tool_calls) == nil then
             -- No tool calls: keep the assistant text in history

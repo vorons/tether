@@ -5773,11 +5773,17 @@ function M.run(app_cfg)
     end
 
     -- Resume (-r): app.lua restored the agent history, but the transcript
-    -- starts empty — seed it so the user sees what the model knows.
+    -- starts empty — seed it so the user sees what the model knows. The
+    -- seed prefers the resume messages over the history: history carries
+    -- no thinking blocks and tool rows without args.
     if agent and agent.get_history then
-        local okh, hist = pcall(agent.get_history)
-        if okh and hist then
-            local seeded = transcript.seed(hist)
+        local src_msgs = S.cfg and S.cfg._resume_messages
+        if src_msgs == nil then
+            local okh, hist = pcall(agent.get_history)
+            if okh and hist then src_msgs = hist end
+        end
+        if src_msgs then
+            local seeded = transcript.seed(src_msgs)
             if #seeded > 0 then
                 transcript.append(
                     { role = "system", text = "↻ session resumed" })

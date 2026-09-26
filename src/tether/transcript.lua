@@ -126,7 +126,8 @@ end
 
 -- Seed from display rows (already {role, text}) or agent-history messages
 -- ({role, content}). User text, assistant text (including the text riding
--- alongside tool_calls) and tool rows are shown; nothing else survives.
+-- alongside tool_calls), thinking blocks and tool rows are shown; the tool
+-- row keeps its args for the arg label. Anything else is dropped.
 function M.seed(messages)
     local out = {}
     for _, m in ipairs(messages or {}) do
@@ -147,8 +148,14 @@ function M.seed(messages)
                 summary = content:match("^[^\n]*") or ""
             end
             out[#out + 1] = { role = "tool", id = m.tool_call_id,
-                name = m.name, status = m.error and "error" or "ok",
+                name = m.name, args = m.args,
+                status = m.error and "error" or "ok",
                 summary = summary or "", body = content }
+        elseif m.role == "thinking" and type(m.content) == "string"
+            and m.content:match("%S") then
+            -- resumed reasoning renders frozen (no live flag, no clock):
+            -- the block the journal kept, green like any finished think
+            out[#out + 1] = { role = "thinking", text = m.content }
         end
     end
     M.reset(out)

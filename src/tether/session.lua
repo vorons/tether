@@ -197,6 +197,9 @@ function M.resume(id)
     local events = read_events(id)
     if #events == 0 then return nil end
     local messages = {}
+    -- tool_call events carry the parsed args the transcript's arg label
+    -- needs (the result event only keeps summary/body for the model)
+    local call_args = {}
     for _, ev in ipairs(events) do
         if ev.type == "message" then
             if ev.role == "assistant" and ev.tool_calls then
@@ -205,12 +208,21 @@ function M.resume(id)
             else
                 messages[#messages + 1] = { role = ev.role, content = ev.content }
             end
+        elseif ev.type == "tool_call" then
+            if ev.tool_call_id ~= nil then call_args[ev.tool_call_id] = ev.args end
+        elseif ev.type == "reasoning" then
+            -- display-only: commands.resume skips it for the agent history,
+            -- transcript.seed renders the think block from it
+            if type(ev.text) == "string" and ev.text:match("%S") then
+                messages[#messages + 1] = { role = "thinking", content = ev.text }
+            end
         elseif ev.type == "tool_result" then
             local res = (type(ev.result) == "table" and ev.result) or {}
             messages[#messages + 1] = {
                 role = "tool",
                 tool_call_id = ev.tool_call_id,
                 name = ev.name,
+                args = call_args[ev.tool_call_id],
                 summary = res.summary,
                 error = res.error,
                 -- full body first (model context), then error, then summary;

@@ -12879,6 +12879,61 @@ do
   print("T216 muted times, counts and dim args: OK")
 end
 
+-- T217: resume restores think blocks and tool args — the full chain:
+-- agent.turn journals them, session.resume rebuilds them, seed renders them.
+with_modules(base_env, function(mods)
+  local agent, session = mods.agent, mods.session
+  local commands = assert(loadfile("src/tether/commands.lua"))()
+  local tmpdir = "/tmp/tether_t217_sessions"
+  os.execute("rm -rf " .. tmpdir)
+  session._session_dir = tmpdir
+  mods.api.stream = function(c, key, messages, on_event)
+    on_event({ type = "reasoning_delta", text = "planning" })
+    on_event({ type = "tool_call_start", id = "c1", name = "grep" })
+    on_event({ type = "tool_call_delta", id = "c1",
+      arguments = '{"pattern":"opencode","path":"src"}' })
+    on_event({ type = "done", reason = "tool_calls" })
+    return true
+  end
+  mods.tools.grep = function() return { matches = {}, count = 0 } end
+  agent.clear()
+  local sid = session.new_session("/tmp/ws", "m")
+  agent.turn({ workspace = "/tmp/ws", _session_id = sid, auto_approve = {} },
+    "k", "do it", function() end)
+  local rsid, messages = commands.resume(sid, "/tmp/ws", { workspace = "/tmp/ws" })
+  assert_eq(rsid, sid, "T217 resume finds the session")
+  local think, tool = nil, nil
+  for _, m in ipairs(messages) do
+    if m.role == "thinking" then think = m end
+    if m.role == "tool" then tool = m end
+  end
+  assert_notnil(think, "T217 resume carries the reasoning")
+  assert_true(think.content:find("planning", 1, true) ~= nil,
+    "T217 the reasoning text survives")
+  assert_notnil(tool, "T217 resume carries the tool result")
+  assert_true(type(tool.args) == "table" and tool.args.pattern == "opencode",
+    "T217 the tool args survive")
+  -- and no thinking leaks into the model history
+  for _, m in ipairs(agent.get_history()) do
+    assert_true(m.role ~= "thinking", "T217 thinking stays out of history")
+  end
+  -- and the transcript seeds them into visible rows
+  local uimod = run_ui_with({}, {
+    agent = { turn = function() return true end,
+      get_history = function() return {} end },
+  })
+  uimod._transcript.seed(messages)
+  local plain = table.concat(uimod._render_all(80), "\n"):gsub("\27%[[0-9;]*m", "")
+  assert_true(plain:find("think ·", 1, true) ~= nil,
+    "T217 the think block is rendered")
+  assert_true(plain:find("planning", 1, true) ~= nil,
+    "T217 the reasoning body is rendered")
+  assert_true(plain:find("opencode", 1, true) ~= nil,
+    "T217 the tool arg label is rendered")
+  os.execute("rm -rf " .. tmpdir)
+  print("T217 resume restores think blocks and tool args: OK")
+end)
+
 if failed > 0 then
     os.exit(1)
 end
