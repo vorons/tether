@@ -1241,10 +1241,14 @@ do
   assert_eq(strip(ui.token_usage(32768, 32768)), "32k/32k (100%)", "T47 full budget")
   assert_eq(strip(ui.token_usage(819, 32768)), "0.8k/32k (2%)", "T47 sub-k formats with decimal")
   assert_eq(strip(ui.token_usage(-5, 32768)), "0k/32k (0%)", "T47 negative clamps to zero")
-  -- thresholds still colored: green < summarize_at, yellow >=, red >= 90%
-  assert_true(ui.token_usage(4200, 32768):find("32m", 1, true) ~= nil, "T47 green below threshold")
+  -- thresholds tint the dim cell: dim below, dim yellow >= summarize_at,
+  -- dim red >= 90%; green is gone
+  assert_true(ui.token_usage(4200, 32768):find("32m", 1, true) == nil, "T47 no green below threshold")
+  assert_true(ui.token_usage(4200, 32768):find("%[2m", 1) ~= nil, "T47 dim below threshold")
   assert_true(ui.token_usage(24000, 32768):find("33;1", 1, true) ~= nil, "T47 yellow above summarize_at")
+  assert_true(ui.token_usage(24000, 32768):find("%[2m", 1) ~= nil, "T47 warning stays dim")
   assert_true(ui.token_usage(31000, 32768):find("31;1", 1, true) ~= nil, "T47 red near full")
+  assert_true(ui.token_usage(31000, 32768):find("%[2m", 1) ~= nil, "T47 error stays dim")
   end
   print("T47 token_usage: OK")
 end

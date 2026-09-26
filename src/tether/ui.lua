@@ -2920,13 +2920,19 @@ function M.token_usage(used, max_tokens, summarize_at)
     if type(used) ~= "number" or used < 0 then used = 0 end
     if type(max_tokens) ~= "number" or max_tokens <= 0 then max_tokens = 1024 end
     local pct = math.min(used / max_tokens, 1)
-    local color = pct >= 0.9 and red or (pct >= (summarize_at or 0.7) and yellow or green)
+    -- the cell reads dim like the rest of the footer; the thresholds only
+    -- tint it — nested SGR composes faint with the color (dim yellow/red).
+    local tint = nil
+    if pct >= 0.9 then tint = red
+    elseif pct >= (summarize_at or 0.7) then tint = yellow end
     local k = function(n)
         local s = string.format("%.1fk", n / 1024)
         return (s:gsub("%.0k$", "k"))
     end
-    return color(string.format("%s/%s (%d%%)", k(used), k(max_tokens),
-        math.floor(pct * 100 + 0.5)))
+    local s = string.format("%s/%s (%d%%)", k(used), k(max_tokens),
+        math.floor(pct * 100 + 0.5))
+    if tint then return dim(tint(s)) end
+    return dim(s)
 end
 
 -- pi-style-input-and-footer: compact token counts for the footer, mirrored
@@ -2993,10 +2999,10 @@ local function render_footer(L)
 
     local stats = {}
     if (S.tokens_in or 0) > 0 then
-        stats[#stats + 1] = muted("↑" .. M.format_count(S.tokens_in))
+        stats[#stats + 1] = dim("↑" .. M.format_count(S.tokens_in))
     end
     if (S.tokens_out or 0) > 0 then
-        stats[#stats + 1] = muted("↓" .. M.format_count(S.tokens_out))
+        stats[#stats + 1] = dim("↓" .. M.format_count(S.tokens_out))
     end
     if S.tokens_max and S.tokens_max > 0 then
         local summarize_at = (S.cfg.context and S.cfg.context.summarize_at) or 0.7
@@ -3005,7 +3011,7 @@ local function render_footer(L)
         stats[#stats + 1] = M.token_usage(S.tokens_used, S.tokens_max, summarize_at)
     end
     -- blocks joined by `·` separators: path · stats · flags (user request)
-    local stats_str = table.concat(stats, muted(" · "))
+    local stats_str = table.concat(stats, dim(" · "))
 
     local flags = static_flags()
     local flags_str = #flags > 0 and to_ascii(table.concat(flags, " ")) or ""
@@ -3015,7 +3021,7 @@ local function render_footer(L)
     -- Truncation order (spec): path first (to_ascii so ASCII mode gets
     -- "..." not "…"), then toast, then stats — each step
     -- re-fits the path into the room that opened up.
-    local SEP = muted(" · ")
+    local SEP = dim(" · ")
     local function join(path_s, s_str, f_str)
         local parts = {}
         if path_s ~= "" then parts[#parts + 1] = path_s end
@@ -3032,7 +3038,7 @@ local function render_footer(L)
         if f_str ~= "" then rest = rest + 3 + vlen(f_str) end
         local room = width - rest
         if room < 1 then return "" end
-        return to_ascii(trunc(muted(ws), room))
+        return to_ascii(trunc(dim(ws), room))
     end
 
     local f_str, s_str = flags_str, stats_str
