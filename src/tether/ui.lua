@@ -2222,6 +2222,26 @@ local function ask_selected(answer, label)
     return false
 end
 
+-- ask-block-b: the hint row's text for the current mode. Short verbs only —
+-- the row is clipped to the width (never wrapped), so the full ASK_KEYS
+-- phrases would not fit. Every key named here exists in ASK_KEYS (asserted by
+-- T228), so the painted hints cannot drift from the handled keys: list modes
+-- name navigation + commit + cancel, editors name save/discard instead.
+-- (M-field, not chunk local: ui.lua sits at Lua's 200-locals limit.)
+function M._ask_hint(a, q)
+    if a.mode == "note" then
+        return "type note · Enter save · Esc discard"
+    end
+    if a.mode == "other" then
+        return "type answer · Enter save · Esc discard"
+    end
+    local back = (a.qidx > 1) and " · ← back" or ""
+    if q.multi then
+        return "↑↓ move · Space toggle · Enter accept · Tab note" .. back .. " · Esc cancel"
+    end
+    return "↑↓ move · Enter select · 1-N pick · Tab note" .. back .. " · Esc cancel"
+end
+
 -- The question block's rows. Rendered from S.ask directly, so the highlight and
 -- the rows can never disagree about what is selectable: option rows are 1..n in
 -- order, then the always-present freeform row at n+1.
@@ -2249,6 +2269,8 @@ local function render_ask(width)
         local row = {}
         if q.multi then
             row[#row + 1] = ask_selected(answer, opt.label) and "[x] " or "[ ] "
+        else
+            row[#row + 1] = ask_selected(answer, opt.label) and "(*) " or "( ) "
         end
         row[#row + 1] = i .. ". " .. opt.label
         if q.recommended == i then row[#row + 1] = dim("  (recommended)") end
@@ -2281,6 +2303,9 @@ local function render_ask(width)
         if a.sel == n + 1 and a.mode == "list" then text = rev(text) end
         out[#out + 1] = text
     end
+    -- ask-block-b: one muted hint row under the freeform row, clipped to the
+    -- width so it never wraps into extra rows.
+    out[#out + 1] = muted(clip(M._ask_hint(a, q), inner))
     return out
 end
 

@@ -9149,6 +9149,114 @@ do
   print("T127 block keys and ASCII: OK")
 end
 
+-- T228: ask-block-b — radio markers, counter rule, muted contextual hint.
+do
+  local agent_stub = { turn = function() return true end, get_history = function() return {} end,
+                       answer_ask = function() return false end, continue = function() return true end }
+  local function boot(questions)
+    local uimod, S = run_ui_with({ 17 }, { agent = agent_stub })
+    _G.agent = agent_stub
+    uimod._handle_agent_event({ type = "ask", id = "a1", questions = questions })
+    return uimod, S
+  end
+  local function plain(uimod, w)
+    return table.concat(uimod._render_all(w or 80), "\n"):gsub("\27%[[0-9;]*m", "")
+  end
+  local down, enter, esc, tab = { kind = "special", name = "down" }, { kind = "enter" },
+      { kind = "esc" }, { kind = "tab" }
+  local single_qs = { { id = "fw", question = "Framework?",
+                        options = { { label = "React" }, { label = "Vue" } } } }
+
+  -- 1.1: single-answer options carry round markers that flip on select
+  local m, S = boot(single_qs)
+  local j = plain(m)
+  assert_true(j:find("( ) 1. React", 1, true) ~= nil, "T228 unselected single option is ( )")
+  assert_true(j:find("( ) 2. Vue", 1, true) ~= nil, "T228 every single option has a marker")
+  S.ask.answers[1].selected = { "Vue" }
+  m._sync_tail()
+  local j2 = plain(m)
+  assert_true(j2:find("(*) 2. Vue", 1, true) ~= nil, "T228 selecting flips only that marker")
+  assert_true(j2:find("( ) 1. React", 1, true) ~= nil, "T228 the other marker stays ( )")
+  -- cursor move alone changes no marker
+  m._handle_key(down)
+  local j3 = plain(m)
+  assert_true(j3:find("(*) 2. Vue", 1, true) ~= nil, "T228 moving the cursor flips no marker")
+
+  -- 1.2: multi questions keep square markers and gain no round ones
+  local mm = boot({ { id = "vals", question = "Values?", multi = true,
+                      options = { { label = "a" }, { label = "b" } } } })
+  mm._handle_key({ kind = "text", char = " " })
+  local mj = plain(mm)
+  assert_true(mj:find("[x] 1. a", 1, true) ~= nil, "T228 a toggled multi option is [x]")
+  assert_true(mj:find("[ ] 2. b", 1, true) ~= nil, "T228 an untoggled multi option is [ ]")
+  assert_true(mj:find("( )", 1, true) == nil and mj:find("(*)", 1, true) == nil,
+    "T228 no round marker appears in multi mode")
+
+  -- 2.1/2.2: counter hidden for one question, shown for many, no Agent asks line
+  assert_true(j:find("(1/1)", 1, true) == nil, "T228 a single question has no counter")
+  assert_true(j:find("Agent asks", 1, true) == nil, "T228 no Agent asks label line")
+  local m3q = boot({ { id = "q1", question = "First?",
+                        options = { { label = "a" } } },
+                      { id = "q2", question = "Second?",
+                        options = { { label = "b" } } } })
+  local qj = plain(m3q)
+  assert_true(qj:find("(1/2)", 1, true) ~= nil, "T228 a multi-question set shows its position")
+  assert_true(qj:find("Agent asks", 1, true) == nil, "T228 no Agent asks label in multi sets either")
+
+  -- 3.1: hint rows per mode name the handled keys; every named key is in ASK_KEYS
+  for _, k in ipairs({ "up", "down", "enter", "space", "tab", "left", "esc" }) do
+    assert_notnil(m.ASK_KEYS[k], "T228 hint coverage: ASK_KEYS documents " .. k)
+  end
+  assert_true(j:find("Enter select", 1, true) ~= nil, "T228 single hint names select")
+  assert_true(j:find("Tab note", 1, true) ~= nil, "T228 single hint names note editing")
+  assert_true(j:find("Esc cancel", 1, true) ~= nil, "T228 single hint names cancel")
+  assert_true(j:find("Space", 1, true) == nil, "T228 single hint names no toggle key")
+  assert_true(mj:find("Space toggle", 1, true) ~= nil, "T228 multi hint names toggle")
+  assert_true(mj:find("Enter accept", 1, true) ~= nil, "T228 multi hint names accept")
+  assert_true(mj:find("1-N", 1, true) == nil, "T228 multi hint names no single pick key")
+  m._handle_key(tab)
+  local nj = plain(m)
+  assert_true(nj:find("Enter save", 1, true) ~= nil, "T228 note hint names save")
+  assert_true(nj:find("Esc discard", 1, true) ~= nil, "T228 note hint names discard")
+  assert_true(nj:find("↑↓", 1, true) == nil, "T228 editor hint names no list navigation")
+  m._handle_key(esc)
+  m._handle_key(down)
+  m._handle_key(enter)
+  assert_eq(S.ask.mode, "other", "T228 Enter on the freeform row opens the answer editor")
+  local oj = plain(m)
+  assert_true(oj:find("type answer", 1, true) ~= nil, "T228 freeform hint names the answer entry")
+  assert_true(oj:find("Enter save", 1, true) ~= nil, "T228 freeform hint names save")
+  assert_true(oj:find("Esc discard", 1, true) ~= nil, "T228 freeform hint names discard")
+  assert_true(oj:find("↑↓", 1, true) == nil, "T228 freeform hint names no list navigation")
+  m._handle_key(esc)
+
+  -- 3.2: back hint only past the first question, cancel always in list modes
+  assert_true(qj:find("back", 1, true) == nil, "T228 no back hint on the first question")
+  m3q._handle_key(enter)
+  local qj2 = plain(m3q)
+  assert_true(qj2:find("← back", 1, true) ~= nil, "T228 back hint appears past the first question")
+  assert_true(qj2:find("Esc cancel", 1, true) ~= nil, "T228 cancel hint stays on later questions")
+
+  -- 3.3: the hint row is clipped, never wrapped — the head survives on exactly
+  -- one row and the clipped tail ("cancel") is gone instead of wrapping below
+  local narrow = plain(m, 30)
+  local _, n_hint = narrow:gsub("↑↓", "↑↓")
+  assert_eq(n_hint, 1, "T228 the hint stays a single row at width 30")
+  assert_true(narrow:find("cancel", 1, true) == nil,
+    "T228 the hint tail is clipped, not wrapped")
+
+  -- 4.1: ASCII mode leaves no non-ASCII block glyph
+  m._ascii_mode = true
+  local arows = table.concat(m._render_all(80), "\n")
+  for _, glyph in ipairs({ "↑", "↓", "←", "·", "↳", "▌", "«", "»" }) do
+    assert_true(arows:find(glyph, 1, true) == nil,
+      "T228 no " .. glyph .. " glyph is left in ASCII mode")
+  end
+  assert_true(arows:find("Esc cancel", 1, true) ~= nil, "T228 the ASCII hint keeps its verbs")
+  m._ascii_mode = nil
+  print("T228 ask-block-b markers, counter, hint: OK")
+end
+
 -- T128 (4.1/4.5): commands module owns resume/new/compact/list helpers.
 do
   local names = {"session", "agent", "api"}
