@@ -1151,6 +1151,23 @@ with_modules(base_env, function(mods)
     assert_true(#lines2 > 1, "T31 wrap=true wraps")
 end)
 
+-- accent-mint-no-bold: default accent is mint without bold per depth; heading keeps bold
+with_modules(base_env, function(mods)
+    local ui = mods.ui
+    ui.set_theme("default")
+    ui._color_depth = "truecolor"
+    local tc = ui.sgr_role("accent", "x")
+    assert_true(tc:find("38;2;105;224;152", 1, true) ~= nil, "accent mint on truecolor")
+    assert_true(tc:find(";1m", 1, true) == nil, "accent has no bold on truecolor")
+    ui._color_depth = "256"
+    local c256 = ui.sgr_role("accent", "x")
+    assert_true(c256:find("38;5;78", 1, true) ~= nil, "accent fallback on 256")
+    assert_true(c256:find(";1m", 1, true) == nil, "accent has no bold on 256")
+    local h = ui.sgr_role("heading", "x")
+    assert_true(h:find("36;1", 1, true) ~= nil, "heading keeps bold")
+    ui._color_depth = "none"
+end)
+
 -- M8/T32: markdown-lite md.render_entry (R4)
 with_modules(base_env, function(mods)
     local ui = mods.ui
@@ -1969,6 +1986,314 @@ do
     "T136 any compression would precede the retry")
   for _, n in ipairs(names) do _G[n] = orig[n] end
   print("T136 no mid-retry compaction: OK")
+end
+
+-- compaction-anchors-preflight-prune 1.1: deterministic anchor extraction and
+-- formatting on a fixture history; noise and word-boundary guards.
+do
+  local agent = dofile("src/tether/agent.lua")
+  local h = {
+    { role = "system", content = "sys" },
+    { role = "user", content = "please implement dark mode, always use tabs" },
+    { role = "assistant", content = { tool_calls = {
+      { id = "r1", ["function"] = { name = "read",
+        arguments = '{"path":"src/ui.lua"}' } } }, text = "" } },
+    { role = "tool", tool_call_id = "r1", name = "read", content = "body" },
+    { role = "assistant", content = { tool_calls = {
+      { id = "w1", ["function"] = { name = "write",
+        arguments = '{"path":"src/ui.lua"}' } } }, text = "" } },
+    { role = "tool", tool_call_id = "w1", name = "write", content = "src/ui.lua" },
+    { role = "assistant", content = { tool_calls = {
+      { id = "c1", ["function"] = { name = "run",
+        arguments = '{"command":"git commit -m \\"dark mode\\""}' } } },
+      text = "" } },
+    { role = "tool", tool_call_id = "c1", name = "run", content = "abc1234def ok" },
+    { role = "user", content = "build failed on linux" },
+  }
+  local a = agent.extract_anchors(h)
+  assert_true(a.goal ~= nil and a.goal:find("dark mode", 1, true) ~= nil,
+    "T244 goal extracted")
+  assert_eq(#a.files_modified, 1, "T244 one modified file")
+  assert_eq(a.files_modified[1], "src/ui.lua", "T244 modified path")
+  assert_eq(a.files_both[1], "src/ui.lua", "T244 read-before-write marked RW")
+  assert_true(#a.preferences >= 1, "T244 preference extracted")
+  assert_true(#a.commits == 1 and a.commits[1]:find("dark mode", 1, true) ~= nil,
+    "T244 commit paired with hash")
+  assert_true(#a.blockers == 1, "T244 tail blocker extracted")
+  local block = agent.format_anchors(a)
+  assert_true(block:find("Preserve these exact facts", 1, true) ~= nil,
+    "T244 anchor header")
+  assert_true(block:find("src/ui.lua (RW)", 1, true) ~= nil,
+    "T244 RW marker rendered")
+  assert_eq(agent.format_anchors(
+    agent.extract_anchors({ { role = "system", content = "s" } })), "",
+    "T244 empty history yields empty block")
+  assert_eq(agent.extract_anchors(
+    { { role = "user", content = "ok" } }).goal, nil,
+    "T244 noise is not a goal")
+  assert_eq(agent.extract_anchors(
+    { { role = "user", content = "the prefix looks odd" } }).goal, nil,
+    "T244 word boundary: prefix is not a task")
+  print("T244 anchors extract/format: OK")
+end
+
+-- compaction-anchors-preflight-prune 1.2: anchors reach api.summarize behind
+-- cfg.context.anchors (default on); anchors=false sends the bare prompt.
+do
+  local names = {"api", "agent", "session", "config", "tools", "context", "tether", "retry"}
+  local orig = {}
+  for _, n in ipairs(names) do orig[n] = _G[n] end
+  _G.tether = host_mock{ getcwd = function() return "/ws" end,
+    realpath = function(p) return p end, sleep = function() end }
+  _G.session = { append = function() end }
+  _G.config = { get_system_prompt = function() return nil end }
+  _G.tools = { _within = function() return true end,
+    _resolve = function(p) return p end, _workspace = function() return "/ws" end }
+  local agent = assert(loadfile("src/tether/agent.lua"))()
+  local long = string.rep("y", 4000)
+  local h = {
+    { role = "system", content = "sys" },
+    { role = "user", content = "implement dark mode" },
+    { role = "assistant", content = long },
+    { role = "user", content = long },
+    { role = "assistant", content = long },
+    { role = "user", content = "tail" },
+  }
+  local seen_prompt
+  _G.api = { summarize = function(_, _, messages)
+    seen_prompt = messages[1].content
+    return "llm body"
+  end }
+  agent.history = {}
+  for _, m in ipairs(h) do agent.history[#agent.history + 1] = m end
+  local _, _, mode = agent.compact_history(
+    agent.history, { context = { keep_recent_messages = 2 } }, "key", nil, true)
+  assert_eq(mode, "llm", "T245 anchors path still llm")
+  assert_true(seen_prompt:find("Preserve these exact facts", 1, true) ~= nil,
+    "T245 anchor block in summary prompt by default")
+  assert_true(seen_prompt:find("dark mode", 1, true) ~= nil,
+    "T245 anchor carries the task text")
+  seen_prompt = nil
+  agent.history = {}
+  for _, m in ipairs(h) do agent.history[#agent.history + 1] = m end
+  agent.compact_history(agent.history,
+    { context = { keep_recent_messages = 2, anchors = false } }, "key", nil, true)
+  assert_true(seen_prompt ~= nil and
+    seen_prompt:find("Preserve these exact facts", 1, true) == nil,
+    "T245 anchors=false sends the bare prompt")
+  for _, n in ipairs(names) do _G[n] = orig[n] end
+  print("T245 anchors wired into summary: OK")
+end
+
+-- compaction-anchors-preflight-prune 1.3/2.3: config defaults and malformed
+-- fallback for the three new context knobs.
+do
+  local config = assert(loadfile("src/tether/config.lua"))()
+  local home = "/tmp/tether_anchors_home"
+  os.execute("rm -rf " .. home .. " && mkdir -p " .. home .. "/.tether")
+  local cfg = config.load(home .. "/no-such-config.lua", home)
+  assert_eq(cfg.context.anchors, true, "T246 default anchors")
+  assert_eq(cfg.context.preflight, true, "T246 default preflight")
+  assert_eq(cfg.context.prune_superseded_reads, false,
+    "T246 default prune_superseded_reads")
+  local bad = assert(io.open(home .. "/.tether/config.lua", "w"))
+  bad:write('return { context = { anchors = "yes", preflight = 1, prune_superseded_reads = "off" } }\n')
+  bad:close()
+  local cfg2 = config.load(home .. "/.tether/config.lua", home)
+  assert_eq(cfg2.context.anchors, true, "T246 malformed anchors falls back")
+  assert_eq(cfg2.context.preflight, true, "T246 malformed preflight falls back")
+  assert_eq(cfg2.context.prune_superseded_reads, false,
+    "T246 malformed prune falls back")
+  local good = assert(io.open(home .. "/.tether/config.lua", "w"))
+  good:write('return { context = { anchors = false, preflight = false, prune_superseded_reads = true } }\n')
+  good:close()
+  local cfg3 = config.load(home .. "/.tether/config.lua", home)
+  assert_eq(cfg3.context.anchors, false, "T246 explicit anchors=false survives")
+  assert_eq(cfg3.context.preflight, false, "T246 explicit preflight=false survives")
+  assert_eq(cfg3.context.prune_superseded_reads, true,
+    "T246 explicit prune=true survives")
+  os.execute("rm -rf " .. home)
+  print("T246 anchor/preflight/prune config: OK")
+end
+
+-- compaction-anchors-preflight-prune 2.1: projection reuses the thresholds.
+do
+  local agent = dofile("src/tether/agent.lua")
+  local cfg = { context = { max_tokens = 1000, summarize_at = 0.7,
+    reserve_tokens = 0 } }
+  local small = { { role = "system", content = "s" },
+    { role = "user", content = "hi" } }
+  assert_true(not agent.should_summarize_projected(small, "tiny", cfg),
+    "T247 small prompt stays quiet")
+  assert_true(agent.should_summarize_projected(small, string.rep("z", 4000), cfg),
+    "T247 large paste fires the projection")
+  assert_true(not agent.should_summarize(small, cfg),
+    "T247 history alone is under threshold")
+  print("T247 preflight projection: OK")
+end
+
+-- compaction-anchors-preflight-prune 2.2: turn() compacts a large paste before
+-- the first LLM call; preflight=false leaves an under-threshold turn alone.
+do
+  local names = {"agent", "session", "config", "api", "tools", "context", "tether", "retry"}
+  local orig = {}
+  for _, n in ipairs(names) do orig[n] = _G[n] end
+  _G.tether = host_mock{ getcwd = function() return "/ws" end,
+    realpath = function(p) return p end, sleep = function() end }
+  _G.session = { append = function() end }
+  _G.config = { get_system_prompt = function() return nil end }
+  _G.tools = { _within = function() return true end,
+    _resolve = function(p) return p end, _workspace = function() return "/ws" end }
+  _G.retry = assert(loadfile("src/tether/retry.lua"))()
+  _G.api = {
+    stream = function(_, _, _, on_event)
+      on_event({ type = "text_delta", text = "ok" })
+      on_event({ type = "done", reason = "stop" })
+      return true
+    end,
+    list_models = function() return {} end,
+    summarize = function() return "preflight summary" end,
+  }
+  local function fresh_agent()
+    local a = assert(loadfile("src/tether/agent.lua"))()
+    a.clear()
+    a.history[#a.history + 1] = { role = "system", content = "sys" }
+    for _ = 1, 4 do
+      a.history[#a.history + 1] = { role = "user", content = string.rep("x", 100) }
+    end
+    return a
+  end
+  local base_cfg = { workspace = "/ws", retry = { base_delay_ms = 1 },
+    context = { max_tokens = 1000, summarize_at = 0.7, reserve_tokens = 0,
+      keep_recent_messages = 4 } }
+  local a = fresh_agent()
+  local events = {}
+  a.turn(base_cfg, "k", string.rep("z", 3000),
+    function(ev) events[#events + 1] = ev end)
+  local compress = 0
+  for _, ev in ipairs(events) do
+    if ev.type == "context_compressed" then compress = compress + 1 end
+  end
+  assert_eq(compress, 1, "T248 preflight compacts the large paste")
+  assert_eq(a.history[2].content:find("preflight summary", 1, true) ~= nil
+    or a.history[2].content:find("── summary ──", 1, true) ~= nil, true,
+    "T248 summary leads the compacted history")
+  local a2 = fresh_agent()
+  local events2 = {}
+  local cfg_off = { workspace = "/ws", retry = { base_delay_ms = 1 },
+    context = { max_tokens = 1000, summarize_at = 0.7, reserve_tokens = 0,
+      keep_recent_messages = 4, preflight = false } }
+  a2.turn(cfg_off, "k", "tiny",
+    function(ev) events2[#events2 + 1] = ev end)
+  local compress2 = 0
+  for _, ev in ipairs(events2) do
+    if ev.type == "context_compressed" then compress2 = compress2 + 1 end
+  end
+  assert_eq(compress2, 0, "T248 preflight=false leaves a small turn alone")
+  for _, n in ipairs(names) do _G[n] = orig[n] end
+  print("T248 turn preflight: OK")
+end
+
+-- compaction-anchors-preflight-prune 3.1: prune unit — fires, no-op same-ref,
+-- idempotent, plan-file exempt, minimum-reclaim gate.
+do
+  local agent = dofile("src/tether/agent.lua")
+  local big = string.rep("x", 30000)
+  local function reads(path1, body1, path2, body2, tail)
+    return {
+      { role = "system", content = "sys" },
+      { role = "assistant", content = { tool_calls = {
+        { id = "r1", ["function"] = { name = "read",
+          arguments = '{"path":"' .. path1 .. '"}' } } }, text = "" } },
+      { role = "tool", tool_call_id = "r1", name = "read", content = body1 },
+      { role = "assistant", content = { tool_calls = {
+        { id = "r2", ["function"] = { name = "read",
+          arguments = '{"path":"' .. path2 .. '"}' } } }, text = "" } },
+      { role = "tool", tool_call_id = "r2", name = "read", content = body2 },
+      { role = "user", content = tail },
+    }
+  end
+  local h = reads("a.lua", big, "a.lua", "new body", string.rep("t", 170000))
+  local out = agent.prune_superseded_reads(h)
+  assert_true(out ~= h, "T249 prune rewrites the view")
+  assert_eq(h[3].content, big, "T249 source history untouched")
+  assert_eq(out[5].content, "new body", "T249 latest copy intact")
+  assert_true(out[3].content:find("superseded", 1, true) ~= nil
+    and out[3].content:find("a.lua", 1, true) ~= nil,
+    "T249 placeholder names the file")
+  assert_true(agent.prune_superseded_reads(out) == out,
+    "T249 prune is idempotent")
+  local plan = reads("docs/plan.md", big, "docs/plan.md", "new body",
+    string.rep("t", 170000))
+  assert_true(agent.prune_superseded_reads(plan) == plan,
+    "T249 plan file exempt")
+  local small = reads("a.lua", "v1", "a.lua", "v2", "tail")
+  assert_true(agent.prune_superseded_reads(small) == small,
+    "T249 below minimum reclaim is a no-op")
+  assert_true(agent.prune_superseded_reads(
+    { { role = "user", content = "hi" } })[1].content == "hi",
+    "T249 single read untouched")
+  print("T249 prune superseded reads: OK")
+end
+
+-- compaction-anchors-preflight-prune 3.2: the provider sees the pruned view
+-- while M.history keeps the originals; disabled prune sends history as-is.
+do
+  local names = {"agent", "session", "config", "api", "tools", "context", "tether", "retry"}
+  local orig = {}
+  for _, n in ipairs(names) do orig[n] = _G[n] end
+  _G.tether = host_mock{ getcwd = function() return "/ws" end,
+    realpath = function(p) return p end, sleep = function() end }
+  _G.session = { append = function() end }
+  _G.config = { get_system_prompt = function() return nil end }
+  _G.tools = { _within = function() return true end,
+    _resolve = function(p) return p end, _workspace = function() return "/ws" end }
+  _G.retry = assert(loadfile("src/tether/retry.lua"))()
+  local agent = assert(loadfile("src/tether/agent.lua"))()
+  local big = string.rep("x", 30000)
+  local function seed(a)
+    a.clear()
+    a.history[#a.history + 1] = { role = "system", content = "sys" }
+    a.history[#a.history + 1] = { role = "assistant", content = { tool_calls = {
+      { id = "r1", ["function"] = { name = "read",
+        arguments = '{"path":"a.lua"}' } } }, text = "" } }
+    a.history[#a.history + 1] = { role = "tool", tool_call_id = "r1",
+      name = "read", content = big }
+    a.history[#a.history + 1] = { role = "assistant", content = { tool_calls = {
+      { id = "r2", ["function"] = { name = "read",
+        arguments = '{"path":"a.lua"}' } } }, text = "" } }
+    a.history[#a.history + 1] = { role = "tool", tool_call_id = "r2",
+      name = "read", content = "new body" }
+    a.history[#a.history + 1] = { role = "user",
+      content = string.rep("t", 170000) .. " go" }
+  end
+  local sent
+  _G.api = {
+    stream = function(_, _, messages, on_event)
+      sent = messages
+      on_event({ type = "text_delta", text = "ok" })
+      on_event({ type = "done", reason = "stop" })
+      return true
+    end,
+    list_models = function() return {} end,
+    summarize = function() return "s" end,
+  }
+  seed(agent)
+  agent.turn({ workspace = "/ws", retry = { base_delay_ms = 1 },
+    context = { max_tokens = 4000000, summarize_at = 0.99, reserve_tokens = 0,
+      prune_superseded_reads = true } }, "k", "go", function() end)
+  assert_true(sent ~= agent.history, "T250 provider gets the pruned view")
+  assert_true(sent[3].content:find("superseded", 1, true) ~= nil,
+    "T250 earlier copy blanked outbound")
+  assert_eq(sent[5].content, "new body", "T250 latest copy sent intact")
+  assert_eq(agent.history[3].content, big, "T250 persisted history untouched")
+  seed(agent)
+  agent.turn({ workspace = "/ws", retry = { base_delay_ms = 1 },
+    context = { max_tokens = 4000000, summarize_at = 0.99, reserve_tokens = 0 } },
+    "k", "go", function() end)
+  assert_true(sent == agent.history, "T250 disabled prune sends history as-is")
+  for _, n in ipairs(names) do _G[n] = orig[n] end
+  print("T250 pruned outbound view: OK")
 end
 
 -- T43: B2 (Lua side) — a single >8KB data: line parses into ONE complete

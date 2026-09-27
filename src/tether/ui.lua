@@ -122,7 +122,11 @@ end
 -- "mono" = no colors at all (roles resolve to nil ⇒ raw text).
 local THEMES = {
     default = {
-        accent = "36;1", warn = "33;1", error = "31;1", success = "32",
+        -- accent is depth-aware (mint #69e098): truecolor carries the exact
+        -- rgb, 256-color falls back to the closest palette index (78).
+        -- No bold component by design; headings keep their own bold.
+        accent = { truecolor = "38;2;105;224;152", ["256"] = "38;5;78" },
+        warn = "33;1", error = "31;1", success = "32",
         dim = "2", muted = "90", italic = "3", reverse = "7", bold = "1",
         -- 7.1: syntax roles (token kinds); default to 16-color codes so
         -- truecolor/256 render with the same palette. ponytail: no brighter
@@ -151,6 +155,9 @@ local function sgr_role(role, s)
     local theme = THEMES[_theme_name] or THEMES.default
     if M.color_depth() == "none" then return to_ascii(s) end
     local code = theme[role]
+    if type(code) == "table" then
+        code = code[M.color_depth()] or code["256"] or code.truecolor
+    end
     if not code then return to_ascii(s) end
     return sgr(code, s)
 end

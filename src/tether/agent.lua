@@ -154,6 +154,7 @@ function M.clear()
     M.pending = nil
     M.session_approved = {}
     M.retry_state = nil
+    M._skip_first_compact = nil
 end
 
 -- --- session journal (design §10) -------------------------------------------
@@ -411,7 +412,16 @@ local function estimate_tokens(history)
     return math.ceil(total)
 end
 
-local function should_summarize(history, cfg)
+local function context_flag(cfg, key, default)
+    local ctx = cfg and cfg.context
+    if ctx == nil then return default end
+    local v = ctx[key]
+    if v == nil then return default end
+    if type(v) == "boolean" then return v end
+    return default
+end
+
+local function compaction_thresholds(cfg)
     local ctx = (cfg and cfg.context) or {}
     local max_tokens = tonumber(ctx.max_tokens)
     if not max_tokens then
@@ -421,10 +431,30 @@ local function should_summarize(history, cfg)
     if not fraction or fraction <= 0 or fraction >= 1 then fraction = 0.7 end
     local reserve = tonumber(ctx.reserve_tokens)
     if not reserve or reserve < 0 then reserve = 16384 end
-    local est = estimate_tokens(history)
+    return max_tokens, fraction, reserve
+end
+
+local function over_threshold(est, max_tokens, fraction, reserve)
     -- OR of two thresholds: fraction of the budget, or the reply reserve.
     -- A large reserve can fire first; that is intentional (safety net).
     return est > fraction * max_tokens or est > max_tokens - reserve
+end
+
+local function should_summarize(history, cfg)
+    local max_tokens, fraction, reserve = compaction_thresholds(cfg)
+    return over_threshold(estimate_tokens(history), max_tokens, fraction, reserve)
+end
+
+-- Preflight: project current estimate + incoming prompt cost against the same
+-- thresholds, so a single large paste compacts before the turn goes out.
+local function should_summarize_projected(history, prompt_text, cfg)
+    local max_tokens, fraction, reserve = compaction_thresholds(cfg)
+    local prompt_cost = 0
+    if type(prompt_text) == "string" and #prompt_text > 0 then
+        prompt_cost = math.ceil(#prompt_text / 4)
+    end
+    return over_threshold(estimate_tokens(history) + prompt_cost,
+        max_tokens, fraction, reserve)
 end
 
 local function keep_recent_of(cfg)
@@ -462,6 +492,319 @@ end
 local SUMMARY_MARKER = "── summary ──"
 local SUMMARY_SPAN_MAX = 2000
 
+-- Deterministic summary anchors (adapted from pifydev/compact): facts worth
+-- preserving, extracted by plain parsing with no model call. shapes handled:
+-- user/assistant string content plus assistant {tool_calls, text} tables where
+-- each call is {id, ["function"] = {name, arguments}} with arguments as a JSON
+-- string (the history echo form) or a table.
+local ANCHOR_TASK_WORDS = { "fix", "implement", "add", "create", "build",
+    "refactor", "remove", "update", "change", "make", "write", "support",
+    "migrate", "debug", "investigate", "improve", "optimize", "optimise",
+    "optimizing", "optimising", "rename", "delete", "integrate", "wire", "port" }
+local ANCHOR_SCOPE_HINTS = { "instead", "actually", "pivot", "scratch that",
+    "on second thought", "change of plans", "let's not", "no, wait", "no wait" }
+local ANCHOR_PREF_HINTS = { "prefer", "always", "never", "please use",
+    "please don't", "please dont", "make sure", "ensure", "don't use",
+    "dont use", "avoid using", "instead", "keep it", "style:" }
+local ANCHOR_BLOCKER_HINTS = { "fail", "failed", "failing", "fails",
+    "error", "errored", "broken", "cannot", "can't", "cant", "blocked",
+    "crash", "crashed", "crashes", "not working", "unresolved", "still stuck",
+    "doesn't work", "doesnt work", "don't work", "dont work" }
+local ANCHOR_NOISE_FIRST = { ok = true, okay = true, yes = true, no = true,
+    thanks = true, sure = true, go = true, continue = true, proceed = true,
+    next = true, yep = true, nope = true, k = true }
+
+-- Lua patterns have no alternation: single words match on word boundaries,
+-- multi-word hints match as plain substrings.
+local function anchor_any(lower, hints)
+    for _, h in ipairs(hints) do
+        if h:find("[^%w']") then
+            if lower:find(h, 1, true) then return true end
+        else
+            if lower:find("%f[%a]" .. h .. "%f[%A]") then return true end
+        end
+    end
+    return false
+end
+
+local function anchor_is_noise(text)
+    local t = tostring(text):gsub("^%s+", ""):gsub("%s+$", "")
+    local lower = t:lower()
+    if lower == "do it" then return true end
+    local first = lower:match("^(%a+)")
+    return first ~= nil and ANCHOR_NOISE_FIRST[first] == true
+        and #t < 24
+end
+
+local ANCHOR_GOAL_MAX = 140
+local ANCHOR_LINE_MAX = 120
+
+local function anchor_snippet(text, max)
+    max = max or ANCHOR_GOAL_MAX
+    local line = tostring(text or ""):gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", "")
+    if #line > max then return line:sub(1, max - 1) .. "…" end
+    return line
+end
+
+local function anchor_text(content)
+    if type(content) == "string" then return content end
+    if type(content) == "table" and type(content.text) == "string" then
+        return content.text
+    end
+    return ""
+end
+
+local function anchor_tool_calls(content)
+    local out = {}
+    if type(content) ~= "table" then return out end
+    local list = content.tool_calls
+    if type(list) ~= "table" then
+        -- tolerance: content itself may be the call list
+        if #content > 0 then list = content else return out end
+    end
+    for _, tc in ipairs(list) do
+        if type(tc) == "table" then out[#out + 1] = tc end
+    end
+    return out
+end
+
+local function anchor_call_args(tc)
+    local fn = tc["function"] or tc.fn or {}
+    local args = fn.arguments
+    if type(args) == "string" and args ~= "" then
+        local ok, tbl = pcall(json_parse, args)
+        if ok and type(tbl) == "table" then return fn.name, tbl end
+        return fn.name, {}
+    elseif type(args) == "table" then
+        return fn.name, args
+    end
+    return fn.name, {}
+end
+
+local ANCHOR_WRITE_TOOLS = { write = true, patch = true, edit = true,
+    apply_patch = true, multiedit = true }
+local ANCHOR_READ_TOOLS = { read = true, cat = true }
+
+local function anchor_trim_prefix(paths)
+    if #paths < 2 then return paths end
+    local split = {}
+    for i, p in ipairs(paths) do
+        split[i] = {}
+        for seg in tostring(p):gmatch("[^/\\]+") do split[i][#split[i] + 1] = seg end
+    end
+    local common = 0
+    while true do
+        local seg = split[1][common + 1]
+        if seg == nil then break end
+        local all = true
+        for i = 2, #split do
+            if #split[i] - 1 <= common or split[i][common + 1] ~= seg then
+                all = false break
+            end
+        end
+        if not all then break end
+        common = common + 1
+    end
+    if common == 0 then return paths end
+    local out = {}
+    for i, parts in ipairs(split) do
+        local tail = {}
+        for j = common + 1, #parts do tail[#tail + 1] = parts[j] end
+        out[i] = table.concat(tail, "/")
+    end
+    return out
+end
+
+local function extract_anchors(history)
+    local goal, scope_change = nil, nil
+    local modified, modified_order = {}, {}
+    local read_set, read_order = {}, {}
+    local prefs, commits, blockers = {}, {}, {}
+    local pending_commit = nil
+    local saw_goal = false
+    history = history or {}
+    for _, m in ipairs(history) do
+        local role = m.role
+        if role == "user" then
+            local text = anchor_text(m.content)
+            if text:match("%S") and not anchor_is_noise(text) then
+                local lower = text:lower()
+                if not saw_goal and anchor_any(lower, ANCHOR_TASK_WORDS) then
+                    goal = anchor_snippet(text)
+                    saw_goal = true
+                elseif anchor_any(lower, ANCHOR_SCOPE_HINTS) then
+                    scope_change = anchor_snippet(text)
+                end
+                if #prefs < 6 and not text:match("%?%s*$")
+                    and anchor_any(lower, ANCHOR_PREF_HINTS) then
+                    local hit = text
+                    for line in (tostring(text) .. "\n"):gmatch("([^\n]*)\n") do
+                        if anchor_any(line:lower(), ANCHOR_PREF_HINTS) then
+                            hit = line break
+                        end
+                    end
+                    prefs[#prefs + 1] = anchor_snippet(hit, ANCHOR_LINE_MAX)
+                end
+            end
+        elseif role == "assistant" then
+            for _, tc in ipairs(anchor_tool_calls(m.content)) do
+                local name, args = anchor_call_args(tc)
+                name = type(name) == "string" and name:lower() or ""
+                if name == "run" then
+                    local cmd = type(args.command) == "string" and args.command or ""
+                    local msg = cmd:match("git commit%s[^\n]*%-m%s+[\"']([^\"']+)[\"']")
+                        or cmd:match("git commit%s[^\n]*%-m%s+(%S%S%S+)")
+                    if msg then pending_commit = anchor_snippet(msg, ANCHOR_LINE_MAX) end
+                else
+                    local p = args.path or args.file or args.filename
+                    if type(p) == "string" and p:match("%S") then
+                        p = p:gsub("^%s+", ""):gsub("%s+$", "")
+                        if ANCHOR_WRITE_TOOLS[name] then
+                            if not modified[p] then
+                                modified[p] = true
+                                modified_order[#modified_order + 1] = p
+                            end
+                        elseif ANCHOR_READ_TOOLS[name] then
+                            if not read_set[p] then
+                                read_set[p] = true
+                                read_order[#read_order + 1] = p
+                            end
+                        end
+                    end
+                end
+            end
+        elseif role == "tool" then
+            if pending_commit then
+                local out = anchor_text(m.content)
+                local hash = out:match("%f[%w]([0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][%w]*)%f[^%w]")
+                if hash then
+                    commits[#commits + 1] = hash:sub(1, 8) .. " " .. pending_commit
+                else
+                    commits[#commits + 1] = pending_commit
+                end
+                if #commits >= 4 then
+                    -- keep scanning (pending cleared) but stop growing
+                    pending_commit = nil
+                else
+                    pending_commit = nil
+                end
+            end
+        end
+    end
+    -- Blockers: tail only, an old failure is usually resolved.
+    local tail_from = math.max(1, #history - 23)
+    for i = tail_from, #history do
+        if #blockers >= 4 then break end
+        local m = history[i]
+        if m.role == "tool" or m.role == "user" then
+            local text = anchor_text(m.content)
+            if text:match("%S") then
+                local hit = nil
+                for line in (tostring(text) .. "\n"):gmatch("([^\n]*)\n") do
+                    if anchor_any(line:lower(), ANCHOR_BLOCKER_HINTS) then
+                        hit = line break
+                    end
+                end
+                if m.error or hit then
+                    blockers[#blockers + 1] =
+                        anchor_snippet(hit or text, ANCHOR_LINE_MAX)
+                end
+            end
+        end
+    end
+    local modified_trimmed = anchor_trim_prefix(modified_order)
+    local both = {}
+    for i, p in ipairs(modified_order) do
+        if read_set[p] then both[#both + 1] = modified_trimmed[i] end
+    end
+    local files_read = {}
+    for _, p in ipairs(read_order) do
+        if not modified[p] then files_read[#files_read + 1] = p end
+    end
+    local files_modified = {}
+    for i = 1, math.min(12, #modified_trimmed) do
+        files_modified[#files_modified + 1] = modified_trimmed[i]
+    end
+    return {
+        goal = goal,
+        scope_change = scope_change,
+        files_modified = files_modified,
+        files_both = (function()
+            local b = {}
+            for i = 1, math.min(12, #both) do b[#b + 1] = both[i] end
+            return b
+        end)(),
+        files_read = (function()
+            local r = {}
+            for i = 1, math.min(8, #files_read) do r[#r + 1] = files_read[i] end
+            return r
+        end)(),
+        preferences = prefs,
+        commits = (function()
+            local seen, c = {}, {}
+            for _, v in ipairs(commits) do
+                if not seen[v] then seen[v] = true c[#c + 1] = v end
+                if #c >= 4 then break end
+            end
+            return c
+        end)(),
+        blockers = (function()
+            local seen, b = {}, {}
+            for _, v in ipairs(blockers) do
+                if not seen[v] then seen[v] = true b[#b + 1] = v end
+                if #b >= 4 then break end
+            end
+            return b
+        end)(),
+    }
+end
+
+local function has_anchors(a)
+    return a ~= nil and (a.goal ~= nil or a.scope_change ~= nil
+        or #a.files_modified > 0 or #a.files_read > 0
+        or #a.preferences > 0 or #a.commits > 0 or #a.blockers > 0)
+end
+
+local function format_anchors(a)
+    if not has_anchors(a) then return "" end
+    local lines = {
+        "Preserve these exact facts in the summary — do not drop or generalize them:",
+    }
+    if a.goal then lines[#lines + 1] = "- Task: " .. a.goal end
+    if a.scope_change then
+        lines[#lines + 1] = "- Latest scope change: " .. a.scope_change
+    end
+    if #a.files_modified > 0 then
+        local both = {}
+        for _, f in ipairs(a.files_both) do both[f] = true end
+        local names = {}
+        for _, f in ipairs(a.files_modified) do
+            names[#names + 1] = both[f] and (f .. " (RW)") or f
+        end
+        lines[#lines + 1] = "- Files modified: " .. table.concat(names, ", ")
+    end
+    if #a.files_read > 0 then
+        lines[#lines + 1] = "- Files read: " .. table.concat(a.files_read, ", ")
+    end
+    if #a.preferences > 0 then
+        lines[#lines + 1] = "- Preferences: " .. table.concat(a.preferences, " | ")
+    end
+    if #a.commits > 0 then
+        lines[#lines + 1] = "- Commits: " .. table.concat(a.commits, " | ")
+    end
+    if #a.blockers > 0 then
+        lines[#lines + 1] = "- Open/unresolved: " .. table.concat(a.blockers, " | ")
+    end
+    return table.concat(lines, "\n")
+end
+
+local function anchor_block(history, cfg)
+    if not context_flag(cfg, "anchors", true) then return "" end
+    local ok, a = pcall(extract_anchors, history)
+    if not ok or type(a) ~= "table" then return "" end
+    return format_anchors(a)
+end
+
 -- Role-prefixed span for the summary request; tool results / long bodies are
 -- bounded so one file read cannot blow the compaction request.
 local function serialize_span(old)
@@ -481,7 +824,7 @@ local function serialize_span(old)
     return table.concat(parts, "\n")
 end
 
-local function build_summary_messages(old, focus)
+local function build_summary_messages(old, focus, anchors_text)
     local prompt = table.concat({
         "Summarize the conversation for a coding agent that will continue.",
         "Cover exactly these sections:",
@@ -492,6 +835,9 @@ local function build_summary_messages(old, focus)
         "- Next steps",
         "Be dense and factual. Use only information present in the history.",
     }, "\n")
+    if type(anchors_text) == "string" and anchors_text ~= "" then
+        prompt = prompt .. "\n\n" .. anchors_text
+    end
     if type(focus) == "string" and focus ~= "" then
         prompt = prompt .. "\n\nFocus instructions:\n" .. focus
     end
@@ -531,7 +877,7 @@ local function compact_history(history, cfg, api_key, focus, force)
     if type(api_key) == "string" and api_key ~= ""
         and api and api.summarize then
         local ok, text = pcall(api.summarize, cfg, api_key,
-            build_summary_messages(old, focus))
+            build_summary_messages(old, focus, anchor_block(history, cfg)))
         if ok and type(text) == "string" and text ~= "" then
             body, mode = text, "llm"
         end
@@ -543,6 +889,121 @@ local function compact_history(history, cfg, api_key, focus, force)
     local new_history = { system, { role = "system", content = summary_msg } }
     for _, m in ipairs(keep) do new_history[#new_history + 1] = m end
     return new_history, summary_msg, mode
+end
+
+-- Lossless superseded-read pruning (adapted from pifydev/compact): a file read
+-- twice keeps both copies in context, but only the later one can still be
+-- true. Blank the earlier copies in the OUTBOUND view only — persisted history
+-- and the journal are never touched, so resume restores the originals.
+-- Cache discipline: the newest tail is never touched, and nothing is rewritten
+-- until enough can be reclaimed at once (one rewrite = one cache miss).
+-- Returns the same table reference when nothing qualifies.
+local PRUNE_PROTECT_CHARS = 160000
+local PRUNE_MIN_RECLAIM_CHARS = 20000
+
+local function prune_placeholder(path)
+    path = tostring(path)
+    return "[superseded: this read of " .. path
+        .. " was replaced by the latest read of " .. path
+        .. " (kept in context) - pruned from context]"
+end
+
+local function normalize_prune_path(p)
+    return tostring(p):gsub("\\", "/"):gsub("^%./", "")
+end
+
+local function is_plan_file(path)
+    local base = tostring(path):match("([^/\\]+)$") or tostring(path)
+    return base:lower():find("plan") ~= nil and base:lower():sub(-3) == ".md"
+end
+
+local function prune_superseded_reads(view)
+    view = view or {}
+    -- 1. every read call: tool_call_id -> path, in order.
+    local path_of_call = {}
+    local call_count = 0
+    for _, m in ipairs(view) do
+        if m.role == "assistant" then
+            for _, tc in ipairs(anchor_tool_calls(m.content)) do
+                local name, args = anchor_call_args(tc)
+                name = type(name) == "string" and name:lower() or ""
+                if ANCHOR_READ_TOOLS[name] and type(tc.id) == "string" then
+                    local p = args.path or args.file or args.filename
+                    if type(p) == "string" and p:match("%S") then
+                        p = normalize_prune_path(
+                            p:gsub("^%s+", ""):gsub("%s+$", ""))
+                        if p ~= "" then
+                            path_of_call[tc.id] = p
+                            call_count = call_count + 1
+                        end
+                    end
+                end
+            end
+        end
+    end
+    if call_count < 2 then return view end
+    -- 2. every read result, grouped by path, in order.
+    local by_path = {}
+    for i, m in ipairs(view) do
+        if m.role == "tool" and type(m.tool_call_id) == "string" then
+            local p = path_of_call[m.tool_call_id]
+            if p then
+                by_path[p] = by_path[p] or {}
+                by_path[p][#by_path[p] + 1] = i
+            end
+        end
+    end
+    -- 3. chars after each message, to find the protected tail.
+    local after = {}
+    local acc = 0
+    for i = #view, 1, -1 do
+        after[i] = acc
+        local c = view[i].content
+        acc = acc + (type(c) == "string" and #c or 0)
+    end
+    -- 4. candidates: all but the last result per path, outside the tail.
+    local candidates = {}
+    local reclaim = 0
+    for path, indexes in pairs(by_path) do
+        if #indexes >= 2 and not is_plan_file(path) then
+            for k = 1, #indexes - 1 do
+                local i = indexes[k]
+                if after[i] >= PRUNE_PROTECT_CHARS then
+                    local m = view[i]
+                    local size = type(m.content) == "string" and #m.content or 0
+                    local ph = prune_placeholder(path)
+                    if size > #ph
+                        and not tostring(m.content):sub(1, 13):find("%[superseded:") then
+                        candidates[#candidates + 1] = { index = i, path = path }
+                        reclaim = reclaim + size
+                    end
+                end
+            end
+        end
+    end
+    if #candidates == 0 or reclaim < PRUNE_MIN_RECLAIM_CHARS then return view end
+    -- 5. rewrite the outbound view only.
+    local out = {}
+    for i, m in ipairs(view) do out[i] = m end
+    for _, c in ipairs(candidates) do
+        local m = view[c.index]
+        local copy = {}
+        for k, v in pairs(m) do copy[k] = v end
+        copy.content = prune_placeholder(c.path)
+        out[c.index] = copy
+    end
+    return out
+end
+
+-- The messages actually sent to the provider: history, or the pruned view
+-- when pruning is enabled. Never assigned back to M.history.
+local function outbound_view(cfg)
+    if not context_flag(cfg, "prune_superseded_reads", false) then
+        return M.history
+    end
+    local ok, view = pcall(prune_superseded_reads, M.history)
+    if not ok or type(view) ~= "table" then return M.history end
+    return view
 end
 
 -- Run one tool call: execute, log, report to UI. Returns result table or {error=...}.
@@ -901,7 +1362,7 @@ local function run_attempt(cfg, api_key, attempt, on_event)
     -- what the transcript showed, not just what the model keeps)
     local reasoning_acc = {}
     local stop_reason = "other"
-    local ok, failure = api.stream(cfg, api_key, M.history, function(ev)
+    local ok, failure = api.stream(cfg, api_key, outbound_view(cfg), function(ev)
         if ev.type ~= "usage" and take_abort() then return end
         if ev.type == "text_delta" then
             text_acc[#text_acc + 1] = ev.text
@@ -1109,7 +1570,12 @@ local function main_loop(cfg, api_key, on_event)
             return false
         end
 
-        if should_summarize(M.history, cfg) then
+        if M._skip_first_compact then
+            -- this turn already compacted in preflight; the keep window still
+            -- holds the large prompt, so a re-check here would compact again
+            -- for no gain (one summary call saved).
+            M._skip_first_compact = nil
+        elseif should_summarize(outbound_view(cfg), cfg) then
             local compressed, summary, mode =
                 compact_history(M.history, cfg, api_key, nil, true)
             if mode ~= "noop" then
@@ -1237,6 +1703,28 @@ function M.turn(cfg, api_key, user_text, on_event, skip_user)
     if not skip_user then
         M.add_user(user_text)
         log_message(cfg, "user", user_text)
+    end
+    -- preflight: a large paste can overflow the very turn it opens, before
+    -- the main loop ever sees an over-threshold history. Project and compact
+    -- first so the turn goes out against a fitting window.
+    if not skip_user and context_flag(cfg, "preflight", true)
+        and should_summarize_projected(M.history, user_text, cfg) then
+        local compressed, summary, mode =
+            compact_history(M.history, cfg, api_key, nil, true)
+        if mode ~= "noop" then
+            M.history = compressed
+            -- the main loop re-checks the threshold on its first iteration;
+            -- it would compact again immediately (the large prompt itself is
+            -- in the keep window), so tell it this turn already preflighted.
+            M._skip_first_compact = true
+            if on_event then
+                on_event({
+                    type = "context_compressed",
+                    mode = mode,
+                    summary = mode == "llm" and summary or nil,
+                })
+            end
+        end
     end
     -- a new user turn gets a fresh retry budget, continuation state and nudge
     M.reset_retry_state()
@@ -1503,6 +1991,10 @@ M._projection_for = projection_for
 M.compress_history = compress_history
 M.compact_history = compact_history
 M.should_summarize = should_summarize
+M.should_summarize_projected = should_summarize_projected
+M.extract_anchors = extract_anchors
+M.format_anchors = format_anchors
+M.prune_superseded_reads = prune_superseded_reads
 M.parse_args = parse_args
 M.json_parse = json_parse
 M.SUMMARY_MARKER = SUMMARY_MARKER

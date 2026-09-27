@@ -65,6 +65,14 @@ local function default_config()
             -- add-llm-compaction: reply headroom + keep-window size
             reserve_tokens = 16384,
             keep_recent_messages = 4,
+            -- compaction-anchors-preflight-prune: deterministic anchor facts
+            -- appended to the summary request (default on), pre-turn
+            -- projection for large pastes (default on), lossless pruning of
+            -- superseded reads in the outbound view (default off: each first
+            -- prune costs one prompt-cache miss).
+            anchors = true,
+            preflight = true,
+            prune_superseded_reads = false,
         },
         -- add-retry-and-continuation: the retry policy reads this table.
         -- There is deliberately no default attempt cap: the budget is the
@@ -534,6 +542,13 @@ function M.load(path, home)
         if not sat or sat <= 0 or sat >= 1 then cfg.context.summarize_at = def_ctx.summarize_at end
         local mt = tonumber(cfg.context.max_tokens)
         if not mt or mt <= 0 then cfg.context.max_tokens = def_ctx.max_tokens end
+        -- compaction-anchors-preflight-prune: boolean knobs; a missing or
+        -- non-boolean value falls back to its default without failing.
+        for _, k in ipairs({ "anchors", "preflight", "prune_superseded_reads" }) do
+            if type(cfg.context[k]) ~= "boolean" then
+                cfg.context[k] = def_ctx[k]
+            end
+        end
     end
 
     -- add-retry-and-continuation: a legacy top-level `retries` was the hard
