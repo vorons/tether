@@ -126,6 +126,15 @@ function M.build_command(item, ctx)
     local binary = ctx.binary
     if not is_nonempty_str(binary) then
         binary = os.getenv("TETHER_BIN")
+        if not is_nonempty_str(binary) then
+            -- reuse the running binary: a PATH lookup can shadow `tether`
+            -- with an unrelated program whose CLI rejects our flags.
+            local th = host()
+            if th and th.exepath then
+                local ok, p = pcall(th.exepath)
+                if ok and is_nonempty_str(p) then binary = p end
+            end
+        end
         if not is_nonempty_str(binary) then binary = "tether" end
     end
     local argv = { sq(binary), "--print", "-w", sq(item.cwd) }

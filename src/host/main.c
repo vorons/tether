@@ -429,6 +429,22 @@ static int l_getcwd(lua_State *L)
     return 1;
 }
 
+/* tether.exepath() -> own executable path | nil  (Linux: /proc/self/exe;
+   child spawns must reuse this binary — a PATH lookup can resolve `tether`
+   to an unrelated program with an incompatible CLI). */
+static int l_exepath(lua_State *L)
+{
+    char buf[4096];
+    ssize_t n = readlink("/proc/self/exe", buf, sizeof(buf) - 1);
+    if (n <= 0) {
+        lua_pushnil(L);
+        return 1;
+    }
+    buf[n] = '\0';
+    lua_pushstring(L, buf);
+    return 1;
+}
+
 static int l_get_terminal_size(lua_State *L)
 {
     struct winsize ws;
@@ -2137,6 +2153,7 @@ static luaL_Reg tether_api[] = {
     {"rs256_sign",     l_rs256_sign},
     {"realpath",    l_realpath},
     {"getcwd",      l_getcwd},
+    {"exepath",     l_exepath},
     {"is_tty",      l_tty},
     {"get_terminal_size", l_get_terminal_size},
     {"mkdirp",      l_mkdirp},

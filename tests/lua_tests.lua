@@ -2311,6 +2311,43 @@ do
   print("T224 subagent single-task orchestration: OK")
 end
 
+-- T230: subagent child reuses the RUNNING binary, never a PATH shadow.
+-- A foreign `tether` on PATH rejects --print with its own help (exit 2),
+-- so build_command must prefer tether.exepath() over bare "tether".
+do
+  local orig_tether = _G.tether
+  local sub = assert(loadfile("src/tether/subagent.lua"))()
+  local item = { task = "go", cwd = "/ws", timeout = 5 }
+  local env_bin = os.getenv("TETHER_BIN")
+  local env_empty = (env_bin == nil or env_bin == "")
+  -- own binary wins over PATH lookup
+  _G.tether = { exepath = function() return "/opt/own/tether" end }
+  if env_empty then
+    local cmd = sub.build_command(item, {})
+    assert_true(cmd:find("'/opt/own/tether' --print", 1, true) ~= nil,
+      "T230 child uses the running binary, not PATH")
+  end
+  -- explicit overrides still win: ctx.binary first ...
+  local cmd_custom = sub.build_command(item, { binary = "/custom/tether" })
+  assert_true(cmd_custom:find("'/custom/tether' --print", 1, true) ~= nil,
+    "T230 ctx.binary wins")
+  -- ... then TETHER_BIN over exepath
+  if not env_empty then
+    local cmd_env = sub.build_command(item, {})
+    assert_true(cmd_env:find(env_bin, 1, true) ~= nil,
+      "T230 TETHER_BIN wins over exepath")
+  end
+  -- no exepath primitive (plain-lua) keeps the old PATH fallback
+  _G.tether = {}
+  if env_empty then
+    local cmd_fb = sub.build_command(item, {})
+    assert_true(cmd_fb:find("'tether' --print", 1, true) ~= nil,
+      "T230 PATH fallback without exepath")
+  end
+  _G.tether = orig_tether
+  print("T230 subagent child binary resolution: OK")
+end
+
 -- T225: subagent batch — bounded parallelism, task-order combination,
 -- abort cancels running and queued tasks.
 do

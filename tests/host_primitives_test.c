@@ -1744,6 +1744,28 @@ int main(void)
         lua_pop(L, 2);
     }
 
+    /* --- exepath ------------------------------------------------------- */
+    /* Subagent children must reuse the running binary (PATH `tether` may be
+       an unrelated program): exepath reports our own /proc/self/exe. */
+    {
+        lua_getglobal(L, "tether");
+        lua_getfield(L, -1, "exepath");
+        lua_remove(L, -2);
+        if (lua_pcall(L, 0, 1, 0) == LUA_OK) {
+            const char *p = lua_tostring(L, -1);
+            char self[4096];
+            ssize_t n = readlink("/proc/self/exe", self, sizeof(self) - 1);
+            check(p != NULL && n > 0, "tether.exepath returns a path");
+            if (p != NULL && n > 0) {
+                self[n] = '\0';
+                check(strcmp(p, self) == 0, "tether.exepath is our own binary");
+            }
+            lua_pop(L, 1);
+        } else {
+            report_lua_error(L, "tether.exepath");
+        }
+    }
+
     test_krep_search(L);
     test_http_transport(L);
     test_http_xfer_steps(L);
