@@ -2324,12 +2324,12 @@ do
   _G.tether = { exepath = function() return "/opt/own/tether" end }
   if env_empty then
     local cmd = sub.build_command(item, {})
-    assert_true(cmd:find("'/opt/own/tether' --print", 1, true) ~= nil,
+    assert_true(cmd:find("'/opt/own/tether' -w", 1, true) ~= nil,
       "T230 child uses the running binary, not PATH")
   end
   -- explicit overrides still win: ctx.binary first ...
   local cmd_custom = sub.build_command(item, { binary = "/custom/tether" })
-  assert_true(cmd_custom:find("'/custom/tether' --print", 1, true) ~= nil,
+  assert_true(cmd_custom:find("'/custom/tether' -w", 1, true) ~= nil,
     "T230 ctx.binary wins")
   -- ... then TETHER_BIN over exepath
   if not env_empty then
@@ -2341,11 +2341,35 @@ do
   _G.tether = {}
   if env_empty then
     local cmd_fb = sub.build_command(item, {})
-    assert_true(cmd_fb:find("'tether' --print", 1, true) ~= nil,
+    assert_true(cmd_fb:find("'tether' -w", 1, true) ~= nil,
       "T230 PATH fallback without exepath")
   end
   _G.tether = orig_tether
   print("T230 subagent child binary resolution: OK")
+end
+
+-- T231: the task must ride glued to --print (`--print <task>` adjacent).
+-- parse_args takes the prompt from the slot right after --print unless it
+-- starts with `-`; with `--print -w ... <task>` the task lands on an
+-- unknown positional and is silently dropped — the child then blocks on
+-- inherited stdin (hang) or exits "requires a prompt argument".
+do
+  local orig_tether = _G.tether
+  _G.tether = {}
+  local sub = assert(loadfile("src/tether/subagent.lua"))()
+  local cmd = sub.build_command(
+    { task = "fix it", model = "m", cwd = "/ws", timeout = 5 }, {})
+  assert_true(cmd:find("--print 'fix it'", 1, true) ~= nil,
+    "T231 task immediately follows --print")
+  local pw, pp = cmd:find("-w ", 1, true), cmd:find("--print", 1, true)
+  assert_true(pw ~= nil and pp ~= nil and pw < pp,
+    "T231 flags precede --print")
+  local cmd2 = sub.build_command(
+    { task = "fix it", cwd = "/ws", timeout = 5 }, {})
+  assert_true(cmd2:find("--print 'fix it'", 1, true) ~= nil,
+    "T231 task glued without optional flags too")
+  _G.tether = orig_tether
+  print("T231 subagent task rides with --print: OK")
 end
 
 -- T225: subagent batch — bounded parallelism, task-order combination,

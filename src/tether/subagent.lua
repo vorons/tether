@@ -137,7 +137,10 @@ function M.build_command(item, ctx)
         end
         if not is_nonempty_str(binary) then binary = "tether" end
     end
-    local argv = { sq(binary), "--print", "-w", sq(item.cwd) }
+    -- flags first, `--print <task>` last: parse_args takes the prompt
+    -- from the slot right after --print, so anything between them (like
+    -- -w) would swallow the slot and drop the task onto a dead positional.
+    local argv = { sq(binary), "-w", sq(item.cwd) }
     if is_nonempty_str(item.model) then
         argv[#argv + 1] = "--model"
         argv[#argv + 1] = sq(item.model)
@@ -146,6 +149,7 @@ function M.build_command(item, ctx)
         argv[#argv + 1] = "--tools"
         argv[#argv + 1] = sq(table.concat(item.tools, ","))
     end
+    argv[#argv + 1] = "--print"
     local depth = tonumber(ctx.depth) or 0
     if depth < 0 then depth = 0 end
     local env = string.format("TETHER_SUBAGENT_DEPTH=%d TETHER_WORKSPACE=%s",
