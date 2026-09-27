@@ -253,11 +253,13 @@ function M.tools_schema()
             .. "required. Each tasks[] item takes task plus optional model, "
             .. "cwd, tools, timeout. Optional model overrides the run model, "
             .. "cwd defaults to the workspace, tools restricts the child tool "
-            .. "set, timeout caps seconds per task.",
+            .. "set, timeout caps seconds per task. Optional resume continues "
+            .. "a finished child session (its id is reported in the result) "
+            .. "with a follow-up task instead of starting over.",
           parameters = { type = "object",
             properties = { task = str, tasks = { type = "array" },
               model = str, cwd = str, tools = { type = "array" },
-              timeout = num } } },
+              timeout = num, resume = str } } },
     }
     if tools_filter == nil then return out end
     local kept = {}

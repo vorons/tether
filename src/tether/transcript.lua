@@ -34,6 +34,18 @@ local visible_hi = -1
 local confirm_entry = nil
 local ask_entry = nil
 
+-- Background progress tail: live outfile excerpt per pending row, newest
+-- lines win, display-only (never journaled, dropped on collapse).
+local TAIL_MAX_LINES = 8
+local function cap_tail(text)
+    local lines = {}
+    for ln in tostring(text):gmatch("[^\n]+") do
+        lines[#lines + 1] = ln
+        if #lines > TAIL_MAX_LINES then table.remove(lines, 1) end
+    end
+    return table.concat(lines, "\n")
+end
+
 -- Injected by ui once render_entry and the viewport height are in scope.
 local render_fn = nil
 local cache_bound_fn = nil
@@ -291,12 +303,27 @@ function M.handle(ev)
                 local dropped = ev.error == "denied by user" or ev.error == "cancelled by user"
                 e.body = dropped and "" or (ev.body or "")
                 e.projection = nil
+                e.progress = nil -- bg tail is display-only; the final row stands alone
                 target = e
                 break
             end
         end
         M.touch(target)
         return false
+    elseif t == "tool_progress" then
+        -- background subagent tick: refresh the capped live tail on a still
+        -- pending row. Display-only: never journaled, dropped on collapse.
+        local target
+        for i = #entries, 1, -1 do
+            local e = entries[i]
+            if e.role == "tool" and e.id == ev.id and e.status == "pending" then
+                e.progress = cap_tail(ev.tail or "")
+                target = e
+                break
+            end
+        end
+        M.touch(target)
+        return true
     elseif t == "aborted" then
         -- the turn ends with no replacement: bring back partial output
         -- dropped by earlier retries before marking pending tools.

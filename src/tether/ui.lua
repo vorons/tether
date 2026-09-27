@@ -2344,6 +2344,12 @@ function M._tool_arg_label(name, args, path)
         if type(p) == "string" then
             return p:match("%+%+%+ b/([^\n]+)") or p:match("%+%+%+ ([^%s]+)")
         end
+    elseif name == "subagent" then
+        local t = args.task or ""
+        if t == "" and type(args.tasks) == "table" and args.tasks[1] then
+            t = args.tasks[1].task or ""
+        end
+        if type(t) == "string" and t ~= "" then return t end
     end
     return path
 end
@@ -2453,6 +2459,15 @@ local function render_entry(e, width, prev_role)
                 if e.started_at then
                     local secs = os.time() - e.started_at
                     head = head .. "  " .. muted(string.format("%.1fs", secs))
+                end
+                -- bg subagent tick: newest progress line rides the head row
+                -- (no expansion needed); the full tail stays display-only.
+                if e.progress and e.progress ~= "" then
+                    local last = sanitize_output(e.progress:match("[^\n]*$") or "")
+                    local budget = width - vlen(head) - 1
+                    if budget >= 4 and last ~= "" then
+                        head = head .. "  " .. dim(clip(last, budget))
+                    end
                 end
             elseif e.status == "error" then
                 local raw = (e.body ~= nil and e.body ~= "") and e.body or (e.summary or "")
@@ -5592,6 +5607,8 @@ handle_key = function(k)
                 -- §6.6: first Ctrl+C aborts the stream, keeps received text;
                 -- turn.abort() owns the flag — ui never assigns agent.abort_requested
                 turn.abort()
+                -- background children belong to the aborted turn too
+                M._abort_bg("subagent cancelled")
                 return
             end
             if S.palette_active then input_clear(); return end
@@ -6168,6 +6185,7 @@ function M.run(app_cfg)
     end)
     M._loop:on_tick(function()
         M._poll_models_bg()
+        M._poll_subagents_bg()
         -- a Ctrl+Q raised by the host while a turn blocked: the turn has
         -- unwound by now, so this is the exit the keystroke asked for
         if tether.quit_requested() then S.quit = true end
@@ -6195,6 +6213,66 @@ function M.run(app_cfg)
     -- tick; the synchronous callers (api.stream between steps, the agent's
     -- backoff deadline) find this loop through the module and pump it
     -- nested instead of blocking the OS thread.
+    -- Background subagent harvest (async-subagents): progress tails plus
+    -- pickup, every tick. Completions only arm the deferred wake drained
+    -- after the tick — a turn never starts inside dispatch (see design).
+    function M._poll_subagents_bg()
+        if not S then return end
+        local sm = rawget(_G, "subagent")
+        if sm and sm.running_tails then
+            for _, t in ipairs(sm.running_tails()) do
+                handle_agent_event({ type = "tool_progress",
+                    id = t.id, tail = t.tail })
+            end
+        end
+        if agent and agent.poll_background then
+            local completed = agent.poll_background(S.cfg, handle_agent_event)
+            if #completed > 0 then
+                debug_log("bg: picked up " .. #completed .. " child(ren)")
+                S._bg_wake_pending = true
+            end
+        end
+    end
+
+    -- Deferred wake past the tick dispatch: completions start the
+    -- continuation carrying fresh results when idle; while a turn runs
+    -- the wake parks in the queue drained on the next idle tick; on
+    -- quit or abort everything is dropped (3.2/3.3 own the abort path).
+    function M._drain_bg_wake()
+        if not S then return end
+        if S.quit then
+            S._bg_wake_pending = nil
+            S._bg_wake_queued = nil
+            return
+        end
+        if S.busy then
+            if S._bg_wake_pending then
+                S._bg_wake_queued = true
+                S._bg_wake_pending = nil
+            end
+            return
+        end
+        if S._bg_wake_pending or S._bg_wake_queued then
+            S._bg_wake_pending = nil
+            S._bg_wake_queued = nil
+            debug_log("bg: waking turn for finished child")
+            turn.continue(S, S.cfg, S.api_key or "", handle_agent_event)
+        end
+    end
+
+    -- Abort owns background children too: kill the registry, collapse rows,
+    -- record cancellations, drop pending wakes.
+    function M._abort_bg(reason)
+        if agent and agent.cancel_background then
+            agent.cancel_background(S and S.cfg, reason or "subagent cancelled",
+                handle_agent_event)
+        end
+        if S then
+            S._bg_wake_pending = nil
+            S._bg_wake_queued = nil
+        end
+    end
+
     M._reactor.set_active(M._loop)
     -- Loop errors surface as the error banner, not as a stderr dump that
     -- kills the session: a tick that raises is reported in place and the
@@ -6204,9 +6282,18 @@ function M.run(app_cfg)
         if not ok and not M._loop:stopped() then
             S.error_banner = tostring(err or "unknown error")
         end
+        -- deferred background wake: completions picked up on the tick start
+        -- their continuation here, past dispatch, never nested inside it.
+        local wok, werr = pcall(M._drain_bg_wake)
+        if not wok and not M._loop:stopped() then
+            S.error_banner = tostring(werr or "unknown error")
+        end
     end
     M._reactor.set_active(nil)
     M._loop = nil
+
+    -- quitting owns background children too: kill, collapse, record.
+    M._abort_bg("subagent cancelled")
 
     if debug_log_fh then
         pcall(function() debug_log_fh:close() end)

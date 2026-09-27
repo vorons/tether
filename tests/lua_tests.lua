@@ -543,6 +543,115 @@ do
     assert_eq(o3.print_prompt, nil, "T19 --print followed by flag -> no prompt")
 end
 
+-- T240: --resume takes an optional session id (sequel), bare -r keeps
+-- latest-session behavior. Tested against the REAL app parser.
+do
+  local app = assert(loadfile("src/tether/app.lua"))()
+  assert_notnil(app._parse_args, "T240 parser exposed for tests")
+  local o = app._parse_args({ "-w", "/ws", "--print", "hi", "--resume", "abc123" })
+  assert_true(o.print_mode, "T240 print mode")
+  assert_eq(o.print_prompt, "hi", "T240 prompt kept")
+  assert_eq(o.workspace, "/ws", "T240 workspace kept")
+  assert_eq(o.resume, "abc123", "T240 resume id captured")
+  local o2 = app._parse_args({ "--print", "hi", "--resume", "abc123" })
+  assert_eq(o2.print_prompt, "hi", "T240 prompt-first order")
+  assert_eq(o2.resume, "abc123", "T240 resume id after prompt")
+  local o3 = app._parse_args({ "-r" })
+  assert_eq(o3.resume, true, "T240 bare -r keeps latest behavior")
+  local o4 = app._parse_args({ "--print", "hi" })
+  assert_eq(o4.resume, nil, "T240 no resume by default")
+  local o5 = app._parse_args({ "-r", "-w", "/ws" })
+  assert_eq(o5.resume, true, "T240 -r before flags stays latest")
+  print("T240 resume takes an optional session id: OK")
+end
+
+-- T241: sequel plumbing. validate keeps resume; spawn mints the child
+-- journal (sequel reuses the given one); the child command carries
+-- --resume after the prompt slot; results report the session id.
+do
+  local orig_tether, orig_tools, orig_session = _G.tether, _G.tools, _G.session
+  _G.tools = {
+    _resolve = function(p, cfg) return p end,
+    _within = function(abs, cfg) return true end,
+    _workspace = function(cfg) return "/tmp/ws" end,
+  }
+  local minted = {}
+  _G.session = { new_session = function(ws, model)
+    minted[#minted + 1] = { ws = ws, model = model }
+    return "childsid" .. #minted
+  end }
+  local cmds = {}
+  _G.tether = {
+    exec_bg_start = function(cmd) cmds[#cmds + 1] = cmd return {} end,
+    exec_bg_poll = function(h, ms) return "done", 0 end,
+    exec_bg_free = function(h) return true end,
+    exec_bg_kill = function(h) return true end,
+    abort_requested = function() return false end,
+    monotonic_ms = function() return 1000 end,
+  }
+  local sub = assert(loadfile("src/tether/subagent.lua"))()
+  local cfg = { workspace = "/tmp/ws", model = "m",
+    subagents = { max_parallel = 4, timeout = 600, max_depth = 1 } }
+  local it = assert(sub.validate_item({ task = "go", resume = "abc" }, {}, cfg))
+  assert_eq(it.resume, "abc", "T241 validate keeps resume")
+  -- fresh spawn mints the journal
+  local rec = assert(sub.run_call_bg({ task = "go" }, cfg))
+  assert_eq(#minted, 1, "T241 spawn mints one journal")
+  assert_eq(minted[1].ws, "/tmp/ws", "T241 journal minted in task cwd")
+  assert_true(cmds[1]:find("--print 'go' --resume 'childsid1'", 1, true) ~= nil,
+    "T241 child command resumes the minted journal after the prompt")
+  local jid = rec.jobs[1].id
+  assert_eq(sub._running[jid].item.sid, "childsid1", "T241 item carries sid")
+  sub.cancel_all("over")
+  -- sequel reuses the given journal, mints nothing
+  local rec2 = assert(sub.run_call_bg({ task = "again", resume = "abc" }, cfg))
+  assert_eq(#minted, 1, "T241 sequel mints nothing")
+  assert_true(cmds[2]:find("--print 'again' --resume 'abc'", 1, true) ~= nil,
+    "T241 sequel command resumes the given journal")
+  sub.cancel_all("over")
+  -- results report the session
+  local fuller = { status = "ok", exit_code = 0, output = "hi",
+    elapsed_ms = 1, model = "m", session_id = "s9" }
+  local comb = sub.combine_batch({ fuller }, 1)
+  assert_true(comb.output:find("session=s9", 1, true) ~= nil,
+    "T241 batch header reports the session")
+  _G.tether, _G.tools, _G.session = orig_tether, orig_tools, orig_session
+  print("T241 sequel plumbing: OK")
+end
+
+-- T242: --debug propagates to the child command so its stages land in
+-- the shared log; without debug the command stays clean.
+do
+  local sub = assert(loadfile("src/tether/subagent.lua"))()
+  local item = { task = "go", cwd = "/ws", timeout = 5, sid = "s1" }
+  local plain = sub.build_command(item, {})
+  local dbg = sub.build_command(item, { cfg = { debug = true } })
+  assert_true(dbg:find("--debug", 1, true) ~= nil,
+    "T242 debug reaches the child command")
+  assert_true(plain:find("--debug", 1, true) == nil,
+    "T242 no debug flag without debug")
+  print("T242 debug propagates to child: OK")
+end
+
+-- T243: argv-branch children detach stdin. A bg-group child sharing the
+-- parent's terminal stops at SIGTTOU in init_termios (State T, zero
+-- output) — </dev/null keeps isatty false. The pipe branch (leading
+-- dash) must keep its stdin pipe: no redirect there.
+do
+  local sub = assert(loadfile("src/tether/subagent.lua"))()
+  local cmd = sub.build_command(
+    { task = "go", cwd = "/ws", timeout = 5, sid = "s1" }, {})
+  assert_true(cmd:find("< /dev/null", 1, true) ~= nil,
+    "T243 argv child detaches stdin")
+  local piped = sub.build_command(
+    { task = "- go", cwd = "/ws", timeout = 5, sid = "s1" }, {})
+  assert_true(piped:find("printf", 1, true) ~= nil,
+    "T243 leading-dash task still goes through the pipe")
+  assert_true(piped:find("< /dev/null", 1, true) == nil,
+    "T243 pipe child keeps its stdin pipe")
+  print("T243 bg child detaches stdin: OK")
+end
+
 -- === M7 regression suite (recreated) + M8 TDD tests =========================
 
 -- M7 helpers: module loader with _G stubs + restore
@@ -2185,6 +2294,7 @@ do
   assert_notnil(props.cwd, "T223 cwd param")
   assert_notnil(props.tools, "T223 tools param")
   assert_notnil(props.timeout, "T223 timeout param")
+  assert_notnil(props.resume, "T223 resume param")
   assert_true(common.set_tools_filter({ "read", "subagent" }), "T223 filter keeps subagent")
   local kept = {}
   for _, t in ipairs(common.tools_schema()) do kept[#kept + 1] = t.name end
@@ -2372,6 +2482,304 @@ do
   print("T231 subagent task rides with --print: OK")
 end
 
+-- T232: bg spawn returns pending without blocking. run_call_bg validates
+-- like run_call, spawns, registers, and returns immediately: no wait loop
+-- (exec_bg_poll with a blocking timeout never fires), and cleanup kills
+-- everything so no child outlives the call.
+do
+  local orig_tether, orig_tools = _G.tether, _G.tools
+  _G.tools = {
+    _resolve = function(p, cfg) return p end,
+    _within = function(abs, cfg) return true end,
+  }
+  local spawned, polls, kills, freed = 0, 0, 0, 0
+  _G.tether = {
+    exec_bg_start = function(cmd) spawned = spawned + 1 return {} end,
+    exec_bg_poll = function(h, ms)
+      polls = polls + 1
+      assert_true((ms or 0) == 0, "T232 bg path never blocks in poll")
+      return "running"
+    end,
+    exec_bg_kill = function(h) kills = kills + 1 return true end,
+    exec_bg_free = function(h) freed = freed + 1 return true end,
+    abort_requested = function() return false end,
+    monotonic_ms = function() return 1000 end,
+  }
+  local sub = assert(loadfile("src/tether/subagent.lua"))()
+  local cfg = { model = "m", workspace = "/ws",
+    subagents = { max_parallel = 4, timeout = 600, max_depth = 1 } }
+  local rec = assert(sub.run_call_bg({ task = "go" }, cfg))
+  assert_true(rec.pending == true, "T232 single returns pending")
+  assert_true(type(rec.jobs) == "table" and type(rec.jobs[1].id) == "string",
+    "T232 pending carries a job id")
+  assert_eq(spawned, 1, "T232 exactly one spawn, no wait loop")
+  assert_eq(polls, 0, "T232 spawn path does not poll")
+  assert_eq(sub.running_count(), 1, "T232 child registered as running")
+  local done = sub.cancel_all("test over")
+  assert_eq(sub.running_count(), 0, "T232 cleanup empties the registry")
+  assert_eq(kills, 1, "T232 cleanup kills the child")
+  assert_eq(#done, 1, "T232 cleanup reports the child")
+  -- validation still fail-cheap: nothing spawns on bad input
+  local before = spawned
+  assert_true(sub.run_call_bg({ task = "a", tasks = { { task = "b" } } }, cfg) == nil,
+    "T232 task+tasks rejected")
+  assert_eq(spawned, before, "T232 rejected call spawns nothing")
+  _G.tether, _G.tools = orig_tether, orig_tools
+  print("T232 bg spawn returns pending: OK")
+end
+
+-- T233: poll_running steps the registry without blocking. While children
+-- run it reports nothing; on completion it consumes (handle freed,
+-- outfile removed) and returns run-shaped results; a freed slot pulls
+-- the queued head in order.
+do
+  local orig_tether, orig_tools = _G.tether, _G.tools
+  _G.tools = {
+    _resolve = function(p, cfg) return p end,
+    _within = function(abs, cfg) return true end,
+  }
+  local spawned, freed = 0, 0
+  local phase = "running"
+  _G.tether = {
+    exec_bg_start = function(cmd) spawned = spawned + 1 return {} end,
+    exec_bg_poll = function(h, ms) return phase, 0 end,
+    exec_bg_kill = function(h) return true end,
+    exec_bg_free = function(h) freed = freed + 1 return true end,
+    abort_requested = function() return false end,
+    monotonic_ms = function() return 1000 end,
+  }
+  local sub = assert(loadfile("src/tether/subagent.lua"))()
+  local cfg = { model = "m", workspace = "/ws",
+    subagents = { max_parallel = 1, timeout = 600, max_depth = 1 } }
+  local rec = assert(sub.run_call_bg(
+    { tasks = { { task = "one" }, { task = "two" } } }, cfg))
+  assert_eq(#rec.jobs, 1, "T233 cap 1 spawns one")
+  assert_eq(spawned, 1, "T233 second task queued")
+  assert_eq(#sub._queue, 1, "T233 queue holds the second")
+  local function fill_outfile(id, text)
+    local p = assert(sub._running[id]).pending.outfile
+    local f = assert(io.open(p, "w"))
+    f:write(text)
+    f:close()
+    return p
+  end
+  local p1 = fill_outfile(rec.jobs[1].id, "out-one")
+  local none = sub.poll_running().completed
+  assert_eq(#none, 0, "T233 running children report nothing")
+  assert_eq(sub.running_count(), 1, "T233 still registered")
+  phase = "done"
+  local step = sub.poll_running()
+  local got = step.completed
+  assert_eq(#got, 1, "T233 completion reported")
+  assert_eq(got[1].idx, 1, "T233 completion carries the index")
+  assert_eq(got[1].result.output, "out-one", "T233 outfile content kept")
+  assert_eq(got[1].result.status, "ok", "T233 result shape ok")
+  assert_true(io.open(p1, "r") == nil, "T233 outfile removed")
+  assert_eq(freed, 1, "T233 handle freed")
+  assert_eq(spawned, 2, "T233 freed slot pulls the queued head")
+  assert_eq(#step.spawned, 1, "T233 refill announced")
+  assert_eq(step.spawned[1].idx, 2, "T233 refilled job carries its index")
+  assert_eq(step.spawned[1].item.task, "two", "T233 refilled job carries its task")
+  assert_eq(#sub._queue, 0, "T233 queue drained")
+  local rest_id = nil
+  for id in pairs(sub._running) do rest_id = id end
+  assert_notnil(rest_id, "T233 second child registered")
+  fill_outfile(rest_id, "out-two")
+  local got2 = sub.poll_running().completed
+  assert_eq(#got2, 1, "T233 second completion reported")
+  assert_eq(got2[1].result.output, "out-two", "T233 second output kept")
+  assert_eq(sub.running_count(), 0, "T233 registry empty at the end")
+  _G.tether, _G.tools = orig_tether, orig_tools
+  print("T233 poll_running steps the registry: OK")
+end
+
+-- T234: batch on the split API — cap respected, out-of-order finishes
+-- combine by idx, abort cancels running and queued per task.
+do
+  local orig_tether, orig_tools = _G.tether, _G.tools
+  _G.tools = {
+    _resolve = function(p, cfg) return p end,
+    _within = function(abs, cfg) return true end,
+  }
+  local spawned, kills = 0, 0
+  local live, max_live = 0, 0
+  local states = {} -- handle n -> "running" | "done"
+  local outtext = {}
+  _G.tether = {
+    exec_bg_start = function(cmd)
+      spawned = spawned + 1
+      live = live + 1
+      max_live = math.max(max_live, live)
+      states[spawned] = "running"
+      return { n = spawned }
+    end,
+    exec_bg_poll = function(h, ms)
+      if states[h.n] == "done" then live = live - 1 states[h.n] = "gone" return "done", 0 end
+      return "running"
+    end,
+    exec_bg_kill = function(h) kills = kills + 1 return true end,
+    exec_bg_free = function(h) return true end,
+    abort_requested = function() return false end,
+    monotonic_ms = function() return 1000 end,
+  }
+  local sub = assert(loadfile("src/tether/subagent.lua"))()
+  local cfg = { model = "m", workspace = "/ws",
+    subagents = { max_parallel = 2, timeout = 600, max_depth = 1 } }
+  local rec = assert(sub.run_call_bg(
+    { tasks = { { task = "one" }, { task = "two" }, { task = "three" } } }, cfg))
+  assert_eq(#rec.jobs, 2, "T234 cap 2 spawns two")
+  assert_eq(spawned, 2, "T234 third queued")
+  local function fill_all(texts)
+    for id, r in pairs(sub._running) do
+      local f = assert(io.open(r.pending.outfile, "w"))
+      f:write(texts[r.idx])
+      f:close()
+    end
+  end
+  fill_all({ "out-one", "out-two" })
+  -- finish out of order: task 2 first
+  states[2] = "done"
+  local c1 = sub.poll_running().completed
+  assert_eq(#c1, 1, "T234 one completion")
+  assert_eq(c1[1].idx, 2, "T234 first finished is task 2")
+  assert_eq(spawned, 3, "T234 freed slot pulls task 3")
+  fill_all({ "out-one", "out-two", "out-three" })
+  states[1], states[3] = "done", "done"
+  local c2 = sub.poll_running().completed
+  assert_eq(#c2, 2, "T234 rest complete")
+  assert_true(max_live <= 2, "T234 cap never exceeded")
+  local by_idx = {}
+  for _, c in ipairs(c1) do by_idx[c.idx] = c.result.output end
+  for _, c in ipairs(c2) do by_idx[c.idx] = c.result.output end
+  assert_eq(by_idx[1] .. "|" .. by_idx[2] .. "|" .. by_idx[3],
+    "out-one|out-two|out-three", "T234 order follows idx, not finish order")
+  assert_eq(sub.running_count(), 0, "T234 registry drained")
+  -- abort path on a fresh batch
+  local rec2 = assert(sub.run_call_bg(
+    { tasks = { { task = "a" }, { task = "b" }, { task = "c" } } }, cfg))
+  assert_eq(#rec2.jobs, 2, "T234 second batch spawns two")
+  local cancelled = sub.cancel_all("subagent cancelled")
+  assert_eq(#cancelled, 3, "T234 cancel reports running and queued")
+  assert_eq(kills, 2, "T234 cancel kills running children")
+  assert_eq(sub.running_count(), 0, "T234 cancel empties registry")
+  assert_eq(#sub._queue, 0, "T234 cancel empties queue")
+  for _, c in ipairs(cancelled) do
+    assert_true(c.result.output:find("cancelled", 1, true) ~= nil,
+      "T234 each cancellation names the reason")
+  end
+  _G.tether, _G.tools = orig_tether, orig_tools
+  print("T234 batch on the split API: OK")
+end
+
+-- T236: bg pickup collapses with the standard budget. The turn parks on
+-- spawn (no tool_result yet, no second LLM segment); on completion the
+-- pickup records history + journal once (never for progress) with the
+-- truncation marker on oversized output, while the UI event keeps it.
+do
+  local orig_agent = _G.agent
+  local sub = assert(loadfile("src/tether/subagent.lua"))()
+  local orig_sm = _G.subagent
+  _G.subagent = sub
+  local orig_tools = _G.tools
+  _G.tools = {
+    _resolve = function(p, cfg) return p end,
+    _within = function(abs, cfg) return true end,
+    _workspace = function(cfg) return "/tmp/ws" end,
+  }
+  local polls = 0
+  local phase = "running"
+  local journal = {}
+  local orig_session = _G.session
+  _G.session = { append = function(sid, ev)
+    journal[#journal + 1] = ev
+  end }
+  local orig_tether = _G.tether
+  _G.tether = {
+    exec_bg_start = function(cmd) return {} end,
+    exec_bg_poll = function(h, ms)
+      polls = polls + 1
+      if polls > 50 then return "done", 0 end -- failsafe: no test hang
+      return phase, 0
+    end,
+    exec_bg_free = function(h) return true end,
+    exec_bg_kill = function(h) return true end,
+    abort_requested = function() return false end,
+    monotonic_ms = function() return 1000 end,
+    getcwd = function() return "/tmp/ws" end,
+    is_tty = function() return false end,
+  }
+  local sub2 = _G.subagent
+  local orig_spawn = sub2.spawn_task
+  sub2.spawn_task = function(item, ctx)
+    local p = os.tmpname()
+    local f = io.open(p, "w")
+    f:write(("x"):rep(20000) .. "TAIL")
+    f:close()
+    return { handle = {}, outfile = p, item = item, started_ms = 1000 }
+  end
+  local agent = assert(loadfile("src/tether/agent.lua"))()
+  _G.agent = agent
+  local orig_api = _G.api
+  local ncalls = 0
+  _G.api = { stream = function(c, key, messages, on_event)
+    ncalls = ncalls + 1
+    on_event({ type = "tool_call_start", id = "c1", name = "subagent" })
+    on_event({ type = "tool_call_delta", id = "c1",
+               arguments = '{"task":"do research"}' })
+    on_event({ type = "done", reason = "tool_calls" })
+    return true
+  end }
+  agent.clear()
+  local cfg = { workspace = "/tmp/ws", model = "parent-m", _session_id = "s1" }
+  local events = {}
+  agent.turn(cfg, "k", "delegate it", function(ev) events[#events + 1] = ev end)
+  assert_eq(ncalls, 1, "T236 turn parks on spawn, no second segment")
+  local early_result = false
+  for _, ev in ipairs(events) do
+    if ev.type == "tool_result" and ev.id == "c1" then early_result = true end
+  end
+  assert_false(early_result, "T236 no tool_result before pickup")
+  assert_notnil(agent.bg_calls and agent.bg_calls["c1"],
+    "T236 call tracked as background")
+  phase = "done"
+  local completed = agent.poll_background(cfg,
+    function(ev) events[#events + 1] = ev end)
+  assert_eq(#completed, 1, "T236 pickup completes the call")
+  local final_ev = nil
+  for _, ev in ipairs(events) do
+    if ev.type == "tool_result" and ev.id == "c1" then final_ev = ev end
+  end
+  assert_notnil(final_ev, "T236 tool_result emitted on pickup")
+  assert_true((final_ev.body or ""):find("TAIL", 1, true) ~= nil,
+    "T236 UI event keeps the full body")
+  local hist_tools, journal_results = 0, 0
+  for _, m in ipairs(agent.get_history()) do
+    if m.role == "tool" and m.tool_call_id == "c1" then
+      hist_tools = hist_tools + 1
+      assert_true(tostring(m.content):find("…(truncated)", 1, true) ~= nil,
+        "T236 history body truncated with marker")
+    end
+  end
+  for _, ev in ipairs(journal) do
+    if ev.type == "tool_result" and ev.tool_call_id == "c1" then
+      journal_results = journal_results + 1
+      assert_true(tostring(ev.result.body):find("…(truncated)", 1, true) ~= nil,
+        "T236 journal body truncated with marker")
+    end
+    assert_true(ev.type ~= "tool_progress", "T236 progress never journaled")
+  end
+  assert_eq(hist_tools, 1, "T236 exactly one history tool result")
+  assert_eq(journal_results, 1, "T236 exactly one journal tool result")
+  sub2.spawn_task = orig_spawn
+  _G.subagent = orig_sm
+  _G.tools = orig_tools
+  _G.session = orig_session
+  _G.api = orig_api
+  _G.agent = orig_agent
+  _G.tether = orig_tether
+  print("T236 bg pickup collapses with budget: OK")
+end
+
 -- T225: subagent batch — bounded parallelism, task-order combination,
 -- abort cancels running and queued tasks.
 do
@@ -2511,8 +2919,10 @@ with_modules(base_env, function(mods)
     return true
   end
   agent.clear()
+  -- print mode keeps the blocking core: the whole child output lands in
+  -- this turn. (Interactive dispatch parks instead — see T236.)
   local cfg = { workspace = "/tmp/ws", _session_id = "s1", auto_approve = {},
-                model = "parent-m" }
+                model = "parent-m", non_interactive = true }
   local events = {}
   agent.turn(cfg, "k", "delegate it", function(ev) events[#events + 1] = ev end)
   local saw_body = false
@@ -2913,6 +3323,234 @@ local function run_ui_with(bytes, stubs, sink, paintC)
   for _, n in ipairs(names) do _G[n] = originals[n]; package.preload[n] = preload[n] end
   if not ok then error("T53 harness: " .. tostring(err), 0) end
   return ui_mod, S
+end
+
+-- T235: bg rows live in the transcript. tool_call_start opens a pending
+-- subagent row (task as label); tool_progress updates a capped live tail
+-- on the pending row without touching anything else; unknown ids are
+-- ignored.
+do
+  local uim, _ = run_ui_with({ 17 }, {
+    agent = { turn = function() return true end,
+      get_history = function() return {} end },
+  })
+  local tr = uim._transcript
+  uim._handle_agent_event({ type = "tool_call_start", id = "sg0001",
+    name = "subagent", args = { task = "dig deep" } })
+  local function find_row(id)
+    for _, e in ipairs(tr.entries()) do
+      if e.role == "tool" and e.id == id then return e end
+    end
+  end
+  local row = find_row("sg0001")
+  assert_notnil(row, "T235 spawn opens a pending row")
+  assert_eq(row.status, "pending", "T235 row starts pending")
+  local plain = table.concat(uim._render_all(80), "\n"):gsub("\27%[[0-9;]*m", "")
+  assert_true(plain:find("dig deep", 1, true) ~= nil,
+    "T235 task text labels the row")
+  uim._handle_agent_event({ type = "tool_progress", id = "sg0001",
+    tail = "child: calling read main.c\nchild: done" })
+  assert_eq(row.status, "pending", "T235 progress keeps pending")
+  assert_true((row.progress or ""):find("calling read main.c", 1, true) ~= nil,
+    "T235 tail stored on the row")
+  plain = table.concat(uim._render_all(80), "\n"):gsub("\27%[[0-9;]*m", "")
+  assert_true(plain:find("child: done", 1, true) ~= nil,
+    "T235 live tail renders without expansion")
+  local n_before = #tr.entries()
+  uim._handle_agent_event({ type = "tool_progress", id = "sg9999",
+    tail = "ghost" })
+  assert_eq(#tr.entries(), n_before, "T235 unknown id adds no row")
+  local big = {}
+  for i = 1, 50 do big[#big + 1] = "line " .. i end
+  uim._handle_agent_event({ type = "tool_progress", id = "sg0001",
+    tail = table.concat(big, "\n") })
+  local lines = 0
+  for _ in tostring(row.progress or ""):gmatch("[^\n]+") do lines = lines + 1 end
+  assert_true(lines <= 8, "T235 tail capped")
+  assert_true(tostring(row.progress):find("line 50", 1, true) ~= nil,
+    "T235 cap keeps the newest lines")
+  print("T235 bg rows live in the transcript: OK")
+end
+
+-- T237: tick harvest and deferred wake. _poll_subagents_bg emits live
+-- tails and arms the wake on pickup; _drain_bg_wake starts the
+-- continuation when idle (never inside the tick) and drops it on quit.
+do
+  local orig_sm, orig_agent, orig_turn = _G.subagent, _G.agent, _G.turn
+  local sub = assert(loadfile("src/tether/subagent.lua"))()
+  _G.subagent = sub
+  local outp = os.tmpname()
+  do local f = assert(io.open(outp, "w")) f:write("line1\nprogress line X") f:close() end
+  sub._running["sg0001"] = { pending = { outfile = outp, handle = {} },
+    item = { task = "t", model = "m" }, timeout = 600, idx = 1 }
+  local woke = 0
+  _G.turn = {
+    begin = function() end, finish = function() end,
+    start = function() return true end, abort = function() end,
+    take_abort = function() return false end, ack_abort = function() end,
+    continue = function(...) woke = woke + 1 return true end,
+  }
+  local bg_round = 0
+  local fake_agent = {
+    turn = function() return true end,
+    get_history = function() return {} end,
+    poll_background = function(cfg, on_event)
+      bg_round = bg_round + 1
+      if bg_round == 1 then return {} end
+      return { { call_id = "c1", combined = { output = "done-out",
+        exit_code = 0, elapsed_ms = 5, model = "m", tasks = 1 } } }
+    end,
+  }
+  _G.agent = fake_agent
+  local uim, S = run_ui_with({ 17 }, {})
+  _G.agent = fake_agent
+  uim._handle_agent_event({ type = "tool_call_start", id = "sg0001",
+    name = "subagent", args = { task = "t" } })
+  uim._poll_subagents_bg()
+  local row = nil
+  for _, e in ipairs(uim._transcript.entries()) do
+    if e.role == "tool" and e.id == "sg0001" then row = e end
+  end
+  assert_notnil(row, "T237 row seeded")
+  assert_true((row.progress or ""):find("progress line X", 1, true) ~= nil,
+    "T237 tick emits the live tail")
+  assert_true(S._bg_wake_pending ~= true, "T237 no wake without pickup")
+  uim._poll_subagents_bg()
+  assert_true(S._bg_wake_pending == true, "T237 pickup arms the wake")
+  assert_eq(woke, 0, "T237 tick never starts the turn itself")
+  S.quit = false -- the drain lives inside the loop, post-run S is quit
+  uim._drain_bg_wake()
+  assert_eq(woke, 1, "T237 deferred drain starts the continuation")
+  assert_true(S._bg_wake_pending ~= true, "T237 wake flag cleared")
+  S._bg_wake_pending = true
+  S.quit = true
+  uim._drain_bg_wake()
+  assert_eq(woke, 1, "T237 quit drops the wake")
+  _G.subagent, _G.agent, _G.turn = orig_sm, orig_agent, orig_turn
+  os.remove(outp)
+  print("T237 tick harvest and deferred wake: OK")
+end
+
+-- T238: busy guard, wake queue, abort. A wake armed mid-turn parks in the
+-- queue instead of firing; the next idle drain wakes once. Abort kills
+-- the registry, collapses rows, records cancellations, drops the flags.
+do
+  -- agent level: cancel_background
+  do
+    local orig_agent, orig_api = _G.agent, _G.api
+    local sub = assert(loadfile("src/tether/subagent.lua"))()
+    local orig_sm = _G.subagent
+    _G.subagent = sub
+    local orig_tools = _G.tools
+    _G.tools = {
+      _resolve = function(p, cfg) return p end,
+      _within = function(abs, cfg) return true end,
+      _workspace = function(cfg) return "/tmp/ws" end,
+    }
+    local kills = 0
+    local orig_tether = _G.tether
+    _G.tether = {
+      exec_bg_start = function(cmd) return {} end,
+      exec_bg_poll = function(h, ms) return "running", 0 end,
+      exec_bg_kill = function(h) kills = kills + 1 return true end,
+      exec_bg_free = function(h) return true end,
+      abort_requested = function() return false end,
+      monotonic_ms = function() return 1000 end,
+      getcwd = function() return "/tmp/ws" end,
+      is_tty = function() return false end,
+    }
+    local journal = {}
+    local orig_session = _G.session
+    _G.session = { append = function(sid, ev) journal[#journal + 1] = ev end }
+    local agent = assert(loadfile("src/tether/agent.lua"))()
+    _G.agent = agent
+    _G.api = { stream = function(c, key, messages, on_event)
+      on_event({ type = "tool_call_start", id = "c9", name = "subagent" })
+      on_event({ type = "tool_call_delta", id = "c9",
+                 arguments = '{"task":"slow job"}' })
+      on_event({ type = "done", reason = "tool_calls" })
+      return true
+    end }
+    agent.clear()
+    local cfg = { workspace = "/tmp/ws", model = "m", _session_id = "s9" }
+    local events = {}
+    agent.turn(cfg, "k", "go", function(ev) events[#events + 1] = ev end)
+    assert_notnil(agent.bg_calls and agent.bg_calls["c9"],
+      "T238 bg call tracked")
+    local jobid = agent.bg_calls["c9"].rec.jobs[1].id
+    agent.cancel_background(cfg, "nope", function(ev) events[#events + 1] = ev end)
+    assert_eq(kills, 1, "T238 abort kills the child")
+    assert_eq(sub.running_count(), 0, "T238 registry cleared")
+    assert_true(agent.bg_calls["c9"] == nil, "T238 tracking dropped")
+    local collapsed, recorded = false, false
+    for _, ev in ipairs(events) do
+      if ev.type == "tool_result" and ev.id == jobid then collapsed = true end
+      if ev.type == "tool_result" and ev.id == "c9" then recorded = true end
+    end
+    assert_true(collapsed, "T238 job row collapsed as cancelled")
+    assert_true(recorded, "T238 call recorded as cancelled")
+    local cancelled_hist = 0
+    for _, m in ipairs(agent.get_history()) do
+      if m.role == "tool" and m.tool_call_id == "c9" and m.error then
+        cancelled_hist = cancelled_hist + 1
+      end
+    end
+    assert_eq(cancelled_hist, 1, "T238 cancellation in history once")
+    _G.subagent, _G.tools, _G.session = orig_sm, orig_tools, orig_session
+    _G.api, _G.agent, _G.tether = orig_api, orig_agent, orig_tether
+  end
+  -- ui level: busy parks, idle wakes, abort drops
+  do
+    local orig_sm, orig_agent, orig_turn = _G.subagent, _G.agent, _G.turn
+    local woke = 0
+    _G.turn = {
+      begin = function() end, finish = function() end,
+      start = function() return true end, abort = function() end,
+      take_abort = function() return false end, ack_abort = function() end,
+      continue = function(...) woke = woke + 1 return true end,
+    }
+    local cancelled = 0
+    _G.agent = {
+      turn = function() return true end,
+      get_history = function() return {} end,
+      cancel_background = function(...) cancelled = cancelled + 1 end,
+    }
+    local uim, S = run_ui_with({ 17 }, {})
+    S.quit = false
+    S.busy = true
+    S._bg_wake_pending = true
+    uim._drain_bg_wake()
+    assert_eq(woke, 0, "T238 no wake mid-turn")
+    assert_true(S._bg_wake_queued == true, "T238 wake parked in queue")
+    S.busy = false
+    uim._drain_bg_wake()
+    assert_eq(woke, 1, "T238 queued wake fires when idle")
+    S._bg_wake_queued = true
+    uim._abort_bg("stop")
+    assert_eq(cancelled, 1, "T238 abort cancels background")
+    assert_true(S._bg_wake_queued ~= true, "T238 abort drops the queue")
+    _G.subagent, _G.agent, _G.turn = orig_sm, orig_agent, orig_turn
+  end
+  print("T238 busy guard, wake queue, abort: OK")
+end
+
+-- T239: quitting kills background children. The run epilogue owns the
+-- registry even when the loop stops immediately (plain Ctrl+Q, no turn).
+do
+  local orig_agent = _G.agent
+  local cancelled = 0
+  run_ui_with({ 17 }, {
+    agent = {
+      turn = function() return true end,
+      get_history = function() return {} end,
+      cancel_background = function(cfg, reason, on_event)
+        cancelled = cancelled + 1
+      end,
+    },
+  })
+  assert_eq(cancelled, 1, "T239 quit cancels background children")
+  _G.agent = orig_agent
+  print("T239 quit kills background children: OK")
 end
 -- add-llm-compaction 3.2: commit_input parses free text after /compact.
 do

@@ -27,7 +27,14 @@ local function parse_args()
     while i <= #args do
         local a = args[i]
         if a == "--resume" or a == "-r" then
-            opts.resume = true
+            -- sequel: an explicit session id continues it; bare -r keeps
+            -- latest-for-workspace behavior.
+            if args[i + 1] and not args[i + 1]:match("^%-") then
+                opts.resume = args[i + 1]
+                i = i + 1
+            else
+                opts.resume = true
+            end
         elseif a == "--workspace" or a == "-w" then
             opts.workspace = args[i + 1]
             i = i + 1
@@ -79,13 +86,44 @@ function M._print_prompt_error(prompt)
     return nil
 end
 
+-- Test seam for the CLI parser (T240): parse a given argv instead of the
+-- process-global `arg` (mirrors the M._print_prompt_error precedent).
+function M._parse_args(argv)
+    local keep = arg
+    arg = argv
+    local ok, opts = pcall(parse_args)
+    arg = keep
+    if ok then return opts end
+    return nil
+end
+
 local function run_inner()
     local opts = parse_args()
     if version then print("tether 0.1.0"); os.exit(0) end
 
+    -- Stage log for --print children (and the parent when debugged):
+    -- open/append/close per line, safe across forked processes sharing
+    -- the file. Stages show exactly where a silent child stops.
+    local log_on = opts.debug or false
+    local function dlog(msg)
+        if not log_on then return end
+        pcall(function()
+            local th = rawget(_G, "tether")
+            local dir = (os.getenv("HOME") or "/tmp") .. "/.tether/log"
+            if th and th.mkdirp then th.mkdirp(dir) end
+            local f = io.open(dir .. "/tether.log", "a")
+            if f then
+                f:write(os.date("[%H:%M:%S] ") .. msg .. "\n")
+                f:close()
+            end
+        end)
+    end
+
     if opts.print_mode then
+        dlog("print: start")
         -- Non-interactive: run a single agent turn, print final text to stdout
         local cfg = config.load()
+        dlog("print: config loaded")
         do
             local ok, perr = commands.boot_providers(cfg)
             if not ok then
@@ -93,6 +131,7 @@ local function run_inner()
                 os.exit(1)
             end
         end
+        dlog("print: providers booted")
         if opts.workspace then cfg.workspace = opts.workspace end
         if opts.model then cfg.model = opts.model end
         -- context-injection: CLI agents files feed the composed prompt (merged
@@ -167,8 +206,24 @@ local function run_inner()
             os.exit(1)
         end
 
-        local sid = commands.new(cfg.workspace, cfg.model)
+        local sid = nil
+        if opts.resume then
+            -- sequel: continue a child session instead of minting a fresh
+            -- one. An explicit id must resolve to a real journal (messages
+            -- nil means the file is missing/empty); bare -r falls back to
+            -- latest for the workspace, then to a fresh session.
+            local rid = (type(opts.resume) == "string") and opts.resume or nil
+            local rsid, rmsgs = commands.resume(rid, cfg.workspace, cfg)
+            if rsid and (not rid or rmsgs) then
+                sid = rsid
+            elseif rid then
+                io.stderr:write("tether: no such session: " .. rid .. "\n")
+                os.exit(1)
+            end
+        end
+        if not sid then sid = commands.new(cfg.workspace, cfg.model) end
         cfg._session_id = sid
+        dlog("print: session " .. tostring(sid))
 
         -- 1.5: agent.turn adds (and journals) the user message; adding it here
         -- too would send the prompt twice.
@@ -184,9 +239,11 @@ local function run_inner()
         end
         local ok, err = pcall(agent.turn, cfg, api_key, prompt, on_event)
         if not ok then
+            dlog("print: turn raised: " .. tostring(err))
             io.stderr:write("tether: agent error: " .. tostring(err) .. "\n")
             os.exit(1)
         end
+        dlog("print: turn done")
         -- collect the last assistant text from agent history
         local history = agent.get_history()
         local last_text = ""

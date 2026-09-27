@@ -93,6 +93,9 @@ local PREVIEW_READ_MAX = 1024 * 1024
 
 M.history = {}
 M.pending = nil            -- confirmation queue for the current tool-call step
+M.bg_calls = nil           -- background subagent calls awaiting pickup: survives
+                           -- turns by design (never cleared by M.clear); the
+                           -- cancel path owns it
 M.session_approved = {}    -- "tool:path" approved for the rest of the session
 M.abort_requested = false  -- §6.6: Ctrl+C during stream
 
@@ -601,6 +604,21 @@ local function run_tool_call(cfg, on_event, id, name, args, projection)
     return res
 end
 
+-- Background spawn failure (validation): same three writes as a sync tool
+-- error — history, journal, UI event — so a rejected call still resolves.
+local function record_tool_error(cfg, on_event, id, name, err)
+    err = tostring(err or "tool failed")
+    M.add_tool_result(id, { error = err })
+    slog(cfg, {
+        ts = os.date(), type = "tool_result", tool_call_id = id, name = name,
+        result = { error = err },
+    })
+    if on_event then
+        on_event({ type = "tool_result", id = id, name = name, error = err,
+            summary = "✗ " .. err, body = err })
+    end
+end
+
 -- add-ask-tool: report a tool result for a call the pending queue resolved
 -- itself — a non-interactive or malformed `ask`, or one the UI answered. The
 -- same three writes run_tool_call performs: history, journal, UI event.
@@ -663,6 +681,45 @@ local function drive_pending(cfg, on_event)
                 end
                 return false
             end
+        elseif call.name == "subagent" and not (cfg and cfg.non_interactive)
+            and M._tool_permitted("subagent", cfg) then
+            -- background delegation (interactive only): spawn now, results
+            -- land later via poll_background; the turn parks meanwhile.
+            -- Print mode and missing bg support keep the blocking call.
+            local sm = rawget(_G, "subagent")
+            if sm and sm.run_call_bg then
+                local rec, berr = sm.run_call_bg(call.args, cfg)
+                if not rec then
+                    record_tool_error(cfg, on_event, call.id, call.name, berr)
+                    call.done = true
+                    p.idx = p.idx + 1
+                else
+                    M.bg_calls = M.bg_calls or {}
+                    local bg = { rec = rec, cfg = cfg, results = {},
+                                 batch = rec.batch }
+                    for idx, eres in pairs(rec.done or {}) do
+                        bg.results[idx] = eres
+                    end
+                    M.bg_calls[call.id] = bg
+                    -- batch: one row per job; the call row stays pending
+                    -- until the combined result lands. Single reuses it.
+                    if on_event and rec.tasks > 1 then
+                        for _, job in ipairs(rec.jobs) do
+                            local it = (rec.items or {})[job.idx] or {}
+                            on_event({ type = "tool_call_start", id = job.id,
+                                name = "subagent",
+                                args = { task = it.task, sid = it.sid } })
+                        end
+                    end
+                    call.done = true
+                    p.idx = p.idx + 1
+                    p.waiting_on_bg = true
+                end
+            else
+                run_tool_call(cfg, on_event, call.id, call.name, call.args, call.projection)
+                call.done = true
+                p.idx = p.idx + 1
+            end
         elseif not should_confirm(call.name, call.args, cfg)
             or check_auto_approve(call.name, call.args, cfg)
             or is_session_approved(call.name, call.args) then
@@ -691,7 +748,12 @@ local function drive_pending(cfg, on_event)
             return false
         end
     end
+    local parked_on_bg = p.waiting_on_bg
     M.pending = nil
+    -- parked on background children: the turn ends here like a parked
+    -- confirmation (ui resumes via continue on pickup), it just waits on
+    -- children instead of the user.
+    if parked_on_bg then return false end
     return true
 end
 
@@ -1273,6 +1335,165 @@ function M.continue(cfg, api_key, on_event)
         if not drive_pending(cfg, on_event) then return true end
     end
     return main_loop(cfg, api_key, on_event)
+end
+
+-- Final record for a completed background call: the same three writes a
+-- sync result performs, with the standard truncation budget on history
+-- and journal while the UI event keeps the full body.
+local function record_bg_result(cfg, on_event, call_id, combined, is_error, err_text)
+    local body = truncate_body(combined.output or "")
+    local summary = tool_summary("subagent", combined)
+    if is_error then
+        err_text = tostring(err_text or "tool failed")
+        M.add_tool_result(call_id, { error = err_text })
+        slog(cfg, {
+            ts = os.date(), type = "tool_result", tool_call_id = call_id,
+            name = "subagent", result = { error = err_text },
+        })
+        if on_event then
+            on_event({ type = "tool_result", id = call_id, name = "subagent",
+                error = err_text, summary = "✗ " .. err_text, body = err_text })
+        end
+    else
+        M.add_tool_result(call_id, { content = body or "" })
+        slog(cfg, {
+            ts = os.date(), type = "tool_result", tool_call_id = call_id,
+            name = "subagent",
+            result = { summary = summary, body = body or "" },
+        })
+        if on_event then
+            on_event({ type = "tool_result", id = call_id, name = "subagent",
+                summary = summary, body = combined.output or "" })
+        end
+    end
+end
+
+-- True when every job of the call has a result (ran or immediate).
+local function bg_call_ready(bg)
+    for i = 1, bg.rec.tasks do
+        if bg.results[i] == nil then return false end
+    end
+    return true
+end
+
+-- Record the final result of a ready call and drop its tracking:
+-- single resolves to success/error like the blocking path, batch
+-- combines in task order. Returns the combined table.
+local function finish_bg_call(call_id, bg, on_event)
+    local n = bg.rec.tasks
+    local combined, is_error, err_text
+    if n == 1 then
+        local r = bg.results[1]
+        combined = { output = r.output, exit_code = r.exit_code,
+            elapsed_ms = r.elapsed_ms, model = r.model, tasks = 1 }
+        is_error, err_text = (r.status ~= "ok"), r.output
+    else
+        local sm = rawget(_G, "subagent")
+        local ordered = {}
+        for i = 1, n do ordered[i] = bg.results[i] end
+        combined = sm.combine_batch(ordered, n)
+        is_error, err_text = false, nil
+    end
+    record_bg_result(bg.cfg, on_event, call_id, combined, is_error, err_text)
+    M.bg_calls[call_id] = nil
+    return combined
+end
+
+-- Background subagent pickup: step the registry, collapse job rows with
+-- transcript-only events, announce refilled rows, and record final
+-- per-call results (history + journal + tool_result event) once all of a
+-- call's jobs finish. Single reuses its call row; batch combines in task
+-- order like the blocking path. Returns an array of {call_id, combined}
+-- for completed calls.
+function M.poll_background(cfg, on_event)
+    local completed = {}
+    local sm = rawget(_G, "subagent")
+    if not sm or not sm.poll_running then return completed end
+    if not M.bg_calls or next(M.bg_calls) == nil then return completed end
+    local step = sm.poll_running()
+    for _, s in ipairs(step.spawned or {}) do
+        if on_event then
+            on_event({ type = "tool_call_start", id = s.id, name = "subagent",
+                args = { task = s.item and s.item.task,
+                         sid = s.item and s.item.sid } })
+        end
+    end
+    for _, c in ipairs(step.completed or {}) do
+        if c.id then
+            for call_id, bg in pairs(M.bg_calls) do
+                local ours = false
+                for _, job in ipairs(bg.rec.jobs) do
+                    if job.id == c.id then ours = true break end
+                end
+                if ours then
+                    bg.results[c.idx] = c.result
+                    if on_event then
+                        local r = c.result
+                        if r.status ~= "ok" then
+                            on_event({ type = "tool_result", id = c.id,
+                                name = "subagent", error = r.output,
+                                summary = "✗ " .. tostring(r.output),
+                                body = tostring(r.output) })
+                        else
+                            on_event({ type = "tool_result", id = c.id,
+                                name = "subagent",
+                                summary = string.format("exit %s, %s",
+                                    tostring(r.exit_code), fmt_ms(r.elapsed_ms)),
+                                body = r.output or "" })
+                        end
+                    end
+                    break
+                end
+            end
+        elseif c.batch then
+            -- immediate refill failure (nothing ever ran): the batch link
+            -- disambiguates same-index jobs of concurrent batches.
+            for _, bg in pairs(M.bg_calls) do
+                if bg.batch == c.batch and bg.results[c.idx] == nil then
+                    bg.results[c.idx] = c.result
+                    break
+                end
+            end
+        end
+    end
+    for call_id, bg in pairs(M.bg_calls) do
+        if bg_call_ready(bg) then
+            local combined = finish_bg_call(call_id, bg, on_event)
+            completed[#completed + 1] =
+                { call_id = call_id, combined = combined }
+        end
+    end
+    return completed
+end
+
+-- Abort/quit owns background children too: kill the registry, collapse
+-- rows, record cancellations for tracked calls, drop the tracking.
+-- Queued items never had rows; their calls still resolve as cancelled.
+function M.cancel_background(cfg, reason, on_event)
+    reason = reason or "subagent cancelled"
+    local sm = rawget(_G, "subagent")
+    local killed = (sm and sm.cancel_all) and sm.cancel_all(reason) or {}
+    if on_event then
+        for _, k in ipairs(killed) do
+            if k.id then
+                on_event({ type = "tool_result", id = k.id, name = "subagent",
+                    error = reason, summary = "✗ " .. reason, body = reason })
+            end
+        end
+    end
+    if M.bg_calls then
+        for call_id, bg in pairs(M.bg_calls) do
+            local n = bg.rec.tasks
+            for i = 1, n do
+                if bg.results[i] == nil then
+                    local it = (bg.rec.items or {})[i] or {}
+                    bg.results[i] = { status = "error", exit_code = 127,
+                        output = reason, elapsed_ms = 0, model = it.model }
+                end
+            end
+            finish_bg_call(call_id, bg, on_event)
+        end
+    end
 end
 
 M.estimate_tokens = estimate_tokens
