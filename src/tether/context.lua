@@ -142,14 +142,15 @@ function M.discover_skills(cfg, workspace)
     return skills
 end
 
--- Auto-discovered AGENTS.md: home first, then workspace. A file that exists
--- but cannot be read is skipped with a stderr warning; missing files are
--- silently ignored.
+-- Auto-discovered AGENTS.md: home files first (.tether, then .agents),
+-- then workspace. A file that exists but cannot be read is skipped with
+-- a stderr warning; missing files are silently ignored.
 function M.load_agents_files(workspace)
     local home = os.getenv("HOME") or ""
     local sections = {}
     local candidates = {
         { label = "home", path = home ~= "" and (home .. "/.tether/AGENTS.md") or nil },
+        { label = "home", path = home ~= "" and (home .. "/.agents/AGENTS.md") or nil },
         { label = "workspace", path = workspace and (workspace .. "/AGENTS.md") or nil },
     }
     for _, c in ipairs(candidates) do

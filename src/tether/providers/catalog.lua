@@ -182,18 +182,23 @@ end
 M._merged = nil
 M._meta = nil
 M._home = nil
+-- catalog-overlay-pin: an explicitly set overlay stays pinned until
+-- cleared, so ensure() never re-merges disk state over it (test
+-- hermeticity: config.load calls ensure() on every load).
+M._pinned = false
 
 -- Test seam / poll hook: layer entries over the bootstrap as the merged
 -- view (same position as the pipeline cache layer). nil clears the view
--- (poll re-merges from disk right after).
+-- (poll re-merges from disk right after) and releases the pin.
 function M.set_overlay(entries, meta)
     if entries == nil then
-        M._merged, M._meta, M._home = nil, nil, nil
+        M._merged, M._meta, M._home, M._pinned = nil, nil, nil, false
         return
     end
     local merged, m = M.merge(M.entries, entries, nil, nil)
     M._merged = merged
     M._meta = meta
+    M._pinned = true
 end
 
 function M.overlay_meta()
@@ -206,7 +211,8 @@ end
 function M.ensure(home)
     -- one home per process in prod; a different home re-merges (tests use
     -- several temp homes in one process — a stale merge would leak).
-    if M._merged and M._home == home then return "ready" end
+    -- A pinned overlay (set_overlay) always wins over disk state.
+    if M._merged and (M._home == home or M._pinned) then return "ready" end
     local cache_providers, generated_at = nil, nil
     local cf = io.open(M.cache_path(home), "r")
     local cache_err = nil

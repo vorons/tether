@@ -83,7 +83,8 @@ local GLYPH_MAP = {
     ["●"] = "*", ["•"] = "*", ["⚙"] = "[t]", ["›"] = ">", ["✗"] = "[x]", ["✓"] = "[ok]", ["✻"] = "*",
     ["↻"] = "[r]", ["⏹"] = "[x]", ["⚠"] = "!", ["▸"] = ">", ["▾"] = "v",
     ["┌"] = "+", ["┐"] = "+", ["└"] = "+", ["┘"] = "+", ["─"] = "-",
-    ["│"] = "|", ["•"] = "-", ["…"] = "...", ["▓"] = "#", ["░"] = "-", ["━"] = "#",
+    ["│"] = "|",     ["•"] = "-", ["…"] = "...", ["▓"] = "#", ["░"] = "-", ["━"] = "#",
+    ["▀"] = "#", ["█"] = "#", ["▄"] = "#",
     ["↑"] = "^", ["↓"] = "v", ["←"] = "<", ["→"] = ">",
     ["·"] = "-",
     -- add-ask-tool: the question block's glyphs (note marker, quoted freeform)
@@ -122,12 +123,24 @@ end
 -- "mono" = no colors at all (roles resolve to nil ⇒ raw text).
 local THEMES = {
     default = {
+        -- green-slate (ported from the Go TUI): accent #69e098, window
+        -- background #101214, input surface #22262a. The renderer emits no
+        -- background fills, so background/input live here as documented
+        -- metadata only; the SGR roles below carry the visible palette.
         -- accent is depth-aware (mint #69e098): truecolor carries the exact
         -- rgb, 256-color falls back to the closest palette index (78).
         -- No bold component by design; headings keep their own bold.
         accent = { truecolor = "38;2;105;224;152", ["256"] = "38;5;78" },
+        -- error/warn are fixed semantic hues (soft red #e06c75 / soft
+        -- yellow #e5c07b in truecolor terms): bright red/yellow at the
+        -- 16-color depth this renderer negotiates, never the accent, so
+        -- failures and retries stay legible under every accent choice.
         warn = "33;1", error = "31;1", success = "32",
-        dim = "2", muted = "90", italic = "3", reverse = "7", bold = "1",
+        -- muted is the derived neutral gray (dark #8d8f92 tier); dim is its
+        -- darkened tier. muted_light is the dark-gray tier (#565a5f terms)
+        -- for light terminal backgrounds, picked by sgr_role via is_light_bg.
+        dim = "2", muted = "90", muted_light = "30",
+        italic = "3", reverse = "7", bold = "1",
         -- 7.1: syntax roles (token kinds); default to 16-color codes so
         -- truecolor/256 render with the same palette. ponytail: no brighter
         -- per-depth variants; add one if a 256-color theme gets complaints.
@@ -147,6 +160,21 @@ local _theme_name = "default"
 -- M8/R2: wrap toggle (cfg.ui.wrap); false = truncate to width instead.
 local _wrap_enabled = true
 
+-- splash-colors: light-background probe for the default theme's light
+-- variant. Test seams: M._light_bg (true/false override, nil = auto),
+-- M._colorfgbg (COLORFGBG override). Auto reads COLORFGBG ("fg;bg"):
+-- a bg of 7/15 means a light terminal. Anything unparseable or missing
+-- falls back to dark, never to light.
+M._light_bg = nil
+M._colorfgbg = nil
+function M.is_light_bg()
+    if M._light_bg ~= nil then return M._light_bg end
+    local fb = M._colorfgbg or os.getenv("COLORFGBG") or ""
+    local bg = fb:match(".*;(.-)%s*$") or fb:match("^(.-)%s*$")
+    local n = tonumber(bg)
+    return n == 7 or n == 15
+end
+
 -- M8/R2: role-based color — theme table drives the code; missing role in a
 -- theme (e.g. mono) returns the raw text with no SGR at all; depth
 -- "none" (ASCII/NO_COLOR/dumb) also forces raw text (7.1: never highlight),
@@ -155,6 +183,12 @@ local function sgr_role(role, s)
     local theme = THEMES[_theme_name] or THEMES.default
     if M.color_depth() == "none" then return to_ascii(s) end
     local code = theme[role]
+    -- splash-colors: on a light terminal the muted tier switches to the
+    -- dark-gray variant so secondary text stays legible; dim ("2") and the
+    -- fixed error/warn hues read on both backgrounds unchanged.
+    if role == "muted" and theme.muted_light and M.is_light_bg() then
+        code = theme.muted_light
+    end
     if type(code) == "table" then
         code = code[M.color_depth()] or code["256"] or code.truecolor
     end
@@ -1332,6 +1366,29 @@ local function box_padding(width)
     return M.editor_padding(width, S.cfg and S.cfg.ui and S.cfg.ui.editor_padding_x)
 end
 
+-- ui-padding: the blank gutter left/right of every painted row. Whole columns,
+-- 0..3, default 1 (nil/non-number keeps the default); clamped so the content
+-- keeps at least one column. Pure, so tests can call it directly.
+function M.ui_padding(width, cfg_value)
+    local p = cfg_value
+    if type(p) ~= "number" then p = 1 end
+    p = math.floor(p)
+    if p < 0 then p = 0 elseif p > 3 then p = 3 end
+    local maxp = math.max(0, math.floor((math.max(width or 0, 1) - 1) / 2))
+    if p > maxp then p = maxp end
+    return p
+end
+
+local function ui_pad(width)
+    return M.ui_padding(width, S and S.cfg and S.cfg.ui and S.cfg.ui.padding)
+end
+
+-- The width every row's content is measured against (wrap/trunc/rules/footer):
+-- the terminal width minus both gutters, never below one column.
+function M._content_width(width)
+    return math.max(1, (width or 1) - 2 * ui_pad(width))
+end
+
 -- slim-footer-indicators: transient flags only (the one-shot toast);
 -- mouse/keyboard mode icons are gone. Everything lives on the single footer row.
 local function static_flags()
@@ -2231,6 +2288,158 @@ local function render_tool_body(name, e, inner)
     return wrap(body, math.max(inner, 1))
 end
 
+-- splash-colors: startup splash (ported from the Go TUI's splashBlock).
+-- Pure data in (version/agents/skills), rows out — no S access, so unit
+-- tests drive it directly. Wordmark in the accent role (no bold, per the
+-- accent contract), version muted, section headers accent, values muted.
+-- Sections with empty lists do not render. No hints, no footer content.
+M.SPLASH_WORDMARK = {
+    " ▀█▀ █▀▀ ▀█▀ █░█ █▀▀ █▀█",
+    " ░█░ ██▄ ░█░ █▀█ ██▄ █▀▄",
+}
+
+function M._tilde_path(p, home)
+    home = home or os.getenv("HOME") or ""
+    p = tostring(p or "")
+    if home ~= "" then
+        if p == home then return "~" end
+        if p:sub(1, #home + 1) == home .. "/" then
+            return "~" .. p:sub(#home + 1)
+        end
+    end
+    return p
+end
+
+-- ui-padding: one blank row above the block when the gutter is on (the old
+-- Go splash opened with a blank line). nil pad = 0 keeps the block flush for
+-- the pure-content tests.
+function M._splash_rows(res, width, pad)
+    res = res or {}
+    width = math.max(width or 80, 1)
+    local rows = {}
+    if pad and pad > 0 then rows[#rows + 1] = "" end
+    local narrow = false
+    for _, ln in ipairs(M.SPLASH_WORDMARK) do
+        if vlen(ln) > width then narrow = true break end
+    end
+    if narrow then
+        rows[#rows + 1] = cyan(" Tether")
+    else
+        for _, ln in ipairs(M.SPLASH_WORDMARK) do
+            rows[#rows + 1] = cyan(ln)
+        end
+    end
+    local ver = tostring(res.version or ""):match("^%s*(.-)%s*$")
+    if ver ~= "" then
+        rows[#rows + 1] = ""
+        if vlen(ver) <= width then rows[#rows + 1] = muted(" " .. ver)
+        else rows[#rows + 1] = muted(" v") end
+    end
+    local function section(header, items)
+        if not items or #items == 0 then return end
+        rows[#rows + 1] = ""
+        rows[#rows + 1] = cyan(" " .. header)
+        -- wrap, never clip: trunc() appends a reset escape even to plain
+        -- text, which would leak SGR into mono/ascii rows and break the
+        -- byte-width asserts with its multibyte ellipsis.
+        local inner = math.max(width - 2, 1)
+        for _, l in ipairs(wrap(table.concat(items, ", "), inner)) do
+            rows[#rows + 1] = muted("  " .. l)
+        end
+    end
+    section("[Context]", res.agents)
+    section("[Skills]", res.skills)
+    return rows
+end
+
+-- Startup resources backing the splash: AGENTS.md candidates (home, then
+-- the repo-root→workspace ancestor chain via _agents_chain, then explicit
+-- cfg lists — mirroring context.lua discovery and the old projectctx.Load,
+-- non-empty files only, tildified) plus user skill names via the context
+-- module (embedded global in the host, loadfile fallback in tests).
+-- Reads S; stored once at startup and reused by /clear and /new.
+function M._collect_splash_resources()
+    local st = M._get_state()
+    local cfg = (st and st.cfg) or {}
+    local ws = (st and st.workspace) or ""
+    local agents, seen = {}, {}
+    local function add_agent(p)
+        if type(p) ~= "string" or p == "" or seen[p] then return end
+        local f = io.open(p, "r")
+        if f then
+            local data = f:read("*a")
+            f:close()
+            if data and data ~= "" then
+                seen[p] = true
+                agents[#agents + 1] = M._tilde_path(p)
+            end
+        end
+    end
+    local home = os.getenv("HOME") or ""
+    if home ~= "" then add_agent(home .. "/.tether/AGENTS.md") end
+    if home ~= "" then add_agent(home .. "/.agents/AGENTS.md") end
+    for _, dir in ipairs(M._agents_chain(ws)) do
+        add_agent(dir .. "/AGENTS.md")
+    end
+    for _, p in ipairs(cfg.agents_files or {}) do add_agent(p) end
+    for _, p in ipairs(cfg._cli_agents_files or {}) do add_agent(p) end
+    local skills = {}
+    local ctxmod = rawget(_G, "context")
+    if type(ctxmod) ~= "table" then
+        local chunk = loadfile("src/tether/context.lua")
+        ctxmod = (chunk and chunk()) or nil
+    end
+    if type(ctxmod) == "table" and type(ctxmod.discover_skills) == "function" then
+        local ok, list = pcall(ctxmod.discover_skills, cfg, ws)
+        if ok and type(list) == "table" then
+            local seen_sk = {}
+            for _, sk in ipairs(list) do
+                local nm = (type(sk) == "table" and sk.name) or tostring(sk)
+                if nm and nm ~= "" and not seen_sk[nm] then
+                    seen_sk[nm] = true
+                    skills[#skills + 1] = nm
+                end
+            end
+        end
+    end
+    return { agents = agents, skills = skills }
+end
+
+-- splash-colors: AGENTS.md ancestor chain, mirroring the old Go
+-- projectctx.Load: ~/.tether/AGENTS.md first, then AGENTS.md from the repo
+-- root down to ws (outermost first). The walk stops after the first
+-- ancestor containing .git, or at ws when there is no repository.
+-- Pure path math apart from the .git probes, so tests drive it with temp
+-- dirs. (M-field: ui.lua sits at Lua's 200-locals limit.)
+function M._agents_chain(ws)
+    local out = {}
+    if type(ws) ~= "string" or ws == "" then return out end
+    local chain = {}
+    local dir = ws
+    local top = nil -- chain index of the repo root (nearest .git upward)
+    while dir and dir ~= "" do
+        chain[#chain + 1] = dir
+        local probe = io.open(dir .. "/.git", "r")
+        if probe then probe:close() top = #chain break end
+        local parent = dir:match("^(.*)/[^/]+$")
+        if not parent or parent == dir then break end
+        dir = parent
+    end
+    -- no repository above ws: only ws itself, like projectctx.Load
+    if not top then return { ws } end
+    for i = top, 1, -1 do out[#out + 1] = chain[i] end
+    return out
+end
+
+-- Fresh splash entry from S (version + stored resources). M-field (not a
+-- chunk local: ui.lua sits at Lua's 200-locals limit for the main chunk).
+function M._splash_entry()
+    local st = M._get_state()
+    local res = (st and st.splash_resources) or { agents = {}, skills = {} }
+    return { role = "splash", version = (st and st.version) or "v0.1.0",
+        agents = res.agents or {}, skills = res.skills or {} }
+end
+
 -- add-ask-tool: is `label` among this question's selected answers?
 local function ask_selected(answer, label)
     for _, l in ipairs((answer and answer.selected) or {}) do
@@ -2368,8 +2577,7 @@ local function render_entry(e, width, prev_role)
     -- the leading block gap (see transcript-visual-refresh).
     local out
     if e.virt == "ask" then
-        out = render_ask(width)
-    elseif e.virt == "placeholder" then
+        out = render_ask(width)    elseif e.virt == "placeholder" then
         -- turn-feedback-restyling: no waiting row in the transcript (the
         -- input box carries the Working indicator); kept as a no-op for any
         -- stale tail reference.
@@ -2388,7 +2596,12 @@ local function render_entry(e, width, prev_role)
         out = co
     else
         local role = e.role or "system"
-        if role == "separator" then
+        if role == "splash" then
+            -- splash-colors: startup splash block (wordmark, version,
+            -- Context/Skills sections); rows from the entry's own data.
+            out = M._splash_rows({ version = e.version,
+                agents = e.agents, skills = e.skills }, width, ui_pad(width))
+        elseif role == "separator" then
             -- tui: Turn separators — dim rule with the local submission time
             local label = "── " .. (e.text or "") .. " "
             local fill = width - vlen(label)
@@ -2531,7 +2744,7 @@ local function render_entry(e, width, prev_role)
     -- (the think block is a visual block of its own), so an entry following
     -- one gaps even when it would otherwise stay attached (a tool row).
     local gap_roles = { separator = true, user = true, assistant = true,
-        system = true, thinking = true }
+        system = true, thinking = true, splash = true }
     local is_virt = e.virt == "ask" or e.virt == "placeholder" or e.virt == "confirm"
     local need_gap = (not is_virt) and prev_role ~= nil
         and (gap_roles[e.role or "system"] or prev_role == "thinking")
@@ -2602,13 +2815,6 @@ function M._render_all(width)
     return transcript.render_all(width or S.w)
 end
 
--- Full-render wrapper kept for the rare call sites that index rows directly
--- (mouse hit-testing, Home). The per-frame status indicator uses
--- M.transcript_height instead.
-local function display_lines()
-    return M._render_all(layout().w)
-end
-
 -- ============================================================
 -- Region renderers
 -- ============================================================
@@ -2644,7 +2850,9 @@ function M.scroll_shift_seq(h, top, bottom, shift)
 end
 
 local function render_transcript(L)
-    local total = ensure_index(L.w)
+    local cw = M._content_width(L.w)
+    local gutter = string.rep(" ", ui_pad(L.w))
+    local total = ensure_index(cw)
     S.last_transcript_h = L.transcript_h -- cache bound follows the viewport
     -- viewport pin: while scrolled away from the tail, rows arriving (or
     -- dropped by a retry) below the viewport must not move it — fold the
@@ -2682,7 +2890,7 @@ local function render_transcript(L)
         -- with SU/SD instead of repainting every row; only the newly
         -- exposed rows are then repainted by the normal diff below.
         if S.last_transcript_top
-            and S.last_transcript_w == L.w
+            and S.last_transcript_w == cw
             and S.cfg.ui.alt_screen ~= true then
             local old_top = S.last_transcript_top
             local delta = old_top - top -- >0: content moved up (scroll down)
@@ -2706,7 +2914,7 @@ local function render_transcript(L)
             S.screen[r] = nil
         end
         S.last_transcript_top = top
-        S.last_transcript_w = L.w
+        S.last_transcript_w = cw
     end
     -- A: live tail — the caret while deltas are still streaming (the waiting
     -- spinner moved to the input box: the transcript carries no placeholder).
@@ -2722,29 +2930,39 @@ local function render_transcript(L)
         end
     end
     local last_painted = math.min(total, bottom)
-    local lo = entry_of_row(top, L.w) or 0
-    local hi = entry_of_row(last_painted, L.w) or -1
+    local lo = entry_of_row(top, cw) or 0
+    local hi = entry_of_row(last_painted, cw) or -1
     transcript.set_visible(lo, hi)
     for i = 1, L.transcript_h do
         local idx = top + i - 1
         local text = ""
         if idx >= 1 and idx <= total then
-            text = row_text(idx, L.w)
+            text = row_text(idx, cw)
         end
         if idx == total and tail ~= "" then
-            local last_i = transcript.entry_of_row(total, L.w)
+            local last_i = transcript.entry_of_row(total, cw)
             local last_e = last_i and transcript.entry_at(last_i)
             if not (last_e and last_e.role == "thinking") then
-                text = trunc(text, L.w - 2) .. tail
+                text = trunc(text, cw - 2) .. tail
             end
         end
-        set_row(L.transcript_row + i - 1, text)
+        -- ui-padding: the gutter prefixes every row but the splash block,
+        -- which carries its own leading space (blank rows stay blank)
+        local prefix = ""
+        if text ~= "" then
+            local ei = entry_of_row(idx, cw)
+            if not (ei and (entry_at(ei) or {}).role == "splash") then
+                prefix = gutter
+            end
+        end
+        set_row(L.transcript_row + i - 1, prefix .. text)
     end
 end
 
 local function render_error_banner(L)
     if not S.error_banner then return end
-    set_row(L.error_row, rev(red(" ! ")) .. " " .. red(trunc(S.error_banner, L.w - 4)))
+    local cw = M._content_width(L.w)
+    set_row(L.error_row, string.rep(" ", ui_pad(L.w)) .. rev(red(" ! ")) .. " " .. red(trunc(S.error_banner, cw - 4)))
 end
 
 -- pi-style-input-and-footer: does the active renderer emit video attributes
@@ -2869,8 +3087,10 @@ local function render_input(L)
     -- palette-only R5: secret mode paints a masked line in the input box —
     -- never the plaintext, never S.input.
     if S.login_secret then
-        local pad = box_padding(L.w)
-        local content_w = math.max(1, L.w - pad * 2)
+        local cw = M._content_width(L.w)
+        local g = string.rep(" ", ui_pad(L.w))
+        local pad = box_padding(cw)
+        local content_w = math.max(1, cw - pad * 2)
         local side = string.rep(" ", pad)
         -- the secret line names what to paste: env var when the provider
         -- takes an API key, device URL for device flows, auth code otherwise.
@@ -2908,12 +3128,12 @@ local function render_input(L)
         local label = "login " .. tostring(S.login_provider or "") .. ": " .. hint
         local mask = string.rep("*", #(S.login_secret.buf or ""))
         local text = label .. ": " .. mask
-        set_row(L.rule_top_row, rule_row(L.w, turn_status(), nil))
-        set_row(L.input_row, side .. input_row_text(text, #text, content_w) .. side)
+        set_row(L.rule_top_row, g .. rule_row(cw, turn_status(), nil))
+        set_row(L.input_row, g .. side .. input_row_text(text, #text, content_w) .. side)
         for i = 2, L.input_h do
-            set_row(L.input_row + i - 1, side .. string.rep(" ", content_w) .. side)
+            set_row(L.input_row + i - 1, g .. side .. string.rep(" ", content_w) .. side)
         end
-        set_row(L.rule_bottom_row, rule_row(L.w, nil, nil))
+        set_row(L.rule_bottom_row, g .. rule_row(cw, nil, nil))
         return
     end
     local lines = input_lines()
@@ -2926,8 +3146,10 @@ local function render_input(L)
         if start < 1 then start = 1 end
         if start > total - shown + 1 then start = total - shown + 1 end
     end
-    local pad = box_padding(L.w)
-    local content_w = math.max(1, L.w - pad * 2)
+    local cw = M._content_width(L.w)
+    local g = string.rep(" ", ui_pad(L.w))
+    local pad = box_padding(cw)
+    local content_w = math.max(1, cw - pad * 2)
     local side = string.rep(" ", pad)
     local cursor_li = cursor_line_col()
 
@@ -2935,22 +3157,22 @@ local function render_input(L)
     -- status and, like the bottom rule, names the input rows the window hides.
     local hidden_above = start - 1
     local hidden_below = total - (start + shown - 1)
-    set_row(L.rule_top_row, rule_row(L.w, turn_status(),
+    set_row(L.rule_top_row, g .. rule_row(cw, turn_status(),
         hidden_above > 0 and string.format(RULE_LABEL_UP, hidden_above) or nil))
 
     for i = 1, shown do
         local li = start + i - 1
         local ln = lines[li]
         if not ln then
-            set_row(L.input_row + i - 1, side .. string.rep(" ", content_w) .. side)
+            set_row(L.input_row + i - 1, g .. side .. string.rep(" ", content_w) .. side)
         else
             local caret_off = (li == cursor_li) and (S.cursor - ln.from) or nil
             set_row(L.input_row + i - 1,
-                side .. input_row_text(ln.text, caret_off, content_w) .. side)
+                g .. side .. input_row_text(ln.text, caret_off, content_w) .. side)
         end
     end
 
-    set_row(L.rule_bottom_row, rule_row(L.w, nil,
+    set_row(L.rule_bottom_row, g .. rule_row(cw, nil,
         hidden_below > 0 and string.format(RULE_LABEL_DOWN, hidden_below) or nil))
 end
 
@@ -2975,6 +3197,8 @@ local function render_palette(L)
     local n = #S.palette_items
     local win, off = palette_window(L.h, n, S.palette_sel)
     local last = L.footer_row - 1
+    local cw = M._content_width(L.w)
+    local g = string.rep(" ", ui_pad(L.w))
     -- descriptions align: the name column is padded to the widest name+hint
     -- across all listed entries (computed once per paint)
     local label_w = 0
@@ -2993,8 +3217,8 @@ local function render_palette(L)
             local label = it.label or ""
             if it.hint then label = label .. " " .. it.hint end
             local pad = string.rep(" ", math.max(label_w - vlen(label), 0))
-            local text = trunc(string.format(" %s%s %s", label, pad, it.desc or ""), L.w - 2)
-            set_row(row, (off + i - 1 == S.palette_sel) and sgr_role("accent", text) or dim(text))
+            local text = trunc(string.format(" %s%s %s", label, pad, it.desc or ""), cw)
+            set_row(row, g .. ((off + i - 1 == S.palette_sel) and sgr_role("accent", text) or dim(text)))
         end
     end
     local irow = L.palette_row + win + 1
@@ -3005,9 +3229,9 @@ local function render_palette(L)
         elseif n > win then
             txt = txt .. string.format(" (%d/%d)", S.palette_sel, n)
         end
-        set_row(irow, dim(trunc(" " .. txt, L.w - 2)))
+        set_row(irow, g .. dim(trunc(" " .. txt, cw)))
     elseif n > win and irow <= last then
-        set_row(irow, dim(trunc(string.format(" %d/%d", S.palette_sel, n), L.w - 2)))
+        set_row(irow, g .. dim(trunc(string.format(" %d/%d", S.palette_sel, n), cw)))
     end
 end
 
@@ -3143,7 +3367,8 @@ local function render_footer(L)
     local flags = static_flags()
     local flags_str = #flags > 0 and to_ascii(table.concat(flags, " ")) or ""
 
-    local width = L.w
+    local width = M._content_width(L.w)
+    local g = string.rep(" ", ui_pad(L.w))
     -- Visual order: path, stats, flags — joined with ` · ` separators.
     -- Truncation order (spec): path first (to_ascii so ASCII mode gets
     -- "..." not "…"), then toast, then stats — each step
@@ -3207,7 +3432,7 @@ local function render_footer(L)
     local model_cell = provider
         and (provider .. "/" .. (S.model_name or "?") .. " · " .. level)
         or ((S.model_name or "?") .. " · " .. level)
-    set_row(L.footer_row, M.footer_stats(left, dim(model_cell), width))
+    set_row(L.footer_row, g .. M.footer_stats(left, dim(model_cell), width))
 end
 
 -- ============================================================
@@ -3654,15 +3879,16 @@ end
 -- ============================================================
 -- Command execution
 -- ============================================================
-local function start_new_session(banner)
+local function start_new_session()
     local sid = commands.new(S.workspace, S.model_name)
     if sid then S.session_id = sid end
     if S.cfg then S.cfg._session_id = S.session_id end
     -- pi-style-input-and-footer: the footer's counters are per session
     S.tokens_in, S.tokens_out = 0, 0
     -- a new session knows nothing of the old transcript — drop it too,
-    -- otherwise the screen shows messages the agent never saw
-    reset_transcript({ { role = "system", text = banner or "↻ New session" } })
+    -- otherwise the screen shows messages the agent never saw. A fresh
+    -- start shows the splash again, not a blank screen.
+    reset_transcript({ M._splash_entry() })
 end
 
 -- M9: /log command (and its view) removed
@@ -3990,8 +4216,13 @@ function pick.resume(id)
         -- counters over; the old session's totals are not this one's
         S.tokens_in, S.tokens_out = 0, 0
         -- the picked session replaces the visible transcript;
-        -- appending would mix two conversations on one screen
-        transcript.seed(messages or {})
+        -- appending would mix two conversations on one screen. The splash
+        -- stays first, like the -r startup path above.
+        local seeded = transcript.seed(messages or {})
+        if #seeded > 0 then
+            table.insert(seeded, 1, M._splash_entry())
+            transcript.reset(seeded)
+        end
         transcript.append(
             { role = "system", text = "↻ session " .. tostring(sid):sub(1, 8) .. " resumed" })
         bump_transcript()
@@ -4094,8 +4325,9 @@ local function execute_command(cmd, rest)
     -- M9: /help, /status, /log removed per user request (unknown commands
     -- fall through to the warning below)
     if cmd == "clear" then
-        -- §6.8: clears in-memory transcript only; disk session untouched
-        reset_transcript({})
+        -- §6.8: clears in-memory transcript only; disk session untouched.
+        -- The splash returns so /clear reads as a fresh start.
+        reset_transcript({ M._splash_entry() })
         return
     end
     if cmd == "compact" then
@@ -4876,7 +5108,7 @@ local function handle_special(k)
         -- M8/R3: Home jumps to top of transcript (input empty);
         -- with text in input, Home moves to line start (branch below)
         S.user_scrolled = true
-        S.scroll = math.max(0, M.transcript_height(layout().w) - 1)
+        S.scroll = math.max(0, M.transcript_height(M._content_width(layout().w)) - 1)
     elseif k.name == "end" and S.input == "" then
         -- M8/R3: End jumps to bottom (follow mode) when input is empty
         S.scroll = 0
@@ -4927,14 +5159,15 @@ M._toggle_all_entries = toggle_all_entries
 
 local function toggle_newest_visible_tool()
     local L = layout()
-    local total = ensure_index(L.w)
+    local cw = M._content_width(L.w)
+    local total = ensure_index(cw)
     local bottom = total - S.scroll
     if bottom > total then bottom = total end
     if bottom < 1 then bottom = 1 end
     local top = bottom - L.transcript_h + 1
     if top < 1 then top = 1 end
-    local lo = entry_of_row(top, L.w) or 0
-    local hi = entry_of_row(math.min(total, bottom), L.w) or -1
+    local lo = entry_of_row(top, cw) or 0
+    local hi = entry_of_row(math.min(total, bottom), cw) or -1
     local chosen
     for i = hi, lo, -1 do
         local e = entry_at(i)
@@ -5432,7 +5665,8 @@ local function handle_confirmation_key(k)
         local c = S.confirmation
         if c and c.options and #c.options > 0 then
             local L = layout()
-            local total = ensure_index(L.w)
+            local cw = M._content_width(L.w)
+            local total = ensure_index(cw)
             -- count of transcript rows above the options block
             local above = total - #c.options
             if k.row and k.row >= above + 1 and k.row <= above + #c.options then
@@ -5440,7 +5674,7 @@ local function handle_confirmation_key(k)
                 local bottom = math.min(total, total - S.scroll)
                 local top = bottom - L.transcript_h + 1
                 local idx = k.row - top + 1
-                local text = (idx >= 1 and idx <= total) and row_text(idx, L.w) or ""
+                local text = (idx >= 1 and idx <= total) and row_text(idx, cw) or ""
                 for i, opt in ipairs(c.options) do
                     if text:find(opt:sub(1, 10), 1, true) then
                         S.confirmation_sel = i
@@ -5587,7 +5821,7 @@ handle_key = function(k)
             if mode == "on" and k.button == 0
                 and k.row >= L.transcript_row
                 and k.row <= L.transcript_row + L.transcript_h - 1 then
-                local total = ensure_index(L.w)
+                local total = ensure_index(M._content_width(L.w))
                 local bottom = math.min(total, total - S.scroll)
                 if bottom < 1 then bottom = 1 end
                 local top = bottom - L.transcript_h + 1
@@ -6051,6 +6285,11 @@ function M.run(app_cfg)
     S.started_at = os.date("%Y-%m-%d %H:%M:%S")
     init_debug_log()
 
+    -- splash-colors: version and startup resources back the splash block;
+    -- /clear and /new re-render it from these, so they stay fixed here.
+    S.version = "v0.1.0"
+    S.splash_resources = M._collect_splash_resources()
+
     local size = tether.get_terminal_size()
     if size then S.w, S.h = size.width, size.height end
 
@@ -6075,9 +6314,17 @@ function M.run(app_cfg)
         if src_msgs then
             local seeded = transcript.seed(src_msgs)
             if #seeded > 0 then
+                -- restored history keeps its order; the splash stays first,
+                -- like a fresh start that already knows the conversation.
+                table.insert(seeded, 1, M._splash_entry())
+                transcript.reset(seeded)
                 transcript.append(
                     { role = "system", text = "↻ session resumed" })
+            else
+                reset_transcript({ M._splash_entry() })
             end
+        else
+            reset_transcript({ M._splash_entry() })
         end
     end
 

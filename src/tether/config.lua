@@ -98,6 +98,9 @@ local function default_config()
             -- pi-style-input-and-footer: horizontal padding inside the input
             -- box's rules (whole columns, 0..3, pi's editorPaddingX)
             editor_padding_x = 0,
+            -- ui-padding: blank gutter left/right of every painted row plus one
+            -- blank row above the splash (whole columns, 0..3; 0 = edge-to-edge)
+            padding = 1,
             alt_screen = true, -- T48: fullscreen TUI; "false" keeps native scrollback
             turn_separators = true, -- 2.x: dim dividers between user turns; set false to disable
             block_gap = 1, -- 6.x: blank rows before top-level transcript entities; 0 = compact

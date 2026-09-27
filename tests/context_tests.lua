@@ -61,7 +61,7 @@ local function reset_sandbox()
     -- wipe skill + agents files
     os.execute("rm -rf " .. WS .. "/.tether/skills " .. WS .. "/.agents/skills")
     os.execute("rm -rf " .. HOME .. "/.tether/skills " .. HOME .. "/.agents/skills")
-    os.execute("rm -f " .. WS .. "/AGENTS.md " .. HOME .. "/.tether/AGENTS.md")
+    os.execute("rm -f " .. WS .. "/AGENTS.md " .. HOME .. "/.tether/AGENTS.md " .. HOME .. "/.agents/AGENTS.md")
     os.execute("mkdir -p " .. WS .. "/.tether/skills " .. WS .. "/.agents/skills")
     os.execute("mkdir -p " .. HOME .. "/.tether/skills " .. HOME .. "/.agents/skills")
 end
@@ -149,6 +149,27 @@ do
     local auto3 = ctx.load_agents_files(WS)
     assert_eq(#auto3, 0, "T3 no AGENTS.md anywhere")
     print("T1/T2/T3 AGENTS.md discovery: OK")
+end
+
+-- ============ 1b. Second home candidate (~/.agents/AGENTS.md) ============
+do
+    reset_sandbox()
+    write_file(HOME .. "/.tether/AGENTS.md", "tether-home-rules")
+    write_file(HOME .. "/.agents/AGENTS.md", "agents-home-rules")
+    write_file(WS .. "/AGENTS.md", "ws-rules")
+
+    local auto = ctx.load_agents_files(WS)
+    assert_eq(#auto, 3, "T1b all three AGENTS.md found")
+    assert_eq(auto[1].content, "tether-home-rules", "T1b .tether home first")
+    assert_eq(auto[2].content, "agents-home-rules", "T1b .agents home second")
+    assert_eq(auto[3].content, "ws-rules", "T1b workspace last")
+
+    reset_sandbox()
+    write_file(HOME .. "/.agents/AGENTS.md", "agents-only")
+    local auto2 = ctx.load_agents_files(WS)
+    assert_eq(#auto2, 1, "T1b agents home alone")
+    assert_eq(auto2[1].content, "agents-only", "T1b agents home content")
+    print("T1b second home AGENTS.md: OK")
 end
 
 -- ============ 2. Frontmatter parse ============
