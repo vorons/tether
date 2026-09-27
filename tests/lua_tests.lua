@@ -8924,6 +8924,65 @@ do
   print("T119c failed-attempt output restored on terminal failure: OK")
 end
 
+-- T119d: the retry drop removes only the failed attempt's ANSWER TEXT, not
+-- the context it reasoned from. A think block built up before the failure
+-- (and the tool rows that produced its evidence) survive the retry: the
+-- model reasoned from them, they carry no answer, and dropping them left the
+-- chat blank the moment any error arrived (the think block and every tool
+-- row below it vanished with the failed attempt's text).
+do
+  local agent_stub = { turn = function() return true end, get_history = function() return {} end }
+  local function find_role(uimod, role)
+    for _, e in ipairs(tentries(uimod)) do if e.role == role then return e end end
+  end
+  local function has_role(uimod, role)
+    for _, e in ipairs(tentries(uimod)) do if e.role == role then return true end end
+    return false
+  end
+  -- think -> tool -> retry on the SAME attempt as the think
+  local uimod, _ = run_ui_with({ 17 }, { agent = agent_stub })
+  uimod._handle_agent_event({ type = "reasoning_delta", text = "planning the work", attempt = 1 })
+  uimod._handle_agent_event({ type = "tool_call_start", id = "t1", name = "read",
+                              args = { path = "/x" } })
+  uimod._handle_agent_event({ type = "tool_result", id = "t1", name = "read",
+                              summary = "92 lines", body = "..." })
+  uimod._handle_agent_event({ type = "retry", attempt = 1, delay = 2.0,
+                              reason = "connection error" })
+  local think = find_role(uimod, "thinking")
+  assert_notnil(think, "T119d the think block survives the retry")
+  assert_eq(think.text, "planning the work", "T119d the think text is intact")
+  assert_eq(think.attempt, 1, "T119d the think row keeps its attempt tag")
+  assert_true(has_role(uimod, "tool"), "T119d the tool row survives the retry")
+  assert_true(has_role(uimod, "system"), "T119d the retry row is appended")
+  assert_true(#uimod._render_all(80) > 0, "T119d the chat still renders after the retry")
+
+  -- the failed attempt's ANSWER TEXT is still dropped (the invariant T119c
+  -- guards), while the think and tool rows stay
+  local uimod2, _ = run_ui_with({ 17 }, { agent = agent_stub })
+  uimod2._handle_agent_event({ type = "reasoning_delta", text = "planning", attempt = 1 })
+  uimod2._handle_agent_event({ type = "text_delta", text = "half an ans", attempt = 1 })
+  uimod2._handle_agent_event({ type = "retry", attempt = 1, delay = 1.0, reason = "x" })
+  local assts = {}
+  for _, e in ipairs(tentries(uimod2)) do
+    if e.role == "assistant" then assts[#assts + 1] = e.text end
+  end
+  assert_eq(table.concat(assts, "|"), "", "T119d the failed attempt's answer text is still dropped")
+  assert_notnil(find_role(uimod2, "thinking"),
+    "T119d the think block is kept alongside the dropped answer")
+
+  -- retry on a LATER attempt (attempt 2) keeps the attempt-1 context too
+  local uimod3, _ = run_ui_with({ 17 }, { agent = agent_stub })
+  uimod3._handle_agent_event({ type = "reasoning_delta", text = "planning", attempt = 1 })
+  uimod3._handle_agent_event({ type = "tool_call_start", id = "t1", name = "list", args = {} })
+  uimod3._handle_agent_event({ type = "tool_result", id = "t1", name = "list",
+                              summary = "18 entries", body = "..." })
+  uimod3._handle_agent_event({ type = "retry", attempt = 2, delay = 2.0, reason = "connection error" })
+  assert_notnil(find_role(uimod3, "thinking"),
+    "T119d attempt-1 think survives a retry of attempt 2")
+  assert_true(has_role(uimod3, "tool"), "T119d attempt-1 tool survives a retry of attempt 2")
+  print("T119d retry drops only the failed attempt's answer text: OK")
+end
+
 -- T135b: the summary marker renders like turn separators (dim rule across
 -- the full width, not a short caption).
 do
