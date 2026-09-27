@@ -1,5 +1,5 @@
 {
- "generated_at": 1790414442,
+ "generated_at": 1790503180,
  "providers": {
   "302ai": {
    "api_key_env": [
@@ -8546,31 +8546,11 @@
    "models": [
     {
      "context": 1000000,
-     "id": "accounts/fireworks/models/deepseek-v4-flash-0731"
-    },
-    {
-     "context": 1000000,
-     "id": "accounts/fireworks/models/deepseek-v4-flash-vision-exp"
-    },
-    {
-     "context": 1000000,
-     "id": "accounts/fireworks/models/deepseek-v4-pro"
-    },
-    {
-     "context": 1000000,
-     "id": "accounts/fireworks/models/deepseek-v4-pro-0813"
-    },
-    {
-     "context": 1000000,
      "id": "accounts/fireworks/models/deepseek-v4p1-flash"
     },
     {
      "context": 1048576,
      "id": "accounts/fireworks/models/ember-1"
-    },
-    {
-     "context": 1048575,
-     "id": "accounts/fireworks/models/glm-5p2"
     },
     {
      "context": 1048573,
@@ -8589,28 +8569,12 @@
      "id": "accounts/fireworks/models/inkling"
     },
     {
-     "context": 262000,
-     "id": "accounts/fireworks/models/kimi-k2p6"
-    },
-    {
-     "context": 262000,
-     "id": "accounts/fireworks/models/kimi-k2p7-code"
-    },
-    {
      "context": 1048576,
      "id": "accounts/fireworks/models/kimi-k3"
     },
     {
-     "context": 196608,
-     "id": "accounts/fireworks/models/minimax-m2p7"
-    },
-    {
      "context": 512000,
      "id": "accounts/fireworks/models/minimax-m3"
-    },
-    {
-     "context": 131072,
-     "id": "accounts/fireworks/models/muse-glimmer-30b"
     },
     {
      "context": 262144,
@@ -8619,10 +8583,6 @@
     {
      "context": 262144,
      "id": "accounts/fireworks/models/nemotron-lightning-3p5-30b-a3b"
-    },
-    {
-     "context": 262144,
-     "id": "accounts/fireworks/models/qwen3p7-plus"
     },
     {
      "context": 262144,
@@ -8635,10 +8595,6 @@
     {
      "context": 1000000,
      "id": "accounts/fireworks/routers/deepseek-flash-latest"
-    },
-    {
-     "context": 1048575,
-     "id": "accounts/fireworks/routers/glm-5p2-fast"
     },
     {
      "context": 1048572,
@@ -8688,31 +8644,11 @@
    "models": [
     {
      "context": 1000000,
-     "id": "accounts/fireworks/models/deepseek-v4-flash-0731"
-    },
-    {
-     "context": 1000000,
-     "id": "accounts/fireworks/models/deepseek-v4-flash-vision-exp"
-    },
-    {
-     "context": 1000000,
-     "id": "accounts/fireworks/models/deepseek-v4-pro"
-    },
-    {
-     "context": 1000000,
-     "id": "accounts/fireworks/models/deepseek-v4-pro-0813"
-    },
-    {
-     "context": 1000000,
      "id": "accounts/fireworks/models/deepseek-v4p1-flash"
     },
     {
      "context": 1048576,
      "id": "accounts/fireworks/models/ember-1"
-    },
-    {
-     "context": 1048575,
-     "id": "accounts/fireworks/models/glm-5p2"
     },
     {
      "context": 1048573,
@@ -8731,28 +8667,12 @@
      "id": "accounts/fireworks/models/inkling"
     },
     {
-     "context": 262000,
-     "id": "accounts/fireworks/models/kimi-k2p6"
-    },
-    {
-     "context": 262000,
-     "id": "accounts/fireworks/models/kimi-k2p7-code"
-    },
-    {
      "context": 1048576,
      "id": "accounts/fireworks/models/kimi-k3"
     },
     {
-     "context": 196608,
-     "id": "accounts/fireworks/models/minimax-m2p7"
-    },
-    {
      "context": 512000,
      "id": "accounts/fireworks/models/minimax-m3"
-    },
-    {
-     "context": 131072,
-     "id": "accounts/fireworks/models/muse-glimmer-30b"
     },
     {
      "context": 262144,
@@ -8761,10 +8681,6 @@
     {
      "context": 262144,
      "id": "accounts/fireworks/models/nemotron-lightning-3p5-30b-a3b"
-    },
-    {
-     "context": 262144,
-     "id": "accounts/fireworks/models/qwen3p7-plus"
     },
     {
      "context": 262144,
@@ -8777,10 +8693,6 @@
     {
      "context": 1000000,
      "id": "accounts/fireworks/routers/deepseek-flash-latest"
-    },
-    {
-     "context": 1048575,
-     "id": "accounts/fireworks/routers/glm-5p2-fast"
     },
     {
      "context": 1048572,
@@ -12450,7 +12362,7 @@
      "id": "deepseek/deepseek-v3.2-exp"
     },
     {
-     "context": 1024000,
+     "context": 1048576,
      "id": "deepseek/deepseek-v4-flash"
     },
     {
@@ -12466,11 +12378,11 @@
      "id": "deepseek/deepseek-v4-pro"
     },
     {
-     "context": 1024000,
+     "context": 1048576,
      "id": "deepseek/deepseek-v4-pro-0813"
     },
     {
-     "context": 1048576,
+     "context": 1040000,
      "id": "deepseek/deepseek-v4.1-flash"
     },
     {
@@ -12750,7 +12662,7 @@
      "id": "minimax/minimax-m1"
     },
     {
-     "context": 196608,
+     "context": 204800,
      "id": "minimax/minimax-m2"
     },
     {
@@ -12766,7 +12678,7 @@
      "id": "minimax/minimax-m2.5"
     },
     {
-     "context": 204800,
+     "context": 196608,
      "id": "minimax/minimax-m2.7"
     },
     {
@@ -13718,7 +13630,7 @@
      "id": "z-ai/glm-5.2"
     },
     {
-     "context": 1048576,
+     "context": 262144,
      "id": "z-ai/glm-5.3"
     },
     {
@@ -13806,7 +13718,7 @@
      "id": "~z-ai/glm-flash-latest"
     },
     {
-     "context": 1048576,
+     "context": 262144,
      "id": "~z-ai/glm-latest"
     }
    ],
@@ -17597,7 +17509,7 @@
     "NANO_GPT_API_KEY"
    ],
    "base_url": "https://nano-gpt.com/api/v1",
-   "model": "xiaomi/mimo-v2.6-flash-uncensored",
+   "model": "z-ai/glm-5.3-uncensored",
    "models": [
     {
      "context": 32768,
@@ -19829,6 +19741,10 @@
     },
     {
      "context": 1048576,
+     "id": "xiaomi/mimo-v2.6-flash-uncensored:thinking"
+    },
+    {
+     "context": 1048576,
      "id": "xiaomi/mimo-v2.6-pro"
     },
     {
@@ -19958,6 +19874,10 @@
     {
      "context": 1048576,
      "id": "z-ai/glm-5.3-flash-uncensored"
+    },
+    {
+     "context": 1048576,
+     "id": "z-ai/glm-5.3-uncensored"
     },
     {
      "context": 1048576,
@@ -22755,6 +22675,10 @@
      "id": "longcat-2.0-free"
     },
     {
+     "context": 1000000,
+     "id": "longcat-2.5-preview-free"
+    },
+    {
      "context": 262144,
      "id": "mimo-v2-flash-free"
     },
@@ -22967,6 +22891,10 @@
     {
      "context": 1000000,
      "id": "longcat-2.0"
+    },
+    {
+     "context": 1000000,
+     "id": "longcat-2.5-preview-free"
     },
     {
      "context": 262144,
