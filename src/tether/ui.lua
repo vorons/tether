@@ -1094,14 +1094,22 @@ local function debug_log(msg)
         if cap then cap[#cap + 1] = msg end
     end
     if not debug_log_fh then return end
-    pcall(function() debug_log_fh:write(os.date("[%H:%M:%S] ") .. msg .. "\n") end)
+    -- flush every line: without it the file stays empty until exit (and a
+    -- kill/crash loses everything), so tailing tether.log shows nothing.
+    pcall(function()
+        debug_log_fh:write(os.date("[%H:%M:%S] ") .. msg .. "\n")
+        debug_log_fh:flush()
+    end)
 end
 local function init_debug_log()
     if S and S.debug and debug_log_fh == nil then
         local dir = (os.getenv("HOME") or "/tmp") .. "/.tether/log"
         pcall(function() tether.mkdirp(dir) end)
         local ok, fh = pcall(io.open, dir .. "/tether.log", "a")
-        if ok and fh then debug_log_fh = fh end
+        if ok and fh then
+            debug_log_fh = fh
+            debug_log("debug log started")
+        end
     end
 end
 
@@ -6200,7 +6208,10 @@ function M.run(app_cfg)
     M._reactor.set_active(nil)
     M._loop = nil
 
-    if debug_log_fh then pcall(function() debug_log_fh:close() end) end
+    if debug_log_fh then
+        pcall(function() debug_log_fh:close() end)
+        debug_log_fh = nil
+    end
     if tether.set_tick_hook then tether.set_tick_hook(nil) end
     -- Restore the keyboard protocol while the alternate screen (and with it
     -- kitty's own flag stack) is still current, then leave alt-screen.

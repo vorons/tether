@@ -13874,6 +13874,53 @@ with_modules(base_env, function(mods)
   print("T217 resume restores think blocks and tool args: OK")
 end)
 
+-- T229: --debug log reaches the disk DURING the run, not only at exit.
+-- A buffered-only handle leaves ~/.tether/log/tether.log empty mid-run, so
+-- tailing it shows nothing and a kill/crash loses everything.
+do
+  local logpath = (os.getenv("HOME") or "/tmp") .. "/.tether/log/tether.log"
+  os.remove(logpath)
+  local midrun = {}
+  local function sniff()
+    local f = io.open(logpath, "r")
+    if f then
+      midrun[#midrun + 1] = f:read("*a") or ""
+      f:close()
+    else
+      midrun[#midrun + 1] = ""
+    end
+  end
+  -- NOTE: the stdin drain consumes all scripted bytes in one tick, so poll
+  -- and write hooks also observe post-close exit writes; sniffing
+  -- read_char_nb instead sees strictly pre-close disk state (the Ctrl-Q
+  -- byte and the terminating nil are read after Enter was processed).
+  local bytes = { 47, 99, 108, 101, 97, 114, 13, 17 } -- "/clear" Enter Ctrl-Q
+  local qi = 0
+  run_ui_with(bytes, {
+    config = { load = function()
+        return { model = "test", workspace = "/tmp", debug = true,
+          ui = { input_max_lines = 8 } }
+      end,
+      api_key = function() return "" end },
+    agent = { turn = function() return true end,
+      get_history = function() return {} end },
+    tether = { read_char_nb = function()
+        sniff()
+        qi = qi + 1
+        if qi <= #bytes then return bytes[qi] end
+        return nil
+      end },
+  })
+  local seen_startup, seen_command = false, false
+  for _, data in ipairs(midrun) do
+    if data:find("debug log started", 1, true) then seen_startup = true end
+    if data:find("command: clear", 1, true) then seen_command = true end
+  end
+  assert_true(seen_startup, "T229 startup line is on disk mid-run")
+  assert_true(seen_command, "T229 command line is on disk mid-run")
+  print("T229 debug log flushed mid-run: OK")
+end
+
 if failed > 0 then
     os.exit(1)
 end
