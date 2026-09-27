@@ -360,7 +360,16 @@ function M.handle(ev)
         if failed then
             dropped_stash = {}
             for i = #entries, 1, -1 do
-                if entries[i].attempt == failed then
+                local e = entries[i]
+                -- Only the failed attempt's ANSWER TEXT is dropped: the model
+                -- may answer differently on retry, so its partial output must
+                -- not survive. Thinking blocks and tool rows are the context
+                -- the model reasoned from — they carry no answer and must stay
+                -- (a think block built up before the failure is not "output of
+                -- the failed attempt"). Attempt tags live on thinking rows too,
+                -- so matching on attempt alone silently deleted them.
+                if e.attempt == failed and e.role ~= "thinking"
+                    and e.role ~= "tool" then
                     table.insert(dropped_stash, 1, table.remove(entries, i))
                     removed = true
                 end
