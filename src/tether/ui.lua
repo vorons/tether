@@ -2702,7 +2702,11 @@ local function render_transcript(L)
             text = row_text(idx, L.w)
         end
         if idx == total and tail ~= "" then
-            text = trunc(text, L.w - 2) .. tail
+            local last_i = transcript.entry_of_row(total, L.w)
+            local last_e = last_i and transcript.entry_at(last_i)
+            if not (last_e and last_e.role == "thinking") then
+                text = trunc(text, L.w - 2) .. tail
+            end
         end
         set_row(L.transcript_row + i - 1, text)
     end
@@ -3404,10 +3408,10 @@ end
 -- leaking its tail ("[<65;48;31M") into the input as text.
 function M._stash_front(list)
     if not list or #list == 0 then return end
-    local old = M._byte_stash
-    local n = #list
-    for i = #old, 1, -1 do old[i + n] = old[i] end
-    for i = 1, n do old[i] = list[i] end
+    -- Consumed bytes (in list) were removed from the stash by M._read_nb()
+    -- calls inside nb_read(). The stash is therefore always empty here,
+    -- and we can safely replace it with the list.
+    M._byte_stash = list
 end
 
 function M._read_utf8_char(first)

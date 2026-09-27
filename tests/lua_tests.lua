@@ -13435,7 +13435,26 @@ do
     assert_eq(S.error_banner, nil, "T207 the Esc key cleared the banner")
   end
   _G.tether = orig_tether
-  print("T207 lone Esc decodes while idle: OK")
+   print("T207 lone Esc decodes while idle: OK")
+end
+
+-- T207b: _stash_front must not duplicate stash entries when called
+-- repeatedly with the same content (e.g. a lone ESC that is drained
+-- and re-stashed each idle tick). The stash must stay at size 1.
+do
+   local uim, S = run_ui_with({ 17 },
+     { agent = { turn = function() return true end, get_history = function() return {} end } })
+   -- In the normal flow M._read_nb() removes bytes before _stash_front,
+   -- so the stash is always empty when _stash_front runs. Verify the
+   -- stash stays at size 1 after repeated stash_front calls (no growth).
+   uim._byte_stash = {}
+   uim._stash_front({ 27 })
+   assert_eq(#uim._byte_stash, 1, "T207b stash stays size 1 after stash_front")
+   assert_eq(uim._byte_stash[1], 27, "T207b stash first byte is ESC")
+   uim._stash_front({ 27 })
+   assert_eq(#uim._byte_stash, 1, "T207b stash stays size 1 after second stash_front")
+   assert_eq(uim._byte_stash[1], 27, "T207b stash first byte is still ESC")
+   print("T207b stash no duplication: OK")
 end
 
 -- T208: the host raises a quit flag while a turn blocks (a Ctrl+Q during an
@@ -13708,7 +13727,37 @@ do
   assert_notnil(xsecs, "T214 expanded shape 'think · Ns ▾': " .. x)
   assert_true(tonumber(xsecs) >= 1003 and tonumber(xsecs) <= 1004,
     "T214 expanded shows the elapsed seconds")
-  print("T214 think header format: OK")
+   print("T214 think header format: OK")
+end
+
+-- T214b: streaming caret ▌ must not be appended to a thinking row
+-- (the think header already ends with ▸; appending ▌ produced ▸▌).
+do
+   local uimod, S = run_ui_with({ 17 },
+     { agent = { turn = function() return true end, get_history = function() return {} end } })
+   uimod._handle_agent_event({ type = "reasoning_delta", text = "hmm" })
+   uimod._handle_agent_event({ type = "text_delta", text = "the answer" })
+   local th = nil
+   for _, e in ipairs(uimod._transcript.entries()) do
+     if e.role == "thinking" then th = e end
+   end
+   assert_notnil(th, "T214b the thinking entry exists")
+   th.started_at = os.time() - 1003
+   S.thinking_visible = false
+   S.streaming = true
+   uimod._invalidate_all()
+   uimod._paint(true)
+   local think_row = nil
+   for _, r in ipairs(uimod._render_all(80)) do
+     local plain = r:gsub("\27%[[0-9;]*m", "")
+     if plain:find("think", 1, true) then think_row = plain; break end
+   end
+   assert_notnil(think_row, "T214b the think row is rendered")
+   assert_true(think_row:find("▌", 1, true) == nil,
+     "T214b streaming caret not appended to a thinking row: " .. think_row)
+   assert_true(think_row:find("▸", 1, true) ~= nil,
+     "T214b think header ▸ still present: " .. think_row)
+   print("T214b streaming caret not on think row: OK")
 end
 
 -- T215: every `── status ────` marker stands as its own block — the turn
