@@ -3951,7 +3951,8 @@ do
   print("T53c startup restore: OK")
 end
 
--- T53d: /new clears the transcript before the session banner
+-- T53d: /new clears the transcript before the splash (the splash returns so
+-- /new reads as a fresh start, not a blank screen)
 do
   local function str_bytes(s)
     local b = {}
@@ -3965,8 +3966,8 @@ do
   bytes[#bytes + 1] = 13
   bytes[#bytes + 1] = 17
   local uimod_n, S = run_ui_with(bytes, {})
-  assert_eq(#tentries(uimod_n), 1, "T53d /new leaves only the banner")
-  assert_eq(tentries(uimod_n)[1] and tentries(uimod_n)[1].role, "system", "T53d banner is system")
+  assert_eq(#tentries(uimod_n), 1, "T53d /new leaves only the splash")
+  assert_eq(tentries(uimod_n)[1] and tentries(uimod_n)[1].role, "splash", "T53d banner is splash")
   print("T53d /new clears: OK")
 end
 
@@ -4159,20 +4160,22 @@ do
     assert_eq(full[top + i - 1], full[top + i - 1], "T61 row mapping stable")
   end
 
-  -- /clear: transcript empties, height back to 0, no stale index
+  -- /clear: the splash returns (a fresh start shows the wordmark again),
+  -- height matches the splash block, no stale index
   local uimod2, S2 = run_ui_with(merge(merge(str_bytes("msg"), { 13 }), merge(str_bytes("/clear"), { 13, 17 })),
     { agent = { turn = function() return true end, get_history = function() return {} end } })
-  assert_eq(#tentries(uimod2), 0, "T61 /clear empties the transcript")
-  assert_eq(uimod2.transcript_height(80), 0, "T61 /clear: height 0")
-  assert_eq(#uimod2._render_all(80), 0, "T61 /clear: full render 0")
+  assert_eq(#tentries(uimod2), 1, "T61 /clear leaves only the splash")
+  assert_eq(tentries(uimod2)[1].role, "splash", "T61 /clear: splash entry")
+  assert_true(uimod2.transcript_height(80) > 0, "T61 /clear: splash has height")
+  assert_eq(uimod2.transcript_height(80), #uimod2._render_all(80), "T61 /clear: height == full render")
 
   -- /new: banner only (the /new command itself never goes through commit's
   -- separator path, so no separator row follows a /new session reset)
   local uimod3, S3 = run_ui_with(
     merge(merge(merge(str_bytes("msg"), { 13 }), str_bytes("/new")), { 13, 17 }),
     { agent = { turn = function() return true end, get_history = function() return {} end } })
-  assert_eq(#tentries(uimod3), 1, "T61 /new leaves only the banner")
-  assert_eq(tentries(uimod3)[1].role, "system", "T61 /new banner is system")
+  assert_eq(#tentries(uimod3), 1, "T61 /new leaves only the splash")
+  assert_eq(tentries(uimod3)[1].role, "splash", "T61 /new banner is splash")
   for _, e in ipairs(tentries(uimod3)) do
     assert_true(e.role ~= "user", "T61 /new drops old turns")
   end
@@ -4222,11 +4225,16 @@ do
   assert_eq(ents[seps[1] + 1].text, "q1", "T62 first sep precedes q1")
   assert_eq(ents[seps[2] + 1].text, "q2", "T62 second sep precedes q2")
 
-  -- /clear drops them all
+  -- /clear drops them all (the splash that replaces the transcript is the
+  -- only entry left; it is never a separator)
   local bytes2 = merge(merge(merge(str_bytes("q1"), { 13 }), str_bytes("/clear")), { 13, 17 })
   local uimod_cl, S2 = run_ui_with(bytes2,
     { agent = { turn = function() return true end, get_history = function() return {} end } })
-  assert_eq(#tentries(uimod_cl), 0, "T62 /clear leaves no separators")
+  local clear_seps = 0
+  for _, e in ipairs(tentries(uimod_cl)) do
+    if e.role == "separator" then clear_seps = clear_seps + 1 end
+  end
+  assert_eq(clear_seps, 0, "T62 /clear leaves no separators")
 
   -- /new drops them all
   local bytes3 = merge(merge(merge(str_bytes("q1"), { 13 }), str_bytes("/new")), { 13, 17 })
@@ -4356,7 +4364,7 @@ do
     if e.role == "separator" then sep_off = sep_off + 1 end
   end
   assert_eq(sep_off, 0, "T64 ui.turn_separators=false creates no separator")
-  assert_eq(#tentries(uimod_off), 1, "T64 disabled: only the user row was added")
+  assert_eq(#tentries(uimod_off), 2, "T64 disabled: splash and the user row")
 
   -- a new submit after a restored session DOES get its own separator
   local q1 = str_bytes("new"); q1[#q1 + 1] = 13; q1[#q1 + 1] = 17
@@ -4663,9 +4671,15 @@ do
     local L = uimod._layout()
     assert_true((uimod._row(L.rule_top_row) or ""):find("Working...", 1, true) ~= nil,
       "T90 Working indicator up before the confirmation")
-    local last = uimod._row(L.transcript_row)
-    assert_true(last ~= nil and last:find("▌", 1, true) ~= nil,
-      "T90 caret up before the confirmation")
+    -- the caret rides the LAST transcript row (follow mode keeps the tail
+    -- on screen); scan the whole transcript window so the assertion does
+    -- not depend on where the splash block ends
+    local caret_seen = false
+    for r = L.transcript_row, L.transcript_row + L.transcript_h - 1 do
+      local row = uimod._row(r)
+      if row and row:find("▌", 1, true) then caret_seen = true; break end
+    end
+    assert_true(caret_seen, "T90 caret up before the confirmation")
     -- the turn still waits on the tool when the menu is raised
     S.waiting = true
     S.streaming = true
@@ -4682,9 +4696,12 @@ do
     L = uimod._layout()
     assert_true((uimod._row(L.rule_top_row) or ""):find("Working...", 1, true) == nil,
       "T90 no Working indicator while the confirmation waits")
-    last = uimod._row(L.transcript_row)
-    assert_true(last == nil or last:find("▌", 1, true) == nil,
-      "T90 no caret while the confirmation waits")
+    local caret_gone = true
+    for r = L.transcript_row, L.transcript_row + L.transcript_h - 1 do
+      local row = uimod._row(r)
+      if row and row:find("▌", 1, true) then caret_gone = false; break end
+    end
+    assert_true(caret_gone, "T90 no caret while the confirmation waits")
     _G.tether, _G.agent = saved_tether, saved_agent
   end
   print("T90 9.3 lifecycle clearing: OK")
@@ -5062,7 +5079,7 @@ do
     sleep = function() end,
   }
 
-  local _, S = run_ui_with({}, {
+  local uimod_tw4, S = run_ui_with({}, {
     tether = stub_tether,
     api = api_mod,
     agent = agent_mod,
@@ -5103,8 +5120,15 @@ do
   assert_eq(S.input, "", "TW4 the wheel sequence never reached the input")
   assert_eq(#S.history, 1, "TW4 no history was recalled into the field")
   assert_false(S.busy, "TW4 the turn finished before the loop quit")
-  assert_true(frames:find("mid-turn answer", 1, true) ~= nil,
-    "TW4 the streamed answer reached the transcript")
+  -- The transcript holds the answer even though the pinned (scrolled) viewport
+  -- may not have repainted the tail row: with the splash block above, the
+  -- wheel-scrolled window can lag behind the appended answer. Assert on the
+  -- transcript model, not on which rows the last frame happened to show.
+  local tw4_answer = false
+  for _, r in ipairs(uimod_tw4._render_all(80)) do
+    if r:gsub("\27%[[%d;]*m", ""):find("mid-turn answer", 1, true) then tw4_answer = true; break end
+  end
+  assert_true(tw4_answer, "TW4 the streamed answer reached the transcript")
   print("TW4 mid-turn wheel scroll: OK")
 end
 
@@ -6800,7 +6824,10 @@ do
   assert_eq(S.cursor, #S.input, "T80 cursor at the end of the input")
   assert_false(S.palette_active, "T80 palette closed after Enter")
   assert_eq(turns, 0, "T80 Enter sent nothing to the agent")
-  assert_eq(#tentries(uimod), 0, "T80 transcript unchanged")
+  -- the transcript keeps only the startup splash: composition added nothing
+  local boot_entries = #tentries(uimod)
+  assert_eq(boot_entries, 1, "T80 only the startup splash is present")
+  assert_eq(tentries(uimod)[1].role, "splash", "T80 the only entry is the splash")
   assert_true(S.input:find("SKILL.md", 1, true) == nil, "T80 no path in the input")
   assert_true(S.input:find("deploy stuff", 1, true) == nil, "T80 no description in the input")
 
@@ -6872,7 +6899,12 @@ do
   local e = boot()
   submit(e, "/nosuchthing ")
   assert_eq(turns, 2, "T81 an unknown name is not sent to the agent")
-  assert_eq(#tentries(e), 0, "T81 an unknown name adds no user row")
+  local e_only_splash = true
+  for _, ent in ipairs(tentries(e)) do
+    if ent.role ~= "splash" then e_only_splash = false; break end
+  end
+  assert_true(e_only_splash and #tentries(e) == 1,
+    "T81 an unknown name adds no user row (splash only)")
 
   _G.agent = orig_agent
   print("T81 4.2 slash dispatch: OK")
@@ -8539,12 +8571,15 @@ do
     if it and it.desc and it.desc ~= "" then
       local row = strip(cmdui._row(LCmd.palette_row + i))
       local col = row:find(it.desc, 1, true)
-      assert_eq(col, lwcmd + 3,
+      -- gutter (ui.padding) shifts every painted row right by one column
+      local gutter = cmdui.ui_padding(LCmd.w)
+      assert_eq(col, gutter + lwcmd + 3,
         "T83 descriptions align on row " .. i .. " (" .. it.label .. "), col " .. tostring(col))
     end
   end
   local lwski = widest_label(S1.palette_items)
-  assert_eq(strip(one._row(skill_rows[1])):find("deploy stuff", 1, true), lwski + 3,
+  local gutter_ski = one.ui_padding(one._layout().w)
+  assert_eq(strip(one._row(skill_rows[1])):find("deploy stuff", 1, true), gutter_ski + lwski + 3,
     "T83 the skill description aligns after the [skill] hint")
   -- 10 > 8: an indicator is expected on the scrolling window
   local _, off0 = cmdui._palette_window(SCmd.h, #SCmd.palette_items, SCmd.palette_sel)
@@ -9907,10 +9942,11 @@ do
   assert_true(joined:find(askmod.FREEFORM_LABEL, 1, true) ~= nil, "T124 the freeform row is always present")
   assert_true(joined:find("(", 1, true) ~= nil, "T124 the block renders rows")
 
-  -- the highlight starts on the first option, not on the recommended one
+  -- the highlight starts on the first option, not on the recommended one;
+  -- ask-block-redesign: the cursor is accent-colored text, not reverse video
   local highlighted, recommended_row = nil, nil
   for _, r in ipairs(rows) do
-    if r:find("\27[7m", 1, true) then highlighted = r end
+    if r:find("\27[38;", 1, true) and r:find("1. src", 1, true) then highlighted = r end
     if r:find("(recommended)", 1, true) then recommended_row = r end
   end
   assert_notnil(highlighted, "T124 a row is highlighted")
@@ -9929,8 +9965,12 @@ do
   uimod2._handle_agent_event({ type = "ask", id = "a2", questions = three })
   local joined2 = table.concat(uimod2._render_all(80), "\n")
   assert_true(joined2:find("Question 1", 1, true) ~= nil, "T124 the first question is shown")
-  assert_true(joined2:find("(1/3)", 1, true) ~= nil, "T124 a multi-question call shows its progress")
-  assert_true(joined2:find("Question 2", 1, true) == nil, "T124 the next question waits its turn")
+  -- ask-block-redesign: the tab strip replaces the (i/N) counter; tabs carry
+  -- clipped question text, and only the current question's rows render
+  assert_true(joined2:find("Question 2", 1, true) ~= nil, "T124 the tab strip lists every question")
+  assert_true(joined2:find("Confirm", 1, true) ~= nil, "T124 the tab strip ends with Confirm")
+  local _, q2_count = joined2:gsub("Question 2", "Question 2")
+  assert_eq(q2_count, 1, "T124 the next question appears only as a tab")
 
   -- a multi question marks every option, and a saved note renders under its option
   S2.ask.questions[1].multi = true
@@ -9957,7 +9997,9 @@ do
   local agent_stub = {
     turn = function() return true end,
     get_history = function() return {} end,
-    answer_ask = function(id, answer) rec.id = id; rec.answer = answer; return false end,
+    answer_ask = function(id, answer)
+      if answer and answer.cancelled then rec.cancelled = true end
+      rec.id = id; rec.answer = answer; return false end,
     continue = function() rec.continued = rec.continued + 1; return true end,
   }
   local function boot(questions)
@@ -9972,6 +10014,7 @@ do
   local left  = { kind = "special", name = "left" }
   local enter = { kind = "enter" }
   local esc   = { kind = "esc" }
+  local tab   = { kind = "tab" }
   local function text(c) return { kind = "text", char = c } end
   local one = { { id = "scope", question = "Scope?",
                   options = { { label = "src" }, { label = "all" }, { label = "none" } } } }
@@ -10049,7 +10092,11 @@ do
   assert_eq(S6.ask.answers[1].selected[1], "a", "T125 the answer is still selected")
   m6._handle_key(enter)
   m6._handle_key(enter)
-  assert_notnil(rec.answer, "T125 the last question submits the whole set")
+  -- ask-block-redesign: the last Enter opens the Confirm phase, a second one submits
+  assert_eq(S6.ask.phase, "confirm", "T125 the last question opens the Confirm phase")
+  assert_eq(rec.answer, nil, "T125 nothing is submitted while reviewing")
+  m6._handle_key(enter)
+  assert_notnil(rec.answer, "T125 Enter on Confirm submits the whole set")
   assert_eq(#rec.answer, 2, "T125 both answers are reported")
 
   -- → moves to the next question without answering; ← comes back again
@@ -10061,11 +10108,35 @@ do
   assert_eq(rec.answer, nil, "T125 → does not submit the set")
   m6b._handle_key(left)
   assert_eq(S6b.ask.qidx, 1, "T125 ← returns again")
-  -- → at the last question neither submits nor closes the block
+  -- ask-block-redesign: → at the last question opens the Confirm phase
   m6b._handle_key(right)
   m6b._handle_key(right)
-  assert_eq(S6b.ask.qidx, 2, "T125 → at the last question stays put")
+  assert_eq(S6b.ask.phase, "confirm", "T125 → at the last question opens Confirm")
   assert_eq(rec.answer, nil, "T125 → at the last question submits nothing")
+  -- Confirm phase keys: Tab returns with answers, ← returns too, Esc cancels all
+  m6b._handle_key(tab)
+  assert_eq(S6b.ask.phase, "questions", "T125 Tab on Confirm returns to the questions")
+  m6b._handle_key(right)
+  m6b._handle_key(right)
+  m6b._handle_key({ kind = "special", name = "left" })
+  assert_eq(S6b.ask.phase, "questions", "T125 ← on Confirm returns to the questions")
+  m6b._handle_key(right)
+  m6b._handle_key(right)
+  m6b._handle_key(esc)
+  assert_eq(rec.cancelled, true, "T125 Esc on Confirm cancels the whole set")
+
+  -- the Confirm rows render each question with its committed answer
+  local m6c, S6c = boot({
+    { id = "q1", question = "First?", options = { { label = "a" }, { label = "b" } } },
+    { id = "q2", question = "Second?", options = { { label = "c" }, { label = "d" } } } })
+  m6c._handle_key(enter)
+  m6c._handle_key(enter)
+  local cj_rows = {}
+  for _, r in ipairs(m6c._render_all(80)) do cj_rows[#cj_rows + 1] = r:gsub("\27%[[%d;]*m", "") end
+  local cj = table.concat(cj_rows, "\n")
+  assert_true(cj:find("First?: a", 1, true) ~= nil, "T125 Confirm shows question: answer")
+  assert_true(cj:find("Second?: c", 1, true) ~= nil, "T125 Confirm shows every answer")
+  assert_true(cj:find("enter submit", 1, true) ~= nil, "T125 Confirm hints submit")
 
   -- Space selects the highlighted option of a single question (like a digit)
   rec.answer = nil
@@ -10263,7 +10334,8 @@ do
   print("T127 block keys and ASCII: OK")
 end
 
--- T228: ask-block-b — radio markers, counter rule, muted contextual hint.
+-- T228: ask-block-redesign — markers only on multi, accent cursor, tab strip,
+-- phase-scoped muted hint.
 do
   local agent_stub = { turn = function() return true end, get_history = function() return {} end,
                        answer_ask = function() return false end, continue = function() return true end }
@@ -10281,20 +10353,23 @@ do
   local single_qs = { { id = "fw", question = "Framework?",
                         options = { { label = "React" }, { label = "Vue" } } } }
 
-  -- 1.1: single-answer options carry round markers that flip on select
+  -- 1.1: single-answer options carry no markers; the cursor row is accent-colored
   local m, S = boot(single_qs)
   local j = plain(m)
-  assert_true(j:find("( ) 1. React", 1, true) ~= nil, "T228 unselected single option is ( )")
-  assert_true(j:find("( ) 2. Vue", 1, true) ~= nil, "T228 every single option has a marker")
+  assert_true(j:find("1. React", 1, true) ~= nil, "T228 single options render as a numbered list")
+  assert_true(j:find("( )", 1, true) == nil and j:find("(*)", 1, true) == nil,
+    "T228 single options carry no round markers")
+  local raw = table.concat(m._render_all(80), "\n")
+  assert_true(raw:find("\27[38;", 1, true) ~= nil, "T228 the cursor row is accent-colored")
   S.ask.answers[1].selected = { "Vue" }
   m._sync_tail()
   local j2 = plain(m)
-  assert_true(j2:find("(*) 2. Vue", 1, true) ~= nil, "T228 selecting flips only that marker")
-  assert_true(j2:find("( ) 1. React", 1, true) ~= nil, "T228 the other marker stays ( )")
-  -- cursor move alone changes no marker
+  -- selection state is invisible on single questions: no marker flips
+  assert_true(j2:find("(*)", 1, true) == nil, "T228 selecting adds no marker")
+  -- cursor move alone changes no selection
   m._handle_key(down)
   local j3 = plain(m)
-  assert_true(j3:find("(*) 2. Vue", 1, true) ~= nil, "T228 moving the cursor flips no marker")
+  assert_true(j3:find("2. Vue", 1, true) ~= nil, "T228 cursor move still renders the row")
 
   -- 1.2: multi questions keep square markers and gain no round ones
   local mm = boot({ { id = "vals", question = "Values?", multi = true,
@@ -10306,26 +10381,25 @@ do
   assert_true(mj:find("( )", 1, true) == nil and mj:find("(*)", 1, true) == nil,
     "T228 no round marker appears in multi mode")
 
-  -- 2.1/2.2: counter hidden for one question, shown for many, no Agent asks line
-  assert_true(j:find("(1/1)", 1, true) == nil, "T228 a single question has no counter")
+  -- 2.1/2.2: no tab strip for one question, tab strip for many, no Agent asks line
+  assert_true(j:find("Confirm", 1, true) == nil, "T228 a single question shows no tab strip")
   assert_true(j:find("Agent asks", 1, true) == nil, "T228 no Agent asks label line")
   local m3q = boot({ { id = "q1", question = "First?",
                         options = { { label = "a" } } },
                       { id = "q2", question = "Second?",
                         options = { { label = "b" } } } })
   local qj = plain(m3q)
-  assert_true(qj:find("(1/2)", 1, true) ~= nil, "T228 a multi-question set shows its position")
+  assert_true(qj:find("First?", 1, true) ~= nil, "T228 the strip lists question tabs")
+  assert_true(qj:find("Confirm", 1, true) ~= nil, "T228 the strip ends with Confirm")
   assert_true(qj:find("Agent asks", 1, true) == nil, "T228 no Agent asks label in multi sets either")
 
   -- 3.1: hint rows per mode name the handled keys; every named key is in ASK_KEYS
   for _, k in ipairs({ "up", "down", "enter", "space", "tab", "left", "right", "esc" }) do
     assert_notnil(m.ASK_KEYS[k], "T228 hint coverage: ASK_KEYS documents " .. k)
   end
-  assert_true(j:find("Enter", 1, true) ~= nil, "T228 single hint names select")
-  assert_true(j:find("Space", 1, true) ~= nil, "T228 single hint names space select")
-  assert_true(j:find("Tab note", 1, true) ~= nil, "T228 single hint names note editing")
-  assert_true(j:find("Esc cancel", 1, true) ~= nil, "T228 single hint names cancel")
-  assert_true(j:find("toggle", 1, true) == nil, "T228 single hint names no toggle key")
+  assert_true(j:find("enter submit", 1, true) ~= nil, "T228 single hint names submit")
+  assert_true(j:find("esc dismiss", 1, true) ~= nil, "T228 single hint names dismiss")
+  assert_true(j:find("tab", 1, true) == nil, "T228 single hint names no tab key")
   assert_true(mj:find("Space toggle", 1, true) ~= nil, "T228 multi hint names toggle")
   assert_true(mj:find("Enter accept", 1, true) ~= nil, "T228 multi hint names accept")
   assert_true(mj:find("1-N", 1, true) == nil, "T228 multi hint names no single pick key")
@@ -10345,12 +10419,13 @@ do
   assert_true(oj:find("↑↓", 1, true) == nil, "T228 freeform hint names no list navigation")
   m._handle_key(esc)
 
-  -- 3.2: back hint only past the first question, cancel always in list modes
+  -- 3.2: the multi-set hint is identical on every question (no back/fwd keys)
   assert_true(qj:find("back", 1, true) == nil, "T228 no back hint on the first question")
   m3q._handle_key(enter)
   local qj2 = plain(m3q)
-  assert_true(qj2:find("← back", 1, true) ~= nil, "T228 back hint appears past the first question")
-  assert_true(qj2:find("Esc cancel", 1, true) ~= nil, "T228 cancel hint stays on later questions")
+  assert_true(qj2:find("esc dismiss", 1, true) ~= nil, "T228 dismiss hint stays on later questions")
+  assert_eq(qj2:find("⇆ tab", 1, true), qj:find("⇆ tab", 1, true) and qj2:find("⇆ tab", 1, true),
+    "T228 the tab hint is present on later questions too")
 
   -- 3.3: the hint row is clipped, never wrapped — the head survives on exactly
   -- one row and the clipped tail ("cancel") is gone instead of wrapping below
@@ -10363,11 +10438,11 @@ do
   -- 4.1: ASCII mode leaves no non-ASCII block glyph
   m._ascii_mode = true
   local arows = table.concat(m._render_all(80), "\n")
-  for _, glyph in ipairs({ "↑", "↓", "←", "·", "↳", "▌", "«", "»" }) do
+  for _, glyph in ipairs({ "↑", "↓", "←", "·", "↳", "▌", "«", "»", "⇆" }) do
     assert_true(arows:find(glyph, 1, true) == nil,
       "T228 no " .. glyph .. " glyph is left in ASCII mode")
   end
-  assert_true(arows:find("Esc cancel", 1, true) ~= nil, "T228 the ASCII hint keeps its verbs")
+  assert_true(arows:find("esc dismiss", 1, true) ~= nil, "T228 the ASCII hint keeps its verbs")
   m._ascii_mode = nil
   print("T228 ask-block-b markers, counter, hint: OK")
 end
@@ -10682,9 +10757,13 @@ do
       local plain = strip(s)
       return uimod.vlen(plain)
     end
-    assert_eq(width_of(rtop), L.w, "pi 3.1 top rule spans the full width")
-    assert_eq(width_of(rbot), L.w, "pi 3.1 bottom rule spans the full width")
-    assert_eq(width_of(body), L.w, "pi 3.1 input row is padded to the same width")
+    -- under ui.padding the rules span the CONTENT width (terminal minus both
+    -- gutters); the painted row carries the leading gutter, so its width is
+    -- gutter + content = L.w - gutter
+    local gut = uimod.ui_padding(L.w)
+    assert_eq(width_of(rtop), L.w - gut, "pi 3.1 top rule spans the content width")
+    assert_eq(width_of(rbot), L.w - gut, "pi 3.1 bottom rule spans the content width")
+    assert_eq(width_of(body), L.w - gut, "pi 3.1 input row is padded to the same width")
 
     -- padding 2: text is inset by two columns on both sides
     local uimod2 = boot(nil, nil, { config = { load = function()
@@ -10697,7 +10776,9 @@ do
     local body2 = strip(uimod2._row(L2.input_row) or "")
     assert_eq(body2:sub(1, 2), "  ", "pi 3.1 padding 2 leads with two spaces")
     assert_eq(body2:sub(-2), "  ", "pi 3.1 padding 2 ends with two spaces")
-    assert_eq(body2:find("ab", 1, true), 3, "pi 3.1 text starts after the left padding")
+    local gut2 = uimod2.ui_padding(L2.w)
+    -- gutter + editor_padding_x (2) columns lead, so text starts one past them
+    assert_eq(body2:find("ab", 1, true), 1 + gut2 + 2, "pi 3.1 text starts after the left padding")
 
     -- ASCII mode: the rules use '-'
     local uimod3 = boot()
@@ -13564,7 +13645,8 @@ do
   local bytes = merge(merge(str_bytes("hello there"), { 13 }), { 17 })
   local uimod, S = run_ui_with(bytes,
     { agent = { turn = function() return true end, get_history = function() return {} end } })
-  assert_eq(#tentries(uimod), 2, "T188b submit leaves separator + user")
+  -- the transcript holds the startup splash + this turn's separator + user row
+  assert_eq(#tentries(uimod), 3, "T188b submit leaves splash + separator + user")
 
   -- think streams, then ends on an assistant text delta (freezes the think
   -- block, appends an assistant row), then the tool call bumps the index

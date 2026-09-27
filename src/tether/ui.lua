@@ -81,7 +81,7 @@ end
 -- ANSI colors, leaving box-drawing and emoji-width glyphs to break layout.
 local GLYPH_MAP = {
     ["●"] = "*", ["•"] = "*", ["⚙"] = "[t]", ["›"] = ">", ["✗"] = "[x]", ["✓"] = "[ok]", ["✻"] = "*",
-    ["↻"] = "[r]", ["⏹"] = "[x]", ["⚠"] = "!", ["▸"] = ">", ["▾"] = "v",
+    ["↻"] = "[r]", ["⏹"] = "[x]", ["⚠"] = "!", ["▸"] = ">", ["▾"] = "v", ["⇆"] = "tab",
     ["┌"] = "+", ["┐"] = "+", ["└"] = "+", ["┘"] = "+", ["─"] = "-",
     ["│"] = "|",     ["•"] = "-", ["…"] = "...", ["▓"] = "#", ["░"] = "-", ["━"] = "#",
     ["▀"] = "#", ["█"] = "#", ["▄"] = "#",
@@ -2448,25 +2448,57 @@ local function ask_selected(answer, label)
     return false
 end
 
--- ask-block-b: the hint row's text for the current mode. Short verbs only —
--- the row is clipped to the width (never wrapped), so the full ASK_KEYS
--- phrases would not fit. Every key named here exists in ASK_KEYS (asserted by
--- T228), so the painted hints cannot drift from the handled keys: list modes
--- name navigation + commit + cancel, editors name save/discard instead.
+-- ask-block-b: the hint row's text for the current phase and mode. Short
+-- verbs only — the row is clipped to the width (never wrapped), so the full
+-- ASK_KEYS phrases would not fit. Every key named here exists in ASK_KEYS
+-- (asserted by T228), so the painted hints cannot drift from the handled
+-- keys: list modes name navigation + commit + cancel, the confirm phase
+-- names submit/dismiss, editors name save/discard instead.
 -- (M-field, not chunk local: ui.lua sits at Lua's 200-locals limit.)
 function M._ask_hint(a, q)
+    if a.phase == "confirm" then
+        return "⇆ tab · enter submit · esc dismiss"
+    end
     if a.mode == "note" then
         return "type note · Enter save · Esc discard"
     end
     if a.mode == "other" then
         return "type answer · Enter save · Esc discard"
     end
-    local back = (a.qidx > 1) and " · ← back" or ""
-    local fwd = (a.qidx < #a.questions) and " · → next" or ""
+    local multi_set = #a.questions > 1
     if q.multi then
-        return "↑↓ move · Space toggle · Enter accept · Tab note" .. back .. fwd .. " · Esc cancel"
+        return "↑↓ move · Space toggle · Enter accept · Tab note · Esc cancel"
     end
-    return "↑↓ move · Enter/Space select · 1-N pick · Tab note" .. back .. fwd .. " · Esc cancel"
+    if multi_set then
+        return "⇆ tab · ↑↓ select · enter confirm · esc dismiss"
+    end
+    return "↑↓ select · enter submit · esc dismiss"
+end
+
+-- ask-block-redesign: the tab strip for multi-question sets. One clipped tab
+-- per question plus a trailing Confirm tab; equal width budgets so any set
+-- size fits one row (minimum 8 columns per tab). Active phase/tab = accent
+-- text; the strip is decoration-only — all routing stays in handle_ask_key.
+function M._render_ask_tabs(a, width)
+    local inner = math.max(width - 2, 1)
+    local tabs = {}
+    for _, qq in ipairs(a.questions or {}) do tabs[#tabs + 1] = qq.question or "" end
+    tabs[#tabs + 1] = "Confirm"
+    local count = #tabs
+    local sepw = 3 * (count - 1) -- "   " between tabs
+    local budget = math.max(math.floor((inner - sepw) / count), 8)
+    local active = (a.phase == "confirm") and count or a.qidx
+    local parts = {}
+    for i, label in ipairs(tabs) do
+        local text = clip(label, budget)
+        if i == active then
+            parts[#parts + 1] = sgr_role("dim", " ") .. sgr_role("accent", text)
+                .. sgr_role("dim", " ")
+        else
+            parts[#parts + 1] = muted(text)
+        end
+    end
+    return table.concat(parts, "   ")
 end
 
 -- The question block's rows. Rendered from S.ask directly, so the highlight and
@@ -2482,10 +2514,30 @@ local function render_ask(width)
     local inner = math.max(width - 2, 1)
     local out = { "" }
 
+    -- ask-block-redesign: multi-question sets open with a tab strip — one
+    -- clipped tab per question plus a trailing Confirm tab. The active tab
+    -- is dim-background + accent text; others stay muted. Single-question
+    -- sets draw no strip (immediate submit, no confirm phase).
+    if a.phase == "confirm" then
+        out[#out + 1] = M._render_ask_tabs(a, width)
+        for qi, qq in ipairs(a.questions or {}) do
+            local ans = a.answers[qi] or {}
+            local sel_text = (type(ans.selected) == "table" and #ans.selected > 0)
+                and table.concat(ans.selected, ", ") or nil
+            local ans_text = (ans.other and ans.other ~= "") and ans.other or sel_text or "—"
+            local qpart = clip(qq.question or "", math.max(math.floor(inner * 0.6), 8))
+            local apart = clip(ans_text, math.max(inner - vlen(qpart) - 2, 4))
+            out[#out + 1] = "  " .. dim(qpart .. ": ") .. apart
+        end
+        out[#out + 1] = muted(clip(M._ask_hint(a, q), inner))
+        return out
+    end
+    if #a.questions > 1 then
+        out[#out + 1] = M._render_ask_tabs(a, width)
+    end
     local progress = #a.questions > 1
         and string.format(" (%d/%d)", a.qidx, #a.questions) or ""
     out[#out + 1] = cyan("? ") .. (q.question or "") .. dim(progress)
-
     if q.description and q.description ~= "" then
         for _, l in ipairs(md_render(q.description, inner, M.md_ansi)) do
             out[#out + 1] = "  " .. l
@@ -2494,16 +2546,16 @@ local function render_ask(width)
 
     for i, opt in ipairs(q.options) do
         local row = {}
+        -- multi keeps its square markers so the toggled state stays visible;
+        -- single renders a clean numbered list (the accent cursor marks position)
         if q.multi then
             row[#row + 1] = ask_selected(answer, opt.label) and "[x] " or "[ ] "
-        else
-            row[#row + 1] = ask_selected(answer, opt.label) and "(*) " or "( ) "
         end
         row[#row + 1] = i .. ". " .. opt.label
         if q.recommended == i then row[#row + 1] = dim("  (recommended)") end
+        local active = (i == a.sel and a.mode == "list")
         local text = "  " .. table.concat(row)
-        if i == a.sel and a.mode == "list" then text = rev(text) end
-        out[#out + 1] = text
+        out[#out + 1] = active and sgr_role("accent", text) or text
         if opt.description and opt.description ~= "" then
             for _, l in ipairs(wrap(opt.description, inner - 4)) do
                 out[#out + 1] = "      " .. dim(l)
@@ -2527,7 +2579,9 @@ local function render_ask(width)
         if answer.other and answer.other ~= "" then
             text = text .. dim("  («" .. answer.other .. "»)")
         end
-        if a.sel == n + 1 and a.mode == "list" then text = rev(text) end
+        if a.sel == n + 1 and a.mode == "list" then
+            text = sgr_role("accent", text)
+        end
         out[#out + 1] = text
     end
     -- ask-block-b: one muted hint row under the freeform row, clipped to the
@@ -2740,14 +2794,23 @@ local function render_entry(e, width, prev_role)
     -- `── status ────` marker — turn timestamps, the summary divider —
     -- stands as a block of its own) — but not before the first entity, and
     -- not before virtual tails (they emit their own leading blank). Empty
-    -- entries get no gap. A thinking block also gets a blank row AFTER it
-    -- (the think block is a visual block of its own), so an entry following
-    -- one gaps even when it would otherwise stay attached (a tool row).
+    -- entries get no gap.
+    -- Tool/subagent rows form a GROUP: the first tool after a narrative
+    -- block (user/assistant/think/system) opens the group with a gap, tools
+    -- inside the group glue together (and to a preceding tool), so a
+    -- tool-trail reads as one unit attached to the block it follows.
     local gap_roles = { separator = true, user = true, assistant = true,
         system = true, thinking = true, splash = true }
+    local role = e.role or "system"
     local is_virt = e.virt == "ask" or e.virt == "placeholder" or e.virt == "confirm"
-    local need_gap = (not is_virt) and prev_role ~= nil
-        and (gap_roles[e.role or "system"] or prev_role == "thinking")
+    local need_gap = false
+    if not is_virt and prev_role ~= nil then
+        if role == "tool" then
+            need_gap = prev_role ~= "tool"
+        else
+            need_gap = gap_roles[role] or prev_role == "tool"
+        end
+    end
     if need_gap and #out > 0 then
         local gap = (S and S.cfg and S.cfg.ui and S.cfg.ui.block_gap)
         if gap == nil then gap = 1 end
@@ -4713,6 +4776,7 @@ local function handle_agent_event(ev)
             qidx = 1,
             sel = 1,
             mode = "list",
+            phase = "questions",
             note_sel = nil,
             editor = "",
             answers = {},
@@ -5424,14 +5488,21 @@ local function resolve_ask(cancelled)
     after_turn_settle()
 end
 
--- The current question is answered: move to the next one, or hand the whole
--- set to the agent once the last one is done.
+-- The current question is answered: move to the next one, or — on the last
+-- question of a multi-question set — open the Confirm phase. Single-question
+-- sets submit immediately (no confirm phase).
 local function ask_advance()
     local a = S.ask
     if not a then return end
     if a.qidx < #a.questions then
         a.qidx = a.qidx + 1
         a.sel = 1
+        a.mode = "list"
+        a.note_sel = nil
+        a.editor = ""
+        sync_tail()
+    elseif #a.questions > 1 then
+        a.phase = "confirm"
         a.mode = "list"
         a.note_sel = nil
         a.editor = ""
@@ -5449,6 +5520,41 @@ local function handle_ask_key(k)
     local n = #q.options
     local freeform_row = n + 1
     local answer = ask_answer()
+
+    -- --- confirm phase: review the whole set, submit or bail -------------
+    if a.phase == "confirm" then
+        if k.kind == "enter" then
+            resolve_ask(false) -- submit the whole committed set
+        elseif k.kind == "esc" then
+            resolve_ask(true)  -- cancel everything, same as Esc in a question
+        elseif (k.kind == "tab")
+            or (k.kind == "special" and (k.name == "left" or k.name == "right")) then
+            -- back to the questions, answers preserved; ←/→ walk tabs, so →
+            -- wraps from Confirm to the first question and ← returns to the last
+            a.phase = "questions"
+            a.mode = "list"
+            a.note_sel = nil
+            a.editor = ""
+            if k.kind == "special" and k.name == "right" then a.qidx = 1 end
+            sync_tail()
+        end
+        return
+    end
+
+    -- question tabs: → on the last question of a multi-question set opens the
+    -- Confirm phase; single-question sets have no confirm phase, so their Tab
+    -- keeps the note/freeform-editor meaning
+    if k.kind == "special" and k.name == "right" and a.qidx >= #a.questions
+        and #a.questions > 1 then
+        a.phase = "confirm"
+        sync_tail()
+        return
+    end
+    if k.kind == "tab" and a.qidx >= #a.questions and #a.questions > 1 then
+        a.phase = "confirm"
+        sync_tail()
+        return
+    end
 
     -- --- editors: characters and backspace edit the buffer ----------------
     if a.mode == "other" or a.mode == "note" then

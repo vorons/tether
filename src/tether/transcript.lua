@@ -504,6 +504,23 @@ function M.cache_rows()
     return cached_rows
 end
 
+-- Role of the nearest preceding entry that rendered at least one row:
+-- invisible entries (whitespace-only text deltas, empty system rows) must
+-- neither create nor consume a block gap, so gap decisions thread past them
+-- to the last VISIBLE block (tool-group gluing keys on this).
+local function effective_prev_role(i)
+    local j = i - 1
+    while j >= 1 do
+        local h = index_h[j]
+        if h and h > 0 then
+            local e = M.entry_at(j)
+            return e and (e.role or "system") or nil
+        end
+        j = j - 1
+    end
+    return nil
+end
+
 -- Rebuild the prefix-sum height index, from the first dirty entry (O(1) for a
 -- plain append) or from the start when the width changed.
 function M.ensure_index(width)
@@ -531,13 +548,14 @@ function M.ensure_index(width)
     else
         index_start, index_h = {}, {}
     end
+    local prev = (from > 1) and effective_prev_role(from) or nil
     for i = from, n do
         local e = M.entry_at(i)
-        local prev = (i > 1) and (M.entry_at(i - 1) or {}).role or nil
         local h = e and entry_height(e, width, prev) or 0
         index_h[i] = h
         rows = rows + h
         index_start[i] = rows - h + 1
+        if h > 0 then prev = (e and e.role or "system") end
     end
     for i = n + 1, #index_start do
         index_start[i], index_h[i] = nil, nil
@@ -566,7 +584,7 @@ function M.row_text(k, width)
     if not i then return "" end
     local e = M.entry_at(i)
     if not e then return "" end
-    local prev = (i > 1) and (M.entry_at(i - 1) or {}).role or nil
+    local prev = effective_prev_role(i)
     local rows = entry_rows(e, width, prev)
     return rows[k - (index_start[i] or 0) + 1] or ""
 end
@@ -576,11 +594,13 @@ end
 function M.render_all(width)
     local out = {}
     M.ensure_index(width)
+    local prev = nil
     for i = 1, M.visible_count() do
         local e = M.entry_at(i)
         if e then
-            local prev = (i > 1) and (M.entry_at(i - 1) or {}).role or nil
-            for _, r in ipairs(entry_rows(e, width, prev)) do out[#out + 1] = r end
+            local rows = entry_rows(e, width, prev)
+            if #rows > 0 then prev = e.role or "system" end
+            for _, r in ipairs(rows) do out[#out + 1] = r end
         end
     end
     return out

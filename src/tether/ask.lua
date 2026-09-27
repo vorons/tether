@@ -25,7 +25,7 @@ M.QUESTION_MAX = 1000
 M.DESCRIPTION_MAX = 8000
 
 -- The freeform row is always present; this is the label the UI renders for it.
-M.FREEFORM_LABEL = "Other (type your own)"
+M.FREEFORM_LABEL = "Type your own answer"
 
 -- The truncation marker the rest of the project uses for oversized bodies.
 M.TRUNCATION = "…(truncated)"
