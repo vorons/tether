@@ -208,26 +208,46 @@ static CURLcode stream_perform(CURL *h, lua_State *L)
     return rc;
 }
 
+/* Terminal teardown for the signal path. printf is not async-signal-safe (the
+   handler can fire while stdio is mid-call), so the recovery sequences go out
+   through one write(2). They are also the *full* set the TUI turns on: ui.lua
+   enables the alternate screen, mouse tracking, bracketed paste and the
+   enhanced-keyboard protocols from Lua, and this handler is precisely the case
+   where that Lua teardown never runs — a SIGINT during a request used to leave
+   the user's terminal in raw alt-screen with the cursor hidden and the mouse
+   swallowing their clicks. Each sequence is idempotent, so sending the
+   superset unconditionally is safe. */
 static void restore_termios(void)
 {
-    if (termios_active) {
-        tcsetattr(STDIN_FILENO, TCSANOW, &orig_termios);
-        printf("\x1b[?25h\n");
-        fflush(stdout);
-        termios_active = 0;
-    }
+    static const char seq[] =
+        "\x1b[<u"                    /* kitty keyboard: pop saved flags */
+        "\x1b[>4;0m"                 /* modifyOtherKeys off */
+        "\x1b[?1049l"                /* leave the alternate screen */
+        "\x1b[?1006l\x1b[?1000l"     /* mouse tracking off */
+        "\x1b[?2004l"                /* bracketed paste off */
+        "\x1b[?25h\n";               /* cursor back on */
+    if (!termios_active) return;
+    tcsetattr(STDIN_FILENO, TCSANOW, &orig_termios);
+    termios_active = 0;
+    /* raw mode is keyed on stdin, so a `tether --print > log` session has
+       stdout as a file: the recovery bytes belong to a terminal, not to the
+       captured output. */
+    if (!isatty(STDOUT_FILENO)) return;
+    ssize_t n = write(STDOUT_FILENO, seq, sizeof(seq) - 1);
+    (void)n;
 }
 
 static volatile sig_atomic_t g_resize_requested = 0;
 
 /* SIGTERM/SIGINT: restore the terminal (a no-op when raw mode was never
    enabled) and exit cleanly. Raw mode disables ISIG, so an in-terminal
-   Ctrl+C arrives as byte 0x03 and only an external signal lands here. */
+   Ctrl+C arrives as byte 0x03 and only an external signal lands here.
+   Exit status is 128+signum so a wrapper script can tell "killed" from a
+   clean exit, the way any other program does. */
 static void on_exit_signal(int sig)
 {
-    (void)sig;
     restore_termios();
-    _exit(0);
+    _exit(128 + sig);
 }
 
 static void on_sigwinch(int sig)
@@ -326,19 +346,19 @@ static int l_write(lua_State *L)
 {
     size_t len;
     const char *s = luaL_checklstring(L, 1, &len);
-    ssize_t w = write(STDOUT_FILENO, s, len);
-    if (w == -1)
-        luaL_error(L, "write: %s", strerror(errno));
-    if (w != (ssize_t)len) {
-        /* partial write: retry remaining bytes */
-        const char *ptr = s + w;
-        size_t remaining = len - w;
-        while (remaining > 0) {
-            w = write(STDOUT_FILENO, ptr, remaining);
-            if (w == -1) break;
-            ptr += w;
-            remaining -= w;
+    /* Loop until every byte is out. The old shape treated a short write as
+       "retry, and if that fails give up quietly": a write interrupted by
+       SIGINT/SIGTERM (those handlers set no SA_RESTART) returned EINTR, and
+       ENOSPC or a partial TTY write truncated the frame while Lua kept
+       rendering as if the screen had been updated. */
+    size_t done = 0;
+    while (done < len) {
+        ssize_t w = write(STDOUT_FILENO, s + done, len - done);
+        if (w == -1) {
+            if (errno == EINTR) continue;
+            luaL_error(L, "write: %s", strerror(errno));
         }
+        done += (size_t)w;
     }
     fflush(stdout);
     return 0;
@@ -915,14 +935,20 @@ static struct curl_slist *http_build_headers(lua_State *L, int idx,
                 curl_slist_free_all(list);
                 return NULL;
             }
-            char line[4096];
-            while (fgets(line, sizeof(line), f) != NULL) {
-                size_t len = strlen(line);
-                while (len > 0 && (line[len - 1] == '\n' || line[len - 1] == '\r'))
-                    line[--len] = '\0';
-                if (len > 0)
+            /* getline, not a fixed buffer: a Bearer token for Vertex/ADFS is a
+               JWT that easily exceeds 4 KB, and fgets would split it into a
+               second line curl drops — the request then goes out with a
+               truncated token and a 401 that names no cause. */
+            char *line = NULL;
+            size_t cap = 0;
+            ssize_t got;
+            while ((got = getline(&line, &cap, f)) != -1) {
+                while (got > 0 && (line[got - 1] == '\n' || line[got - 1] == '\r'))
+                    line[--got] = '\0';
+                if (got > 0)
                     list = curl_slist_append(list, line);
             }
+            free(line);
             fclose(f);
         } else {
             list = curl_slist_append(list, entry);
@@ -1581,15 +1607,20 @@ static int l_http_stream(lua_State *L)
             snprintf(x->err, sizeof(x->err), "%s",
                      curl_easy_strerror(CURLE_ABORTED_BY_CALLBACK));
         }
-        /* deliver every queued line in order, exactly like the old callback */
-        for (size_t i = 0; i < x->lines.n && !lua_error; i++) {
-            lua_rawgeti(L, LUA_REGISTRYINDEX, fn_ref);
-            lua_pushstring(L, x->lines.v[i]);
-            if (lua_pcall(L, 1, 0, 0) != LUA_OK) {
-                lua_error = 1;
-                const char *m = lua_tostring(L, -1);
-                snprintf(lua_err, sizeof(lua_err), "%s", m ? m : "?");
-                lua_pop(L, 1);
+        /* deliver every queued line in order, exactly like the old callback.
+           The loop still runs past a Lua error so the undelivered lines are
+           freed — stopping at the error leaked one malloc'd line per queued
+           event until the transfer was destroyed. */
+        for (size_t i = 0; i < x->lines.n; i++) {
+            if (!lua_error) {
+                lua_rawgeti(L, LUA_REGISTRYINDEX, fn_ref);
+                lua_pushstring(L, x->lines.v[i]);
+                if (lua_pcall(L, 1, 0, 0) != LUA_OK) {
+                    lua_error = 1;
+                    const char *m = lua_tostring(L, -1);
+                    snprintf(lua_err, sizeof(lua_err), "%s", m ? m : "?");
+                    lua_pop(L, 1);
+                }
             }
             free(x->lines.v[i]);
         }

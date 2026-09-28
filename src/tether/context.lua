@@ -8,6 +8,15 @@
 
 local M = {}
 
+-- Shared helpers from providers/common.lua: the C host loads it as the
+-- `provider_common` global before every module, the loadfile fallback keeps
+-- plain-lua dev/test runs working (same idiom as agent.lua and session.lua).
+local common = _G.provider_common
+    or (function()
+        local chunk = loadfile("src/tether/providers/common.lua")
+        return chunk and chunk()
+    end)()
+
 local AGENTS_CAP_BYTES = 16 * 1024
 
 local BUILTIN_PROMPT = [==[
@@ -192,7 +201,10 @@ local function render_agents_sections(sections)
     for _, s in ipairs(sections) do
         local content = s.content
         if #content > AGENTS_CAP_BYTES then
-            content = content:sub(1, AGENTS_CAP_BYTES) .. "…(truncated)"
+            -- the agents file goes into the system prompt verbatim: cutting on
+            -- a byte can split a glyph and providers 400 the whole request.
+            content = common.utf8_prefix(content, AGENTS_CAP_BYTES)
+                .. "…(truncated)"
         end
         local header
         if s.path then

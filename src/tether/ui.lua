@@ -326,29 +326,6 @@ local function vlen(s)
     end
     return w
 end
--- M8 fix: utf8.sub does NOT exist in the Lua 5.4 stdlib (it worked only
--- inside the embedded binary if it defined one; plain lua crashed).
--- Build char-index slicing on char boundaries instead. T176: step_char-based
--- so a stray byte can never raise "invalid UTF-8 code" (utf8.offset does).
-local function usub(s, i, j)
-    j = j or -1
-    local bounds = {}
-    local k = 1
-    while k <= #s do
-        bounds[#bounds + 1] = k
-        k = M._step_char(s, k)
-    end
-    local n = #bounds
-    if i < 0 then i = n + i + 1 end
-    if j < 0 then j = n + j + 1 end
-    if i < 1 then i = 1 end
-    if j > n then j = n end
-    if i > j or n == 0 then return "" end
-    local start = bounds[i]
-    local stop = (j + 1 <= n) and (bounds[j + 1] - 1) or #s
-    return s:sub(start, stop)
-end
-
 -- M11: split s into {t, w, sp} cells: an SGR sequence is one zero-width
 -- cell, any other codepoint is one cell of char_width() columns. Invalid
 -- UTF-8 bytes degrade to width-1 cells instead of raising.
@@ -384,6 +361,24 @@ local function cells(s)
             i = i + clen
         end
     end
+    return out
+end
+
+-- Cut to `width` DISPLAY columns without splitting a glyph or an SGR sequence.
+-- The byte shortcut (`:sub(1, width)`) cut box-drawing/CJK glyphs mid-byte and
+-- could drop the closing reset, leaving the terminal with broken UTF-8 and a
+-- bleeding colour; the char-index one (usub) counted glyphs, not columns.
+local function fit_cols(s, width)
+    if vlen(s) <= width then return s end
+    local parts, used = {}, 0
+    for _, u in ipairs(cells(s)) do
+        if used + u.w > width then break end
+        parts[#parts + 1] = u.t
+        used = used + u.w
+    end
+    local out = table.concat(parts)
+    -- only styled input can lose its closing SGR to the cut
+    if s:find("\27", 1, true) then out = out .. ESC .. "[0m" end
     return out
 end
 
@@ -460,12 +455,9 @@ local function wrap(text, width)
             out[#out + 1] = ""
         elseif not _wrap_enabled then
             -- M8/R2: wrap off → truncate with arrow marker
-            -- 7.4: cut at a display-width boundary; drop any SGR sequence
-            -- dangling past the cut (usub can split one mid-escape, which
-            -- would leave \27[3 bytes that are not a full SGR and break
-            -- the strip-invariant).
-            local cut = usub(para, 1, width - 1)
-            cut = cut:gsub("\27%[[0-9;?]*[^a-zA-Z]", ""):gsub("\27$", "")
+            -- 7.4: cut at a display-width boundary (fit_cols keeps every SGR
+            -- sequence whole and never splits a multibyte glyph).
+            local cut = fit_cols(para, width - 1)
             out[#out + 1] = (M._ascii_mode or M._env_ascii or _ascii)
                 and cut .. ">"
                 or cut .. "→"
@@ -813,7 +805,7 @@ local function md_render(text, width, ansi_fn)
                     local parts = {}
                     for c = 1, ncol do parts[#parts + 1] = string.rep("─", colw[c]) end
                     local rule = dim(table.concat(parts, "─┼─"))
-                    if vlen(rule) > width then rule = rule:sub(1, width) end
+                    if vlen(rule) > width then rule = fit_cols(rule, width) end
                     out[#out + 1] = rule
                 else
                     local cells = {}
@@ -822,7 +814,7 @@ local function md_render(text, width, ansi_fn)
                         cells[#cells + 1] = cell .. string.rep(" ", math.max(colw[c] - vlen(cell), 0))
                     end
                     local row = table.concat(cells, " │ ")
-                    if vlen(row) > width then row = row:sub(1, width) end
+                    if vlen(row) > width then row = fit_cols(row, width) end
                     out[#out + 1] = row
                 end
             end
@@ -2828,6 +2820,11 @@ end
 -- run after render_entry exists (above) and before any height query.
 transcript.configure({
     render = render_entry,
+    cut = function(s, n)
+        local pc = M._provider_common
+        if pc and pc.utf8_prefix then return pc.utf8_prefix(s, n) end
+        return s:sub(1, n)
+    end,
     cache_bound = function()
         local vh = S and S.last_transcript_h
         if not vh or vh < 1 then vh = (S and S.h or 24) - 6 end
@@ -4116,8 +4113,8 @@ M._device_poll_tick = function()
             auth_mod.set(nil, S.login_provider, entry)
         end
         if S.cfg and ((S.cfg.provider or "openai") == S.login_provider) then
-            S.api_key = entry.access_token
-            S.cfg.api_key = entry.access_token
+            S.api_key = res.access_token
+            S.cfg.api_key = res.access_token
         end
         transcript.append({
             role = "system",
@@ -5773,14 +5770,20 @@ local function handle_confirmation_key(k)
             local L = layout()
             local cw = M._content_width(L.w)
             local total = ensure_index(cw)
-            -- count of transcript rows above the options block
+            -- options are the LAST transcript lines of the block
             local above = total - #c.options
-            if k.row and k.row >= above + 1 and k.row <= above + #c.options then
-                -- account for scroll offset
-                local bottom = math.min(total, total - S.scroll)
-                local top = bottom - L.transcript_h + 1
-                local idx = k.row - top + 1
-                local text = (idx >= 1 and idx <= total) and row_text(idx, cw) or ""
+            -- k.row is a SCREEN row; map it to a transcript line index the
+            -- same way the tool-row click below does (mixing screen rows with
+            -- line indices picked the wrong option, i.e. the wrong verdict).
+            local bottom = math.min(total, total - S.scroll)
+            if bottom < 1 then bottom = 1 end
+            local top = bottom - L.transcript_h + 1
+            if top < 1 then top = 1 end
+            if k.row and k.row >= L.transcript_row
+                and k.row <= L.transcript_row + L.transcript_h - 1 then
+                local idx = top + (k.row - L.transcript_row)
+                local text = (idx >= above + 1 and idx <= total)
+                    and row_text(idx, cw) or ""
                 for i, opt in ipairs(c.options) do
                     if text:find(opt:sub(1, 10), 1, true) then
                         S.confirmation_sel = i

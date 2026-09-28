@@ -49,6 +49,64 @@ function M.json_unescape(s)
     return table.concat(out)
 end
 
+-- Escape-aware extraction of JSON string values by key, for the SSE parsers.
+-- A pattern like '"key":"(.-[^\\])"' cannot read escaped backslashes: when a
+-- value ENDS with a backslash there is no (non-backslash + quote) pair left at
+-- its real end, so the lazy run keeps going and swallows the following fields
+-- (`"content":"\\"` came out as `\"},` inside the answer, `"content":""` with
+-- any field after it as `"},`). This scan skips `\X` pairs, so the closing
+-- quote it stops at is the value's own. Values are returned still escaped —
+-- the caller unescapes exactly once (M7/D2b rule).
+-- Returns the run for every occurrence of the key, or nothing for a value that
+-- never terminates (a malformed line yields no event rather than garbage).
+function M.json_strings(s, key)
+    local out = {}
+    local pat = '"' .. key .. '"%s*:%s*"'
+    local from = 1
+    while from <= #s do
+        local _, value_open = s:find(pat, from)
+        if not value_open then break end
+        local i = value_open + 1
+        while i <= #s and s:sub(i, i) ~= '"' do
+            i = s:sub(i, i) == "\\" and i + 2 or i + 1
+        end
+        if i > #s then break end
+        out[#out + 1] = s:sub(value_open + 1, i - 1)
+        from = i + 1
+    end
+    return out
+end
+
+-- The first string value of `key`, or nil when the key is absent or its value
+-- is not a string. An empty value returns "" (distinguishable from nil).
+function M.json_string(s, key)
+    local found = M.json_strings(s, key)
+    return found[1]
+end
+
+-- Cut a UTF-8 string to at most n BYTES without splitting a glyph: a raw
+-- :sub(1, n) can end mid-sequence, and strict providers 400 a body that is not
+-- valid UTF-8. n is a byte budget, not a display width (see ui.fit_cols).
+-- Valid input always comes out valid; already-invalid input (binary tool
+-- output) is returned untouched rather than chewed further.
+function M.utf8_prefix(s, n)
+    if #s <= n then return s end
+    -- a UTF-8 glyph is at most 4 bytes, so at most 3 continuation bytes can
+    -- hang past the cut; scanning back that far finds the glyph's lead byte
+    for back = 0, 3 do
+        local k = n - back
+        if k < 1 then return "" end
+        local b = s:byte(k)
+        if b < 0x80 then return s:sub(1, k) end       -- ASCII: clean boundary
+        if b >= 0xC0 then                             -- lead byte
+            local seqlen = b < 0xE0 and 2 or b < 0xF0 and 3 or 4
+            if seqlen - 1 > back then return s:sub(1, k - 1) end
+            return s:sub(1, n)                        -- the glyph ends by n
+        end
+    end
+    return s:sub(1, n)                                -- not UTF-8 data: leave it
+end
+
 -- Minimal JSON encoder for tables (tool schemas, request envelopes).
 -- Objects vs arrays: a table with only 1..n integer keys encodes as an array.
 function M.json_encode(v)

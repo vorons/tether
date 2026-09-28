@@ -14,7 +14,9 @@ code=$?
 code=$?
 [ "$code" -eq 0 ] || fail "/dev/null exit $code (expected 0)"
 
-# SIGINT (external): the handler restores the terminal and exits 0. Stdin is a
+# SIGINT (external): the handler restores the terminal, then the process exits
+# with the conventional 128+signum status (130) so a wrapper script can tell an
+# interrupted run from a clean one. Stdin is a
 # FIFO held open on fd 3 so the process stays alive waiting for input; tether is
 # a direct background child (no pipeline), so `wait` returns its own status.
 # A non-interactive shell starts background jobs with SIGINT ignored, so this
@@ -44,6 +46,6 @@ fi
 wait "$pid"; code=$?
 exec 3>&-
 rm -rf "$tmpd"
-[ "$code" -eq 0 ] || fail "SIGINT exit $code (expected 0)"
+[ "$code" -eq 130 ] || fail "SIGINT exit $code (expected 130 = 128+SIGINT)"
 
 echo "PASS: all M2 smoke checks"

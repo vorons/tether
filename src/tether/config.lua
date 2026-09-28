@@ -714,8 +714,8 @@ function M.api_key(cfg)
     -- — cf-aig-authorization: Bearer <empty> with ids filled).
     local penv = (type(cfg) == "table" and type(cfg.provider_env) == "table")
         and cfg.provider_env or nil
-    if penv and provider == "cloudflare-workers-ai"
-        or provider == "cloudflare-ai-gateway" then
+    if penv and (provider == "cloudflare-workers-ai"
+        or provider == "cloudflare-ai-gateway") then
         local k = penv.CLOUDFLARE_API_KEY
         if type(k) == "string" and k ~= "" then
             cfg._auth_style = nil

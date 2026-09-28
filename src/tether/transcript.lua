@@ -50,10 +50,19 @@ end
 local render_fn = nil
 local cache_bound_fn = nil
 
+-- Byte budget cut for provider text that this module shortens itself (the
+-- retry note's detail). Injected rather than required: pulling
+-- providers/common.lua in would make the display layer depend on the transport
+-- layer for one call. The fallback only ends a sentence early, while the plain
+-- :sub(1, n) it replaces can end inside a multibyte glyph and glue "…" to
+-- orphaned continuation bytes.
+local cut_fn = function(s, n) return s:sub(1, n) end
+
 function M.configure(opts)
     opts = opts or {}
     if opts.render then render_fn = opts.render end
     if opts.cache_bound then cache_bound_fn = opts.cache_bound end
+    if opts.cut then cut_fn = opts.cut end
 end
 
 function M.entries()
@@ -381,7 +390,7 @@ function M.handle(ev)
         local detail = ""
         if type(ev.detail) == "string" and ev.detail ~= "" then
             detail = ev.detail:gsub("%s+", " ")
-            if #detail > 180 then detail = detail:sub(1, 180) .. "…" end
+            if #detail > 180 then detail = cut_fn(detail, 180) .. "…" end
             detail = " — " .. detail
         end
         M.append({

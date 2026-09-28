@@ -211,7 +211,7 @@ local function emit_response(payload, on_event)
     if not payload:find('"candidates"', 1, true) then return false end
     local any = false
     -- text parts (skip the functionCall neighbourhood by matching per-part)
-    for text in payload:gmatch('"text"[%s]*:[%s]*"(.-[^\\])"') do
+    for _, text in ipairs(common.json_strings(payload, "text")) do
         if text ~= "" then
             text = json_unescape(text)
             if text ~= "" then
@@ -259,7 +259,7 @@ local function emit_response(payload, on_event)
     -- add-retry-and-continuation: recorded as a failure for the transport; the
     -- retry policy classifies it, so the provider never emits `error`.
     if not any and payload:find('"error"', 1, true) then
-        local msg = payload:match('"message"[%s]*:[%s]*"(.-[^\\])"')
+        local msg = common.json_string(payload, "message")
         local status = tonumber(payload:match('"code"[%s]*:[%s]*(%d+)'))
             or tonumber(payload:match('"status"[%s]*:[%s]*(%d+)'))
         S.failure = { message = msg and json_unescape(msg) or "gemini error",

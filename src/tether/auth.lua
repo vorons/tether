@@ -283,9 +283,14 @@ function M.resolve_adc_token(adc, post, now)
         grant_type = "urn:ietf:params:oauth:grant-type:jwt-bearer",
         assertion = header .. "." .. claims .. "." .. sig,
     })
-    if type(res) == "table" and type(res.access_token) == "string"
-        and res.access_token ~= "" then
-        return res.access_token
+    -- the seam returns the response BODY as a string (see M._post_json), so
+    -- it has to be decoded before the token fields can be read.
+    if type(res) ~= "string" or res == "" then return nil end
+    local pok, parsed = pcall(common.json_decode, res)
+    if not pok or type(parsed) ~= "table" then return nil end
+    if type(parsed.access_token) == "string"
+        and parsed.access_token ~= "" then
+        return parsed.access_token
     end
     return nil
 end

@@ -183,19 +183,22 @@ M._extra_header_lines = extra_header_lines -- test seam
 -- private temp file; the header file and request body file are removed
 -- right after the request completes. The body file is written 0600 too.
 local function header_file(lines)
-    local path = ("/tmp/tether_h_%d_%d"):format(os.time(), math.random(100000, 999999))
+    -- os.tmpname() with LUA_USE_POSIX (see Makefile: -DLUA_USE_POSIX) goes
+    -- through mkstemp: the file is created exclusively and 0600, so a path
+    -- another user pre-created or symlinked in world-writable /tmp can never
+    -- be followed — the secret only lands in a file we just made. (io.open has
+    -- no O_EXCL mode in Lua, which is why the previous guessed-name scheme
+    -- could not close that window.)
+    local path = os.tmpname()
     -- 3.5: create the file, lock it down, then write the key — no window in
     -- which the secret is world-readable, and no key is written if the
     -- permission change fails.
-    local f = io.open(path, "w")
-    if not f then return nil end
-    f:close()
     -- 1.7: in-process fchmod via the C host, not `chmod 600` through the shell.
     if not tether.fchmod(path, HEADER_FILE_MODE) then
         os.remove(path)
         return nil
     end
-    f = io.open(path, "w")
+    local f = io.open(path, "w")
     if not f then
         os.remove(path)
         return nil

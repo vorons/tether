@@ -11,41 +11,20 @@ local common = _G.provider_common
     end)()
 assert(common, "session: cannot load provider_common")
 local json_decode = common.json_decode
+-- Encoding used to live here as a private copy. It escaped only
+-- \ " \n \r \t and rendered a numeric table key as `[3]`, so a journal line
+-- could hold a raw control byte or a Lua-shaped (non-JSON) key and the line
+-- then failed to parse on resume. common.json_encode is the same encoder the
+-- request bodies use: every C0 control escaped, keys always quoted.
+local json_encode = common.json_encode
 
-local function json_escape(s)
-    s = s:gsub("\\", "\\\\"):gsub('"', '\\"'):gsub("\n", "\\n"):gsub("\r", "\\r"):gsub("\t", "\\t")
-    return s
-end
-
-local function json_encode(obj)
-    if type(obj) == "string" then
-        return '"' .. json_escape(obj) .. '"'
-    elseif type(obj) == "number" then
-        return tostring(obj)
-    elseif type(obj) == "boolean" then
-        return obj and "true" or "false"
-    elseif type(obj) == "nil" then
-        return "null"
-    elseif type(obj) == "table" then
-        local is_array = (#obj > 0)
-        local items = {}
-        if is_array then
-            for _, v in ipairs(obj) do
-                items[#items + 1] = json_encode(v)
-            end
-            return "[" .. table.concat(items, ",") .. "]"
-        end
-        for k, v in pairs(obj) do
-            local key = type(k) == "string" and '"' .. json_escape(k) .. '"' or ("[" .. tostring(k) .. "]")
-            items[#items + 1] = key .. ":" .. json_encode(v)
-        end
-        return "{" .. table.concat(items, ",") .. "}"
-    end
-    return tostring(obj)
-end
-
-local SESSION_DIR = os.getenv("HOME") .. "/.tether/sessions"
-local HISTORY_FILE = os.getenv("HOME") .. "/.tether/history.jsonl"
+-- HOME is not guaranteed (a stripped environment, `env -i`, a container
+-- entrypoint): the module used to crash at load while concatenating nil.
+-- Falling back to the cwd keeps journaling working in a shell without HOME
+-- instead of taking down every command with it.
+local ROOT = (os.getenv("HOME") or tether.getcwd()) .. "/.tether"
+local SESSION_DIR = ROOT .. "/sessions"
+local HISTORY_FILE = ROOT .. "/history.jsonl"
 
 -- M7/T1 test seam: tests set session._session_dir to a temp path.
 local function session_dir()
@@ -98,6 +77,53 @@ local function read_events(id)
     return events
 end
 
+-- Picker probe: what the session list needs from a journal is the head
+-- (session_start ts/workspace, first user message) and its last line
+-- (session_end's meta.workspace, which wins over the start one because a
+-- resumed run ends under the workspace it exited in). Decoding every journal
+-- end to end made opening the picker O(all sessions x their size) — a single
+-- long session carries megabytes of tool output, and the JSON decode dominates.
+-- So read a bounded head and a bounded tail window, and only fall back to the
+-- full read for the one case the window cannot answer.
+local HEAD_BYTES = 64 * 1024
+local TAIL_BYTES = 8 * 1024
+
+-- Whole lines from the start of the file; a trailing partial line is dropped
+-- (it cannot decode) and an undecodable line is skipped, as read_events does.
+local function head_events(path)
+    local events = {}
+    local f = io.open(path, "r")
+    if not f then return events end
+    local chunk = f:read(HEAD_BYTES) or ""
+    f:close()
+    chunk = chunk:match("^(.*)\n") or ""
+    for line in chunk:gmatch("[^\n]+") do
+        local obj = json_decode(line)
+        if obj then events[#events + 1] = obj end
+    end
+    return events
+end
+
+-- The last whole line's event, reading at most TAIL_BYTES from the end.
+local function tail_event(path)
+    local f = io.open(path, "r")
+    if not f then return nil end
+    local size = f:seek("end") or 0
+    if size == 0 then f:close(); return nil end
+    local skip = size > TAIL_BYTES and (size - TAIL_BYTES) or 0
+    f:seek("set", skip)
+    local chunk = f:read("a") or ""
+    f:close()
+    -- the first fragment after a mid-file seek is a partial line
+    if skip > 0 then chunk = chunk:sub((chunk:find("\n", 1, true) or 0) + 1) end
+    local last
+    for line in chunk:gmatch("[^\n]+") do
+        local obj = json_decode(line)
+        if obj then last = obj end
+    end
+    return last
+end
+
 local function list_session_files(workspace)
     ensure_dir()
     local files = {}
@@ -126,20 +152,36 @@ local function list_session_files(workspace)
     for _, cand in ipairs(candidates) do
         rank = rank + 1
         local id = cand.id
-        local events = read_events(id)
-        -- meta.workspace: check session_start (first) and session_end (last)
+        local path = session_path(id)
+        local head = head_events(path)
+        local first = head[1]
+        -- meta.workspace: session_start, overridden by the last event's
         local ws = nil
-        local first = events[1]
         if first and first.meta and first.meta.workspace then ws = first.meta.workspace end
-        local last = events[#events]
+        local last = tail_event(path)
         if last and last.meta and last.meta.workspace then ws = last.meta.workspace end
         if ws == workspace then
             local first_line, has_message = "", false
-            for _, ev in ipairs(events) do
+            for _, ev in ipairs(head) do
                 if ev.type == "message" then
                     has_message = true
                     if first_line == "" and ev.role == "user" and ev.content then
                         first_line = ev.content
+                        break
+                    end
+                end
+            end
+            -- ponytail: ceiling — a session whose first message sits past the
+            -- head window (tens of KiB of tool traffic before it) still costs a
+            -- full read here, which is the pre-probe behavior. Upgrade path: an
+            -- index line appended per turn instead of probing the journal.
+            if not has_message then
+                for _, ev in ipairs(read_events(id)) do
+                    if ev.type == "message" then
+                        has_message = true
+                        if first_line == "" and ev.role == "user" and ev.content then
+                            first_line = ev.content
+                        end
                     end
                 end
             end

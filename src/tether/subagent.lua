@@ -125,8 +125,11 @@ end
 -- as a flag). Stdout+stderr land in a unique outfile, like tools.run.
 function M.build_command(item, ctx)
     ctx = (type(ctx) == "table") and ctx or {}
-    local outfile = ("/tmp/tether_subagent_%d_%d.out"):format(
-        os.time(), math.random(100000, 999999))
+    -- Reserve the outfile before the shell redirects into it: `>` follows a
+    -- symlink, so a pre-guessed name in world-writable /tmp would let another
+    -- process own (and read) the child's output. os.tmpname() with
+    -- LUA_USE_POSIX is mkstemp — created exclusively, 0600, unguessable.
+    local outfile = os.tmpname()
     local binary = ctx.binary
     if not is_nonempty_str(binary) then
         binary = os.getenv("TETHER_BIN")
@@ -440,7 +443,7 @@ function M.run_call(args, cfg)
                  session_id = res.session_id }
     end
     local results = M.run_batch(items, ctx)
-    return combine_batch(results, #results)
+    return M.combine_batch(results, #results)
 end
 
 -- Combine per-task run-shaped results (indexed 1..n) into the single

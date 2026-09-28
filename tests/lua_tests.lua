@@ -15086,6 +15086,433 @@ do
   print("T229 debug log flushed mid-run: OK")
 end
 
+-- T251 (full-project review 2026-09-28, high): wrap-off must cut on DISPLAY
+-- columns and never split an SGR sequence or a multibyte glyph. The old cut was
+-- usub (character index) plus a gsub that mangled `\27[36m` into a stray `m`.
+do
+  local ui = assert(loadfile("src/tether/ui.lua"))()
+  ui.set_wrap(false)
+  local styled = "\27[36m" .. string.rep("中", 30) .. "\27[0m"
+  local lines = ui.wrap_lines(styled, 10)
+  assert_eq(#lines, 1, "T251 wrap=false still one line")
+  local row = lines[1]
+  assert_true(ui.vlen(row) <= 10, "T251 cut measured in columns, not glyphs")
+  assert_true(row:find("\27[36m", 1, true) ~= nil, "T251 opening SGR stays whole")
+  assert_eq(ui._strip_sgr(row):find("\27", 1, true), nil, "T251 no partial escape left")
+  assert_notnil(utf8.len(ui._strip_sgr(row)), "T251 no glyph split mid-byte")
+  ui.set_wrap(true)
+  print("T251 wrap-off cut is width- and SGR-safe: OK")
+end
+
+-- T252: the blocking batch path combined results through a bare `combine_batch`
+-- (a nil global) instead of M.combine_batch — two tasks crashed the tool call.
+do
+  local sub = assert(loadfile("src/tether/subagent.lua"))()
+  sub.run_batch = function(items, _ctx)
+    local r = {}
+    for i = 1, #items do
+      r[i] = { status = "ok", exit_code = 0, output = "out" .. i,
+               elapsed_ms = 1, model = "m", session_id = "s" .. i }
+    end
+    return r
+  end
+  local res, err = sub.run_call(
+    { tasks = { { task = "a" }, { task = "b" } } },
+    { workspace = "/ws", model = "m" })
+  assert_notnil(res, "T252 batch run_call returns a result (" .. tostring(err) .. ")")
+  assert_eq(res.tasks, 2, "T252 both tasks reported")
+  assert_true(res.output:find("out1", 1, true) ~= nil
+      and res.output:find("out2", 1, true) ~= nil, "T252 outputs in task order")
+  print("T252 subagent batch path combines results: OK")
+end
+
+-- T253: `penv and A or B` read as `(penv and A) or B`, so a cloudflare-ai-gateway
+-- cfg without provider_env reached `penv.CLOUDFLARE_API_KEY` on nil.
+do
+  local cfgm = assert(loadfile("src/tether/config.lua"))()
+  local ok, key = pcall(cfgm.api_key, { provider = "cloudflare-ai-gateway" })
+  assert_true(ok, "T253 api_key does not raise when provider_env is missing")
+  assert_eq(key, "", "T253 keyless cloudflare-ai-gateway resolves empty")
+  print("T253 cloudflare credential branch guards penv: OK")
+end
+
+-- T254 (H1): the SSE string readers are escape-aware. The old
+-- '"key":"(.-[^\\])"' pattern cannot find the end of a value that finishes with
+-- an escaped backslash, or of an empty value, so it ran past the real closing
+-- quote and printed the JSON fields behind it as answer text.
+do
+  local openai = assert(loadfile("src/tether/providers/openai.lua"))()
+  local function texts(payload)
+    local out = {}
+    openai.reset_stream()
+    openai.parse_sse_line('data: ' .. payload, function(ev)
+      if ev.type == "text_delta" then out[#out + 1] = ev.text end
+    end)
+    return out
+  end
+  local t = texts('{"id":"1","choices":[{"index":0,"delta":{"content":"a\92\92"}}]}')
+  assert_eq(#t, 1, "T254 exactly one text delta")
+  assert_eq(t[1], "a\92", "T254 a value ending in an escaped backslash stays in the value")
+  assert_eq(#texts('{"id":"1","choices":[{"index":0,"delta":{"content":"","role":"assistant"}}]}'),
+    0, "T254 an empty value emits nothing instead of the fields behind it")
+  assert_eq(texts('{"id":"1","choices":[{"index":0,"delta":{"content":"C:\92\92tmp"}}]}')[1],
+    "C:\92tmp", "T254 an embedded escaped backslash decodes once")
+  assert_eq(texts('{"id":"1","choices":[{"index":0,"delta":{"content":"say \92"hi\92""}}]}')[1],
+    'say "hi"', "T254 escaped quotes round trip")
+  print("T254 openai SSE strings are escape-aware: OK")
+end
+
+-- T255 (H1): the same escape-aware read on the other streamed adapters.
+do
+  local anthropic = assert(loadfile("src/tether/providers/anthropic.lua"))()
+  local gemini = assert(loadfile("src/tether/providers/gemini.lua"))()
+  local codex = assert(loadfile("src/tether/providers/openai-codex.lua"))()
+
+  local function collect(mod, line)
+    local out = {}
+    mod.reset_stream()
+    mod.parse_sse_line(line, function(ev)
+      if ev.type == "text_delta" then out[#out + 1] = ev.text end
+    end)
+    return out
+  end
+
+  assert_eq(collect(anthropic,
+      'data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"a\92\92"}}')[1],
+    "a\92", "T255 anthropic trailing escaped backslash")
+  assert_eq(#collect(anthropic,
+      'data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"","x":1}}'),
+    0, "T255 anthropic empty text emits nothing")
+  local g = collect(gemini,
+    'data: {"candidates":[{"content":{"parts":[{"text":"a\92\92"},{"text":"b\92"c\92""}],"role":"model"}}]}')
+  assert_eq(#g, 2, "T255 gemini keeps both text parts")
+  assert_eq(g[1], "a\92", "T255 gemini part 1 ends at its own quote")
+  assert_eq(g[2], 'b"c"', "T255 gemini part 2")
+  assert_eq(collect(codex,
+      'data: {"type":"response.output_text.delta","delta":"end\92\92","ob":"x"}')[1],
+    "end\92", "T255 codex trailing escaped backslash")
+  assert_eq(#collect(codex,
+      'data: {"type":"response.output_text.delta","delta":"","ob":"x"}'),
+    0, "T255 codex blank frame emits nothing")
+  print("T255 anthropic/gemini/codex SSE strings are escape-aware: OK")
+end
+
+-- T256 (H2): ~/.tether/auto_approve.lua is EXECUTED at startup, so storing an
+-- approval is generating Lua source out of a model-chosen path. The old emitter
+-- wrapped the pattern with "'"..e..'"', so a quote in the path ended the literal
+-- early and the whole file stopped compiling — every grant stored before it
+-- silently stopped applying.
+with_modules(base_env, function(mods)
+  local home = "/tmp/tether_t256_home"
+  os.execute("rm -rf " .. home .. " && mkdir -p " .. home)
+  _G.tether = host_mock{ getcwd = function() return home .. "/ws" end,
+                         realpath = function(p) return p end }
+  local agent, config = mods.agent, mods.config
+  local p1 = agent.persist_approval("write", 'a"b.lua', home)
+  assert_eq(p1, '^write:a"b%.lua$', "T256 a quote in the target stays inside one literal")
+  local p2 = agent.persist_approval("write", 'dir\92name.lua', home)
+  assert_eq(p2, '^write:dir\92name%.lua$', "T256 a backslash in the target survives")
+  local p3 = agent.persist_approval("run", 'sh -c "echo hi"', home)
+  assert_eq(p3, '^run:sh %-c "echo hi"$', "T256 a quoted command survives")
+  local chunk, lerr = loadfile(home .. "/.tether/auto_approve.lua")
+  assert_notnil(chunk, "T256 the generated file still compiles: " .. tostring(lerr))
+  local entries = config.load_auto_approve(home)
+  assert_eq(#entries, 3, "T256 all three grants load back")
+  assert_eq(entries[1], p1, "T256 grant 1 keeps its content and order")
+  assert_eq(entries[2], p2, "T256 grant 2 keeps its content and order")
+  assert_eq(entries[3], p3, "T256 grant 3 keeps its content and order")
+  assert_eq(agent.persist_approval("write", 'a"b.lua', home), p1,
+    "T256 re-approving the same target returns the same pattern")
+  assert_eq(#config.load_auto_approve(home), 3, "T256 re-approving does not duplicate")
+  assert_eq(agent.persist_approval("write", "x.lua", nil), nil,
+    "T256 no home means no write, not a crash")
+  assert_eq(agent.persist_approval("write", "x.lua", ""), nil,
+    "T256 an empty home is rejected")
+  os.execute("rm -rf " .. home)
+  print("T256 auto_approve grants round trip through the executed file: OK")
+end)
+
+-- T257 (H3): write used to report success for a path it never wrote. The bytes
+-- now go through a sibling temp file and every step is checked, so targeting a
+-- directory is an error — and no temp file is left behind.
+do
+  local orig = _G.tether
+  local ws = "/tmp/tether_t257_ws"
+  os.execute("rm -rf " .. ws .. " && mkdir -p " .. ws .. "/adirectory")
+  _G.tether = host_mock{ getcwd = function() return "/tmp" end,
+                         realpath = function(p) return (p:gsub("/+$", "")) end }
+  local tools = assert(loadfile("src/tether/tools.lua"))()
+  local r, err = tools.write({ path = "adirectory", content = "hello" }, { workspace = ws })
+  assert_eq(r, nil, "T257 writing onto a directory fails")
+  assert_true(type(err) == "string" and err:find("cannot write adirectory", 1, true) ~= nil,
+    "T257 the failure names the path: " .. tostring(err))
+  local leftovers = 0
+  for _, name in ipairs(tether.readdir(ws) or {}) do
+    if name:match("^adirectory%.tmp%.") then leftovers = leftovers + 1 end
+  end
+  assert_eq(leftovers, 0, "T257 the temp file is cleaned up")
+  _G.tether = orig
+  os.execute("rm -rf " .. ws)
+  print("T257 write reports a failed rename: OK")
+end
+
+-- T258 (H3): patch counted a file as applied when the rewritten buffer never
+-- reached the disk, so the model believed the edit had landed.
+do
+  local orig = _G.tether
+  local ws = "/tmp/tether_t258_ws"
+  os.execute("rm -rf " .. ws .. " && mkdir -p " .. ws .. "/adir")
+  local f = assert(io.open(ws .. "/a.txt", "w")); f:write("one\n"); f:close()
+  _G.tether = host_mock{ getcwd = function() return "/tmp" end,
+                         realpath = function(p) return (p:gsub("/+$", "")) end }
+  local tools = assert(loadfile("src/tether/tools.lua"))()
+  local r, err = tools.patch("--- a/adir\n+++ b/adir\n@@ -0,0 +1 @@\n+new\n", { workspace = ws })
+  assert_eq(r, nil, "T258 a patch that cannot be written fails")
+  assert_true(type(err) == "string" and err:find("cannot write adir", 1, true) ~= nil,
+    "T258 patch reports the write error: " .. tostring(err))
+  local r2, err2 = tools.patch("--- a/a.txt\n+++ b/a.txt\n@@ -1 +1,2 @@\n one\n+two\n",
+    { workspace = ws })
+  assert_true(r2 ~= nil, "T258 a valid patch still applies (" .. tostring(err2) .. ")")
+  assert_eq(r2.files, 1, "T258 one file applied")
+  local h = assert(io.open(ws .. "/a.txt"))
+  local body = h:read("*a")
+  h:close()
+  assert_eq(body, "one\ntwo\n", "T258 the file holds the patched bytes")
+  _G.tether = orig
+  os.execute("rm -rf " .. ws)
+  print("T258 patch reports a failed write: OK")
+end
+
+-- T259 (H3): run reported elapsed_ms from os.clock(), which is CPU time and
+-- stalls while the host is blocked in curl or waitpid — a 30s command reported
+-- 0ms. It now comes from the host's monotonic clock.
+do
+  local orig = _G.tether
+  local ws = "/tmp/tether_t259_ws"
+  os.execute("rm -rf " .. ws .. " && mkdir -p " .. ws)
+  local ticks = { 1000, 3500 }
+  local n = 0
+  _G.tether = host_mock{ getcwd = function() return "/tmp" end,
+                         realpath = function(p) return (p:gsub("/+$", "")) end,
+                         monotonic_ms = function()
+                           n = n + 1
+                           return ticks[n] or 3500
+                         end,
+                         exec = function() return true, 0 end }
+  local tools = assert(loadfile("src/tether/tools.lua"))()
+  local r = tools.run({ command = "true", timeout = 1 }, { workspace = ws })
+  assert_eq(n, 2, "T259 the clock is read before and after the command")
+  assert_eq(r.elapsed_ms, 2500, "T259 elapsed_ms is wall-clock, not CPU time")
+  _G.tether = orig
+  os.execute("rm -rf " .. ws)
+  print("T259 run measures elapsed wall-clock: OK")
+end
+
+-- T260 (H4/M3): the truncation helpers cut on a byte budget but must never cut
+-- a UTF-8 glyph in half — a body that is not valid UTF-8 is a 400 from the
+-- provider, which turns a long answer into a failed request.
+do
+  local common = assert(loadfile("src/tether/providers/common.lua"))()
+  local s = "abc" .. string.rep("\228\184\173", 4)
+  assert_eq(#s, 15, "T260 the sample is 15 bytes")
+  for budget = 0, #s + 3 do
+    local cut = common.utf8_prefix(s, budget)
+    assert_true(#cut <= budget, "T260 budget " .. budget .. " is respected")
+    assert_true(utf8.len(cut) ~= nil, "T260 budget " .. budget .. " yields valid UTF-8")
+    assert_true(s:sub(1, #cut) == cut, "T260 budget " .. budget .. " is a prefix")
+  end
+  assert_eq(common.utf8_prefix(s, 15), s, "T260 no cut when the budget fits")
+  assert_eq(common.utf8_prefix("abc", 10), "abc", "T260 short input untouched")
+  assert_eq(common.utf8_prefix("", 5), "", "T260 empty input")
+  local bin = "\255\254\253\252\0\1"
+  assert_true(#common.utf8_prefix(bin, 3) <= 3,
+    "T260 non-UTF-8 input still fits the budget")
+  print("T260 utf8_prefix never splits a glyph: OK")
+end
+
+-- T261 (M1): a journal line is re-parsed on resume, so it has to be valid JSON.
+-- The encoder that used to live in session.lua escaped only \ " \n \r \t, so one
+-- ESC from a colored tool output or a NUL from a binary read wrote a line that
+-- resume dropped silently. common.json_encode escapes every C0 control.
+with_modules(base_env, function(mods)
+  local dir = "/tmp/tether_t261_sessions"
+  os.execute("rm -rf " .. dir .. " && mkdir -p " .. dir)
+  mods.session._session_dir = dir
+  local id = mods.session.new_session("/tmp", "test-model")
+  assert_notnil(id, "T261 the session is created")
+  local nasty = "a\0b\1c\127d\27[31mred\7bell\bb\ff\ttab\nnl\rCR"
+  assert_true(mods.session.append(id, { type = "assistant_delta", text = nasty }),
+    "T261 the journal line is appended")
+  local h = assert(io.open(dir .. "/" .. id .. ".jsonl"))
+  local raw = h:read("*a")
+  h:close()
+  local lines = {}
+  for one in raw:gmatch("[^\n]+") do lines[#lines + 1] = one end
+  assert_eq(#lines, 2, "T261 one line per event")
+  for i, one in ipairs(lines) do
+    assert_true(one:find("[%z\1-\31]") == nil,
+      "T261 line " .. i .. " carries no C0 control byte besides its terminator")
+  end
+  local events = mods.session.read(id)
+  assert_eq(#events, 2, "T261 both events decode on resume")
+  assert_eq(events[2].text, nasty, "T261 the control bytes decode back exactly")
+  os.execute("rm -rf " .. dir)
+  print("T261 session journal lines are valid JSON: OK")
+end)
+
+-- T262 (M2): HOME is not guaranteed (env -i, a container entrypoint, a unit
+-- without User=). session.lua used to concatenate nil at load, which took down
+-- every command rather than just journaling. Out of process, because the suite
+-- itself runs with HOME set to a temp directory.
+do
+  local cmd = [==[env -u HOME lua -e 'c = loadfile("src/tether/session.lua") tether = { getcwd = function() return "/tmp" end } local ok, m = pcall(c) print(ok and "NOHOME_OK" or ("NOHOME_FAIL " .. tostring(m)))']==]
+  local probe = io.popen(cmd)
+  local out = probe and probe:read("*a") or ""
+  if probe then probe:close() end
+  assert_true(out:find("NOHOME_OK", 1, true) ~= nil,
+    "T262 session.lua loads with HOME removed: " .. out)
+  print("T262 session.lua survives a missing HOME: OK")
+end
+
+-- T263: the retry note shortens the provider's own error text on a byte budget.
+-- transcript.lua stays dependency-free, so ui injects the shared UTF-8-safe
+-- cutter; the plain :sub(1, 180) it replaces could end inside a multibyte glyph
+-- and glue "…" to orphaned continuation bytes.
+do
+  local agent_stub = { turn = function() return true end, get_history = function() return {} end }
+  local uimod, _ = run_ui_with({ 17 }, { agent = agent_stub })
+  -- 179 bytes of ASCII, then a 3-byte glyph straddling the 180-byte budget
+  uimod._handle_agent_event({ type = "retry", attempt = 1, delay = 1.0,
+                              reason = "overloaded",
+                              detail = string.rep("a", 179) .. "\228\184\173tail" })
+  local row
+  for _, e in ipairs(tentries(uimod)) do if e.role == "system" then row = e end end
+  assert_notnil(row, "T263 the retry row is appended")
+  assert_true(utf8.len(row.text) ~= nil, "T263 the retry line stays valid UTF-8")
+  assert_true(row.text:find("tail", 1, true) == nil,
+    "T263 the glyph the budget split is dropped, not half-emitted")
+  assert_true(#row.text < 179 + #("overloaded") + 40, "T263 the detail stayed truncated")
+
+  -- the cutter is the injected one, not a leftover local
+  local tr = assert(loadfile("src/tether/transcript.lua"))()
+  tr.configure({ cut = function(_, n) return "<" .. n .. ">" end })
+  tr.handle({ type = "retry", attempt = 1, delay = 1.0, reason = "r",
+              detail = string.rep("z", 200) })
+  assert_true(tr.last().text:find("<180>", 1, true) ~= nil,
+    "T263 transcript asks the injected cutter to do the cut")
+  print("T263 retry note truncation keeps glyphs whole: OK")
+end
+
+-- T264: the resume picker probes a bounded head + tail window of each journal
+-- instead of decoding every byte of up to 100 files (a long session is
+-- megabytes of tool output, so opening the picker was O(all sessions)). The
+-- semantics it must keep: session_start ts, the first user message, the
+-- session_end workspace override, message-free sessions filtered out.
+do
+  local orig = _G.tether
+  _G.tether = host_mock{ getcwd = function() return "/tmp" end,
+                         realpath = function(p) return p end }
+  local session = assert(loadfile("src/tether/session.lua"))()
+  local dir = "/tmp/tether_t264_sessions"
+  os.execute("rm -rf " .. dir)
+  os.execute("mkdir -p " .. dir)
+  session._session_dir = dir
+
+  local start_a = '{"ts":"T-START","type":"session_start","meta":{"workspace":"/ws-a","model":"m"}}'
+  local start_b = '{"ts":"T-START-B","type":"session_start","meta":{"workspace":"/ws-a","model":"m"}}'
+  local user_1 = '{"ts":"U1","type":"message","role":"user","content":"first prompt"}'
+  local user_2 = '{"ts":"U2","type":"message","role":"user","content":"late prompt"}'
+  local end_a = '{"ts":"E1","type":"session_end","meta":{"workspace":"/ws-a","model":"m"}}'
+  local end_b = '{"ts":"E2","type":"session_end","meta":{"workspace":"/ws-b","model":"m"}}'
+  local big_filler = '{"ts":"F","type":"tool_result","tool_call_id":"x","content":"'
+      .. string.rep("f", 200 * 1024) .. '"}'
+
+  local function journal(name, lines)
+    local f = assert(io.open(dir .. "/" .. name .. ".jsonl", "w"))
+    f:write(table.concat(lines, "\n") .. "\n")
+    f:close()
+  end
+  journal("aaa", { start_a, user_1, big_filler, end_a }) -- huge body, message in the head
+  journal("bbb", { start_b, user_1, end_b })             -- workspace only on session_end
+  journal("ccc", { start_a, end_a })                     -- never produced a message
+  journal("ddd", { start_a, big_filler, user_2, end_a }) -- message past the head window
+
+  local function by_id(files, id)
+    for _, e in ipairs(files) do if e.id == id then return e end end
+  end
+  local function listed_ids(files)
+    local t = {}
+    for _, e in ipairs(files) do t[e.id] = true end
+    return t
+  end
+
+  -- instrument the reads so "did it stream the whole file" is observable
+  local real_open, stats = io.open, { bytes = {}, streamed = {} }
+  local function counting_open(path, mode)
+    local f = real_open(path, mode)
+    if not f or type(path) ~= "string" or not path:find(dir, 1, true) then return f end
+    local key = path:match("([^/]+)%.jsonl$")
+    return setmetatable({ g_t264 = true }, { __index = function(_, k)
+      if k == "read" then
+        return function(_, arg)
+          local data = f:read(arg or 1)
+          if type(data) == "string" then
+            stats.bytes[key] = (stats.bytes[key] or 0) + #data
+          end
+          return data
+        end
+      elseif k == "lines" then
+        return function(_)
+          stats.streamed[key] = true
+          return f:lines()
+        end
+      elseif k == "seek" then
+        return function(_, a, b) if b ~= nil then return f:seek(a, b) end return f:seek(a) end
+      elseif k == "close" then
+        return function(_) return f:close() end
+      end
+    end })
+  end
+
+  local function probe(workspace)
+    for k in pairs(stats.bytes) do stats.bytes[k] = nil end
+    for k in pairs(stats.streamed) do stats.streamed[k] = nil end
+    io.open = counting_open
+    local ok, files = pcall(session.session_files, workspace)
+    io.open = real_open
+    assert_true(ok, "T264 the listing does not raise: " .. tostring(files))
+    return files
+  end
+
+  local a = probe("/ws-a")
+  local aaa = by_id(a, "aaa")
+  assert_notnil(aaa, "T264 the big journal is listed")
+  assert_eq(aaa.first_line, "first prompt", "T264 the first user message is read from the head")
+  assert_eq(aaa.ts, "T-START", "T264 the ts comes from session_start")
+  assert_true(not stats.streamed["aaa"],
+    "T264 a journal whose head answers the query is never streamed")
+  assert_true((stats.bytes["aaa"] or 0) <= 64 * 1024 + 8 * 1024 + 1024,
+    "T264 the read stays inside the head+tail windows, got " .. tostring(stats.bytes["aaa"]))
+  assert_eq(listed_ids(a)["ccc"], nil, "T264 a session without messages stays out of the picker")
+
+  assert_true(not listed_ids(probe("/ws-a"))["bbb"],
+    "T264 a journal whose last event moved workspace is not listed under its start one")
+  local b = by_id(probe("/ws-b"), "bbb")
+  assert_notnil(b, "T264 the session_end workspace override is read from the tail")
+  assert_eq(b.first_line, "first prompt", "T264 the override keeps the head's label")
+
+  local d = by_id(probe("/ws-a"), "ddd")
+  assert_notnil(d, "T264 the journal with a late message is still listed")
+  assert_eq(d.first_line, "late prompt",
+    "T264 the head window misses the message, so the full read falls back")
+  assert_true(stats.streamed["ddd"], "T264 the fallback path is the one that streamed it")
+
+  session._session_dir = nil
+  _G.tether = orig
+  os.execute("rm -rf " .. dir)
+  print("T264 the resume picker reads bounded windows: OK")
+end
+
 if failed > 0 then
     os.exit(1)
 end

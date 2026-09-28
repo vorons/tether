@@ -120,9 +120,9 @@ function M.parse_sse_line(line, on_event)
     local etype = payload:match('"type"[%s]*:[%s]*"([^"]+)"')
     if not etype then return end
     if etype == "response.output_text.delta" then
-        -- empty value yields "" (no event): never a second match without
-        -- captures (it would return the whole `"delta":""` fragment as text).
-        local delta = payload:match('"delta"[%s]*:[%s]*"(.-[^\\])"') or ""
+        -- Escape-aware read (common.json_string): the old pattern returned the
+        -- fields after an empty or backslash-ended value as answer text.
+        local delta = common.json_string(payload, "delta") or ""
         if delta and delta ~= "" then
             on_event({ type = "text_delta",
                 text = common.json_unescape(delta) })
@@ -138,9 +138,8 @@ function M.parse_sse_line(line, on_event)
         end
     elseif etype == "response.function_call_arguments.delta" then
         local index = tonumber(payload:match('"output_index"[%s]*:[%s]*(%d+)')) or 0
-        -- same no-capture rule as above: empty yields "" (no event), so a
-        -- blank frame can never corrupt the assembled arguments.
-        local delta = payload:match('"delta"[%s]*:[%s]*"(.-[^\\])"') or ""
+        -- same escape-aware read as above: a blank frame yields "" (no event).
+        local delta = common.json_string(payload, "delta") or ""
         local slot = S.calls[index] or {}
         if delta and delta ~= "" then
             on_event({ type = "tool_call_delta", id = slot.id,

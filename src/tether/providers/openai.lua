@@ -152,8 +152,10 @@ local function tc_elements(seg)
     return els
 end
 
--- Cut s at the first unescaped `"` (or return it whole): an unterminated
--- fragment's chunk simply ends mid-string.
+-- Cut s at the first unescaped `"` (or return it whole when there is none,
+-- i.e. the chunk ended mid-string). This is the escape-aware read of a JSON
+-- string value: a '(.-[^\\])"' pattern instead runs past a value that ends in
+-- an escaped backslash and swallows the fields that follow it.
 local function cut_unescaped(s)
     local i = 1
     while i <= #s do
@@ -179,11 +181,13 @@ local function parse_sse_line(line, on_event)
     if not obj then return end
 
     -- content delta: "content":"..." — unescaped once, here (SSE string layer).
-    -- An empty value yields "" (no event): the fallback must NOT be a second
-    -- match without captures — string.match would return the whole key
-    -- fragment ("content":"") and it would leak into the answer as text.
-    local content = payload:match('"content"[%s]*:[%s]*"(.-[^\\])"') or ""
-    if content and content ~= "" then
+    -- Extracted by the escape-aware scanner (common.json_string): the old
+    -- '(.-[^\\])"' pattern could not read a value ending in a backslash, so it
+    -- ran past the real closing quote and leaked the following fields
+    -- (`"content":"\\"` printed `\"},`, an empty `"content":""` printed `"},`)
+    -- straight into the answer. An absent/non-string value yields nil.
+    local content = common.json_string(payload, "content") or ""
+    if content ~= "" then
         content = json_unescape(content)
         if content ~= "" then
             on_event({ type = "text_delta", text = content })
@@ -192,12 +196,10 @@ local function parse_sse_line(line, on_event)
 
     -- add-reasoning-level: reasoning arrives beside content as
     -- `reasoning_content` (deepseek-style) or its `reasoning` alias, and is
-    -- emitted as reasoning_delta — never as answer text. The leading quote
-    -- in the pattern keeps `"reasoning_content"` from matching a plain
-    -- `"content"` key.
-    local reasoning = payload:match('"reasoning_content"[%s]*:[%s]*"(.-[^\\])"')
-        or payload:match('"reasoning"[%s]*:[%s]*"(.-[^\\])"')
-        or ""
+    -- emitted as reasoning_delta — never as answer text. The leading quote in
+    -- the key keeps `"reasoning_content"` from matching a plain `"content"`.
+    local reasoning = common.json_string(payload, "reasoning_content")
+        or common.json_string(payload, "reasoning") or ""
     if reasoning ~= "" then
         reasoning = json_unescape(reasoning)
         if reasoning ~= "" then
@@ -235,21 +237,11 @@ local function parse_sse_line(line, on_event)
                 local args = nil
                 local _, ae = el:find('"arguments"%s*:%s*"', 1)
                 if ae then
-                    if el:sub(ae + 1, ae + 1) == '"' then
-                        -- empty value (""): a lazy (.-[^\\])" pattern would
-                        -- eat the closing quote as content and match into
-                        -- the next field (","), corrupting the echo.
-                        args = ""
-                    else
-                        args = el:match('^(.-[^\\])"', ae + 1)
-                        if args == nil then
-                            -- unterminated: the chunk split mid-string, no
-                            -- closing quote here (also covers a value ending
-                            -- in an escaped backslash, where the terminated
-                            -- pattern cannot match).
-                            args = cut_unescaped(el:sub(ae + 1))
-                        end
-                    end
+                    -- One escape-aware read covers all three shapes: an empty
+                    -- value (yields ""), a complete value (stops at its own
+                    -- closing quote, even one ending in an escaped backslash),
+                    -- and a chunk split mid-string (yields the rest).
+                    args = cut_unescaped(el:sub(ae + 1))
                 end
                 if args ~= nil and args ~= "" then
                     on_event({ type = "tool_call_delta", id = id,
@@ -281,7 +273,7 @@ local function parse_sse_line(line, on_event)
     -- the policy classifies the message — the provider never emits `error`.
     -- (content == "" means no delta: empty string is truthy in Lua.)
     if (not content or content == "") and payload:find('"error"', 1, true) then
-        local msg = payload:match('"message"[%s]*:[%s]*"([^"]*)"')
+        local msg = common.json_string(payload, "message")
         if msg then msg = json_unescape(msg) end
         local status = tonumber(payload:match('"status"[%s]*:[%s]*(%d+)'))
             or tonumber(payload:match('"code"[%s]*:[%s]*"?([%d]+)"?'))

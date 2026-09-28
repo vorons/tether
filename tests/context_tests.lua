@@ -57,13 +57,30 @@ local HOME = os.getenv("HOME")
 local WS = os.getenv("TETHER_TEST_WORKSPACE")
 assert(HOME and WS, "context_tests: run with HOME=<sandbox> TETHER_TEST_WORKSPACE=<dir> lua tests/context_tests.lua")
 
+-- reset_sandbox() runs `rm -rf`, so a non-sandbox HOME would delete the real
+-- ~/.tether/skills and ~/.agents/skills. Refuse anything that is not a fresh
+-- directory under the system temp root (mktemp -d in the Makefile).
+local TMPROOT = (os.getenv("TMPDIR") or "/tmp"):gsub("/+$", "") .. "/"
+local function in_sandbox(p)
+    return #p > #TMPROOT and p:sub(1, #TMPROOT) == TMPROOT
+end
+assert(in_sandbox(HOME) and in_sandbox(WS),
+    "context_tests: HOME and TETHER_TEST_WORKSPACE must live under " .. TMPROOT
+    .. " (rm -rf sandbox guard)")
+
+-- Every path goes through single quotes: word splitting on a space in the path
+-- would turn one `rm -rf` into several, and metacharacters would execute.
+local function sq(p)
+    return "'" .. tostring(p):gsub("'", "'\\''") .. "'"
+end
+
 local function reset_sandbox()
     -- wipe skill + agents files
-    os.execute("rm -rf " .. WS .. "/.tether/skills " .. WS .. "/.agents/skills")
-    os.execute("rm -rf " .. HOME .. "/.tether/skills " .. HOME .. "/.agents/skills")
-    os.execute("rm -f " .. WS .. "/AGENTS.md " .. HOME .. "/.tether/AGENTS.md " .. HOME .. "/.agents/AGENTS.md")
-    os.execute("mkdir -p " .. WS .. "/.tether/skills " .. WS .. "/.agents/skills")
-    os.execute("mkdir -p " .. HOME .. "/.tether/skills " .. HOME .. "/.agents/skills")
+    os.execute("rm -rf " .. sq(WS .. "/.tether/skills") .. " " .. sq(WS .. "/.agents/skills"))
+    os.execute("rm -rf " .. sq(HOME .. "/.tether/skills") .. " " .. sq(HOME .. "/.agents/skills"))
+    os.execute("rm -f " .. sq(WS .. "/AGENTS.md") .. " " .. sq(HOME .. "/.tether/AGENTS.md") .. " " .. sq(HOME .. "/.agents/AGENTS.md"))
+    os.execute("mkdir -p " .. sq(WS .. "/.tether/skills") .. " " .. sq(WS .. "/.agents/skills"))
+    os.execute("mkdir -p " .. sq(HOME .. "/.tether/skills") .. " " .. sq(HOME .. "/.agents/skills"))
 end
 
 -- Stub the C host's tether.exec (used for ls-based skill enumeration) so the

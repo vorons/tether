@@ -49,7 +49,12 @@ local function within_workspace(path, cfg)
     return rp == ws or rp:sub(1, #ws + 1) == ws .. "/"
 end
 
+-- elapsed_ms is wall-clock, so it comes from the host's monotonic clock:
+-- os.clock() counts CPU time, and a command that sleeps reports ~0ms because
+-- the interpreter never ran during it. Same source as the ui paint throttle
+-- (ui._paint_clock); plain-lua test hosts default it to 0.
 local function now_ms()
+    if tether.monotonic_ms then return math.floor(tether.monotonic_ms()) end
     return math.floor(os.clock() * 1000)
 end
 
@@ -274,13 +279,26 @@ function M.grep(args, cfg)
     return { matches = matches, count = #matches }
 end
 
+-- Write `content` to `path` through a sibling temp file. Every step is
+-- checked: a full disk (error surfaces at close, not write), a `path` that is
+-- a directory (rename fails with EISDIR) and an unwritable directory all used
+-- to be reported as success, so the model believed an edit had landed when the
+-- file still held its old bytes. On any failure the temp file is removed.
 local function atomic_write(path, content)
     local tmp = path .. ".tmp." .. math.random(100000, 999999)
     local f = io.open(tmp, "w")
     if not f then return nil, "cannot open temp file" end
-    f:write(content)
-    f:close()
-    os.rename(tmp, path)
+    local wok, werr = f:write(content)
+    local cok, cerr = f:close()
+    if not wok or not cok then
+        os.remove(tmp)
+        return nil, werr or cerr or "write failed"
+    end
+    local ronk, rerr = os.rename(tmp, path)
+    if not ronk then
+        os.remove(tmp)
+        return nil, rerr
+    end
     return true
 end
 
@@ -294,7 +312,8 @@ function M.write(args, cfg)
     local content = args.content or ""
     local ok, err = atomic_write(path, content)
     if not ok then
-        return nil, string.format("cannot write %s", to_rel(args.path, cfg))
+        return nil, string.format("cannot write %s: %s",
+            to_rel(args.path, cfg), err or "no detail")
     end
     return { bytes = #content, path = to_rel(args.path, cfg) }
 end
@@ -402,13 +421,12 @@ function M.patch(patch_str, cfg)
         end
 
         if ok then
-            local tmp = full_path .. ".tmp." .. math.random(100000, 999999)
-            local f2 = io.open(tmp, "w")
-            if f2 then
-                f2:write(table.concat(content_lines, "\n"))
-                if #content_lines > 0 then f2:write("\n") end
-                f2:close()
-                os.rename(tmp, full_path)
+            local new_text = table.concat(content_lines, "\n")
+            if #content_lines > 0 then new_text = new_text .. "\n" end
+            local wok, werr = atomic_write(full_path, new_text)
+            if not wok then
+                return nil, string.format("cannot write %s: %s", fname,
+                    werr or "no detail")
             end
             total_add = total_add + add_count
             total_del = total_del + del_count
@@ -437,8 +455,10 @@ function M.run(args, cfg)
     end
 
     local start_ms = now_ms()
-    -- unique temp file per invocation: no cross-run races / leaks (audit #6)
-    local outfile = ("/tmp/tether_run_%d_%d.out"):format(os.time(), math.random(100000, 999999))
+    -- mkstemp via os.tmpname(): created exclusively (0600), so the shell `>`
+    -- below can never be aimed at a file another user pre-created or symlinked
+    -- in world-writable /tmp (a guessed tether_run_<time>_<rand> name could be).
+    local outfile = os.tmpname()
     local cmd = string.format("cd %s && timeout %d env TETHER_WORKSPACE=%s sh -c %s > %s 2>&1",
                               sq(cwd), timeout_val, sq(cwd), sq(command), sq(outfile))
     local ok, exit_code = tether.exec(cmd)

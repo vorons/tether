@@ -296,13 +296,17 @@ local function run_inner()
     -- Resume logic (design §10): only with -r
     local resume_id = nil
     if opts.resume then
-        local sid, messages = commands.resume(nil, cfg.workspace, cfg)
-        if sid then
+        local rid = (type(opts.resume) == "string") and opts.resume or nil
+        local sid, messages = commands.resume(rid, cfg.workspace, cfg)
+        if sid and (not rid or messages) then
             resume_id = sid
             -- the transcript seeds from these, not from the agent history:
             -- history carries no thinking blocks (the model must not see
             -- them) while the seed needs the journal's display fields
             cfg._resume_messages = messages
+        elseif rid then
+            io.stderr:write("tether: no such session: " .. rid .. "\n")
+            os.exit(1)
         else
             io.stderr:write("tether: no previous session for this workspace; starting a new one\n")
         end

@@ -191,7 +191,7 @@ local function parse_sse_line(line, on_event)
     if etype == "error" then
         -- add-retry-and-continuation: record the failure for the transport
         -- instead of emitting an event; the retry policy classifies it.
-        local msg = payload:match('"message"[%s]*:[%s]*"(.-[^\\])"')
+        local msg = common.json_string(payload, "message")
         local status = tonumber(payload:match('"status"[%s]*:[%s]*(%d+)'))
             or tonumber(payload:match('"code"[%s]*:[%s]*"?([%d]+)"?'))
         S.failure = { message = msg and json_unescape(msg) or "anthropic error",
@@ -220,10 +220,11 @@ local function parse_sse_line(line, on_event)
     if etype == "content_block_delta" then
         local idx = tonumber(payload:match('"index"[%s]*:[%s]*(%d+)'))
         if payload:find('"text_delta"', 1, true) then
-            -- empty value yields "" (no event): never a second match without
-            -- captures (it would return the whole `"text":""` fragment as text).
-            local text = payload:match('"text"[%s]*:[%s]*"(.-[^\\])"') or ""
-            if text and text ~= "" then
+            -- Escape-aware read (common.json_string): the old '(.-[^\\])"'
+            -- pattern over-matched a value ending in an escaped backslash and
+            -- an empty one, leaking the fields after it into the answer.
+            local text = common.json_string(payload, "text") or ""
+            if text ~= "" then
                 text = json_unescape(text)
                 if text ~= "" then
                     on_event({ type = "text_delta", text = text })
@@ -234,7 +235,7 @@ local function parse_sse_line(line, on_event)
         if payload:find('"thinking_delta"', 1, true) then
             -- add-reasoning-level: thinking blocks stream as reasoning_delta
             -- (signature_delta below carries no text and emits nothing).
-            local th = payload:match('"thinking"[%s]*:[%s]*"(.-[^\\])"') or ""
+            local th = common.json_string(payload, "thinking") or ""
             if th ~= "" then
                 th = json_unescape(th)
                 if th ~= "" then
@@ -245,7 +246,7 @@ local function parse_sse_line(line, on_event)
         end
         if payload:find('"input_json_delta"', 1, true) then
             -- RAW fragment: unescaping happens once in agent.parse_args (D2b).
-            local frag = payload:match('"partial_json"[%s]*:[%s]*"(.-[^\\])"')
+            local frag = common.json_string(payload, "partial_json")
             if frag then
                 local known = idx and S.index_to_id[idx]
                 if known then
