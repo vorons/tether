@@ -2904,22 +2904,34 @@ local function render_entry(e, width, prev_role)
             elseif e.status == "error" then marker = red("✗")
             else marker = green("✓") end
             local head = marker .. " " .. sgr_role("accent", e.name or "?")
+            -- The trailing status the head ends with is reserved BEFORE the
+            -- label is clipped. Appending it after a full-width label pushes
+            -- the row past the terminal: the terminal autowraps the remainder
+            -- onto the next screen row and the line-diff cache, which knows
+            -- only logical rows, never repaints that spill (a ghost above the
+            -- input that survives scrolling).
+            local tail = ""
+            if e.status == "pending" then
+                -- M8/R3: pending tools show live elapsed time
+                if e.started_at then
+                    local secs = os.time() - e.started_at
+                    tail = "  " .. muted(string.format("%.1fs", secs))
+                end
+            elseif e.status ~= "error" and e.summary and e.summary ~= "" then
+                tail = "  " .. muted(e.summary)
+            end
             -- the call's primary argument (which file ran what): without it
             -- `✓ read` / `✓ run` say nothing about what actually happened.
             do
                 local label = M._tool_arg_label(e.name, e.args, e.path)
                 if label and label ~= "" then
                     label = sanitize_output(label:match("^[^\n]*") or "")
-                    local budget = width - vlen(head) - 1
+                    local budget = width - vlen(head) - 1 - vlen(tail)
                     if budget >= 4 then head = head .. " " .. dim(clip(label, budget)) end
                 end
             end
             if e.status == "pending" then
-                -- M8/R3: pending tools show live elapsed time
-                if e.started_at then
-                    local secs = os.time() - e.started_at
-                    head = head .. "  " .. muted(string.format("%.1fs", secs))
-                end
+                head = head .. tail
                 -- bg subagent tick: newest progress line rides the head row
                 -- (no expansion needed); the full tail stays display-only.
                 if e.progress and e.progress ~= "" then
@@ -2935,9 +2947,8 @@ local function render_entry(e, width, prev_role)
                 local first = raw:match("^[^\n]*") or ""
                 local budget = width - vlen(head) - 1
                 if budget >= 1 then head = head .. " " .. red(clip(first, budget)) end
-                head = trunc(head, width)
-            elseif e.summary and e.summary ~= "" then
-                head = head .. "  " .. muted(e.summary)
+            else
+                head = head .. tail
             end
             -- 4.4: the write/patch row carries the +N -M meter.
             if e.status ~= "error" and (e.name == "write" or e.name == "patch") and diff_mod then
@@ -2954,6 +2965,7 @@ local function render_entry(e, width, prev_role)
                     if db > 0 then head = head .. red(string.rep("━", db)) end
                 end
             end
+            head = trunc(head, width)
             local to = { head }
             -- 3.3: the full body (including a failed call's error text and a
             -- pending write/patch projection) is behind expansion.

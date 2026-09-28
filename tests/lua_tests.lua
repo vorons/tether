@@ -16342,6 +16342,60 @@ do
   print("T281 more-candidates marker: OK")
 end
 
+-- T282 (tool-row-overflow): a successful tool row must never exceed the width
+-- it is rendered for. The head is a clipped label plus an UNCLIPPED summary
+-- tail ("exit 0, 81 ms"), so a long command pushed the row past the terminal
+-- edge; the terminal autowrapped the remainder onto the NEXT screen row (the
+-- blank gap above the input) and the line-diff cache, which only knows
+-- logical rows, never repainted that spill. Scroll invalidation covers the
+-- transcript window only, so the ghost survived scrolling too.
+do
+  local m, _ = run_ui_with({ 17 }, {})
+  local function strip(s) return (s or ""):gsub("\27%[[%d;]*m", "") end
+  local cmd = 'grep -n "require\\|LUA_MODS\\|mods\\[" Makefile | head -30; echo ---; '
+    .. 'grep -rn "package\\|require" src/tether/*.lua | grep "require(" | head -40'
+  local function tool_row(w)
+    m._transcript.reset({})
+    m._transcript.append({ role = "tool", name = "run", status = "ok",
+      summary = "exit 0, 81 ms", args = { command = cmd } })
+    m._invalidate_all()
+    for _, r in ipairs(m._render_all(w)) do
+      if strip(r):find("run", 1, true) ~= nil then return r end
+    end
+    return nil
+  end
+  for _, w in ipairs({ 60, 80, 120 }) do
+    local row = tool_row(w)
+    assert_notnil(row, "T282 tool row painted at width " .. w)
+    assert_true(m.vlen(row) <= w,
+      ("T282 tool row fits width %d, got %d: %s"):format(w, m.vlen(row), strip(row)))
+  end
+  -- the status tail wins over the command: it stays whole, the label is clipped
+  local row = tool_row(78)
+  assert_true(strip(row):find("exit 0, 81 ms", 1, true) ~= nil,
+    "T282 the exit status stays visible: " .. strip(row))
+
+  -- the sibling tails the head also rides are covered by the same budget:
+  -- a pending row's elapsed counter and a write row's +N -M meter bars.
+  local function fits(list, w)
+    m._transcript.reset({})
+    for _, e in ipairs(list) do m._transcript.append(e) end
+    m._invalidate_all()
+    local worst = 0
+    for _, r in ipairs(m._render_all(w)) do worst = math.max(worst, m.vlen(r)) end
+    return worst
+  end
+  local pending_w = fits({ { role = "tool", name = "run", status = "pending",
+    started_at = os.time(), args = { command = cmd },
+    progress = "still running the thing" } }, 60)
+  assert_true(pending_w <= 60, "T282 pending row fits the width, got " .. pending_w)
+  local meter_w = fits({ { role = "tool", name = "write", status = "ok",
+    summary = "+9000 −9000 lines", projection = { add = 9000, del = 9000 },
+    args = { path = "src/tether/ui.lua" } } }, 60)
+  assert_true(meter_w <= 60, "T282 meter row fits the width, got " .. meter_w)
+  print("T282 tool row never outruns the width: OK")
+end
+
 if failed > 0 then
     os.exit(1)
 end
