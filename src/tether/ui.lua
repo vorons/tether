@@ -3456,6 +3456,39 @@ M.transcript_entries = transcript_entries
 -- pump_keys itself lives in ui_busy (S + callbacks in, handled out).
 local handle_key
 
+-- S-MUTATION OWNERSHIP (Phase D 4.1): which handler writes what.
+-- Initial values live in new_state (all nil/empty/defaults); below are the
+-- post-init writers. Renderers never write (transcript scroll cache aside).
+-- Ask edits go through `a`/`answer` aliases of S.ask — no direct S.ask.x
+-- writes outside construction. Completion edits go through the `comp`
+-- alias of S.completion. T4.1 parses these OWN lines and proves every
+-- write site in src is attributed here. Format: OWN: <field> <- owners.
+-- OWN: S.ask <- handle_agent_event, resolve_ask
+-- OWN: S.ask.* <- handle_agent_event, ask_answer, ask_toggle, ask_advance, handle_ask_key
+-- OWN: S.confirmation <- handle_agent_event, resolve_confirmation
+-- OWN: S.confirmation_sel <- handle_agent_event, handle_confirmation_key, resolve_confirmation
+-- OWN: S.palette_active <- palette_sync, palette_hide, path_complete_tab, completion_cancel, completion_commit, M._picker_close, M._mention_refilter, M._mention_open, on_mouse, on_palette_copy, on_palette_resume, close_resume_palette, on_palette_model, close_model_palette, on_palette_think, close_think_palette, on_palette_login, close_login_palette, on_palette_logout, on_palette_mention, on_slash_copy, on_slash_model, on_slash_resume, on_slash_think, on_slash_login, on_slash_logout, begin, cancel, submit, login_command, logout_command, logout_close, M._poll_models_bg
+-- OWN: S.palette_mode <- palette_sync, path_complete_tab, completion_cancel, completion_commit, M._picker_close, M._mention_refilter, on_mouse, on_palette_copy, on_palette_resume, close_resume_palette, on_palette_model, close_model_palette, on_palette_think, close_think_palette, on_palette_login, close_login_palette, on_palette_logout, on_slash_copy, on_slash_model, on_slash_resume, on_slash_think, on_slash_login, on_slash_logout, begin, cancel, submit, login_command, logout_command, logout_close, logout_ask_confirm, logout_confirm_back, M._poll_models_bg
+-- OWN: S.palette_items <- palette_sync, palette_hide, M._palette_apply_query, path_complete_tab, completion_cancel, completion_commit, M._picker_close, M._mention_refilter, on_mouse, on_palette_copy, on_palette_resume, close_resume_palette, on_palette_model, close_model_palette, on_palette_think, close_think_palette, on_palette_login, close_login_palette, on_palette_logout, on_slash_copy, on_slash_model, on_slash_resume, on_slash_think, on_slash_login, on_slash_logout, begin, cancel, submit, login_command, logout_command, logout_close, logout_ask_confirm
+-- OWN: S.palette_sel <- palette_sync, palette_hide, M._palette_apply_query, path_complete_tab, completion_cancel, completion_commit, M._picker_close, M._mention_refilter, on_mouse, on_palette_copy, on_palette_resume, close_resume_palette, on_palette_model, close_model_palette, on_palette_think, close_think_palette, on_palette_login, close_login_palette, on_palette_logout, on_palette_logout_confirm, on_palette_mention, on_palette_path, on_palette_command, on_slash_copy, on_slash_model, on_slash_resume, on_slash_think, on_slash_login, on_slash_logout, begin, cancel, submit, login_command, logout_command, logout_close, logout_ask_confirm, logout_confirm_back, M._poll_models_bg
+-- OWN: S.palette_query <- on_mouse, on_slash_model, on_palette_model, close_model_palette, on_palette_login, close_login_palette, on_palette_logout, login_command, logout_command, logout_close
+-- OWN: S.palette_skills <- palette_sync, palette_hide
+-- OWN: S._palette_all <- on_mouse, on_slash_model, close_model_palette, close_login_palette, login_command, logout_command, logout_close, M._poll_models_bg
+-- OWN: S._in_copy_palette <- on_slash_copy, on_palette_copy
+-- OWN: S._in_resume_palette <- on_mouse, on_slash_resume, on_palette_resume, close_resume_palette
+-- OWN: S._in_model_palette <- on_mouse, on_slash_model, on_palette_model, close_model_palette, M._poll_models_bg
+-- OWN: S._in_think_palette <- on_mouse, on_slash_think, on_palette_think, close_think_palette
+-- OWN: S._in_login_palette <- on_mouse, begin, cancel, submit, login_command, close_login_palette, logout_close
+-- OWN: S._in_logout_palette <- logout_close, logout_command
+-- OWN: S._logout_confirm <- logout_ask_confirm, logout_confirm_back, logout_close
+-- OWN: S._logout_sel <- logout_ask_confirm, logout_confirm_back, logout_close
+-- OWN: S.completion <- path_complete_tab, completion_cancel, completion_commit, M._picker_close, M._mention_refilter, M._mention_open, on_palette_path
+-- OWN: S.completion.* <- path_complete_tab, M._mention_refilter, on_palette_mention, on_palette_path
+-- Out of scope (owned elsewhere): S.login_secret/login_provider/login_flow
+-- (ui_auth begin/cancel/submit/poll_tick), S.confirmation.detail (read by
+-- resolve_confirmation), S.history (input history), S._models_bg/_models_err
+-- (model refresh bookkeeping).
+
 local function handle_agent_event(ev)
     if not ev or not ev.type then return end
     -- add-steering-input: drain mid-turn keys on every event tick so Enter /

@@ -110,6 +110,94 @@ do
   print("T2.2 table-driven dispatch: OK")
 end
 
+-- Phase D 4.1: every S.ask/S.confirmation/palette write is attributed to
+-- the OWN block in ui.lua. The test parses the block, scans both sources
+-- for write sites (direct, indexed, and a/answer/comp/bag aliases), maps
+-- each to its nearest enclosing definition, and fails on any write whose
+-- owner is not documented. new_state initial values are exempt by design.
+do
+  local function read_lines(path)
+    local f = assert(io.open(path, "r"))
+    local t = {}
+    for line in f:lines() do t[#t + 1] = line end
+    f:close()
+    return t
+  end
+  local ui_lines = read_lines("src/tether/ui.lua")
+  -- documented owners per field, straight from the source of truth
+  local expected = {}
+  for _, line in ipairs(ui_lines) do
+    local field, owners = line:match("^%-%- OWN: (S%.[%a_.*]+) <%- (.*)$")
+    if field then
+      expected[field] = {}
+      for o in owners:gmatch("[^,%s]+") do expected[field][o] = true end
+    end
+  end
+  assert_true(expected["S.ask"] ~= nil, "T4.1 OWN block present")
+  local function def_name(line)
+    local n = line:match("^%s*local function ([%a_][%w_]*)")
+      or line:match("^%s*function (M%.[%a_][%w_]*)")
+      or line:match("^%s*([%a_][%w_.]*) ?= ?function")
+    if n then
+      local slash = n:match("^slash_callbacks%.([%a_]+)$")
+      if slash then return "on_slash_" .. slash end
+      return n
+    end
+    return nil
+  end
+  local scope = { "ask", "ask.*", "confirmation", "confirmation_sel",
+    "palette_active", "palette_mode", "palette_items", "palette_sel",
+    "palette_query", "palette_skills", "_palette_all", "_in_copy_palette",
+    "_in_resume_palette", "_in_model_palette", "_in_think_palette",
+    "_in_login_palette", "_in_logout_palette", "_logout_confirm",
+    "_logout_sel", "completion", "completion.*" }
+  local in_scope = {}
+  for _, s in ipairs(scope) do in_scope[s] = true end
+  local function check_file(path, bag)
+    local lines = read_lines(path)
+    local owner, bad = nil, {}
+    for i, line in ipairs(lines) do
+      local d = def_name(line)
+      if d then owner = d end
+      if owner ~= "new_state" and owner then
+        local function hit(field, why)
+          if not in_scope[field] then return end
+          local key = "S." .. field
+          local set = expected[key]
+          if not set then
+            bad[#bad + 1] = string.format("%s:%d %s undocumented field", path, i, key)
+          elseif not set[owner] then
+            bad[#bad + 1] = string.format("%s:%d %s written by %s (%s)",
+              path, i, key, owner, why)
+          end
+        end
+        local recv = bag and "bag" or "S"
+        for f in line:gmatch(recv .. "%.([%a_][%w_]*)%s*=[^=]") do hit(f, "direct") end
+        if line:find(recv .. ".palette_items%s*%[") and line:find("=[^=]", line:find("%[")) then
+          hit("palette_items", "append")
+        end
+        for f in line:gmatch(recv .. "%.completion%.([%a_][%w_]*)%s*=[^=]") do
+          hit("completion.*", "sub")
+        end
+        for f in line:gmatch(recv .. "%.ask%.([%a_][%w_]*)%s*=[^=]") do hit("ask.*", "sub") end
+        if not bag then
+          for _ in line:gmatch("[^%.%w]a%.[%a_][%w_]*%s*=[^=]") do hit("ask.*", "alias a") end
+          for _ in line:gmatch("[^%.%w]answer%.[%a_][%w_]*%s*=[^=]") do hit("ask.*", "alias answer") end
+          for _ in line:gmatch("[^%.%w]comp%.[%a_][%w_]*%s*=[^=]") do hit("completion.*", "alias comp") end
+        end
+      end
+    end
+    return bad
+  end
+  local bad = check_file("src/tether/ui.lua", false)
+  for _, b in ipairs(check_file("src/tether/ui/auth.lua", true)) do bad[#bad + 1] = b end
+  if #bad > 0 then
+    print("T4.1 unattributed writes:\n  " .. table.concat(bad, "\n  "))
+  end
+  assert_eq(#bad, 0, "T4.1 every interaction write is owned")
+  print("T4.1 S-mutation ownership: OK")
+end
+
 if failed > 0 then
     os.exit(1)
 end
