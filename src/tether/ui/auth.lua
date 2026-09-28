@@ -20,8 +20,9 @@
 --        Moved verbatim from ui.lua (Phase C 3.2); the facade keeps thin
 --        proxies so call sites and M.* seams keep working.
 -- OUT: module table { known_providers, is_known_provider, begin, cancel,
---      poll_tick, submit, logout_delete, logout_close, logout_ask_confirm,
---      logout_confirm_accept, logout_confirm_back }.
+--      poll_tick, submit, login_command, logout_command, logout_delete,
+--      logout_close, logout_ask_confirm, logout_confirm_accept,
+--      logout_confirm_back }.
 --      begin/submit return booleans; poll_tick returns
 --      "pending" | "granted" | "failed" | nil. Pure S-mutation otherwise.
 -- EXAMPLE:
@@ -301,6 +302,114 @@ local function submit(bag, deps, raw)
 end
 M.submit = submit
 
+-- Phase C 3.3: the /login command body (moved from the facade's slash
+-- dispatch). Non-interactive guard, bare-picker list, name check, begin.
+local function login_command(bag, deps, rest)
+    deps = deps or {}
+    local errors = deps.errors or {}
+    -- add-provider-login: interactive credential flow / store clear
+    local provider = (type(rest) == "string" and rest:match("^%s*(.-)%s*$")) or ""
+    if bag.cfg and bag.cfg.non_interactive then
+        bag.error_banner = errors.login_interactive_only
+        return
+    end
+    -- Bare /login → shared palette in login mode (same mechanism as
+    -- /copy/slash menu); never a silent default to the active provider.
+    if provider == "" then
+        local active = (bag.cfg and bag.cfg.provider) or "openai"
+        local items = {}
+        for _, name in ipairs(known_providers(deps.catalog)) do
+            items[#items + 1] = {
+                label = name,
+                desc = (name == active) and "active" or "",
+            }
+        end
+        bag.error_banner = nil
+        bag.palette_mode = "login"
+        bag.palette_active = true
+        bag.palette_items = items
+        bag._palette_all = items
+        bag.palette_query = ""
+        bag.palette_sel = 1
+        bag._in_login_palette = true
+        return
+    end
+    if not is_known_provider(deps.catalog, provider) then
+        bag.error_banner = errors.unknown_provider_prefix .. provider
+        return
+    end
+    provider = provider:lower()
+    begin(bag, deps, provider)
+end
+M.login_command = login_command
+
+-- Phase C 3.3: the /logout command body (moved from the facade's slash
+-- dispatch). Bare-picker over stored credentials, name check, direct
+-- delete for the named path.
+local function logout_command(bag, deps, rest)
+    deps = deps or {}
+    local errors = deps.errors or {}
+    local provider = (type(rest) == "string" and rest:match("^%s*(.-)%s*$")) or ""
+    -- logout-picker: bare /logout opens a stored-only picker in the
+    -- shared palette (never a silent default to the active provider).
+    if provider == "" then
+        local auth_mod = deps.auth
+        local store = (auth_mod and auth_mod.load) and auth_mod.load(nil) or {}
+        local names = {}
+        if type(store) == "table" then
+            for name in pairs(store) do
+                if type(name) == "string" and name ~= "" then
+                    names[#names + 1] = name
+                end
+            end
+        end
+        table.sort(names)
+        if #names == 0 then
+            -- logout-confirm D5: an empty store is a state, not a failed
+            -- lookup — the picker still does not open.
+            bag.error_banner = errors.no_provider_logged_in
+            return
+        end
+        local active = (bag.cfg and bag.cfg.provider) or nil
+        local items = {}
+        for _, name in ipairs(names) do
+            local entry = store[name]
+            local kind = (type(entry) == "table" and type(entry.kind) == "string")
+                and entry.kind or ""
+            local desc = kind
+            if name == active then
+                desc = (desc ~= "" and desc .. " • " or "") .. "active"
+            end
+            items[#items + 1] = { label = name, desc = desc }
+        end
+        bag.error_banner = nil
+        bag.palette_mode = "logout"
+        bag.palette_active = true
+        bag.palette_items = items
+        bag._palette_all = items
+        bag.palette_query = ""
+        bag.palette_sel = 1
+        bag._in_logout_palette = true
+        return
+    end
+    if not is_known_provider(deps.catalog, provider) then
+        bag.error_banner = errors.unknown_provider_prefix .. provider
+        return
+    end
+    provider = provider:lower()
+    -- logout-picker: named path stays direct (no picker, no confirm),
+    -- but honest — a missing entry reports instead of a false "removed".
+    local auth_mod = deps.auth
+    local stored = auth_mod and auth_mod.load
+        and auth_mod.load(nil) or {}
+    if type(stored) ~= "table" or stored[provider] == nil then
+        bag.error_banner = errors.no_stored_credential_prefix .. provider
+        return
+    end
+    M.logout_delete(bag, deps, provider)
+end
+M.logout_command = logout_command
+
 -- logout-picker: delete one stored credential and confirm with a
 -- transcript/system line (provider name only — never token material).
 local function logout_delete(bag, deps, provider)
@@ -355,7 +464,7 @@ local function logout_confirm_accept(bag, deps)
     deps = deps or {}
     local provider = bag._logout_confirm
     logout_close(bag)
-    if provider then logout_delete(bag, deps, provider) end
+    if provider then M.logout_delete(bag, deps, provider) end
 end
 M.logout_confirm_accept = logout_confirm_accept
 

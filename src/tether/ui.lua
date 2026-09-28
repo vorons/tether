@@ -3053,16 +3053,8 @@ if type(M._provider_catalog) ~= "table" then
     M._provider_catalog = (chunk and chunk()) or nil
 end
 
--- Phase C 3.2 proxies: implementations live in ui_auth (bag/deps);
--- these keep the local names the key/slash handlers call.
-local function known_providers()
-    return M._auth_flow.known_providers(M._provider_catalog)
-end
-
-local function is_known_provider(name)
-    return M._auth_flow.is_known_provider(M._provider_catalog, name)
-end
-
+-- Phase C 3.3: known_providers/is_known_provider proxies deleted with
+-- the login/logout command bodies (no callers left; ui_auth owns them).
 local function provider_mod(name)
     local glob = rawget(_G, "provider_" .. name)
     if glob then return glob end
@@ -3396,100 +3388,13 @@ slash_callbacks.resume = function(bag, cmd, rest)
 end
 
 slash_callbacks.login = function(bag, cmd, rest)
-        -- add-provider-login: interactive credential flow / store clear
-        local provider = (type(rest) == "string" and rest:match("^%s*(.-)%s*$")) or ""
-        if S.cfg and S.cfg.non_interactive then
-            S.error_banner = M._copy.errors.login_interactive_only
-            return
-        end
-        -- Bare /login → shared palette in login mode (same mechanism as
-        -- /copy/slash menu); never a silent default to the active provider.
-        if provider == "" then
-            local active = (S.cfg and S.cfg.provider) or "openai"
-            local items = {}
-            for _, name in ipairs(known_providers()) do
-                items[#items + 1] = {
-                    label = name,
-                    desc = (name == active) and "active" or "",
-                }
-            end
-            S.error_banner = nil
-            S.palette_mode = "login"
-            S.palette_active = true
-            S.palette_items = items
-            S._palette_all = items
-            S.palette_query = ""
-            S.palette_sel = 1
-            S._in_login_palette = true
-            return
-        end
-        if not is_known_provider(provider) then
-            S.error_banner = M._copy.errors.unknown_provider_prefix .. provider
-            return
-        end
-        provider = provider:lower()
-        begin_login(provider)
+    -- Phase C 3.3: body lives in ui_auth (catalog/auth/store reads).
+    return M._auth_flow.login_command(S, M._auth_deps(), rest)
 end
 
 slash_callbacks.logout = function(bag, cmd, rest)
-        local provider = (type(rest) == "string" and rest:match("^%s*(.-)%s*$")) or ""
-        -- logout-picker: bare /logout opens a stored-only picker in the
-        -- shared palette (never a silent default to the active provider).
-        if provider == "" then
-            local auth_mod = _G.auth
-            local store = (auth_mod and auth_mod.load) and auth_mod.load(nil) or {}
-            local names = {}
-            if type(store) == "table" then
-                for name in pairs(store) do
-                    if type(name) == "string" and name ~= "" then
-                        names[#names + 1] = name
-                    end
-                end
-            end
-            table.sort(names)
-            if #names == 0 then
-                -- logout-confirm D5: an empty store is a state, not a failed
-                -- lookup — the picker still does not open.
-                S.error_banner = M._copy.errors.no_provider_logged_in
-                return
-            end
-            local active = (S.cfg and S.cfg.provider) or nil
-            local items = {}
-            for _, name in ipairs(names) do
-                local entry = store[name]
-                local kind = (type(entry) == "table" and type(entry.kind) == "string")
-                    and entry.kind or ""
-                local desc = kind
-                if name == active then
-                    desc = (desc ~= "" and desc .. " • " or "") .. "active"
-                end
-                items[#items + 1] = { label = name, desc = desc }
-            end
-            S.error_banner = nil
-            S.palette_mode = "logout"
-            S.palette_active = true
-            S.palette_items = items
-            S._palette_all = items
-            S.palette_query = ""
-            S.palette_sel = 1
-            S._in_logout_palette = true
-            return
-        end
-        if not is_known_provider(provider) then
-            S.error_banner = M._copy.errors.unknown_provider_prefix .. provider
-            return
-        end
-        provider = provider:lower()
-        -- logout-picker: named path stays direct (no picker, no confirm),
-        -- but honest — a missing entry reports instead of a false "removed".
-        local auth_mod = _G.auth
-        local stored = auth_mod and auth_mod.load
-            and auth_mod.load(nil) or {}
-        if type(stored) ~= "table" or stored[provider] == nil then
-            S.error_banner = M._copy.errors.no_stored_credential_prefix .. provider
-            return
-        end
-        M._logout_delete(provider)
+    -- Phase C 3.3: body lives in ui_auth (catalog/auth/store reads).
+    return M._auth_flow.logout_command(S, M._auth_deps(), rest)
 end
 
 slash_callbacks.think = function(bag, cmd, rest)

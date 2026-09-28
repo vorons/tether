@@ -70,6 +70,47 @@ do
   print("T3.2 ui_auth direct: OK")
 end
 
+-- Phase C 3.3: /login and /logout command bodies live in ui_auth.
+do
+  local auth = assert(loadfile("src/tether/ui/auth.lua"))()
+  local copy = assert(loadfile("src/tether/ui/copy.lua"))()
+  local deps = { errors = copy.errors, catalog = nil, auth = nil }
+  -- bare /login builds the provider picker, active marked
+  local bag = { cfg = { provider = "openai" } }
+  auth.login_command(bag, deps, "")
+  assert_eq(bag.palette_mode, "login", "T3.3 bare login opens the picker")
+  assert_eq(#bag.palette_items, 3, "T3.3 fallback triple listed")
+  assert_eq(bag.palette_items[1].desc, "active", "T3.3 active provider marked")
+  -- unknown provider explains itself
+  bag = { cfg = {} }
+  auth.login_command(bag, deps, "nope")
+  assert_true((bag.error_banner or ""):find("nope", 1, true) ~= nil, "T3.3 unknown provider banner")
+  -- non-interactive refused
+  bag = { cfg = { non_interactive = true } }
+  auth.login_command(bag, deps, "")
+  assert_true((bag.error_banner or "") ~= "", "T3.3 non-interactive refused")
+  -- bare /logout with an empty store is a state, not a failure
+  bag = { cfg = {} }
+  deps.auth = { load = function() return {} end }
+  auth.logout_command(bag, deps, "")
+  assert_true((bag.error_banner or "") ~= "", "T3.3 empty store banner")
+  assert_eq(bag.palette_active, nil, "T3.3 picker stays closed on empty store")
+  -- bare /logout lists stored credentials, active marked
+  bag = { cfg = { provider = "openai" } }
+  deps.auth = { load = function()
+    return { openai = { kind = "api_key" }, gemini = { kind = "oauth" } }
+  end }
+  auth.logout_command(bag, deps, "")
+  assert_eq(bag.palette_mode, "logout", "T3.3 bare logout opens the picker")
+  assert_eq(#bag.palette_items, 2, "T3.3 stored providers listed")
+  -- named /logout on a missing entry reports honestly (known provider,
+  -- nothing stored under it)
+  bag = { cfg = {} }
+  auth.logout_command(bag, deps, "anthropic")
+  assert_true((bag.error_banner or ""):find("anthropic", 1, true) ~= nil, "T3.3 missing entry banner")
+  print("T3.3 login/logout command bodies: OK")
+end
+
 if failed > 0 then
     os.exit(1)
 end
