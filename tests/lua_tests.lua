@@ -1285,7 +1285,7 @@ with_modules(base_env, function(mods)
     ui._color_depth = "256"
     out = render("run `npm test` now", 40, ui.md_ansi)
     joined = table.concat(out)
-    assert_true(joined:find("\27[35m", 1, true) ~= nil, "T32 inline code takes the code role")
+    assert_true(joined:find("\27[38;5;139m", 1, true) ~= nil, "T32 inline code takes the code role")
     assert_true(joined:find("`", 1, true) == nil, "T32 inline code marker stripped when coloured")
     out = render("**bold** and *italic*", 40, ui.md_ansi)
     joined = table.concat(out)
@@ -7039,8 +7039,8 @@ do
 end
 
 -- T80 (4.1 + 3.1): a skill row only composes `/<name> ` into the input —
--- Enter and Tab send nothing, run nothing and never read the body; the row
--- carries its argument hint and no longer produces a [skill: …] reference.
+-- Enter and Tab send nothing, run nothing and never read the body; the row is
+-- marked `[s]` in its description and produces no [skill: …] reference.
 do
   local turns = 0
   local agent_stub = { turn = function() turns = turns + 1; return true end,
@@ -7062,7 +7062,8 @@ do
   type_text(uimod, "/dep")
   local S = uimod._get_state()
   assert_eq(S.palette_items[1].label, "/deploy", "T80 skill row is the slash name")
-  assert_eq(S.palette_items[1].hint, "[skill]", "T80 skill row carries its hint")
+  assert_eq(S.palette_items[1].hint, nil, "T80 skill rows carry no hint")
+  assert_eq(S.palette_items[1].desc, "[s] deploy stuff", "T80 the mark rides the description")
   uimod._handle_key({ kind = "enter" })
   S = uimod._get_state()
   assert_eq(S.input, "/deploy ", "T80 Enter composes the skill name")
@@ -8784,8 +8785,8 @@ do
   local L1 = one._layout()
   local skill_rows = rows_with(one, S1, "/deploy")
   assert_eq(#skill_rows, 1, "T83 the skill row is painted")
-  assert_true(strip(one._row(skill_rows[1])):find("[skill]", 1, true) ~= nil,
-    "T83 the skill row shows [skill]")
+  assert_true(strip(one._row(skill_rows[1])):find("[s] deploy stuff", 1, true) ~= nil,
+    "T83 the skill row marks its description with [s]")
   -- command row: fresh palette, no filter, top window has /clear without a hint
   local cmdui = boot(function() return {
     { name = "deploy", description = "deploy stuff", path = "/tmp/skills/deploy/SKILL.md" } } end)
@@ -8824,8 +8825,9 @@ do
   end
   local lwski = widest_label(S1.palette_items)
   local gutter_ski = one.ui_padding(one._layout().w)
-  assert_eq(strip(one._row(skill_rows[1])):find("deploy stuff", 1, true), gutter_ski + lwski + 3,
-    "T83 the skill description aligns after the [skill] hint")
+  assert_eq(strip(one._row(skill_rows[1])):find("[s] deploy stuff", 1, true),
+    gutter_ski + lwski + 3,
+    "T83 the skill description column aligns with the command rows")
   -- 10 > 8: an indicator is expected on the scrolling window
   local _, off0 = cmdui._palette_window(SCmd.h, #SCmd.palette_items, SCmd.palette_sel)
   assert_true(off0 == 1 and #SCmd.palette_items > 8,
@@ -14929,8 +14931,8 @@ do
 end
 
 -- T210: the think block carries a • marker — yellow while the model is still
--- reasoning, green once it moved on — and the expanded header reads "think",
--- never "thinking".
+-- reasoning, dim like its label once it moved on — and the expanded header
+-- reads "think", never "thinking".
 do
   local uimod, S = run_ui_with({ 17 },
     { agent = { turn = function() return true end, get_history = function() return {} end } })
@@ -14948,11 +14950,12 @@ do
   local joined = table.concat(uimod._render_all(80), "\n"):gsub("\27%[[0-9;]*m", "")
   assert_true(joined:find("think ·", 1, true) ~= nil, "T210 the header reads think")
   assert_eq(joined:find("thinking", 1, true), nil, "T210 no 'thinking' header anywhere")
-  -- the model moved on to the answer: the marker turns green
+  -- the model moved on to the answer: the marker takes the label's dim tone
   uimod._handle_agent_event({ type = "text_delta", text = "the answer" })
   head = think_row()
   assert_notnil(head, "T210 the think row survives the answer")
-  assert_true(head:find("32m", 1, true) ~= nil, "T210 the marker is green once done")
+  assert_true(head:find("\27[2m", 1, true) ~= nil, "T210 the marker is dim once done")
+  assert_eq(head:find("\27[32m", 1, true), nil, "T210 a frozen think row is never green")
   -- collapsed keeps the marker and the label
   S.thinking_visible = false
   uimod._invalidate_all()
@@ -16394,6 +16397,236 @@ do
     args = { path = "src/tether/ui.lua" } } }, 60)
   assert_true(meter_w <= 60, "T282 meter row fits the width, got " .. meter_w)
   print("T282 tool row never outruns the width: OK")
+end
+
+-- T283 (ui-transcript-polish 1): the `code` role is soft lavender and
+-- depth-aware, so inline code stays readable on the dark window. 16-color
+-- magenta ("35") was the complaint; mono must still emit no SGR.
+with_modules(base_env, function(mods)
+  local ui = mods.ui
+  for _, name in ipairs({ "default", "solarized" }) do
+    local code = ui.THEMES[name].code
+    assert_eq(type(code), "table", "T283 " .. name .. " theme code role is depth-tiered")
+    assert_eq(code.truecolor, "38;2;180;142;173", "T283 " .. name .. " code truecolor")
+    assert_eq(code["256"], "38;5;139", "T283 " .. name .. " code 256 fallback")
+  end
+  ui.set_theme("default")
+  ui._color_depth = "truecolor"
+  assert_eq(ui.sgr_role("code", "x"), "\27[38;2;180;142;173mx\27[0m",
+    "T283 truecolor inline code is lavender")
+  ui._color_depth = "256"
+  assert_eq(ui.sgr_role("code", "x"), "\27[38;5;139mx\27[0m",
+    "T283 256-color inline code falls back to 139")
+  ui.set_theme("mono")
+  assert_eq(ui.sgr_role("code", "x"), "x", "T283 mono leaves code raw")
+  ui.set_theme("default")
+  ui._color_depth = nil
+end)
+
+-- T284 (ui-transcript-polish 2): a thinking row's glyph is warn while reasoning
+-- runs and dim once frozen — a finished block is not a success, and the spec
+-- forbids the success role on any thinking row.
+do
+  local m = run_ui_with({ 17 }, {
+    agent = { turn = function() return true end, get_history = function() return {} end },
+  })
+  m._color_depth = "256"
+  -- collapsed header: the label is then exactly dim("think · "), so the
+  -- glyph/label pair can be matched as painted
+  m._get_state().thinking_visible = false
+  local function think_row(live)
+    m._transcript.reset({})
+    m._transcript.append({ role = "thinking", text = "reasoning",
+      started_at = os.time(), live = live })
+    m._invalidate_all()
+    for _, r in ipairs(m._render_all(80)) do
+      if (r or ""):gsub("\27%[[%d;]*m", ""):find("think", 1, true) then return r end
+    end
+    return nil
+  end
+  local live = think_row(true)
+  local frozen = think_row(nil)
+  assert_notnil(live, "T284 a live thinking row renders")
+  assert_notnil(frozen, "T284 a frozen thinking row renders")
+  assert_true(live:find("\27[33;1m•", 1, true) ~= nil, "T284 live glyph is warn")
+  assert_true(frozen:find("\27[2m•", 1, true) ~= nil, "T284 frozen glyph takes the dim role")
+  assert_eq(frozen:find("\27[32m", 1, true), nil, "T284 no success role on a thinking row")
+  assert_true(frozen:find("\27[2m•\27[0m \27[2mthink", 1, true) ~= nil,
+    "T284 the glyph shares the label's tone: " .. (frozen or ""))
+  assert_true(live:find("\27[33;1m•\27[0m \27[2mthink", 1, true) ~= nil,
+    "T284 only the glyph changes between the states: " .. (live or ""))
+  m._color_depth = nil
+  print("T284 thinking glyph follows the label: OK")
+end
+
+-- T285 (ui-transcript-polish 3): the footer cell drops the slash together with
+-- an unknown model — `llama-cpp · off`, never a dangling `llama-cpp/`.
+do
+  local function strip(s) return (s or ""):gsub("\27%[[%d;]*m", "") end
+  local uimod = run_ui_with({ 17 }, {
+    agent = { turn = function() return true end, get_history = function() return {} end },
+  })
+  local S = uimod._get_state()
+  local function footer()
+    S.cfg.reasoning = "off"
+    uimod._paint(true)
+    return strip(uimod._row(uimod._layout().footer_row))
+  end
+  S.cfg.provider = "llama-cpp"
+  S.model_name = "deepseek-chat"
+  local f1 = footer()
+  assert_true(f1:find("llama-cpp/deepseek-chat · off", 1, true) ~= nil,
+    "T285 provider and model join with a slash: " .. f1)
+  S.model_name = nil
+  local f2 = footer()
+  assert_true(f2:find("llama-cpp · off", 1, true) ~= nil,
+    "T285 a bare provider carries the level: " .. f2)
+  assert_eq(f2:find("llama-cpp/", 1, true), nil,
+    "T285 no dangling slash without a model: " .. f2)
+  assert_eq(f2:find("?", 1, true), nil,
+    "T285 no placeholder model name: " .. f2)
+  S.cfg.provider = nil
+  S.model_name = "solo-model"
+  local f3 = footer()
+  assert_true(f3:find("solo-model · off", 1, true) ~= nil,
+    "T285 an unknown provider keeps the bare model: " .. f3)
+  print("T285 footer omits the slash with the model: OK")
+end
+
+-- T286 (ui-transcript-polish 4): skill rows drop the [skill] hint and carry the
+-- mark inside the description, in the one tone the whole palette row uses.
+do
+  local function strip(s) return (s or ""):gsub("\27%[[%d;]*m", "") end
+  local uimod = run_ui_with({ 17 }, {
+    agent = { turn = function() return true end, get_history = function() return {} end },
+  })
+  uimod._skills_stub = function() return {
+    { name = "deploy", description = "deploy stuff", path = "/tmp/skills/deploy/SKILL.md" },
+  } end
+  for i = 1, #"/dep" do
+    uimod._handle_key({ kind = "text", char = ("/dep"):sub(i, i) })
+  end
+  uimod._paint(true)
+  local S = uimod._get_state()
+  local row
+  for r = 1, S.h do
+    if strip(uimod._row(r)):find("/deploy", 1, true) then row = uimod._row(r) end
+  end
+  assert_notnil(row, "T286 the skill row is painted")
+  assert_true(strip(row):find("[s] deploy stuff", 1, true) ~= nil,
+    "T286 the description carries the [s] mark: " .. strip(row))
+  assert_eq(strip(row):find("[skill]", 1, true), nil, "T286 no [skill] hint left")
+  -- one tone: the row is a single SGR span, so mark and description cannot
+  -- diverge from the rest of the line
+  local esc = 0
+  for _ in row:gmatch("\27%[[%d;]*m") do esc = esc + 1 end
+  assert_eq(esc, 2, "T286 mark and description share the row's tone: " .. row)
+  uimod._skills_stub = nil
+  print("T286 skill rows marked [s] in the description: OK")
+end
+
+-- T287 (ui-transcript-polish 5): the user's own text is markdown-lite — inline
+-- markup and fenced blocks render, in the code role the assistant uses.
+do
+  local function strip(s) return (s or ""):gsub("\27%[[%d;]*m", "") end
+  local m = run_ui_with({ 17 }, {
+    agent = { turn = function() return true end, get_history = function() return {} end },
+  })
+  m._color_depth = "256"
+  local function user_rows(text, w)
+    m._transcript.reset({})
+    m._transcript.append({ role = "user", text = text })
+    m._invalidate_all()
+    local out = {}
+    for _, r in ipairs(m._render_all(w or 60)) do out[#out + 1] = r end
+    return out
+  end
+  local rows = user_rows("run `npm test` **now**")
+  local joined = table.concat(rows)
+  local plain = strip(joined)
+  assert_true(plain:find("› ", 1, true) ~= nil, "T287 the user marker stays: " .. plain)
+  assert_true(joined:find("\27[38;5;139m", 1, true) ~= nil,
+    "T287 user inline code takes the lavender code role")
+  assert_true(joined:find("\27[1m", 1, true) ~= nil, "T287 user bold takes the bold role")
+  assert_eq(plain:find("`", 1, true), nil, "T287 the backticks are consumed")
+  for _, r in ipairs(rows) do
+    assert_true(m.vlen(r) <= 60, "T287 user markup row fits the width: " .. strip(r))
+  end
+
+  local fenced = user_rows("```lua\nlocal x = 1\n```")
+  local stripped = {}
+  for _, r in ipairs(fenced) do stripped[#stripped + 1] = strip(r) end
+  local fplain = table.concat(stripped, "\n")
+  assert_true(strip(fenced[1] or ""):find("┌", 1, true) ~= nil,
+    "T287 a user fence opens the same frame: " .. strip(fenced[1] or ""))
+  assert_true(fplain:find("local x = 1", 1, true) ~= nil, "T287 the fenced body renders")
+  assert_true(strip(fenced[#fenced] or ""):find("└", 1, true) ~= nil,
+    "T287 the frame closes")
+  for _, r in ipairs(fenced) do
+    assert_true(m.vlen(r) <= 60, "T287 user fence row fits the width: " .. strip(r))
+  end
+
+  -- md_render's shared tail also tightens blank rows in user text
+  local gaps = {}
+  for _, r in ipairs(user_rows("a\n\n\n\nb\n\n")) do gaps[#gaps + 1] = strip(r) end
+  assert_eq(#gaps, 3, "T287 blank rows collapse to one: " .. table.concat(gaps, "|"))
+  assert_true(gaps[1]:find("a", 1, true) ~= nil, "T287 the first row is content")
+  assert_eq(gaps[2]:find("%S"), nil, "T287 one blank row between the paragraphs")
+  assert_true(gaps[3]:find("b", 1, true) ~= nil, "T287 no trailing blank row")
+
+  -- the new user path rides the same width contract as every other producer:
+  -- a row that outruns the terminal autowraps onto a screen row the line-diff
+  -- cache never repaints (T282's ghost)
+  local long = ("`" .. string.rep("a", 90) .. "` **bold** # not-a-heading "
+    .. string.rep("tail ", 20))
+  for _, w in ipairs({ 60, 80, 120 }) do
+    local wide = user_rows(long, w)
+    assert_true(#wide > 0, "T287 a long user message renders at width " .. w)
+    for _, r in ipairs(wide) do
+      assert_true(m.vlen(r) <= w,
+        ("T287 user row fits width %d, got %d: %s"):format(w, m.vlen(r), strip(r)))
+    end
+  end
+  m._color_depth = nil
+  print("T287 user text renders inline markup and fences: OK")
+end
+
+-- T288 (ui-transcript-polish 5): block structure is NOT parsed in user text —
+-- the row stays a faithful echo, and an unclosed fence loses nothing.
+do
+  local function strip(s) return (s or ""):gsub("\27%[[%d;]*m", "") end
+  local m = run_ui_with({ 17 }, {
+    agent = { turn = function() return true end, get_history = function() return {} end },
+  })
+  m._color_depth = "256"
+  local rows = {}
+  m._transcript.reset({})
+  m._transcript.append({ role = "user", text =
+    "# Title\n- item\n1. step\n| a | b |" })
+  m._invalidate_all()
+  for _, r in ipairs(m._render_all(80)) do rows[#rows + 1] = strip(r) end
+  local plain = table.concat(rows, "\n")
+  for _, marker in ipairs({ "# Title", "- item", "1. step", "| a | b |" }) do
+    assert_true(plain:find(marker, 1, true) ~= nil,
+      "T288 the marker stays literal: " .. marker .. " in " .. plain)
+  end
+  assert_eq(plain:find("│ a", 1, true), nil, "T288 no table frame is built")
+  local joined = table.concat(m._render_all(80))
+  assert_eq(joined:find("\27[36;1m", 1, true), nil, "T288 no heading role in user text")
+  -- an unmatched fence frames the rest instead of swallowing it
+  local unclosed = {}
+  m._transcript.reset({})
+  m._transcript.append({ role = "user", text = "```sh\necho hi" })
+  m._invalidate_all()
+  for _, r in ipairs(m._render_all(80)) do unclosed[#unclosed + 1] = strip(r) end
+  local uplain = table.concat(unclosed, "\n")
+  assert_true(uplain:find("echo hi", 1, true) ~= nil,
+    "T288 an unclosed fence keeps its body: " .. uplain)
+  for _, r in ipairs(unclosed) do
+    assert_true(m.vlen(r) <= 80, "T288 unclosed fence row fits the width: " .. r)
+  end
+  m._color_depth = nil
+  print("T288 user text keeps block markers literal: OK")
 end
 
 if failed > 0 then

@@ -145,13 +145,17 @@ local THEMES = {
         -- truecolor/256 render with the same palette. ponytail: no brighter
         -- per-depth variants; add one if a 256-color theme gets complaints.
         comment = "2;38", string = "32", number = "33", keyword = "36;1",
-        code = "35", heading = "36;1",
+        -- inline code is soft lavender (#b48ead), depth-aware like accent: the
+        -- 16-color magenta (35) reads near-black on the dark window.
+        code = { truecolor = "38;2;180;142;173", ["256"] = "38;5;139" },
+        heading = "36;1",
     },
     solarized = {
         accent = "36", warn = "33", error = "31", success = "32",
         dim = "2", muted = "90", italic = "3", reverse = "7", bold = "1",
         comment = "2;38", string = "32", number = "33", keyword = "36",
-        code = "35", heading = "36;1",
+        code = { truecolor = "38;2;180;142;173", ["256"] = "38;5;139" },
+        heading = "36;1",
     },
     mono = {}, -- every role missing ⇒ no SGR emitted
 }
@@ -708,7 +712,10 @@ function M.highlight_line(line, lang, state)
     return table.concat(out)
 end
 
-local function md_render(text, width, ansi_fn)
+-- `lite` (user text): inline markup and fenced blocks render, block structure
+-- does not — heading, list and table markers stay literal so the row remains a
+-- faithful echo of what was typed.
+local function md_render(text, width, ansi_fn, lite)
     local ascii = M._ascii_mode or M._env_ascii or _ascii
     local box = ascii and { tl = "+", tr = "+", bl = "+", br = "+", h = "-", v = "|" }
                             or { tl = "┌", tr = "┐", bl = "└", br = "┘", h = "─", v = "│" }
@@ -761,7 +768,7 @@ local function md_render(text, width, ansi_fn)
             end
             out[#out + 1] = dim(box.bl .. string.rep(box.h, inner + 2) .. box.br)
             i = i + 1 -- skip closing fence (or last line)
-        elseif line:match("^%s*|") then
+        elseif not lite and line:match("^%s*|") then
             -- table: consecutive source lines beginning with |
             local tlines = {}
             while i <= #lines and lines[i]:match("^%s*|") do
@@ -820,7 +827,7 @@ local function md_render(text, width, ansi_fn)
             end
         else
             local hashes, rest = line:match("^(#+)%s+(.*)")
-            if hashes and rest then
+            if not lite and hashes and rest then
                 -- headings: wrap to width, heading role colour, no trailing blank
                 local htext = md_strip_inline(rest, ansi_fn)
                 htext = sgr_role("heading", htext)
@@ -828,7 +835,7 @@ local function md_render(text, width, ansi_fn)
                     out[#out + 1] = wl
                 end
                 i = i + 1
-            elseif line:match("^%s*%d+%.%s+") then
+            elseif not lite and line:match("^%s*%d+%.%s+") then
                 -- ordered list: numbered prefix + aligned continuation indent
                 local num = line:match("^%s*(%d+%.?)%s+")
                 local item = line:gsub("^%s*%d+%.%s+", "", 1)
@@ -841,7 +848,7 @@ local function md_render(text, width, ansi_fn)
                         or (string.rep(" ", prew) .. wl)
                 end
                 i = i + 1
-            elseif line:match("^%s*[%-%*]%s+") then
+            elseif not lite and line:match("^%s*[%-%*]%s+") then
                 local item = line:gsub("^%s*[%-%*]%s+", "", 1)
                 local body = md_strip_inline(item, ansi_fn)
                 local prefix = bullet .. " "
@@ -1546,9 +1553,8 @@ M._row = function(row) return S and S.screen[row] or nil end
 -- ============================================================
 -- unified-slash-palette 1.2: skill rows for the palette. Discovery is injected
 -- so tests can stub it (M._skills_stub, mirroring M._tools_stub); a discovery
--- problem degrades to no rows instead of breaking the palette.
--- (the "[skill]" row hint is inlined at its single use site to stay under
--- Lua's 200-locals-per-chunk limit alongside the theme role helpers)
+-- problem degrades to no rows instead of breaking the palette. The skill mark
+-- is part of the description ("[s] ...") so the name column stays narrow.
 
 local function discover_palette_skills()
     local ok, res
@@ -1583,8 +1589,7 @@ local function palette_skill_rows()
         if name ~= "" and not commands[name:lower()] then
             rows[#rows + 1] = {
                 label = "/" .. name,
-                desc = sk.description or "",
-                hint = "[skill]",
+                desc = "[s] " .. (sk.description or ""),
                 skill = true,
                 name = name,
                 path = sk.path or "",
@@ -2848,8 +2853,11 @@ local function render_entry(e, width, prev_role)
             if fill < 1 then fill = 1 end
             out = { muted(label .. string.rep("─", fill)) }
         elseif role == "user" then
+            -- the user's own text is markdown-lite: inline code/bold/italic and
+            -- fenced blocks render, block markers (#, -, 1., |) stay literal so
+            -- the echo matches what was typed.
             out = with_prefix(cyan("›") .. " ", 2,
-                wrap(e.text or "", math.max(width - 2, 1)))
+                md_render(e.text or "", math.max(width - 2, 1), M.md_ansi, true))
         elseif role == "assistant" then
             -- M8/R4: markdown-lite render; md_render handles wrap/width itself
             local body = md_render(e.text or "", math.max(width - 2, 1), M.md_ansi)
@@ -2866,10 +2874,11 @@ local function render_entry(e, width, prev_role)
             out = with_prefix(marker, 2, body)
         elseif role == "thinking" then
             -- the marker color tracks liveness: yellow while reasoning may
-            -- still append to this entry, green once the model moved on (the
+            -- still append to this entry, dim once the model moved on (the
             -- answer, a tool call, or the turn ending froze it — see
-            -- transcript.handle). Same glyph as a running tool.
-            local mark = e.live and yellow("•") or green("•")
+            -- transcript.handle). A frozen row is finished business, not a
+            -- success, so it takes the label's tone instead of green.
+            local mark = e.live and yellow("•") or dim("•")
             local secs = os.time() - (e.started_at or os.time())
             if secs < 0 then secs = 0 end
             if not S.thinking_visible then
@@ -3720,13 +3729,16 @@ local function render_footer(L)
     end
 
     -- right-aligned cell: provider/model · <level> (provider omitted when
-    -- unknown; the level always shows, `off` included — spec tui: Footer)
+    -- unknown; the level always shows, `off` included — spec tui: Footer).
+    -- No model chosen drops the slash with it: `llama-cpp · off`, never
+    -- a dangling `llama-cpp/`.
+    local name = S.model_name
     local provider = (type(S.cfg) == "table" and S.cfg.provider) or nil
     local level = (type(S.cfg) == "table" and type(S.cfg.reasoning) == "string"
         and S.cfg.reasoning) or "off"
     local model_cell = provider
-        and (provider .. "/" .. (S.model_name or "?") .. " · " .. level)
-        or ((S.model_name or "?") .. " · " .. level)
+        and ((name and (provider .. "/" .. name) or provider) .. " · " .. level)
+        or ((name or "?") .. " · " .. level)
     set_row(L.footer_row, g .. M.footer_stats(left, dim(model_cell), width))
 end
 
