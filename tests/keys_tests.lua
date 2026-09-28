@@ -153,7 +153,7 @@ do
     "_logout_sel", "completion", "completion.*" }
   local in_scope = {}
   for _, s in ipairs(scope) do in_scope[s] = true end
-  local function check_file(path, bag)
+  local function check_file(path, bag, ask_alias)
     local lines = read_lines(path)
     local owner, bad = nil, {}
     for i, line in ipairs(lines) do
@@ -184,13 +184,18 @@ do
           for _ in line:gmatch("[^%.%w]a%.[%a_][%w_]*%s*=[^=]") do hit("ask.*", "alias a") end
           for _ in line:gmatch("[^%.%w]answer%.[%a_][%w_]*%s*=[^=]") do hit("ask.*", "alias answer") end
           for _ in line:gmatch("[^%.%w]comp%.[%a_][%w_]*%s*=[^=]") do hit("completion.*", "alias comp") end
+        elseif ask_alias then
+          for _ in line:gmatch("[^%.%w]a%.[%a_][%w_]*%s*=[^=]") do hit("ask.*", "alias a") end
+          for _ in line:gmatch("[^%.%w]answer%.[%a_][%w_]*%s*=[^=]") do hit("ask.*", "alias answer") end
         end
       end
     end
     return bad
   end
-  local bad = check_file("src/tether/ui.lua", false)
-  for _, b in ipairs(check_file("src/tether/ui/auth.lua", true)) do bad[#bad + 1] = b end
+  local bad = check_file("src/tether/ui.lua", false, false)
+  for _, b in ipairs(check_file("src/tether/ui/auth.lua", true, false)) do bad[#bad + 1] = b end
+  for _, b in ipairs(check_file("src/tether/ui/confirm.lua", true, false)) do bad[#bad + 1] = b end
+  for _, b in ipairs(check_file("src/tether/ui/ask.lua", true, true)) do bad[#bad + 1] = b end
   if #bad > 0 then
     print("T4.1 unattributed writes:\n  " .. table.concat(bad, "\n  "))
   end

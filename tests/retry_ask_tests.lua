@@ -1719,6 +1719,46 @@ end
 -- add-steering-input (T137+)
 -- ============================================================
 
+-- Phase D 4.2b: ui_ask owns the question-block controller (bag/deps).
+do
+  local askm = assert(loadfile("src/tether/ui/ask.lua"))()
+  assert_eq(askm.editor_backspace("ab"), "a", "T4.2b backspace drops one char")
+  assert_eq(askm.editor_backspace(""), "", "T4.2b backspace on empty")
+  local ans = { selected = {} }
+  askm.ask_toggle(ans, { label = "x" })
+  assert_eq(#ans.selected, 1, "T4.2b toggle adds")
+  askm.ask_toggle(ans, { label = "x" })
+  assert_eq(#ans.selected, 0, "T4.2b toggle removes")
+  local synced = 0
+  local deps = { sync = function() synced = synced + 1 end }
+  local bag = { ask = { qidx = 1, sel = 1, mode = "list",
+    questions = { { options = { { label = "a" } } }, { options = { { label = "b" } } } },
+    answers = {} } }
+  askm.ask_advance(bag, deps)
+  assert_eq(bag.ask.qidx, 2, "T4.2b advance walks questions")
+  assert_eq(synced, 1, "T4.2b advance syncs the tail")
+  -- esc in list mode cancels through resolve (stub turn records it)
+  local finished, answered = 0, nil
+  local rdeps = { askmod = { CANCELLED_TEXT = "cancelled",
+      summary = function() return "s" end },
+    turn = { finish = function() finished = finished + 1 end,
+      answer = function(_, a) answered = a return true end,
+      continue = function() return true end },
+    on_event = function() end, sync = function() end,
+    paint = function() end, bump = function() end,
+    settle = function() end, note = function() end }
+  local cbag = { ask = { id = "q1", questions = {}, answers = {} }, cfg = {} }
+  askm.handle_ask_key(cbag, rdeps, { kind = "esc" })
+  assert_eq(cbag.ask, nil, "T4.2b esc clears the block")
+  assert_eq(finished, 1, "T4.2b cancel finishes the turn")
+  assert_true(answered.cancelled, "T4.2b cancellation reaches the agent")
+  -- facade parity: proxies route into the modules, keyboard stays put
+  local ui = dofile("src/tether/ui.lua")
+  assert_eq(type(ui._ask.handle_ask_key), "function", "T4.2b facade loads ui_ask")
+  assert_eq(type(ui._confirm.handle_confirmation_key), "function", "T4.2b facade loads ui_confirm")
+  print("T4.2b ui_ask controller: OK")
+end
+
 
 if failed > 0 then
     os.exit(1)

@@ -26,6 +26,7 @@ ui_ask_view src/tether/ui/ask_view.lua
 ui_busy src/tether/ui/busy.lua
 ui_auth src/tether/ui/auth.lua
 ui_confirm src/tether/ui/confirm.lua
+ui_ask src/tether/ui/ask.lua
 transcript src/tether/transcript.lua
 commands src/tether/commands.lua
 turn src/tether/turn.lua
@@ -109,6 +110,8 @@ ui_busy
 ui_auth
 ## ui_confirm: one-shot confirmation menu (src/tether/ui/confirm.lua)
 ui_confirm
+## ui_ask: question-block controller (src/tether/ui/ask.lua)
+ui_ask
 ui
 ## config_schema: defaults, merge, config-file writers (src/tether/config_schema.lua)
 config_schema

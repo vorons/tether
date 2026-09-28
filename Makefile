@@ -103,6 +103,7 @@ test: tether
 	@luac -p src/tether/ui/palette.lua
 	@luac -p src/tether/ui/auth.lua
 	@luac -p src/tether/ui/confirm.lua
+	@luac -p src/tether/ui/ask.lua
 	@luac -p src/tether/transcript.lua
 	@luac -p src/tether/commands.lua
 	@luac -p src/tether/turn.lua

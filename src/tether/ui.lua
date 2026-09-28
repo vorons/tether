@@ -94,6 +94,16 @@ if type(M._confirm) ~= "table" then
     M._confirm = (chunk and chunk()) or {}
 end
 
+-- ui_ask: the question-block controller — cursor/answer state machine,
+-- editors, submit/cancel (embedded global `ui_ask`, loadfile fallback for
+-- tests/dev). Same M-field pattern; the view stays in ui_ask_view and the
+-- keyboard in the 2.2 key table.
+M._ask = _G.ui_ask
+if type(M._ask) ~= "table" then
+    local chunk = loadfile("src/tether/ui/ask.lua")
+    M._ask = (chunk and chunk()) or {}
+end
+
 -- ============================================================
 -- ANSI
 -- ============================================================
@@ -3803,6 +3813,40 @@ local function after_turn_settle()
     drain_followups()
 end
 
+-- Impure edge for ui_confirm, built per call. M-field (200-locals limit);
+-- defined after after_turn_settle so every upvalue resolves.
+function M._confirm_deps()
+    return {
+        turn = turn,
+        agent = rawget(_G, "agent"),
+        on_event = handle_agent_event,
+        sync = sync_tail,
+        paint = paint,
+        bump = bump_transcript,
+        settle = after_turn_settle,
+        note = function(text) transcript.append({ role = "system", text = text }) end,
+        layout = layout,
+        content_width = M._content_width,
+        ensure = ensure_index,
+        row_text = row_text,
+        digits = CONFIRM_DIGITS,
+    }
+end
+
+-- Impure edge for ui_ask, built per call. M-field (200-locals limit).
+function M._ask_deps()
+    return {
+        askmod = ask,
+        turn = turn,
+        on_event = handle_agent_event,
+        sync = sync_tail,
+        paint = paint,
+        bump = bump_transcript,
+        settle = after_turn_settle,
+        note = function(text) transcript.append({ role = "system", text = text }) end,
+    }
+end
+
 local function commit_input()
     local text = S.input
     if text:match("^%s*$") then
@@ -4184,386 +4228,53 @@ end
 -- the freeform answer and an option's note — and they only ever commit on
 -- Enter; Esc closes the editor without cancelling the question set.
 
+-- Phase D 4.2b proxies: the ask controller lives in ui_ask (bag/deps)
+-- with identical names, so the 4.1 OWN block is untouched; the 2.2 key
+-- table keeps owning the keyboard.
 -- Drop the last UTF-8 codepoint from an editor buffer.
 local function editor_backspace(text)
-    if text == nil or text == "" then return "" end
-    local i = #text
-    while i > 0 do
-        local b = text:byte(i)
-        if b < 0x80 or b >= 0xC0 then break end
-        i = i - 1
-    end
-    return text:sub(1, i - 1)
+    return M._ask.editor_backspace(text)
 end
 
 local function ask_question()
-    local a = S.ask
-    return a and a.questions and a.questions[a.qidx] or nil
+    return M._ask.ask_question(S)
 end
 
 local function ask_answer()
-    local a = S.ask
-    if not a then return nil end
-    a.answers[a.qidx] = a.answers[a.qidx] or { selected = {}, other = "", notes = {} }
-    return a.answers[a.qidx]
+    return M._ask.ask_answer(S)
 end
 
 -- Toggle one option of a multi question, keeping toggle order.
 local function ask_toggle(answer, option)
-    if not (answer and option) then return end
-    local selected = answer.selected or {}
-    for i, label in ipairs(selected) do
-        if label == option.label then
-            table.remove(selected, i)
-            answer.selected = selected
-            return
-        end
-    end
-    selected[#selected + 1] = option.label
-    answer.selected = selected
+    return M._ask.ask_toggle(answer, option)
 end
 
 -- Close the block and hand the answer (or the cancellation) to the agent, then
 -- resume the turn exactly the way resolve_confirmation does. A cancellation is
 -- an answer the model can act on — the turn continues either way.
 local function resolve_ask(cancelled)
-    local a = S.ask
-    if not a then return end
-    local questions, answers = a.questions or {}, a.answers or {}
-    S.ask = nil
-    transcript.append({
-        role = "system",
-        text = "→ ask: " .. (cancelled and ask.CANCELLED_TEXT or ask.summary(questions, answers)),
-    })
-    turn.finish(S)
-    local ok, err = turn.answer(a.id,
-        cancelled and { cancelled = true } or answers, S.cfg, handle_agent_event)
-    if not ok and err then S.error_banner = tostring(err) end
-    bump_transcript()
-    sync_tail()
-
-    local ok2, err2 = turn.continue(S, S.cfg, S.api_key or "", handle_agent_event, function()
-        sync_tail()
-        paint(true)
-    end)
-    if not ok2 and err2 then S.error_banner = tostring(err2) end
-    bump_transcript()
-    sync_tail()
-    after_turn_settle()
+    return M._ask.resolve_ask(S, M._ask_deps(), cancelled)
 end
 
 -- The current question is answered: move to the next one, or — on the last
 -- question of a multi-question set — open the Confirm phase. Single-question
 -- sets submit immediately (no confirm phase).
 local function ask_advance()
-    local a = S.ask
-    if not a then return end
-    if a.qidx < #a.questions then
-        a.qidx = a.qidx + 1
-        a.sel = 1
-        a.mode = "list"
-        a.note_sel = nil
-        a.editor = ""
-        sync_tail()
-    elseif #a.questions > 1 then
-        a.phase = "confirm"
-        a.mode = "list"
-        a.note_sel = nil
-        a.editor = ""
-        sync_tail()
-    else
-        resolve_ask(false)
-    end
+    return M._ask.ask_advance(S, M._ask_deps())
 end
 
 local function handle_ask_key(k)
-    local a = S.ask
-    if not a then return end
-    local q = ask_question()
-    if not q then resolve_ask(true); return end
-    local n = #q.options
-    local freeform_row = n + 1
-    local answer = ask_answer()
-
-    -- --- confirm phase: review the whole set, submit or bail -------------
-    if a.phase == "confirm" then
-        if k.kind == "enter" then
-            resolve_ask(false) -- submit the whole committed set
-        elseif k.kind == "esc" then
-            resolve_ask(true)  -- cancel everything, same as Esc in a question
-        elseif (k.kind == "tab")
-            or (k.kind == "special" and (k.name == "left" or k.name == "right")) then
-            -- back to the questions, answers preserved; ←/→ walk tabs, so →
-            -- wraps from Confirm to the first question and ← returns to the last
-            a.phase = "questions"
-            a.mode = "list"
-            a.note_sel = nil
-            a.editor = ""
-            if k.kind == "special" and k.name == "right" then a.qidx = 1 end
-            sync_tail()
-        end
-        return
-    end
-
-    -- question tabs: → on the last question of a multi-question set opens the
-    -- Confirm phase; single-question sets have no confirm phase, so their Tab
-    -- keeps the note/freeform-editor meaning
-    if k.kind == "special" and k.name == "right" and a.qidx >= #a.questions
-        and #a.questions > 1 then
-        a.phase = "confirm"
-        sync_tail()
-        return
-    end
-    if k.kind == "tab" and a.qidx >= #a.questions and #a.questions > 1 then
-        a.phase = "confirm"
-        sync_tail()
-        return
-    end
-
-    -- --- editors: characters and backspace edit the buffer ----------------
-    if a.mode == "other" or a.mode == "note" then
-        if k.kind == "esc" then
-            -- discard this editor session's edits; the set stays open
-            a.mode = "list"
-            a.note_sel = nil
-            a.editor = ""
-            sync_tail()
-            return
-        end
-        if k.kind == "enter" then
-            local text = a.editor or ""
-            if a.mode == "other" then
-                answer.other = text
-            else
-                local opt = q.options[a.note_sel]
-                if opt then
-                    if text ~= "" then answer.notes[opt.label] = text
-                    else answer.notes[opt.label] = nil end
-                end
-            end
-            a.mode = "list"
-            a.note_sel = nil
-            a.editor = ""
-            sync_tail()
-            return
-        end
-        if k.kind == "backspace" then
-            a.editor = editor_backspace(a.editor)
-            sync_tail()
-            return
-        end
-        if k.kind == "text" then
-            a.editor = (a.editor or "") .. (k.char or "")
-            sync_tail()
-            return
-        end
-        if k.kind == "paste" then
-            a.editor = (a.editor or "") .. ((k.text or ""):gsub("[%r%n]+", " "))
-            sync_tail()
-            return
-        end
-        return
-    end
-
-    -- --- list mode -------------------------------------------------------
-    if k.kind == "esc" then resolve_ask(true); return end
-    if k.kind == "special" then
-        if k.name == "up" then
-            a.sel = math.max(1, a.sel - 1)
-            sync_tail()
-        elseif k.name == "down" then
-            a.sel = math.min(freeform_row, a.sel + 1)
-            sync_tail()
-        elseif k.name == "left" and a.qidx > 1 then
-            -- back to the previous question, its answer still in place
-            a.qidx = a.qidx - 1
-            a.sel = 1
-            sync_tail()
-        elseif k.name == "right" and a.qidx < #a.questions then
-            -- on to the next question: an unanswered one keeps its place, an
-            -- answered one keeps its answer
-            a.qidx = a.qidx + 1
-            a.sel = 1
-            sync_tail()
-        end
-        return
-    end
-    if k.kind == "tab" then
-        -- Tab edits the highlighted row: a note on an option, the freeform
-        -- answer on the freeform row (which Enter submits once it holds text)
-        if a.sel <= n then
-            local opt = q.options[a.sel]
-            a.mode = "note"
-            a.note_sel = a.sel
-            a.editor = (answer.notes and answer.notes[opt.label]) or ""
-            sync_tail()
-        elseif a.sel == freeform_row then
-            a.mode = "other"
-            a.editor = answer.other or ""
-            sync_tail()
-        end
-        return
-    end
-    if k.kind == "enter" then
-        if a.sel == freeform_row then
-            if answer.other and answer.other ~= "" then
-                ask_advance() -- a committed freeform answer is the answer
-            else
-                a.mode = "other"
-                a.editor = ""
-                sync_tail()
-            end
-            return
-        end
-        if a.sel <= n then
-            if q.multi then
-                -- Enter accepts the toggled selection and moves on; Space and
-                -- digits are what toggle
-                ask_advance()
-            else
-                answer.selected = { q.options[a.sel].label }
-                ask_advance()
-            end
-        end
-        return
-    end
-    if k.kind == "text" then
-        local c = k.char or ""
-        if c == " " then
-            -- Space picks the highlighted option: on a single question it
-            -- selects and moves on (like a digit), on a multi question it
-            -- toggles without submitting. The freeform row is never picked
-            -- by Space -- Enter opens its editor there.
-            if a.sel <= n then
-                if q.multi then
-                    ask_toggle(answer, q.options[a.sel])
-                    sync_tail()
-                else
-                    answer.selected = { q.options[a.sel].label }
-                    ask_advance()
-                end
-            end
-            return
-        end
-        local digit = tonumber(c)
-        if digit and digit >= 1 and digit <= n then
-            local opt = q.options[digit]
-            if q.multi then
-                ask_toggle(answer, opt)
-                sync_tail()
-            else
-                a.sel = digit
-                answer.selected = { opt.label }
-                ask_advance()
-            end
-        end
-        return
-    end
+    return M._ask.handle_ask_key(S, M._ask_deps(), k)
 end
 
+-- Phase D 4.2b proxy: the controller lives in ui_confirm (bag/deps);
+-- the 2.2 key table keeps owning the keyboard.
 local function resolve_confirmation(decision)
-    local detail = S.confirmation and S.confirmation.detail
-    -- palette-only R3/R6: every decision clears the menu.
-    S.confirmation = nil
-    S.confirmation_sel = 1
-    if detail and agent then
-        local needs_resume = true
-        local ok, err = turn.confirm(detail.id, decision, S.cfg, handle_agent_event)
-        if not ok and err then S.error_banner = tostring(err) end
-        transcript.append({
-            role = "system",
-            text = "→ confirmation: " .. decision .. " (" .. detail.name .. ")",
-        })
-        if decision == "cancel" then needs_resume = false end
-        if needs_resume then
-            -- resume the agent loop after confirmation; turn owns begin/finish
-            local ok2, err2 = turn.continue(S, S.cfg, S.api_key or "", handle_agent_event, function()
-                sync_tail()
-                paint(true)
-            end)
-            if not ok2 and err2 then S.error_banner = tostring(err2) end
-        end
-        after_turn_settle()
-    end
-    bump_transcript() -- the decision line appended above
-    sync_tail()       -- menu gone, back to the idle input box
+    return M._confirm.resolve_confirmation(S, M._confirm_deps(), decision)
 end
 
 local function handle_confirmation_key(k)
-    if k.kind == "esc" then
-        resolve_confirmation("cancel")
-        return
-    end
-    if k.kind == "enter" then
-        local sel = S.confirmation_sel
-        -- 5 options (palette-only)
-        local dec = { [1]="allow", [2]="session", [3]="always", [4]="deny", [5]="cancel" }
-        resolve_confirmation(dec[sel] or "deny")
-        return
-    end
-    if k.kind == "text" then
-        local c = k.char
-        -- palette-only T2: digit shortcuts 1..5 (plus legacy y/a/A/n)
-        local digit = tonumber(c)
-        if digit and CONFIRM_DIGITS[digit] then
-            resolve_confirmation(CONFIRM_DIGITS[digit])
-        elseif c == "y" then resolve_confirmation("allow")
-        elseif c == "n" then resolve_confirmation("deny")
-        elseif c == "a" then resolve_confirmation("session")
-        elseif c == "A" then resolve_confirmation("always")
-        end
-        return
-    end
-    if k.kind == "special" then
-        if k.name == "up" then
-            local n = #((S.confirmation and S.confirmation.options) or {})
-            if n > 0 then
-                S.confirmation_sel = math.max(1, S.confirmation_sel - 1)
-                sync_tail() -- selection lives in the menu's rows
-            end
-        elseif k.name == "down" then
-            local n = #((S.confirmation and S.confirmation.options) or {})
-            if n > 0 then
-                S.confirmation_sel = math.min(n, S.confirmation_sel + 1)
-                sync_tail() -- selection lives in the menu's rows
-            end
-        end
-        return
-    end
-    if k.kind == "mouse" and k.name == "press" then
-        -- options are rendered inside the transcript flow; match by column band
-        local c = S.confirmation
-        if c and c.options and #c.options > 0 then
-            local L = layout()
-            local cw = M._content_width(L.w)
-            local total = ensure_index(cw)
-            -- options are the last block lines except the trailing
-            -- confirm-menu-redesign blank + hint rows (2 lines)
-            local above = total - #c.options - 2
-            -- k.row is a SCREEN row; map it to a transcript line index the
-            -- same way the tool-row click below does (mixing screen rows with
-            -- line indices picked the wrong option, i.e. the wrong verdict).
-            local bottom = math.min(total, total - S.scroll)
-            if bottom < 1 then bottom = 1 end
-            local top = bottom - L.transcript_h + 1
-            if top < 1 then top = 1 end
-            if k.row and k.row >= L.transcript_row
-                and k.row <= L.transcript_row + L.transcript_h - 1 then
-                local idx = top + (k.row - L.transcript_row)
-                local text = (idx >= above + 1 and idx <= total)
-                    and row_text(idx, cw) or ""
-                for i, opt in ipairs(c.options) do
-                    if text:find(opt:sub(1, 10), 1, true) then
-                        S.confirmation_sel = i
-                        local dec = { [1]="allow", [2]="session", [3]="always",
-                                      [4]="deny", [5]="cancel" }
-                        resolve_confirmation(dec[i] or "deny")
-                        break
-                    end
-                end
-            end
-        end
-    end
+    return M._confirm.handle_confirmation_key(S, M._confirm_deps(), k)
 end
 
 -- Phase B 2.2: handle_key routes through ui_keys.route/dispatch. These
