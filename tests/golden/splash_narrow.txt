@@ -1,0 +1,10 @@
+[38;2;105;224;152m Tether[0m
+
+[90m v9.9-test[0m
+
+[38;2;105;224;152m [Context][0m
+[2m  ~/.tether/AGENTS.m[0m
+[2m  d[0m
+
+[38;2;105;224;152m [Skills][0m
+[2m  review, deploy[0m

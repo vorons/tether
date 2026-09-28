@@ -2284,49 +2284,7 @@ int main(int argc, char **argv)
 
     int rc = 0;
     struct { const char *src; const char *name; } mods[] = {
-        /* provider_common first: session/agent resolve their JSON helpers to it */
-        { provider_common_lua,    "provider_common"    },
-        /* provider_catalog next: api/config/ui resolve presets from it —
-           must precede every module that reads it (config, ui, api) */
-        { provider_catalog_lua, "provider_catalog" },
-        /* retry: pure policy module api/agent apply (see src/tether/retry.lua) */
-        { retry_lua,   "retry"   },
-        { session_lua, "session" },
-        { diff_lua,   "diff"   },
-        /* ask: the structured-question rules ui/agent apply (src/tether/ask.lua) */
-        { ask_lua,    "ask"    },
-        /* confirm_policy: pure should_confirm/approve_key policy (src/tether/confirm_policy.lua) */
-        { confirm_policy_lua, "confirm_policy" },
-        /* auth: OAuth/API-key store for /login /logout (src/tether/auth.lua) */
-        { auth_lua, "auth" },
-        /* reactor: single-threaded event loop over stdin+transport+timers */
-        { reactor_lua, "reactor" },
-        /* transcript: visible conversation model; ui loads it before State */
-        { transcript_lua, "transcript" },
-        /* commands: session lifecycle + slash side effects (src/tether/commands.lua) */
-        { commands_lua, "commands" },
-        /* turn: control facade over agent; abort seam + busy reset (src/tether/turn.lua) */
-        { turn_lua, "turn" },
-        { ui_lua,     "ui"     },
-        { config_lua, "config" },
-        { tools_lua,  "tools"  },
-        /* subagent: child-run orchestrator for the subagent tool */
-        { subagent_lua,  "subagent"  },
-        /* provider_catalog: preset table api/config/ui resolve (Tier-A adds no modules) */
-        { provider_openai_lua,    "provider_openai"    },
-        { provider_anthropic_lua, "provider_anthropic" },
-        { provider_gemini_lua,    "provider_gemini"    },
-        /* Tier-B adapters (own wire/auth, before api) */
-        { provider_azure_openai_lua,          "provider_azure_openai"          },
-        { provider_amazon_bedrock_lua,        "provider_amazon_bedrock"        },
-        { provider_google_vertex_lua,         "provider_google_vertex"         },
-        { provider_cloudflare_ai_gateway_lua, "provider_cloudflare_ai_gateway" },
-        { provider_radius_lua,                "provider_radius"                },
-        { provider_openai_codex_lua,          "provider_openai_codex"          },
-        { api_lua,    "api"    },
-        { context_lua, "context" },
-        { agent_lua,  "agent"  },
-        { app_lua,    "app"    },
+#include "embed_mods.inc"
     };
     for (size_t i = 0; i < sizeof(mods)/sizeof(mods[0]); i++) {
         if (load_module(L, mods[i].src, mods[i].name) != 0) { rc = 1; break; }

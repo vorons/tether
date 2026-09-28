@@ -1,0 +1,15 @@
+accent=[38;2;105;224;152mAb[0m
+warn=[33;1mAb[0m
+error=[31;1mAb[0m
+success=[32mAb[0m
+dim=[2mAb[0m
+muted=[90mAb[0m
+italic=[3mAb[0m
+reverse=[7mAb[0m
+bold=[1mAb[0m
+comment=[2;38mAb[0m
+string=[32mAb[0m
+number=[33mAb[0m
+keyword=[36;1mAb[0m
+code=[38;2;180;142;173mAb[0m
+heading=[36;1mAb[0m

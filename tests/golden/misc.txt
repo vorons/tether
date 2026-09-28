@@ -1,0 +1,5 @@
+kb:auto
+kb:kitty
+strip:red
+ascii:↑↓→
+tilde:/tmp/x

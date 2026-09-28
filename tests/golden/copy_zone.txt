@@ -1,0 +1,6 @@
+[2mtype[0m [90mfilter[0m  [2m↑↓[0m [90mselect[0m  [2menter[0m [90mrun[0m  [2mtab[0m [90minsert[0m  [2mesc[0m [90mclose[0m
+[2m↑↓[0m [90mselect[0m  [2menter[0m [90msubmit[0m  [2mesc[0m [90mdismiss[0m
+[once]     allow once | [session]  allow until the session ends | [always]   save to auto_approve | [deny]     decline
+allow,session,always,deny,cancel
+login is interactive only
+→ thinking: medium

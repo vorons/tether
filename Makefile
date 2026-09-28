@@ -7,7 +7,14 @@ CFLAGS  ?= -std=c11 -Wall -Wextra -Werror -O2 -D_POSIX_C_SOURCE=200809L
 
 LUA_DIR = vendor/lua-5.4.6/src
 EMBED_OUT = src/host/embed.c
-LUA_MODS = src/tether/app.lua src/tether/ui.lua src/tether/transcript.lua src/tether/commands.lua src/tether/turn.lua src/tether/config.lua src/tether/session.lua src/tether/api.lua src/tether/agent.lua src/tether/tools.lua src/tether/subagent.lua src/tether/diff.lua src/tether/retry.lua src/tether/ask.lua src/tether/confirm_policy.lua src/tether/auth.lua src/tether/reactor.lua src/tether/providers/common.lua src/tether/providers/catalog.lua src/tether/providers/openai.lua src/tether/providers/anthropic.lua src/tether/providers/gemini.lua src/tether/providers/azure-openai.lua src/tether/providers/amazon-bedrock.lua src/tether/providers/google-vertex.lua src/tether/providers/cloudflare-ai-gateway.lua src/tether/providers/radius.lua src/tether/providers/openai-codex.lua
+# Module registration is generated from tools/embed_order.txt (single source
+# of truth). GNU make remakes the include first and re-execs, so a fresh
+# clone and an edited order file both work with no hand edits here.
+include build/embed_list.mk
+EMBED_GEN = tools/gen_embed.lua tools/embed_order.txt
+build/embed_list.mk src/host/embed_mods.inc: $(EMBED_GEN)
+	@mkdir -p build
+	@lua tools/gen_embed.lua tools/embed_order.txt build/embed_list.mk src/host/embed_mods.inc
 
 LUA_SRCS = lapi.c lauxlib.c lbaselib.c lcode.c lcorolib.c lctype.c \
            ldblib.c ldebug.c ldo.c ldump.c lfunc.c lgc.c linit.c \
@@ -83,44 +90,22 @@ build/aho_corasick.o: $(KREP_DIR)/aho_corasick.c
 $(LUA_DIR)/%.o: $(LUA_DIR)/%.c
 	$(CC) $(CFLAGS) -I$(LUA_DIR) -DLUA_USE_POSIX -c $< -o $@
 
-$(EMBED_OUT): $(LUA_MODS) tools/embed.lua
-	@lua tools/embed.lua $(EMBED_OUT) \
-		app_lua src/tether/app.lua \
-		ui_lua src/tether/ui.lua \
-		transcript_lua src/tether/transcript.lua \
-		commands_lua src/tether/commands.lua \
-		turn_lua src/tether/turn.lua \
-		config_lua src/tether/config.lua \
-		session_lua src/tether/session.lua \
-		provider_common_lua src/tether/providers/common.lua \
-		provider_catalog_lua src/tether/providers/catalog.lua \
-		provider_openai_lua src/tether/providers/openai.lua \
-		provider_anthropic_lua src/tether/providers/anthropic.lua \
-		provider_gemini_lua src/tether/providers/gemini.lua \
-		provider_azure_openai_lua src/tether/providers/azure-openai.lua \
-		provider_amazon_bedrock_lua src/tether/providers/amazon-bedrock.lua \
-		provider_google_vertex_lua src/tether/providers/google-vertex.lua \
-		provider_cloudflare_ai_gateway_lua src/tether/providers/cloudflare-ai-gateway.lua \
-		provider_radius_lua src/tether/providers/radius.lua \
-		provider_openai_codex_lua src/tether/providers/openai-codex.lua \
-		api_lua src/tether/api.lua \
-		retry_lua src/tether/retry.lua \
-		ask_lua src/tether/ask.lua \
-		confirm_policy_lua src/tether/confirm_policy.lua \
-		auth_lua src/tether/auth.lua \
-		reactor_lua src/tether/reactor.lua \
-		context_lua src/tether/context.lua \
-		agent_lua src/tether/agent.lua \
-		tools_lua src/tether/tools.lua \
-		subagent_lua src/tether/subagent.lua \
-		diff_lua src/tether/diff.lua
+$(EMBED_OUT): $(LUA_MODS) tools/embed.lua build/embed_list.mk src/host/embed_mods.inc
+	@lua tools/embed.lua $(EMBED_OUT) $(EMBED_ARGS)
 
 test: tether
 	@luac -p src/tether/app.lua
 	@luac -p src/tether/ui.lua
+	@luac -p src/tether/ui/copy.lua
+	@luac -p src/tether/ui/markdown.lua
+	@luac -p src/tether/ui/highlight.lua
+	@luac -p src/tether/ui/keys.lua
+	@luac -p src/tether/ui/palette.lua
 	@luac -p src/tether/transcript.lua
 	@luac -p src/tether/commands.lua
 	@luac -p src/tether/turn.lua
+	@luac -p src/tether/config_schema.lua
+	@luac -p src/tether/config_auth.lua
 	@luac -p src/tether/config.lua
 	@luac -p src/tether/session.lua
 	@luac -p src/tether/api.lua
@@ -139,6 +124,9 @@ test: tether
 	@luac -p src/tether/retry.lua
 	@luac -p src/tether/ask.lua
 	@luac -p src/tether/confirm_policy.lua
+	@luac -p src/tether/compression.lua
+	@luac -p src/tether/projection.lua
+	@luac -p src/tether/approval.lua
 	@luac -p src/tether/auth.lua
 	@luac -p src/tether/reactor.lua
 	@luac -p src/tether/context.lua
@@ -147,9 +135,11 @@ test: tether
 	@luac -p src/tether/diff.lua
 	@echo "=== luac ok ==="
 	@LUA_HOME=$$(mktemp -d); rm -rf "$$LUA_HOME"; mkdir -p "$$LUA_HOME"; \
-		HOME="$$LUA_HOME" TETHER_HOME="$$LUA_HOME" lua tests/lua_tests.lua; rc=$$?; \
-		rm -rf "$$LUA_HOME"; \
-		if [ $$rc -ne 0 ]; then exit $$rc; fi
+		for t in tests/*_tests.lua; do \
+			case $$t in tests/context_tests.lua) continue;; esac; \
+			HOME="$$LUA_HOME" TETHER_HOME="$$LUA_HOME" lua $$t || exit $$?; \
+		done; \
+		rm -rf "$$LUA_HOME"
 	@CTX_H=$$(mktemp -d); CTX_W=$$(mktemp -d); \
 		rm -rf "$$CTX_H" "$$CTX_W"; mkdir -p "$$CTX_H" "$$CTX_W"; \
 		HOME="$$CTX_H" TETHER_TEST_WORKSPACE="$$CTX_W" lua tests/context_tests.lua; rc=$$?; \

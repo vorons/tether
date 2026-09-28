@@ -1,0 +1,2 @@
+type filter  ↑↓ select  enter run  tab insert  esc close
+[2mtype[0m [90mfilter[0m  [2m↑↓[0m [90mselect[0m  [2menter[0m [90mrun[0m  [2mtab[0m [90minsert[0m  [2mesc[0m [90mclose[0m

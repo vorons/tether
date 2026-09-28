@@ -31,34 +31,6 @@ local retry = _G.retry
     end)()
 assert(retry, "agent: cannot load retry")
 
--- dynamic-provider-catalog: catalog lookup for the compaction budget.
--- Shared instance in the binary, loadfile fallback for dev/test runs.
-local catalog = _G.provider_catalog
-    or (function()
-        local chunk = loadfile("src/tether/providers/catalog.lua")
-        return chunk and chunk()
-    end)()
-
--- Per-model context limit: exact (provider, model) hit, else the
--- provider's default model, else nil (caller keeps 32768). A model name
--- matching nothing falls down the chain, never fails.
-local function catalog_max_tokens(cfg)
-    if not (catalog and catalog.get and cfg) then return nil end
-    local entry = catalog.get(cfg.provider)
-    if not (entry and type(entry.models) == "table") then return nil end
-    local want, fallback = cfg.model, entry.model
-    local fb = nil
-    for _, m in ipairs(entry.models) do
-        local id = (type(m) == "table" and m.id) or m
-        local cx = (type(m) == "table" and m.context) or nil
-        if type(cx) == "number" and cx > 0 then
-            if id == want then return cx end
-            if id == fallback then fb = cx end
-        end
-    end
-    return fb
-end
-
 -- add-ask-tool: the structured-question rules (normalisation, answer payload,
 -- transcript summary) live in a pure module — a global in the built binary and
 -- a loadfile fallback for development/plain-lua runs.
@@ -78,6 +50,33 @@ local confirm_policy = _G.confirm_policy
     end)()
 assert(confirm_policy, "agent: cannot load confirm_policy")
 
+-- modular-next-phases E: pure context-compaction policy — a global in the
+-- built binary and a loadfile fallback for development/plain-lua runs.
+-- Execution (LLM summarize call, history swap) stays here in compact_history.
+local compression = _G.compression
+    or (function()
+        local chunk = loadfile("src/tether/compression.lua")
+        return chunk and chunk()
+    end)()
+assert(compression, "agent: cannot load compression")
+
+-- modular-next-phases E: read-only change projection + persistent approval
+-- store — globals in the built binary, loadfile fallbacks for dev/test runs.
+-- Turn control (turn/confirm/answer_ask/continue) stays here.
+local projection = _G.projection
+    or (function()
+        local chunk = loadfile("src/tether/projection.lua")
+        return chunk and chunk()
+    end)()
+assert(projection, "agent: cannot load projection")
+
+local approval = _G.approval
+    or (function()
+        local chunk = loadfile("src/tether/approval.lua")
+        return chunk and chunk()
+    end)()
+assert(approval, "agent: cannot load approval")
+
 -- deepen-core-modules cut 5: turn facade owns the abort seam; agent keeps
 -- M.abort_requested as the flag storage and the four entry points for
 -- print mode / non-UI callers.
@@ -87,9 +86,6 @@ local turn_mod = _G.turn
         return chunk and chunk()
     end)()
 assert(turn_mod, "agent: cannot load turn")
-
--- Bound on a projection's read of the previous content (same bound `read` uses).
-local PREVIEW_READ_MAX = 1024 * 1024
 
 M.history = {}
 M.pending = nil            -- confirmation queue for the current tool-call step
@@ -289,60 +285,9 @@ local function execute_tool(name, args, cfg)
     end
 end
 
-local path_of = confirm_policy.path_of
-local patch_target_path = confirm_policy.patch_target_path
-
--- pretty-transcript-rendering 2.2: a read-only projection of what a write or
--- patch will change. Resolved through the tools helpers, inside the workspace,
--- bounded (1 MiB), never written, never journalled. Any failure returns nil so
--- the call itself proceeds unchanged.
-local function projection_for(tool_name, args, cfg)
-    if not (diff_mod and tools) then return nil end
-    args = args or {}
-    if tool_name == "write" then
-        local target = args.path
-        if type(target) ~= "string" or target == "" then return nil end
-        local abs = tools._resolve(target, cfg)
-        if not tools._within(abs, cfg) then return nil end
-        local st = tether.stat and tether.stat(abs) or nil
-        if st and st.is_dir then return nil end
-        if st and st.size and st.size > PREVIEW_READ_MAX then return nil end
-        local rel = tools._to_rel(abs, cfg)
-        local prior, is_new = "", false
-        if st then
-            local f = io.open(abs, "rb")
-            if not f then return nil end
-            local data = f:read(PREVIEW_READ_MAX + 1) or ""
-            f:close()
-            if #data > PREVIEW_READ_MAX then return nil end
-            prior = data
-        else
-            is_new = true
-        end
-        local old_label = is_new and "/dev/null" or ("a/" .. rel)
-        local new_label = "b/" .. rel
-        local text, counts = diff_mod.unified(prior, args.content or "", old_label, new_label)
-        return { path = rel, kind = is_new and "new" or "overwrite",
-                 diff = text, add = counts.add, del = counts.del,
-                 before = prior, is_new = is_new }
-    elseif tool_name == "patch" then
-        local diffstr = args.patch
-        if type(diffstr) ~= "string" or diffstr == "" then return nil end
-        local target = patch_target_path(args)
-        if not target then return nil end
-        local abs = tools._resolve(target, cfg)
-        if not tools._within(abs, cfg) then return nil end
-        local add, del = 0, 0
-        for line in diffstr:gmatch("[^\n]*") do
-            local p = line:sub(1, 1)
-            if p == "+" and line:sub(1, 3) ~= "+++" then add = add + 1
-            elseif p == "-" and line:sub(1, 3) ~= "---" then del = del + 1 end
-        end
-        return { path = tools._to_rel(abs, cfg), kind = "patch",
-                 diff = diffstr, add = add, del = del }
-    end
-    return nil
-end
+-- pretty-transcript-rendering 2.2: read-only change projection + persistent
+-- approval live in their own modules now (projection.lua, approval.lua);
+-- the turn core below calls in through those tables.
 
 local should_confirm = confirm_policy.should_confirm
 local approve_key = confirm_policy.approve_key
@@ -352,60 +297,10 @@ local function is_session_approved(tool_name, args)
     return confirm_policy.is_session_approved(tool_name, args, M.session_approved)
 end
 
--- Design §6.10: [A] always persists to config with a dated comment.
--- We keep it in a machine-managed side file that config.load merges,
--- instead of rewriting the user's hand-written config.lua.
---
--- The file is EXECUTED at startup (config.load_auto_approve uses loadfile +
--- pcall), so writing an entry means writing Lua source with content the model
--- chose — `run:` entries carry the whole shell command. Interpolating an entry
--- between two quote characters let a quote or backslash in the path end the
--- literal early: approving `write` on `a"b.lua` produced a chunk that no
--- longer compiles, so every grant stored before it stopped applying.
--- %q emits a literal that decodes back to exactly `e`, and the read side uses
--- the same decoder the app uses, so what we re-emit is what gets matched.
---
--- `home` is a parameter, not os.getenv("HOME"): callers resolve it (cfg
--- `_auth_home` in the TUI, the real env in --print), so tests can point a
--- grant at a scratch directory instead of the developer's config.
+-- Design §6.10: [A] always persists to config. Canonical implementations
+-- live in approval.lua; the M.* names below keep the consumed seams.
 function M.persist_approval(tool_name, target, home)
-    if type(home) ~= "string" or home == "" then return nil end
-    if tether.mkdirp(home .. "/.tether") == nil then return nil end
-    local path = home .. "/.tether/auto_approve.lua"
-    local pattern = "^" .. tool_name .. ":" ..
-        tostring(target):gsub("([%^%$%(%)%%%.%[%]%*%+%-%?])", "%%%1") .. "$"
-    local config = rawget(_G, "config")
-    if type(config) ~= "table" or type(config.load_auto_approve) ~= "function" then
-        local chunk = loadfile("src/tether/config.lua")
-        config = (chunk and chunk()) or nil
-    end
-    -- Without a decoder we cannot know what is already in the file, and
-    -- rewriting it from scratch would drop the user's earlier grants.
-    if type(config) ~= "table" or type(config.load_auto_approve) ~= "function" then
-        return nil
-    end
-    local entries = config.load_auto_approve(home)
-    for _, e in ipairs(entries) do
-        if e == pattern then return pattern end -- already present
-    end
-    entries[#entries + 1] = pattern
-    local w = io.open(path, "w")
-    if not w then return nil end
-    w:write("-- added by tether ([A] always) on " .. os.date("%Y-%m-%d") .. "\nreturn {\n")
-    for _, e in ipairs(entries) do
-        w:write("  " .. string.format("%q", e) .. ",\n")
-    end
-    w:write("}\n")
-    w:close()
-    return pattern
-end
-
-local function persist_auto_approve(tool_name, args, cfg)
-    local home = (type(cfg) == "table" and cfg._auth_home) or os.getenv("HOME") or ""
-    local pattern = M.persist_approval(tool_name, path_of(args), home)
-    if not pattern or not cfg then return end
-    cfg.auto_approve = cfg.auto_approve or {}
-    table.insert(cfg.auto_approve, pattern)
+    return approval.persist_approval(tool_name, target, home)
 end
 
 -- Tool-call arguments arrive raw (still JSON-escaped). Exactly one unescape
@@ -420,468 +315,6 @@ local function parse_args(args_str)
     return {}
 end
 
-local function estimate_tokens(history)
-    local total = 0
-    for _, m in ipairs(history) do
-        local c = m.content
-        if type(c) == "string" then total = total + #c / 4
-        elseif type(c) == "table" then
-            for _, tc in ipairs(c) do
-                total = total + #(tc["function"] and (tc["function"].arguments or "") or "") / 4
-            end
-        end
-    end
-    return math.ceil(total)
-end
-
-local function context_flag(cfg, key, default)
-    local ctx = cfg and cfg.context
-    if ctx == nil then return default end
-    local v = ctx[key]
-    if v == nil then return default end
-    if type(v) == "boolean" then return v end
-    return default
-end
-
-local function compaction_thresholds(cfg)
-    local ctx = (cfg and cfg.context) or {}
-    local max_tokens = tonumber(ctx.max_tokens)
-    if not max_tokens then
-        max_tokens = catalog_max_tokens(cfg) or 32768
-    end
-    local fraction = tonumber(ctx.summarize_at)
-    if not fraction or fraction <= 0 or fraction >= 1 then fraction = 0.7 end
-    local reserve = tonumber(ctx.reserve_tokens)
-    if not reserve or reserve < 0 then reserve = 16384 end
-    return max_tokens, fraction, reserve
-end
-
-local function over_threshold(est, max_tokens, fraction, reserve)
-    -- OR of two thresholds: fraction of the budget, or the reply reserve.
-    -- A large reserve can fire first; that is intentional (safety net).
-    return est > fraction * max_tokens or est > max_tokens - reserve
-end
-
-local function should_summarize(history, cfg)
-    local max_tokens, fraction, reserve = compaction_thresholds(cfg)
-    return over_threshold(estimate_tokens(history), max_tokens, fraction, reserve)
-end
-
--- Preflight: project current estimate + incoming prompt cost against the same
--- thresholds, so a single large paste compacts before the turn goes out.
-local function should_summarize_projected(history, prompt_text, cfg)
-    local max_tokens, fraction, reserve = compaction_thresholds(cfg)
-    local prompt_cost = 0
-    if type(prompt_text) == "string" and #prompt_text > 0 then
-        prompt_cost = math.ceil(#prompt_text / 4)
-    end
-    return over_threshold(estimate_tokens(history) + prompt_cost,
-        max_tokens, fraction, reserve)
-end
-
-local function keep_recent_of(cfg)
-    local n = cfg and cfg.context and tonumber(cfg.context.keep_recent_messages)
-    if not n or n < 0 then return 4 end
-    return math.floor(n)
-end
-
--- Split history into system + old span + keep window (walks back over leading
--- tool messages so a tool result is not orphaned from its call).
-local function split_span(history, N)
-    if #history <= N + 1 then return history[1], {}, {} end
-    local keep_from = math.max(2, #history - N + 1)
-    while keep_from > 2 and history[keep_from].role == "tool" do
-        keep_from = keep_from - 1
-    end
-    local old = {}
-    for i = 2, keep_from - 1 do old[#old + 1] = history[i] end
-    local keep = {}
-    for i = keep_from, #history do keep[#keep + 1] = history[i] end
-    return history[1], old, keep
-end
-
-local function truncation_body(old)
-    local parts = {}
-    for _, m in ipairs(old) do
-        local c = m.content
-        if type(c) == "string" then
-            parts[#parts + 1] = m.role .. ": " .. (c:sub(1, 200) .. (c:len() > 200 and "…" or ""))
-        end
-    end
-    return table.concat(parts, "\n")
-end
-
-local SUMMARY_MARKER = "── summary ──"
-local SUMMARY_SPAN_MAX = 2000
-
--- Deterministic summary anchors (adapted from pifydev/compact): facts worth
--- preserving, extracted by plain parsing with no model call. shapes handled:
--- user/assistant string content plus assistant {tool_calls, text} tables where
--- each call is {id, ["function"] = {name, arguments}} with arguments as a JSON
--- string (the history echo form) or a table.
-local ANCHOR_TASK_WORDS = { "fix", "implement", "add", "create", "build",
-    "refactor", "remove", "update", "change", "make", "write", "support",
-    "migrate", "debug", "investigate", "improve", "optimize", "optimise",
-    "optimizing", "optimising", "rename", "delete", "integrate", "wire", "port" }
-local ANCHOR_SCOPE_HINTS = { "instead", "actually", "pivot", "scratch that",
-    "on second thought", "change of plans", "let's not", "no, wait", "no wait" }
-local ANCHOR_PREF_HINTS = { "prefer", "always", "never", "please use",
-    "please don't", "please dont", "make sure", "ensure", "don't use",
-    "dont use", "avoid using", "instead", "keep it", "style:" }
-local ANCHOR_BLOCKER_HINTS = { "fail", "failed", "failing", "fails",
-    "error", "errored", "broken", "cannot", "can't", "cant", "blocked",
-    "crash", "crashed", "crashes", "not working", "unresolved", "still stuck",
-    "doesn't work", "doesnt work", "don't work", "dont work" }
-local ANCHOR_NOISE_FIRST = { ok = true, okay = true, yes = true, no = true,
-    thanks = true, sure = true, go = true, continue = true, proceed = true,
-    next = true, yep = true, nope = true, k = true }
-
--- Lua patterns have no alternation: single words match on word boundaries,
--- multi-word hints match as plain substrings.
-local function anchor_any(lower, hints)
-    for _, h in ipairs(hints) do
-        if h:find("[^%w']") then
-            if lower:find(h, 1, true) then return true end
-        else
-            if lower:find("%f[%a]" .. h .. "%f[%A]") then return true end
-        end
-    end
-    return false
-end
-
-local function anchor_is_noise(text)
-    local t = tostring(text):gsub("^%s+", ""):gsub("%s+$", "")
-    local lower = t:lower()
-    if lower == "do it" then return true end
-    local first = lower:match("^(%a+)")
-    return first ~= nil and ANCHOR_NOISE_FIRST[first] == true
-        and #t < 24
-end
-
-local ANCHOR_GOAL_MAX = 140
-local ANCHOR_LINE_MAX = 120
-
-local function anchor_snippet(text, max)
-    max = max or ANCHOR_GOAL_MAX
-    local line = tostring(text or ""):gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", "")
-    if #line > max then return line:sub(1, max - 1) .. "…" end
-    return line
-end
-
-local function anchor_text(content)
-    if type(content) == "string" then return content end
-    if type(content) == "table" and type(content.text) == "string" then
-        return content.text
-    end
-    return ""
-end
-
-local function anchor_tool_calls(content)
-    local out = {}
-    if type(content) ~= "table" then return out end
-    local list = content.tool_calls
-    if type(list) ~= "table" then
-        -- tolerance: content itself may be the call list
-        if #content > 0 then list = content else return out end
-    end
-    for _, tc in ipairs(list) do
-        if type(tc) == "table" then out[#out + 1] = tc end
-    end
-    return out
-end
-
-local function anchor_call_args(tc)
-    local fn = tc["function"] or tc.fn or {}
-    local args = fn.arguments
-    if type(args) == "string" and args ~= "" then
-        local ok, tbl = pcall(json_parse, args)
-        if ok and type(tbl) == "table" then return fn.name, tbl end
-        return fn.name, {}
-    elseif type(args) == "table" then
-        return fn.name, args
-    end
-    return fn.name, {}
-end
-
-local ANCHOR_WRITE_TOOLS = { write = true, patch = true, edit = true,
-    apply_patch = true, multiedit = true }
-local ANCHOR_READ_TOOLS = { read = true, cat = true }
-
-local function anchor_trim_prefix(paths)
-    if #paths < 2 then return paths end
-    local split = {}
-    for i, p in ipairs(paths) do
-        split[i] = {}
-        for seg in tostring(p):gmatch("[^/\\]+") do split[i][#split[i] + 1] = seg end
-    end
-    local common = 0
-    while true do
-        local seg = split[1][common + 1]
-        if seg == nil then break end
-        local all = true
-        for i = 2, #split do
-            if #split[i] - 1 <= common or split[i][common + 1] ~= seg then
-                all = false break
-            end
-        end
-        if not all then break end
-        common = common + 1
-    end
-    if common == 0 then return paths end
-    local out = {}
-    for i, parts in ipairs(split) do
-        local tail = {}
-        for j = common + 1, #parts do tail[#tail + 1] = parts[j] end
-        out[i] = table.concat(tail, "/")
-    end
-    return out
-end
-
-local function extract_anchors(history)
-    local goal, scope_change = nil, nil
-    local modified, modified_order = {}, {}
-    local read_set, read_order = {}, {}
-    local prefs, commits, blockers = {}, {}, {}
-    local pending_commit = nil
-    local saw_goal = false
-    history = history or {}
-    for _, m in ipairs(history) do
-        local role = m.role
-        if role == "user" then
-            local text = anchor_text(m.content)
-            if text:match("%S") and not anchor_is_noise(text) then
-                local lower = text:lower()
-                if not saw_goal and anchor_any(lower, ANCHOR_TASK_WORDS) then
-                    goal = anchor_snippet(text)
-                    saw_goal = true
-                elseif anchor_any(lower, ANCHOR_SCOPE_HINTS) then
-                    scope_change = anchor_snippet(text)
-                end
-                if #prefs < 6 and not text:match("%?%s*$")
-                    and anchor_any(lower, ANCHOR_PREF_HINTS) then
-                    local hit = text
-                    for line in (tostring(text) .. "\n"):gmatch("([^\n]*)\n") do
-                        if anchor_any(line:lower(), ANCHOR_PREF_HINTS) then
-                            hit = line break
-                        end
-                    end
-                    prefs[#prefs + 1] = anchor_snippet(hit, ANCHOR_LINE_MAX)
-                end
-            end
-        elseif role == "assistant" then
-            for _, tc in ipairs(anchor_tool_calls(m.content)) do
-                local name, args = anchor_call_args(tc)
-                name = type(name) == "string" and name:lower() or ""
-                if name == "run" then
-                    local cmd = type(args.command) == "string" and args.command or ""
-                    local msg = cmd:match("git commit%s[^\n]*%-m%s+[\"']([^\"']+)[\"']")
-                        or cmd:match("git commit%s[^\n]*%-m%s+(%S%S%S+)")
-                    if msg then pending_commit = anchor_snippet(msg, ANCHOR_LINE_MAX) end
-                else
-                    local p = args.path or args.file or args.filename
-                    if type(p) == "string" and p:match("%S") then
-                        p = p:gsub("^%s+", ""):gsub("%s+$", "")
-                        if ANCHOR_WRITE_TOOLS[name] then
-                            if not modified[p] then
-                                modified[p] = true
-                                modified_order[#modified_order + 1] = p
-                            end
-                        elseif ANCHOR_READ_TOOLS[name] then
-                            if not read_set[p] then
-                                read_set[p] = true
-                                read_order[#read_order + 1] = p
-                            end
-                        end
-                    end
-                end
-            end
-        elseif role == "tool" then
-            if pending_commit then
-                local out = anchor_text(m.content)
-                local hash = out:match("%f[%w]([0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][%w]*)%f[^%w]")
-                if hash then
-                    commits[#commits + 1] = hash:sub(1, 8) .. " " .. pending_commit
-                else
-                    commits[#commits + 1] = pending_commit
-                end
-                if #commits >= 4 then
-                    -- keep scanning (pending cleared) but stop growing
-                    pending_commit = nil
-                else
-                    pending_commit = nil
-                end
-            end
-        end
-    end
-    -- Blockers: tail only, an old failure is usually resolved.
-    local tail_from = math.max(1, #history - 23)
-    for i = tail_from, #history do
-        if #blockers >= 4 then break end
-        local m = history[i]
-        if m.role == "tool" or m.role == "user" then
-            local text = anchor_text(m.content)
-            if text:match("%S") then
-                local hit = nil
-                for line in (tostring(text) .. "\n"):gmatch("([^\n]*)\n") do
-                    if anchor_any(line:lower(), ANCHOR_BLOCKER_HINTS) then
-                        hit = line break
-                    end
-                end
-                if m.error or hit then
-                    blockers[#blockers + 1] =
-                        anchor_snippet(hit or text, ANCHOR_LINE_MAX)
-                end
-            end
-        end
-    end
-    local modified_trimmed = anchor_trim_prefix(modified_order)
-    local both = {}
-    for i, p in ipairs(modified_order) do
-        if read_set[p] then both[#both + 1] = modified_trimmed[i] end
-    end
-    local files_read = {}
-    for _, p in ipairs(read_order) do
-        if not modified[p] then files_read[#files_read + 1] = p end
-    end
-    local files_modified = {}
-    for i = 1, math.min(12, #modified_trimmed) do
-        files_modified[#files_modified + 1] = modified_trimmed[i]
-    end
-    return {
-        goal = goal,
-        scope_change = scope_change,
-        files_modified = files_modified,
-        files_both = (function()
-            local b = {}
-            for i = 1, math.min(12, #both) do b[#b + 1] = both[i] end
-            return b
-        end)(),
-        files_read = (function()
-            local r = {}
-            for i = 1, math.min(8, #files_read) do r[#r + 1] = files_read[i] end
-            return r
-        end)(),
-        preferences = prefs,
-        commits = (function()
-            local seen, c = {}, {}
-            for _, v in ipairs(commits) do
-                if not seen[v] then seen[v] = true c[#c + 1] = v end
-                if #c >= 4 then break end
-            end
-            return c
-        end)(),
-        blockers = (function()
-            local seen, b = {}, {}
-            for _, v in ipairs(blockers) do
-                if not seen[v] then seen[v] = true b[#b + 1] = v end
-                if #b >= 4 then break end
-            end
-            return b
-        end)(),
-    }
-end
-
-local function has_anchors(a)
-    return a ~= nil and (a.goal ~= nil or a.scope_change ~= nil
-        or #a.files_modified > 0 or #a.files_read > 0
-        or #a.preferences > 0 or #a.commits > 0 or #a.blockers > 0)
-end
-
-local function format_anchors(a)
-    if not has_anchors(a) then return "" end
-    local lines = {
-        "Preserve these exact facts in the summary — do not drop or generalize them:",
-    }
-    if a.goal then lines[#lines + 1] = "- Task: " .. a.goal end
-    if a.scope_change then
-        lines[#lines + 1] = "- Latest scope change: " .. a.scope_change
-    end
-    if #a.files_modified > 0 then
-        local both = {}
-        for _, f in ipairs(a.files_both) do both[f] = true end
-        local names = {}
-        for _, f in ipairs(a.files_modified) do
-            names[#names + 1] = both[f] and (f .. " (RW)") or f
-        end
-        lines[#lines + 1] = "- Files modified: " .. table.concat(names, ", ")
-    end
-    if #a.files_read > 0 then
-        lines[#lines + 1] = "- Files read: " .. table.concat(a.files_read, ", ")
-    end
-    if #a.preferences > 0 then
-        lines[#lines + 1] = "- Preferences: " .. table.concat(a.preferences, " | ")
-    end
-    if #a.commits > 0 then
-        lines[#lines + 1] = "- Commits: " .. table.concat(a.commits, " | ")
-    end
-    if #a.blockers > 0 then
-        lines[#lines + 1] = "- Open/unresolved: " .. table.concat(a.blockers, " | ")
-    end
-    return table.concat(lines, "\n")
-end
-
-local function anchor_block(history, cfg)
-    if not context_flag(cfg, "anchors", true) then return "" end
-    local ok, a = pcall(extract_anchors, history)
-    if not ok or type(a) ~= "table" then return "" end
-    return format_anchors(a)
-end
-
--- Role-prefixed span for the summary request; tool results / long bodies are
--- bounded so one file read cannot blow the compaction request.
-local function serialize_span(old)
-    local parts = {}
-    for _, m in ipairs(old) do
-        local c = m.content
-        if type(c) == "string" then
-            local body = c
-            if #body > SUMMARY_SPAN_MAX then
-                -- boundary-safe: this span is the body of the compaction request
-                body = common.utf8_prefix(body, SUMMARY_SPAN_MAX) .. "…"
-            end
-            parts[#parts + 1] = m.role .. ": " .. body
-        elseif type(c) == "table" then
-            parts[#parts + 1] = m.role .. ": [tool_calls]"
-        end
-    end
-    return table.concat(parts, "\n")
-end
-
-local function build_summary_messages(old, focus, anchors_text)
-    local prompt = table.concat({
-        "Summarize the conversation for a coding agent that will continue.",
-        "Cover exactly these sections:",
-        "- Goal",
-        "- Constraints",
-        "- Progress",
-        "- Key decisions",
-        "- Next steps",
-        "Be dense and factual. Use only information present in the history.",
-    }, "\n")
-    if type(anchors_text) == "string" and anchors_text ~= "" then
-        prompt = prompt .. "\n\n" .. anchors_text
-    end
-    if type(focus) == "string" and focus ~= "" then
-        prompt = prompt .. "\n\nFocus instructions:\n" .. focus
-    end
-    return {
-        { role = "system", content = prompt },
-        { role = "user", content = "Conversation history:\n" .. serialize_span(old) },
-    }
-end
-
--- Compress old history: keep system + last N messages, summarize the rest.
--- Truncation-only entry kept for tests / callers that do not need the LLM path.
-local function compress_history(history, cfg)
-    local N = keep_recent_of(cfg)
-    local system, old, keep = split_span(history, N)
-    if #old == 0 then return history end
-    local new_history = { system }
-    new_history[#new_history + 1] =
-        { role = "system", content = SUMMARY_MARKER .. "\n" .. truncation_body(old) }
-    for _, m in ipairs(keep) do new_history[#new_history + 1] = m end
-    return new_history
-end
 
 -- add-llm-compaction: full compact path. force=true bypasses the threshold
 -- (manual /compact). Returns (new_history, summary_text, mode) where mode is
@@ -889,26 +322,26 @@ end
 local function compact_history(history, cfg, api_key, focus, force)
     history = history or M.history
     cfg = cfg or {}
-    if not force and not should_summarize(history, cfg) then
+    if not force and not compression.should_summarize(history, cfg) then
         return history, "", "noop"
     end
-    local N = keep_recent_of(cfg)
-    local system, old, keep = split_span(history, N)
+    local N = compression.keep_recent_of(cfg)
+    local system, old, keep = compression.split_span(history, N)
     if #old == 0 then return history, "", "noop" end
 
     local body, mode
     if type(api_key) == "string" and api_key ~= ""
         and api and api.summarize then
         local ok, text = pcall(api.summarize, cfg, api_key,
-            build_summary_messages(old, focus, anchor_block(history, cfg)))
+            compression.build_summary_messages(old, focus, compression.anchor_block(history, cfg)))
         if ok and type(text) == "string" and text ~= "" then
             body, mode = text, "llm"
         end
     end
     if not body then
-        body, mode = truncation_body(old), "truncation"
+        body, mode = compression.truncation_body(old), "truncation"
     end
-    local summary_msg = SUMMARY_MARKER .. "\n" .. body
+    local summary_msg = compression.SUMMARY_MARKER .. "\n" .. body
     local new_history = { system, { role = "system", content = summary_msg } }
     for _, m in ipairs(keep) do new_history[#new_history + 1] = m end
     return new_history, summary_msg, mode
@@ -947,10 +380,10 @@ local function prune_superseded_reads(view)
     local call_count = 0
     for _, m in ipairs(view) do
         if m.role == "assistant" then
-            for _, tc in ipairs(anchor_tool_calls(m.content)) do
-                local name, args = anchor_call_args(tc)
+            for _, tc in ipairs(compression.anchor_tool_calls(m.content)) do
+                local name, args = compression.anchor_call_args(tc)
                 name = type(name) == "string" and name:lower() or ""
-                if ANCHOR_READ_TOOLS[name] and type(tc.id) == "string" then
+                if compression.ANCHOR_READ_TOOLS[name] and type(tc.id) == "string" then
                     local p = args.path or args.file or args.filename
                     if type(p) == "string" and p:match("%S") then
                         p = normalize_prune_path(
@@ -1021,7 +454,7 @@ end
 -- The messages actually sent to the provider: history, or the pruned view
 -- when pruning is enabled. Never assigned back to M.history.
 local function outbound_view(cfg)
-    if not context_flag(cfg, "prune_superseded_reads", false) then
+    if not compression.context_flag(cfg, "prune_superseded_reads", false) then
         return M.history
     end
     local ok, view = pcall(prune_superseded_reads, M.history)
@@ -1598,7 +1031,7 @@ local function main_loop(cfg, api_key, on_event)
             -- holds the large prompt, so a re-check here would compact again
             -- for no gain (one summary call saved).
             M._skip_first_compact = nil
-        elseif should_summarize(outbound_view(cfg), cfg) then
+        elseif compression.should_summarize(outbound_view(cfg), cfg) then
             local compressed, summary, mode =
                 compact_history(M.history, cfg, api_key, nil, true)
             if mode ~= "noop" then
@@ -1673,7 +1106,7 @@ local function main_loop(cfg, api_key, on_event)
             local args = parse_args(tc.arguments)
             -- 2.1/2.2: carry the parsed args on the event and, for write/patch,
             -- a read-only projection of the change the call is about to make.
-            local projection = projection_for(tc.name, args, cfg)
+            local projection = projection.projection_for(tc.name, args, cfg)
             calls[#calls + 1] = { id = tc.id, name = tc.name, args = args,
                                   arguments_str = tc.arguments, projection = projection }
             if on_event then
@@ -1730,8 +1163,8 @@ function M.turn(cfg, api_key, user_text, on_event, skip_user)
     -- preflight: a large paste can overflow the very turn it opens, before
     -- the main loop ever sees an over-threshold history. Project and compact
     -- first so the turn goes out against a fitting window.
-    if not skip_user and context_flag(cfg, "preflight", true)
-        and should_summarize_projected(M.history, user_text, cfg) then
+    if not skip_user and compression.context_flag(cfg, "preflight", true)
+        and compression.should_summarize_projected(M.history, user_text, cfg) then
         local compressed, summary, mode =
             compact_history(M.history, cfg, api_key, nil, true)
         if mode ~= "noop" then
@@ -1768,7 +1201,7 @@ function M.confirm(id, decision, cfg, on_event)
                     M.session_approved[approve_key(call.name, call.args)] = true
                 end
                 if decision == "always" then
-                    persist_auto_approve(call.name, call.args, cfg)
+                    approval.persist_auto_approve(call.name, call.args, cfg)
                 end
                 run_tool_call(cfg, on_event, call.id, call.name, call.args, call.projection)
             elseif decision == "cancel" then
@@ -2007,20 +1440,19 @@ function M.cancel_background(cfg, reason, on_event)
     end
 end
 
-M.estimate_tokens = estimate_tokens
+M.estimate_tokens = compression.estimate_tokens
 M._should_confirm = should_confirm
-M._patch_target_path = patch_target_path
-M._projection_for = projection_for
-M.compress_history = compress_history
+M._projection_for = projection.projection_for
+M.compress_history = compression.compress_history
 M.compact_history = compact_history
-M.should_summarize = should_summarize
-M.should_summarize_projected = should_summarize_projected
-M.extract_anchors = extract_anchors
-M.format_anchors = format_anchors
+M.should_summarize = compression.should_summarize
+M.should_summarize_projected = compression.should_summarize_projected
+M.extract_anchors = compression.extract_anchors
+M.format_anchors = compression.format_anchors
 M.prune_superseded_reads = prune_superseded_reads
 M.parse_args = parse_args
 M.json_parse = json_parse
-M.SUMMARY_MARKER = SUMMARY_MARKER
+M.SUMMARY_MARKER = compression.SUMMARY_MARKER
 M._inject_steer = inject_steer
 M._take_steer = take_steer
 

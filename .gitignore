@@ -3,6 +3,7 @@ build/
 *.o
 *.a
 src/host/embed.c
+src/host/embed_mods.inc
 /tether
 .opencode/
 .pi/

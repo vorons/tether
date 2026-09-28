@@ -1,0 +1,6 @@
+confirm: ⇆ tab  enter submit  esc dismiss
+note: type note  Enter save  Esc discard
+other: type answer  Enter save  Esc discard
+multi: ↑↓ move  Space toggle  Enter accept  Tab note  Esc cancel
+multiset: ⇆ tab  ↑↓ select  enter confirm  esc dismiss
+single: ↑↓ select  enter submit  esc dismiss

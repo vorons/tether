@@ -1,0 +1,5 @@
+[36;1mlocal[0m [36;1mfunction[0m f(x) [2;38m-- comment[0m
+print([32m"hi"[0m) [2;38m-- comment[0m
+[2;38m/* block */[0m [36;1mint[0m x = [33m42[0m;
+[36;1mdef[0m f(): [2;38m# comment[0m
+anything at all
