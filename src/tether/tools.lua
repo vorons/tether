@@ -98,18 +98,6 @@ function M.read(args, cfg)
     return { content = table.concat(out, "\n"), line_count = #lines }
 end
 
-local function is_dir(path)
-    local f = io.open(path, "r")
-    if not f then return false end
-    f:close()
-    -- 2.4: a directory's realpath with a trailing "/" is the directory itself;
-    -- for a file that path cannot resolve (ENOTDIR) so realpath returns nil.
-    local rp = tether.realpath and tether.realpath(path .. "/") or nil
-    if not rp then return false end
-    local norm = (path:gsub("/+$", ""))
-    return rp == norm
-end
-
 local function dir_entries(path)
     -- 1.4: in-process listing via the C host; readdir already returns the
     -- entry names sorted and without `.`/`..` (no `ls -1A` shell-out).
@@ -124,56 +112,152 @@ function M.list(args, cfg)
     return { entries = entries, count = #entries }
 end
 
--- 4.1/4.4: path completion primitive. Takes a user-typed token (may start
--- with @, may be relative), returns a list of matching candidates.
---   prefix = "/abs/path"          → list entries under that absolute dir
---   prefix = "src"                 → workspace-relative candidates matching prefix
---   prefix = "src/"                → list entries inside src/
---   prefix = "@src"               → same as "src", leading @ preserved in UI
--- Absolute tokens starting with "/" or containing ".." are refused (return {}).
--- Results capped at 200 with a truncation flag.
-function M.path_complete(token, cfg)
-    local ws = current_workspace(cfg)
-    -- refuse absolute and traversal tokens
-    if token:sub(1, 1) == "/" then return { candidates = {}, truncated = false } end
-    if token:find("%.%./") or token:find("^%.%./") or token:find("/%.%./")
-        or token:find("^%.%./") then
-        return { candidates = {}, truncated = false }
+-- ============================================================
+-- Picker lookup (spec tui: Path completion)
+-- ============================================================
+
+-- The walk has no .gitignore matcher to lean on: the only implementation in
+-- the tree is krep's, on the C side and reachable only as a content search.
+-- Version-control, dependency and build trees are therefore cut by name.
+local PRUNED_DIRS = {
+    [".git"] = true, [".hg"] = true, [".svn"] = true,
+    ["node_modules"] = true,
+    ["dist"] = true, ["build"] = true, ["target"] = true, ["out"] = true,
+    [".venv"] = true, ["venv"] = true, ["__pycache__"] = true,
+    [".terraform"] = true, [".next"] = true, [".cache"] = true,
+}
+-- The picker runs on the UI's synchronous key path, so the walk's worst case
+-- has to be bounded by both work and time: no cancellation exists here.
+local WALK_MAX_ENTRIES = 20000
+local WALK_BUDGET_MS = 50
+local MAX_CANDIDATES = 200
+
+-- Appends relative paths under `abs` to `out`, directories with a trailing
+-- "/". `st` carries the start time and the stop flag; once set, every frame
+-- bails out immediately.
+local function walk_into(abs, rel, want_hidden, out, st)
+    if st.stopped then return end
+    if #out >= WALK_MAX_ENTRIES or now_ms() - st.t0 >= WALK_BUDGET_MS then
+        st.stopped = true
+        return
     end
-    -- strip leading @
-    local clean = token:gsub("^@", "")
-    -- split into dir part and file prefix
-    local dir, filepfx
-    local slash = clean:match("^(.*)/")
-    if slash then
-        dir = slash
-        filepfx = clean:sub(#slash + 2)
-    else
-        dir = ""
-        filepfx = clean
-    end
-    local abs_dir = (dir == "") and ws or (ws .. "/" .. dir)
-    -- check we are still inside the workspace
-    if not within_workspace(abs_dir, cfg) then
-        return { candidates = {}, truncated = false }
-    end
-    local entries = dir_entries(abs_dir)
-    local candidates = {}
-    local limit = 200
-    local truncated = false
-    for _, e in ipairs(entries) do
-        if e:sub(1, #filepfx) == filepfx then
-            -- 4.4: directories get a trailing / so a second completion lists inside them
-            local base = is_dir(abs_dir .. "/" .. e) and (e .. "/") or e
-            -- The candidate carries the typed directory: completing replaces the
-            -- whole token, so a bare name would drop it (spec tui: Path
-            -- completion — the token becomes `src/tether/agent.lua`).
-            local label = (dir == "") and base or (dir .. "/" .. base)
-            candidates[#candidates + 1] = label
-            if #candidates >= limit then truncated = true break end
+    for _, name in ipairs(dir_entries(abs)) do
+        if name:sub(1, 1) ~= "." or want_hidden then
+            local full = abs .. "/" .. name
+            local shown = rel .. name
+            local s = tether.stat(full)
+            if s then
+                if s.is_dir then
+                    if not PRUNED_DIRS[name] then
+                        out[#out + 1] = shown .. "/"
+                        walk_into(full, shown .. "/", want_hidden, out, st)
+                    end
+                else
+                    out[#out + 1] = shown
+                end
+            end
+            if #out >= WALK_MAX_ENTRIES or now_ms() - st.t0 >= WALK_BUDGET_MS then
+                st.stopped = true
+                return
+            end
         end
     end
-    return { candidates = candidates, truncated = truncated }
+end
+
+local function base_name(path)
+    local trimmed = path:sub(-1) == "/" and path:sub(1, -2) or path
+    return trimmed:match("([^/]+)$") or trimmed
+end
+
+-- nil when the filter is not a subsequence of the entry's own name; otherwise
+-- the gaps it had to skip and whether it matched from the start. Modelled on
+-- the command palette's scorer but local to this module: ui is the layer above
+-- tools, so the lookup cannot call up into it, and file ranking wants a
+-- path-length tie-break the command list never needed.
+local function entry_match(filter, path)
+    if filter == "" then return 0, true end
+    local name = base_name(path):lower()
+    local f = filter:lower()
+    local prefix = name:find(f, 1, true) == 1
+    local pos, gaps = 1, 0
+    for c in f:gmatch("(.)") do
+        local found = name:find(c, pos, true)
+        if not found then return nil end
+        gaps = gaps + (found - pos)
+        pos = found + 1
+    end
+    return gaps, prefix
+end
+
+-- 4.1/4.4: path completion primitive. Takes a user-typed token (may start
+-- with @, may be relative) and returns ranked workspace-relative candidates:
+--   prefix = "ag"                  → any entry named ag* at any depth
+--   prefix = "src"                 → same, from the workspace root
+--   prefix = "src/tether/ag"       → scoped to src/tether/, matched on "ag"
+--   prefix = "@src"                → same as "src", leading @ preserved in UI
+-- Absolute, `~` and traversal tokens are refused (return {}), and the walk
+-- never leaves the workspace. `truncated` says candidates were dropped, either
+-- because the list hit MAX_CANDIDATES or because the walk hit its budget.
+-- `cache` is the previous call's walk result: the picker re-filters on every
+-- keystroke, and passing it back keeps the tree walk to once per session for
+-- as long as the scope and the hidden-entry rule are unchanged.
+function M.path_complete(token, cfg, cache)
+    local ws = current_workspace(cfg)
+    if token:sub(1, 1) == "/" or token:sub(1, 1) == "~" then
+        return { candidates = {}, truncated = false }
+    end
+    if token:find("%.%./") or token:find("^%.%./") or token:find("/%.%./") then
+        return { candidates = {}, truncated = false }
+    end
+    local clean = token:gsub("^@", "")
+    local dir, query = clean:match("^(.*/)(.*)$")
+    if not dir then dir, query = "", clean end
+    local base_abs = (dir == "") and ws or (ws .. "/" .. dir)
+    local base_st = tether.stat(base_abs)
+    if not base_st or not base_st.is_dir then
+        return { candidates = {}, truncated = false }
+    end
+    if not within_workspace(base_abs, cfg) then
+        return { candidates = {}, truncated = false }
+    end
+    -- A dot segment is reachable only when the user typed a dot: in the
+    -- remainder being matched, or in a directory they named outright.
+    local want_hidden = query:sub(1, 1) == "." or dir:sub(1, 1) == "."
+        or dir:find("/%.") ~= nil
+    local key = dir .. "|" .. (want_hidden and "1" or "0")
+    local paths, stopped
+    if cache and cache.key == key then
+        paths, stopped = cache.paths, cache.stopped
+    else
+        paths = {}
+        local st = { t0 = now_ms(), stopped = false }
+        walk_into(base_abs, dir, want_hidden, paths, st)
+        stopped = st.stopped
+        cache = { key = key, paths = paths, stopped = stopped }
+    end
+    local ranked = {}
+    for _, path in ipairs(paths) do
+        local gaps, prefix = entry_match(query, path)
+        if gaps then
+            ranked[#ranked + 1] = { path = path, gaps = gaps, prefix = prefix }
+        end
+    end
+    table.sort(ranked, function(a, b)
+        if a.prefix ~= b.prefix then return a.prefix end
+        if a.gaps ~= b.gaps then return a.gaps < b.gaps end
+        if #a.path ~= #b.path then return #a.path < #b.path end
+        return a.path < b.path
+    end)
+    local candidates = {}
+    local truncated = stopped
+    for i, entry in ipairs(ranked) do
+        if i > MAX_CANDIDATES then
+            truncated = true
+            break
+        end
+        candidates[i] = entry.path
+    end
+    return { candidates = candidates, truncated = truncated, cache = cache }
 end
 
 -- Design §7 glob: *, **, ?, [abc], [!abc]; sort by path; limit 500.

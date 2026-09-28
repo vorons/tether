@@ -942,6 +942,10 @@ M.PALETTE_HINTS = {
                 { key = "enter", act = "run" }, { key = "tab", act = "insert" },
                 { key = "esc", act = "close" } },
     path = { { key = "tab", act = "cycle" }, { key = "esc", act = "restore" } },
+    -- at-file-picker: the "@" preview inserts on Enter and on Tab, so "cycle"
+    -- would lie — it never walks the list without applying.
+    mention = { { key = "type", act = "filter" }, { key = "↑↓", act = "move" },
+                { key = "enter/tab", act = "insert" }, { key = "esc", act = "close" } },
     copy = { { key = "↑↓", act = "select" }, { key = "enter", act = "copy" },
              { key = "esc", act = "close" } },
     resume = { { key = "↑↓", act = "select" }, { key = "enter", act = "resume" },
@@ -1745,7 +1749,14 @@ local function path_complete_tab()
     if tools_mod == nil or tools_mod.path_complete == nil then return end
     local token, token_pos = completion_token()
     if not token or token == "" then return end
-    local r = tools_mod.path_complete(token, { workspace = S.workspace })
+    -- A `@` preview can survive its palette emptying; Tab is a fresh, forcing
+    -- completion, so that session (and its cached walk) is handed over here.
+    local cache = nil
+    if S.completion and S.completion.mention then
+        cache = S.completion.cache
+        S.completion = nil
+    end
+    local r = tools_mod.path_complete(token, { workspace = S.workspace }, cache)
     local cands = (r and r.candidates) or {}
     if #cands == 0 then return end -- no candidates -> input unchanged, no palette
     if #cands == 1 then
@@ -1767,6 +1778,8 @@ local function path_complete_tab()
         comp.tail = S.input:sub(comp.start + #token)
     end
     comp.items = cands
+    comp.cache = r.cache
+    comp.truncated = r.truncated == true
     if not S.palette_active then
         S.palette_mode = "path"
         S.palette_active = true
@@ -1808,6 +1821,91 @@ local function completion_commit()
         S.palette_sel = 1
         palette_sync()
     end
+end
+
+-- ============================================================
+-- at-file-picker: the `@` trigger (spec tui: Path completion)
+-- ============================================================
+-- Typing "@" at the start of a token previews the workspace in the palette
+-- without touching the input: nothing is applied until Enter, and every later
+-- keystroke re-filters the snapshot the first one took. Module fields, not
+-- chunk locals (ui.lua sits at Lua's 200-locals limit).
+
+-- True when the cursor is at a token start: nothing typed yet, or the byte
+-- before it is whitespace. An "@" anywhere else is ordinary text.
+function M._at_token_start()
+    if S.cursor == 0 then return true end
+    return S.input:sub(S.cursor, S.cursor):find("%s") ~= nil
+end
+
+function M._picker_close()
+    S.completion = nil
+    S.palette_active = false
+    S.palette_mode = "command"
+    S.palette_items = {}
+    S.palette_sel = 1
+end
+
+-- Re-rank the token against the walk the session already did. The cache key
+-- (scoped directory + hidden rule) is what tools.path_complete compares, so a
+-- keystroke that only extends the fuzzy remainder costs no filesystem work.
+function M._mention_refilter()
+    local comp = S.completion
+    if not comp or not comp.mention then return end
+    local token, token_pos = completion_token()
+    if not token or token:sub(1, 1) ~= "@" then
+        M._picker_close()
+        return
+    end
+    local tools_mod = M._tools_stub or tools_mod()
+    if not tools_mod or tools_mod.path_complete == nil then
+        M._picker_close()
+        return
+    end
+    comp.start = token_pos
+    local r = tools_mod.path_complete(token, { workspace = S.workspace }, comp.cache)
+    local cands = (r and r.candidates) or {}
+    comp.items = cands
+    comp.cache = (r and r.cache) or comp.cache
+    comp.truncated = (r and r.truncated) == true
+    S.completion = comp
+    S.palette_items = {}
+    for _, c in ipairs(cands) do
+        S.palette_items[#S.palette_items + 1] = { label = c, desc = "" }
+    end
+    S.palette_sel = 1
+    if #cands == 0 then
+        -- Nothing matches yet: hide the palette but keep the session, so the
+        -- next character can reopen it without typing "@" again.
+        S.palette_active = false
+        S.palette_mode = "command"
+        return
+    end
+    S.palette_active = true
+    S.palette_mode = "mention"
+end
+
+function M._mention_open()
+    if S.cfg and S.cfg.ui and S.cfg.ui.path_completion == false then return end
+    local token, token_pos = completion_token()
+    if not token or token:sub(1, 1) ~= "@" then return end
+    S.completion = { start = token_pos, mention = true }
+    M._mention_refilter()
+end
+
+-- Enter/Tab: swap the typed token for "@<candidate>", leave the text after it
+-- alone, and put the cursor directly behind the inserted path.
+function M._mention_accept()
+    local comp = S.completion
+    local it = comp and S.palette_items[S.palette_sel]
+    if not it then return end
+    local token, token_pos = completion_token()
+    if not token then M._picker_close() return end
+    local replace = "@" .. it.label
+    S.input = S.input:sub(1, token_pos - 1) .. replace
+        .. S.input:sub(token_pos + #token)
+    S.cursor = token_pos - 1 + #replace
+    M._picker_close()
 end
 
 -- ============================================================
@@ -3390,6 +3488,7 @@ local function render_palette(L)
         end
     end
     local irow = L.palette_row + paint_win + 1
+    local more = S.completion and S.completion.truncated
     if irow <= L.palette_row + room then
         if q ~= "" then
             local txt = "> " .. q
@@ -3399,8 +3498,13 @@ local function render_palette(L)
                 txt = txt .. string.format(" (%d/%d)", S.palette_sel, n)
             end
             set_row(irow, g .. dim(trunc(" " .. txt, cw)))
-        elseif n > paint_win then
-            set_row(irow, g .. dim(trunc(string.format(" %d/%d", S.palette_sel, n), cw)))
+        elseif n > paint_win or more then
+            -- at-file-picker: a trailing `+` says the ranked list was cut (the
+            -- 200-candidate cap or the walk's own budget), so `1/200` doesn't
+            -- read like the whole tree. Painted even when everything fits: a
+            -- stopped walk hides entries no window would have shown anyway.
+            set_row(irow, g .. dim(trunc(string.format(" %d/%d%s",
+                S.palette_sel, n, more and "+" or ""), cw)))
         end
     end
     if L.palette_h >= 1 then
@@ -6352,6 +6456,54 @@ handle_key = function(k)
                 return
             end
             return
+        elseif S.palette_mode == "mention" then
+            -- at-file-picker: the "@" preview. Arrows move the highlight, the
+            -- input only changes through the user's own keystrokes, and both
+            -- Enter and Tab insert the highlighted path.
+            if k.kind == "tab" then
+                M._mention_accept()
+                return
+            elseif k.kind == "special"
+                and (k.name == "up" or k.name == "down") then
+                local n = #S.palette_items
+                if n > 0 then
+                    if k.name == "up" then
+                        S.palette_sel = math.max(1, S.palette_sel - 1)
+                    else
+                        S.palette_sel = math.min(n, S.palette_sel + 1)
+                    end
+                    if S.completion then S.completion.sel = S.palette_sel end
+                end
+                return
+            elseif k.kind == "special" then
+                -- cursor keys and Delete still edit: the preview lives as long
+                -- as the user types, so it must not lock the input.
+                if k.name == "left" or k.name == "right" or k.name == "home"
+                    or k.name == "end" or k.name == "delete" then
+                    handle_special(k)
+                    M._mention_refilter()
+                end
+                return
+            elseif k.kind == "enter" then
+                M._mention_accept()
+                return
+            elseif k.kind == "esc" then
+                M._picker_close()
+                return
+            elseif k.kind == "text" then
+                input_insert(k.char)
+                M._mention_refilter()
+                return
+            elseif k.kind == "backspace" then
+                input_backspace()
+                M._mention_refilter()
+                return
+            elseif k.kind == "paste" then
+                input_insert(k.text or "")
+                M._mention_refilter()
+                return
+            end
+            return
         elseif S.palette_mode == "path" then
             -- 4.2/4.3: path palette — Tab cycles, Esc restores the token as
             -- typed, Enter commits the selected path; text/backspace keep the
@@ -6451,7 +6603,17 @@ handle_key = function(k)
             end
         end
         S.cursor = #S.input
-    elseif k.kind == "text" then input_insert(k.char)
+    elseif k.kind == "text" then
+        -- at-file-picker: "@" at a token start opens the file preview; while a
+        -- preview session lives, every further character re-filters it.
+        local trigger = k.char == "@" and not S.palette_active
+            and M._at_token_start()
+        input_insert(k.char)
+        if trigger then
+            M._mention_open()
+        elseif S.completion and S.completion.mention then
+            M._mention_refilter()
+        end
     elseif k.kind == "enter" then
         if S.busy and not S.confirmation and not S.ask then
             enqueue_busy("steer")
@@ -6464,7 +6626,9 @@ handle_key = function(k)
         else
             input_insert("\n")
         end
-    elseif k.kind == "backspace" then input_backspace()
+    elseif k.kind == "backspace" then
+        input_backspace()
+        if S.completion and S.completion.mention then M._mention_refilter() end
     elseif k.kind == "esc" then
         if S.busy and ((S.steer_queue and #S.steer_queue > 0)
             or (S.followup_queue and #S.followup_queue > 0)) then

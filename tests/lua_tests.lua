@@ -59,7 +59,10 @@ do
         return names
     end
     function host_fs.stat(path)
-        local f = io.popen("stat -c '%Y %s %F' " .. shq(path) .. " 2>/dev/null")
+        -- LC_ALL=C: %F is translated, so a Russian locale reports the kind as
+        -- "каталог" and the is_dir sniff below silently reports every directory
+        -- as a file. The C host uses S_ISDIR, which has no locale.
+        local f = io.popen("LC_ALL=C stat -c '%Y %s %F' " .. shq(path) .. " 2>/dev/null")
         if not f then return nil end
         local out = f:read("*a")
         f:close()
@@ -5599,9 +5602,251 @@ do
   _G.provider_catalog = orig_catalog
 end
 
--- T163: catalog defaults wired into config
+-- T278 (at-file-picker 2.1-2.5): the `@` trigger. Stub-driven through
+-- M._tools_stub like T74, so the UI layer is tested without a filesystem.
 do
-  -- dynamic-provider-catalog: seed the merged view (config snapshots it).
+    local mention_entries = {
+        "src/tether/ui.lua", "src/tether/providers/gemini.lua",
+        "src/tether/providers/openai.lua", "tests/ui.lua", "src/tether/",
+    }
+    local lookups = {}
+    local mention_stub = {}
+    -- The stub mirrors tools.path_complete's contract, cache field included:
+    -- the first call of a session gets nil, later ones get the bundle back.
+    function mention_stub.path_complete(token, _cfg, cache)
+        lookups[#lookups + 1] = { token = token, cache = cache }
+        local q = (token:gsub("^@", "")):lower()
+        local out = {}
+        for _, c in ipairs(mention_entries) do
+            if q == "" or c:lower():find(q, 1, true) then out[#out + 1] = c end
+        end
+        return { candidates = out, truncated = false, cache = cache or { n = 1 } }
+    end
+
+    local function cfg_at(pc)
+        return { config = { load = function() return {
+            model = "test", workspace = "/tmp/tw/test",
+            ui = { input_max_lines = 8, path_completion = pc } } end,
+            api_key = function() return "" end } }
+    end
+    local function picker(pc)
+        local ui_mod = assert((function()
+            local m, _ = run_ui_with({ 17 }, cfg_at(pc))
+            return m
+        end)())
+        ui_mod._tools_stub = mention_stub
+        return ui_mod
+    end
+    local function type(ui_mod, s)
+        for c in s:gmatch(".") do
+            ui_mod._handle_key({ kind = "text", char = c })
+        end
+    end
+    local function fresh() lookups = {} end
+
+    -- 2.1: "@" at a token start opens the palette and applies nothing.
+    do
+        fresh()
+        local ui_mod = picker(true)
+        type(ui_mod, "@")
+        local S = ui_mod._get_state()
+        assert_eq(S.input, "@", "T278 open: input holds only what was typed")
+        assert_eq(S.cursor, 1, "T278 open: cursor untouched")
+        assert_eq(S.palette_active, true, "T278 open: palette opened")
+        assert_eq(S.palette_mode, "mention", "T278 open: palette mode is 'mention'")
+        assert_eq(#S.palette_items, 5, "T278 open: every candidate listed")
+        assert_eq(S.palette_items[1].label, "src/tether/ui.lua",
+            "T278 open: the highlight previews, nothing is inserted")
+    end
+
+    -- 2.2: an "@" inside a token is ordinary text.
+    do
+        fresh()
+        local ui_mod = picker(true)
+        type(ui_mod, "voron@")
+        local S = ui_mod._get_state()
+        assert_eq(S.input, "voron@", "T278 mid: the @ stayed text")
+        assert_eq(S.palette_active, false, "T278 mid: no palette opened")
+        assert_eq(#lookups, 0, "T278 mid: the lookup never ran")
+    end
+
+    -- 2.3 + 3.1: each later character re-filters the open session, and the
+    -- session's cached walk is handed back instead of taken again.
+    do
+        fresh()
+        local ui_mod = picker(true)
+        type(ui_mod, "read @ge")
+        local S = ui_mod._get_state()
+        assert_eq(S.input, "read @ge", "T278 filter: input holds only typed text")
+        assert_eq(S.palette_active, true, "T278 filter: palette stayed open")
+        assert_eq(S.palette_mode, "mention", "T278 filter: mode stayed 'mention'")
+        assert_eq(#S.palette_items, 1, "T278 filter: narrowed to one candidate")
+        assert_eq(S.palette_items[1].label, "src/tether/providers/gemini.lua",
+            "T278 filter: a deep file listed from its basename")
+        assert_eq(#lookups, 3, "T278 filter: one lookup per keystroke of the token")
+        assert_eq(lookups[1].cache, nil, "T278 filter: the session starts uncached")
+        assert_notnil(lookups[3].cache, "T278 filter: the cached walk came back")
+        -- 2.4 (spec): a single candidate still lists under the @ trigger
+        assert_eq(S.palette_active, true, "T278 single: one candidate still opens")
+    end
+
+    -- 2.4: the arrows move the highlight without touching the input; Enter and
+    -- Tab both insert the highlighted path and close the preview.
+    do
+        fresh()
+        local ui_mod = picker(true)
+        type(ui_mod, "@ui")
+        local S = ui_mod._get_state()
+        assert_eq(#S.palette_items, 2, "T278 tab: two candidates listed")
+        local before = S.input
+        ui_mod._handle_key({ kind = "special", name = "down" })
+        S = ui_mod._get_state()
+        assert_eq(S.palette_sel, 2, "T278 arrows: down moves the highlight")
+        assert_eq(S.input, before, "T278 arrows: input untouched")
+        ui_mod._handle_key({ kind = "special", name = "up" })
+        S = ui_mod._get_state()
+        assert_eq(S.palette_sel, 1, "T278 arrows: up moves the highlight")
+        assert_eq(S.input, before, "T278 arrows: input still untouched")
+        ui_mod._handle_key({ kind = "enter" })
+        S = ui_mod._get_state()
+        assert_eq(S.input, "@src/tether/ui.lua",
+            "T278 enter: highlighted path inserted")
+        assert_eq(S.cursor, 18, "T278 enter: cursor sits after the inserted path")
+        assert_eq(S.palette_active, false, "T278 enter: palette closed")
+        assert_eq(S.palette_mode, "command", "T278 enter: mode reset")
+        assert_eq(S.completion, nil, "T278 enter: session dropped")
+    end
+
+    do
+        fresh()
+        local ui_mod = picker(true)
+        type(ui_mod, "@ui")
+        ui_mod._handle_key({ kind = "special", name = "down" })
+        ui_mod._handle_key({ kind = "tab" })
+        local S = ui_mod._get_state()
+        assert_eq(S.input, "@tests/ui.lua", "T278 tab: Tab inserts the highlighted path")
+        assert_eq(S.cursor, 13, "T278 tab: cursor sits after the inserted path")
+        assert_eq(S.palette_active, false, "T278 tab: palette closed")
+        assert_eq(S.palette_mode, "command", "T278 tab: mode reset")
+        assert_eq(S.completion, nil, "T278 tab: session dropped")
+    end
+
+    -- Enter mid-sentence keeps the text on both sides of the mention.
+    do
+        fresh()
+        local ui_mod = picker(true)
+        type(ui_mod, "read @g")
+        ui_mod._handle_key({ kind = "enter" })
+        local S = ui_mod._get_state()
+        assert_eq(S.input, "read @src/tether/providers/gemini.lua",
+            "T278 midline: only the token was replaced")
+        assert_eq(S.cursor, #S.input, "T278 midline: cursor after the inserted path")
+    end
+
+    -- Esc leaves exactly what the user typed (nothing was ever applied).
+    do
+        fresh()
+        local ui_mod = picker(true)
+        type(ui_mod, "@u")
+        ui_mod._handle_key({ kind = "special", name = "down" })
+        ui_mod._handle_key({ kind = "esc" })
+        local S = ui_mod._get_state()
+        assert_eq(S.input, "@u", "T278 esc: typed text kept")
+        assert_eq(S.cursor, 2, "T278 esc: cursor unchanged")
+        assert_eq(S.palette_active, false, "T278 esc: palette closed")
+        assert_eq(S.palette_mode, "command", "T278 esc: mode reset")
+    end
+
+    -- 2.3: erasing back through the "@" closes the palette.
+    do
+        fresh()
+        local ui_mod = picker(true)
+        type(ui_mod, "@ui")
+        local S = ui_mod._get_state()
+        assert_eq(#S.palette_items, 2, "T278 erase: filtered to the ui pair")
+        ui_mod._handle_key({ kind = "backspace" })
+        S = ui_mod._get_state()
+        assert_eq(S.input, "@u", "T278 erase: one character removed")
+        assert_eq(S.palette_active, true, "T278 erase: still open")
+        assert_eq(#S.palette_items, 4, "T278 erase: widened as the token shrank")
+        ui_mod._handle_key({ kind = "backspace" })
+        S = ui_mod._get_state()
+        assert_eq(#S.palette_items, 5, "T278 erase: the bare @ lists everything")
+        assert_eq(S.palette_active, true, "T278 erase: @ still opens")
+        ui_mod._handle_key({ kind = "backspace" })
+        S = ui_mod._get_state()
+        assert_eq(S.input, "", "T278 erase: the mention is gone")
+        assert_eq(S.palette_active, false, "T278 erase: palette closed")
+        assert_eq(S.palette_mode, "command", "T278 erase: mode reset")
+        assert_eq(S.completion, nil, "T278 erase: session dropped")
+    end
+
+    -- 2.5: ui.path_completion=false makes both triggers inert.
+    do
+        fresh()
+        local ui_mod = picker(false)
+        type(ui_mod, "@u")
+        local S = ui_mod._get_state()
+        assert_eq(S.input, "@u", "T278 disabled: @ stayed ordinary text")
+        assert_eq(S.palette_active, false, "T278 disabled: no palette")
+        assert_eq(#lookups, 0, "T278 disabled: the lookup never ran")
+        ui_mod._handle_key({ kind = "tab" })
+        S = ui_mod._get_state()
+        assert_eq(S.input, "@u", "T278 disabled: Tab applied nothing")
+        assert_eq(S.palette_active, false, "T278 disabled: Tab opened nothing")
+    end
+
+    -- 3.2: closing the picker drops the session, so reopening walks again.
+    do
+        fresh()
+        local ui_mod = picker(true)
+        type(ui_mod, "@ui")
+        ui_mod._handle_key({ kind = "esc" })
+        ui_mod._handle_key({ kind = "esc" }) -- the first closed the picker, this clears the line
+        type(ui_mod, "@ui")
+        assert_eq(#lookups, 6, "T278 reopen: three keystrokes per session")
+        assert_eq(lookups[1].cache, nil, "T278 reopen: a session starts uncached")
+        assert_notnil(lookups[2].cache, "T278 reopen: the session runs cached")
+        assert_eq(lookups[4].cache, nil, "T278 reopen: the closed session was dropped")
+    end
+
+    -- Cursor keys keep working while the preview is open: the token the
+    -- cursor sits inside is what gets filtered.
+    do
+        fresh()
+        local ui_mod = picker(true)
+        type(ui_mod, "@ui")
+        ui_mod._handle_key({ kind = "special", name = "left" })
+        local S = ui_mod._get_state()
+        assert_eq(S.cursor, 2, "T278 cursor: Left moved inside the token")
+        assert_eq(S.input, "@ui", "T278 cursor: the input is unchanged")
+        assert_eq(S.palette_active, true, "T278 cursor: still previewing")
+        assert_eq(#S.palette_items, 4, "T278 cursor: filtered on the shorter token")
+    end
+
+    -- 2.6: the mention palette says what it does.
+    do
+        local ui_mod = picker(true)
+        type(ui_mod, "@u")
+        local S = ui_mod._get_state()
+        assert_eq(S.palette_mode, "mention", "T278 hints: mode is 'mention'")
+        assert_notnil(ui_mod.PALETTE_HINTS.mention, "T278 hints: mention hints exist")
+        local hp = ui_mod.PALETTE_HINTS.mention
+        local text = table.concat((function()
+            local t = {}
+            for _, p in ipairs(hp) do t[#t + 1] = p.key .. " " .. p.act end
+            return t
+        end)(), "  ")
+        assert_true(text:find("enter/tab insert", 1, true) ~= nil,
+            "T278 hints: both insert keys are advertised: " .. text)
+        assert_true(not text:find("cycle", 1, true),
+            "T278 hints: nothing promises a walk without applying: " .. text)
+    end
+    print("T278 @ picker: trigger, filter, insert, gate: OK")
+end
+
+-- T163: catalog defaults wired into config
+do  -- dynamic-provider-catalog: seed the merged view (config snapshots it).
   local catfix = assert(loadfile("src/tether/providers/catalog.lua"))()
   catfix.set_overlay({
     deepseek = { wire = "openai", base_url = "https://api.deepseek.com",
@@ -15869,6 +16114,232 @@ do
     "T275 ASCII separator is pure ASCII: " .. asep)
   uia._ascii_mode = false
   print("T275 footer separator rule: OK")
+end
+
+-- T276 (at-file-picker 1.3/1.4): tree-wide ranked lookup. A basename matches
+-- at any depth, a slash scopes the walk, pruned and hidden trees stay out.
+do
+  local orig_tether = _G.tether
+  local ws = "/tmp/tether_t276_ws"
+  os.execute("rm -rf " .. ws .. " && mkdir -p " .. ws
+    .. "/src/tether/providers " .. ws .. "/tests " .. ws
+    .. "/node_modules/pkg " .. ws .. "/.git " .. ws .. "/.hidden")
+  local files = {
+    "src/tether/ui.lua", "src/tether/quilt.lua",
+    "src/tether/providers/gemini.lua",
+    "tests/ui.lua", "tests/gemini_test.lua", "a.txt", ".dotfile-hidden",
+    ".hidden/inside.lua",
+    "node_modules/pkg/index.js", ".git/config",
+  }
+  for _, rel in ipairs(files) do
+    local h = io.open(ws .. "/" .. rel, "w"); h:write("x\n"); h:close()
+  end
+  _G.tether = host_mock{ getcwd = function() return "/tmp" end,
+                         realpath = function(p) return p end }
+  local tools = assert(loadfile("src/tether/tools.lua"))()
+  local cfg = { workspace = ws }
+  local function has(list, want)
+    for _, p in ipairs(list) do if p == want then return true end end
+    return false
+  end
+
+  -- deep match without typing a directory, prefix ranked over subsequence,
+  -- and the shorter path winning a tie (spec tui: Path completion)
+  local r = tools.path_complete("ui", cfg)
+  assert_eq(r.candidates[1], "tests/ui.lua", "T276 prefix match ranks first")
+  assert_eq(r.candidates[2], "src/tether/ui.lua", "T276 tie breaks toward the shorter path")
+  assert_eq(r.candidates[3], "src/tether/quilt.lua", "T276 interior match ranks last")
+  local deep = tools.path_complete("gem", cfg)
+  assert_eq(deep.candidates[1], "tests/gemini_test.lua", "T276 deep match ranks shallow first")
+  assert_eq(deep.candidates[2], "src/tether/providers/gemini.lua",
+    "T276 a deep file matches its basename alone")
+
+  -- the @ prefix is a mention marker, not part of the match
+  assert_eq(tools.path_complete("@gem", cfg).candidates[1], deep.candidates[1],
+    "T276 @-prefixed token ranks the same")
+
+  -- a slash scopes the walk to that directory, still recursively
+  local scoped = tools.path_complete("src/tether/ui", cfg)
+  assert_eq(#scoped.candidates, 2, "T276 a scoped walk stays inside the scope")
+  assert_eq(scoped.candidates[1], "src/tether/ui.lua", "T276 scoped candidate is workspace-relative")
+  assert_eq(scoped.candidates[2], "src/tether/quilt.lua", "T276 the scope is searched recursively")
+  assert_eq(#tools.path_complete("nosuchdir/ui", cfg).candidates, 0,
+    "T276 a missing scope yields nothing")
+
+  -- directories are listed with a trailing slash so the next lookup descends
+  assert_true(has(tools.path_complete("src/", cfg).candidates, "src/tether/"),
+    "T276 the walk lists directories with a trailing slash")
+
+  -- pruned and hidden trees never appear
+  assert_eq(#tools.path_complete("index", cfg).candidates, 0,
+    "T276 node_modules is pruned out of the walk")
+  assert_eq(#tools.path_complete("conf", cfg).candidates, 0,
+    "T276 .git is out of the walk")
+  assert_eq(#tools.path_complete("dot", cfg).candidates, 0,
+    "T276 a hidden entry needs a dot in the token")
+  assert_true(has(tools.path_complete(".", cfg).candidates, ".dotfile-hidden"),
+    "T276 a dotted token offers hidden entries")
+  assert_eq(#tools.path_complete("inside", cfg).candidates, 0,
+    "T276 a hidden directory is not entered without a dot")
+  local hid = tools.path_complete(".hidden/inside", cfg)
+  assert_eq(#hid.candidates, 1, "T276 a typed hidden directory scopes the walk")
+  assert_eq(hid.candidates[1], ".hidden/inside.lua", "T276 typed hidden scope resolves")
+
+  -- the workspace jail holds through the rewrite
+  assert_eq(#tools.path_complete("~/.ssh", cfg).candidates, 0, "T276 ~ token refused")
+  assert_eq(#tools.path_complete("/etc/passwd", cfg).candidates, 0, "T276 absolute token refused")
+  assert_eq(#tools.path_complete("../../etc", cfg).candidates, 0, "T276 .. token refused")
+
+  _G.tether = orig_tether
+  os.execute("rm -rf " .. ws)
+  print("T276 tree-wide ranked lookup: OK")
+end
+
+-- T277 (at-file-picker 1.2/1.3): the walk is bounded, and both truncation
+-- reasons surface through the same flag.
+do
+  local orig_tether = _G.tether
+  local ws = "/tmp/tether_t277_ws"
+  os.execute("rm -rf " .. ws .. " && mkdir -p " .. ws)
+  for i = 1, 250 do
+    local h = io.open(ws .. "/f" .. i .. ".txt", "w"); h:write("x\n"); h:close()
+  end
+  _G.tether = host_mock{ getcwd = function() return "/tmp" end,
+                         realpath = function(p) return p end }
+  local tools = assert(loadfile("src/tether/tools.lua"))()
+  local cfg = { workspace = ws }
+
+  local capped = tools.path_complete("", cfg)
+  assert_eq(#capped.candidates, 200, "T277 the candidate list is capped at 200")
+  assert_true(capped.truncated, "T277 a capped list says more candidates exist")
+  assert_eq(tools.path_complete("zzz", cfg).truncated, false,
+    "T277 an uncapped lookup does not claim truncation")
+
+  -- A clock that runs ahead stands in for a tree too slow to walk: the walk
+  -- stops early and says so instead of finishing.
+  local fake_ms = 0
+  _G.tether.monotonic_ms = function() fake_ms = fake_ms + 100; return fake_ms end
+  local stopped = tools.path_complete("", cfg)
+  assert_true(stopped.truncated, "T277 a budget-stopped walk reports truncation")
+
+  _G.tether = orig_tether
+  os.execute("rm -rf " .. ws)
+  print("T277 bounded walk: OK")
+end
+
+-- T279 (at-file-picker 3.1/3.2): one tree walk per picker session. The picker
+-- re-ranks on every keystroke, so only a first call — or one whose scope
+-- changed — may reach the filesystem.
+do
+  local orig_tether = _G.tether
+  local ws = "/tmp/tether_t279_ws"
+  os.execute("rm -rf " .. ws .. " && mkdir -p " .. ws .. "/src/tether "
+    .. ws .. "/docs")
+  for _, rel in ipairs({ "src/tether/ui.lua", "src/tether/quilt.lua",
+    "src/tether/agent.lua", "docs/design.md", ".hiddenconf" }) do
+    local h = io.open(ws .. "/" .. rel, "w"); h:write("x\n"); h:close()
+  end
+  local reads = 0
+  _G.tether = host_mock{ getcwd = function() return "/tmp" end,
+    realpath = function(p) return p end,
+    readdir = function(p) reads = reads + 1; return host_fs.readdir(p) end }
+  local tools = assert(loadfile("src/tether/tools.lua"))()
+  local cfg = { workspace = ws }
+
+  local opened = tools.path_complete("@", cfg)
+  local after_open = reads
+  assert_true(after_open > 0, "T279 opening the picker walks the tree")
+  assert_notnil(opened.cache, "T279 the lookup hands back its walk")
+
+  local again = tools.path_complete("@ui", cfg, opened.cache)
+  assert_eq(reads, after_open, "T279 a longer token re-ranks the cached walk")
+  assert_eq(again.candidates[1], "src/tether/ui.lua", "T279 cached ranking holds")
+  assert_eq(again.cache, opened.cache, "T279 the same bundle is handed back")
+
+  -- A session that starts fresh has nothing to reuse and walks again.
+  tools.path_complete("@ui", cfg)
+  assert_true(reads > after_open, "T279 an uncached lookup walks")
+
+  -- A different scope, or a different hidden rule, is a different walk.
+  reads = 0
+  tools.path_complete("@src/tether/qu", cfg, again.cache)
+  assert_true(reads > 0, "T279 a new scope invalidates the cached walk")
+  reads = 0
+  tools.path_complete("@.hidden", cfg, again.cache)
+  assert_true(reads > 0, "T279 asking for hidden entries invalidates the walk")
+  reads = 0
+  tools.path_complete("@ui", cfg, again.cache)
+  assert_eq(reads, 0, "T279 an unchanged scope stays on the cache")
+
+  _G.tether = orig_tether
+  os.execute("rm -rf " .. ws)
+  print("T279 one walk per picker session: OK")
+end
+
+-- T280 (at-file-picker 3.3): the listed candidates are a snapshot. A file
+-- created while the picker is open shows up only after it is reopened.
+do
+  local orig_tether = _G.tether
+  local ws = "/tmp/tether_t280_ws"
+  os.execute("rm -rf " .. ws .. " && mkdir -p " .. ws)
+  local h = io.open(ws .. "/mark.lua", "w"); h:write("x\n"); h:close()
+  _G.tether = host_mock{ getcwd = function() return "/tmp" end,
+                         realpath = function(p) return p end }
+  local tools = assert(loadfile("src/tether/tools.lua"))()
+  local cfg = { workspace = ws }
+
+  local open = tools.path_complete("@mark", cfg)
+  assert_eq(#open.candidates, 1, "T280 the open session lists what exists")
+  local late = io.open(ws .. "/marked.lua", "w"); late:write("x\n"); late:close()
+  local kept = tools.path_complete("@mark", cfg, open.cache)
+  assert_eq(#kept.candidates, 1, "T280 a file created mid-session stays out")
+  local reopened = tools.path_complete("@mark", cfg)
+  assert_eq(#reopened.candidates, 2, "T280 reopening picks the new file up")
+
+  _G.tether = orig_tether
+  os.execute("rm -rf " .. ws)
+  print("T280 the candidate list is a snapshot: OK")
+end
+
+-- T281 (at-file-picker 4.3): a cut candidate list says so. tools reports the
+-- cut as `truncated`; the palette's counter row gains a trailing `+`, and only
+-- then — an uncut list keeps the digits-and-`/` row exactly as T83 pins it.
+do
+  local function strip(s) return (s or ""):gsub("\27%[[%d;]*m", "") end
+  local function cfg_at(pc)
+    return { config = { load = function() return {
+      model = "test", workspace = "/tmp/tw/test",
+      ui = { input_max_lines = 8, path_completion = pc } } end,
+      api_key = function() return "" end } }
+  end
+  local function picker(cut)
+    local stub = { path_complete = function()
+      local cands = {}
+      for i = 1, 4 do cands[i] = ("src/f%d.lua"):format(i) end
+      return { candidates = cands, truncated = cut, cache = { n = 1 } }
+    end }
+    local ui_mod = assert(run_ui_with({ 17 }, cfg_at(true)))
+    ui_mod._tools_stub = stub
+    ui_mod._handle_key({ kind = "text", char = "@" })
+    ui_mod._paint(true)
+    return ui_mod, ui_mod._get_state()
+  end
+
+  local ui_mod, S = picker(true)
+  assert_eq(S.completion.truncated, true, "T281 the cut is carried on the session")
+  local L = ui_mod._layout()
+  local row = strip(ui_mod._row(L.palette_row + #S.palette_items + 1))
+  assert_true(row:match("^%s*1/4%+%s*$") ~= nil,
+    "T281 a cut list shows the more-candidates marker: " .. row)
+
+  local ui_mod2, S2 = picker(false)
+  assert_eq(S2.completion.truncated, false, "T281 an uncut list carries no cut")
+  local L2 = ui_mod2._layout()
+  local row2 = strip(ui_mod2._row(L2.palette_row + #S2.palette_items + 1))
+  assert_true(row2:find("+", 1, true) == nil,
+    "T281 an uncut list paints no marker: " .. row2)
+
+  print("T281 more-candidates marker: OK")
 end
 
 if failed > 0 then
