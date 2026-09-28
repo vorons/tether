@@ -962,7 +962,12 @@ M.PALETTE_HINTS = {
     login = { { key = "type", act = "filter" }, { key = "↑↓", act = "select" },
               { key = "enter", act = "connect" }, { key = "esc", act = "close" } },
     logout = { { key = "type", act = "filter" }, { key = "↑↓", act = "select" },
-               { key = "enter", act = "delete" }, { key = "esc", act = "close" } },
+               { key = "enter", act = "confirm" }, { key = "esc", act = "close" } },
+    -- logout-confirm: the deletion step has no filter buffer, so no `type` pair
+    -- and no `enter delete` until the row is the one being confirmed.
+    ["logout-confirm"] = { { key = "↑↓", act = "select" },
+                           { key = "enter", act = "delete" },
+                           { key = "y/n", act = "choose" }, { key = "esc", act = "back" } },
     think = { { key = "↑↓", act = "select" }, { key = "enter", act = "set" },
               { key = "esc", act = "close" } },
 }
@@ -1240,6 +1245,8 @@ local function new_state()
         _in_copy_palette = nil,  -- 5.2: set when the /copy palette is open
         _in_login_palette = nil, -- add-provider-login: bare /login provider picker
         _in_logout_palette = nil, -- logout-picker: bare /logout stored-credentials picker
+        _logout_confirm = nil,   -- logout-confirm: provider the deletion step targets
+        _logout_sel = nil,       -- logout-confirm: row index in the list to return to
         _in_resume_palette = nil, -- palette-only: /resume session list
         _in_model_palette = nil,  -- palette-only: /model list
         _in_think_palette = nil,  -- add-reasoning-level: bare /think level list
@@ -1697,6 +1704,55 @@ function M._logout_delete(provider)
         text = "→ logout " .. provider .. ": stored credential removed",
     })
     bump_transcript()
+end
+
+-- logout-confirm: both steps of the picker are closed from one place, so no
+-- exit path can leave the confirmation state behind.
+function M._logout_close()
+    S.palette_active = false
+    S.palette_mode = "command"
+    S.palette_items = {}
+    S.palette_sel = 1
+    S._in_logout_palette = nil
+    S.palette_query = nil
+    S._palette_all = nil
+    S._logout_confirm = nil
+    S._logout_sel = nil
+end
+
+-- logout-confirm D1: picking a provider switches the shared palette to the
+-- deletion step instead of deleting. S._palette_all and S.palette_query stay
+-- untouched — the step owns no filter buffer (D2), and backing out rebuilds
+-- the list from that snapshot rather than re-reading the store (D3).
+function M._logout_ask_confirm(provider)
+    if not provider then return end
+    S._logout_confirm = provider
+    S._logout_sel = S.palette_sel
+    S.palette_mode = "logout-confirm"
+    S.palette_items = {
+        { label = "yes", desc = "delete " .. provider .. "'s stored key", accept = true },
+        { label = "no", desc = "keep " .. provider .. " logged in" },
+    }
+    S.palette_sel = 1
+end
+
+-- The accepted row: close, then delete through the single writer.
+function M._logout_confirm_accept()
+    local provider = S._logout_confirm
+    M._logout_close()
+    if provider then M._logout_delete(provider) end
+end
+
+-- Keep row, `n` or Esc: back to the provider list with the query, the ranked
+-- rows and the highlight exactly as the step found them.
+function M._logout_confirm_back()
+    S.palette_mode = "logout"
+    S._logout_confirm = nil
+    local sel = S._logout_sel or 1
+    S._logout_sel = nil
+    M._palette_apply_query()
+    if sel < 1 or sel > #S.palette_items then sel = 1 end
+    S.palette_sel = sel
 end
 
 -- ============================================================
@@ -4810,7 +4866,9 @@ local function execute_command(cmd, rest)
             end
             table.sort(names)
             if #names == 0 then
-                S.error_banner = "no stored credentials"
+                -- logout-confirm D5: an empty store is a state, not a failed
+                -- lookup — the picker still does not open.
+                S.error_banner = "no provider is logged in"
                 return
             end
             local active = (S.cfg and S.cfg.provider) or nil
@@ -6135,14 +6193,16 @@ handle_key = function(k)
                             begin_login(it.label)
                             bump_transcript()
                         elseif S.palette_mode == "logout" and it.label then
-                            S.palette_active = false
-                            S.palette_mode = "command"
-                            S.palette_items = {}
-                            S.palette_sel = 1
-                            S._in_logout_palette = nil
-                            S.palette_query = nil
-                            S._palette_all = nil
-                            M._logout_delete(it.label)
+                            -- logout-confirm D4: a click takes the same path as
+                            -- Enter — it opens the deletion step, never deletes.
+                            M._logout_ask_confirm(it.label)
+                        elseif S.palette_mode == "logout-confirm" then
+                            -- a click acts on the row it hit, like every other mode
+                            if it.accept then
+                                M._logout_confirm_accept()
+                            else
+                                M._logout_confirm_back()
+                            end
                         elseif S.palette_mode == "resume" and it.id then
                             S.palette_active = false
                             S.palette_mode = "command"
@@ -6429,26 +6489,13 @@ handle_key = function(k)
             end
             return
         elseif S.palette_mode == "logout" then
-            -- logout-picker: stored-credentials picker — Enter deletes the
-            -- highlighted entry immediately (no confirmation step); Esc is
+            -- logout-picker: stored-credentials picker — Enter opens the
+            -- confirmation step (nothing is deleted from the list); Esc is
             -- two-stage and Enter dead on no match, like model/login.
-            local function close_logout_palette()
-                S.palette_active = false
-                S.palette_mode = "command"
-                S.palette_items = {}
-                S.palette_sel = 1
-                S._in_logout_palette = nil
-                S.palette_query = nil
-                S._palette_all = nil
-            end
             if k.kind == "enter" then
                 local it = S.palette_items[S.palette_sel]
                 if not it then return end
-                local label = it.label
-                close_logout_palette()
-                if label then
-                    M._logout_delete(label)
-                end
+                M._logout_ask_confirm(it.label)
                 return
             elseif k.kind == "esc" then
                 if (S.palette_query or "") ~= "" then
@@ -6456,7 +6503,7 @@ handle_key = function(k)
                     M._palette_apply_query()
                     return
                 end
-                close_logout_palette()
+                M._logout_close()
                 return
             elseif k.kind == "special" then
                 local n = #S.palette_items
@@ -6477,6 +6524,40 @@ handle_key = function(k)
             elseif k.kind == "paste" then
                 S.palette_query = (S.palette_query or "") .. (k.text or "")
                 M._palette_apply_query()
+                return
+            end
+            return
+        elseif S.palette_mode == "logout-confirm" then
+            -- logout-confirm D2: the deletion step. No filter buffer, so text
+            -- keys are the two choices rather than query characters, and every
+            -- key this mode does not use is swallowed instead of leaking into
+            -- the input or back into the list's query.
+            if k.kind == "enter" then
+                local it = S.palette_items[S.palette_sel]
+                if not it then return end
+                if it.accept then
+                    M._logout_confirm_accept()
+                else
+                    M._logout_confirm_back()
+                end
+                return
+            elseif k.kind == "esc" then
+                M._logout_confirm_back()
+                return
+            elseif k.kind == "text" then
+                local c = (k.char or ""):lower()
+                if c == "y" then
+                    M._logout_confirm_accept()
+                elseif c == "n" then
+                    M._logout_confirm_back()
+                end
+                return
+            elseif k.kind == "special" then
+                if k.name == "up" then
+                    S.palette_sel = math.max(1, S.palette_sel - 1)
+                elseif k.name == "down" then
+                    S.palette_sel = math.min(#S.palette_items, S.palette_sel + 1)
+                end
                 return
             end
             return

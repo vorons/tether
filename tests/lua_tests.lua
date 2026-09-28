@@ -11949,12 +11949,16 @@ do
   uim9._execute_command("logout", "azure")
   assert_true((S9.error_banner or ""):find("azure", 1, true) ~= nil,
     "T219 unknown provider banner")
-  -- Enter on a picked row deletes immediately with a token-free system row
+  -- logout-confirm 5.1: Enter on a picked row opens the deletion step instead
+  -- of removing anything; the entry only goes when that step accepts.
   local entries9 = #uim9._transcript.entries()
   uim9._execute_command("logout", "")
   uim9._handle_key({ kind = "enter" })
-  assert_true(S9.palette_active == false, "T219 picker Enter closes")
-  assert_true(auth.get(home9, "gemini") == nil, "T219 Enter deletes the picked entry")
+  assert_eq(S9.palette_mode, "logout-confirm", "T219 picker Enter opens the step")
+  assert_notnil(auth.get(home9, "gemini"), "T219 Enter alone deletes nothing")
+  uim9._handle_key({ kind = "text", char = "y" })
+  assert_true(S9.palette_active == false, "T219 accepted step closes the palette")
+  assert_true(auth.get(home9, "gemini") == nil, "T219 the accepted step deletes")
   assert_notnil(auth.get(home9, "openai"), "T219 other entries untouched")
   local after9 = uim9._transcript.entries()
   local saw9, leaked9 = false, false
@@ -11979,12 +11983,133 @@ do
   })
   uim9b._execute_command("logout", "")
   assert_true(S9b.palette_active == false, "T219 empty store opens no picker")
-  assert_true((S9b.error_banner or ""):find("no stored credentials", 1, true) ~= nil,
-    "T219 empty store banner names the state")
+  assert_true((S9b.error_banner or ""):find("no provider is logged in", 1, true) ~= nil,
+    "T219 empty store banner says nobody is logged in")
   auth.path = orig_path9b
   _G.auth = orig_auth9b
 
   print("T219 logout stored-only picker: OK")
+
+  -- T289-T292: logout-confirm — the picker's second step. Enter or a click on a
+  -- provider row opens it; only its accepted row deletes; backing out returns
+  -- to the same filtered list with the same highlight.
+  do
+    local home9c = tmp .. "_h9c"
+    os.execute("rm -rf '" .. home9c .. "' && mkdir -p '" .. home9c .. "/.tether'")
+    auth.set(home9c, "openai", { kind = "api_key", access_token = "sk-confirm-9c" })
+    auth.set(home9c, "gemini", { kind = "oauth", access_token = "tok-confirm-9c" })
+    local orig_authc, orig_pathc = _G.auth, auth.path
+    _G.auth = auth
+    auth.path = function() return home9c .. "/.tether/auth.json" end
+    local uimc, Sc = run_ui_with({ 17 }, {
+      agent = { turn = function() return true end, get_history = function() return {} end },
+      config = { load = function()
+          return { model = "m", provider = "gemini",
+                   base_url = "https://models.example/v1",
+                   workspace = "/tmp", ui = { input_max_lines = 8 } }
+        end, api_key = function() return "" end },
+    })
+
+    -- T289: the step itself. Two rows naming the provider, nothing removed
+    -- until one of them is accepted, and `y` closes with a token-free row.
+    local before_c = #uimc._transcript.entries()
+    assert_eq(Sc._logout_confirm, nil, "T289 a fresh session has no target")
+    assert_eq(Sc._logout_sel, nil, "T289 a fresh session has no saved index")
+    uimc._execute_command("logout", "")
+    uimc._handle_key({ kind = "enter" })
+    assert_eq(Sc.palette_mode, "logout-confirm", "T289 Enter opens the step")
+    assert_true(Sc.palette_active, "T289 the step stays in the shared palette")
+    assert_eq(Sc._logout_confirm, "gemini", "T289 the step targets the highlighted row")
+    assert_eq(Sc._logout_sel, 1, "T289 the list index is remembered")
+    assert_eq(#Sc.palette_items, 2, "T289 the step offers exactly two rows")
+    assert_eq(Sc.palette_items[1].label, "yes", "T289 the delete row leads")
+    assert_true(Sc.palette_items[1].desc:find("gemini", 1, true) ~= nil,
+      "T289 the delete row names the provider")
+    assert_true(Sc.palette_items[2].desc:find("gemini", 1, true) ~= nil,
+      "T289 the keep row names the provider too")
+    assert_notnil(auth.get(home9c, "gemini"), "T289 nothing is deleted before the accept")
+    -- D2: the step owns no filter buffer — keys are choices, not query text.
+    uimc._handle_key({ kind = "text", char = "q" })
+    assert_eq(Sc.palette_query, "", "T289 an unused key filters nothing")
+    assert_eq(Sc.palette_mode, "logout-confirm", "T289 an unused key deletes nothing")
+    assert_eq(#Sc.palette_items, 2, "T289 an unused key drops no row")
+    uimc._handle_key({ kind = "text", char = "y" })
+    assert_true(Sc.palette_active == false, "T289 y deletes and closes")
+    assert_true(auth.get(home9c, "gemini") == nil, "T289 y removed the entry")
+    assert_notnil(auth.get(home9c, "openai"), "T289 y left the other entry alone")
+    assert_eq(Sc._logout_confirm, nil, "T289 the target is cleared on close")
+    local after_c = uimc._transcript.entries()
+    local saw_c, leak_c = false, false
+    for i = before_c + 1, #after_c do
+      local t = tostring(after_c[i].text or "")
+      if t:find("logout", 1, true) and t:find("gemini", 1, true) then saw_c = true end
+      if t:find("tok-confirm-9c", 1, true) then leak_c = true end
+    end
+    assert_true(saw_c, "T289 the accept confirms with a system row")
+    assert_false(leak_c, "T289 the system row carries no token text")
+
+    -- T290: Esc returns to the list with the filter and the highlight intact,
+    -- and the keep row (Enter on it, or `n`) is the same way back.
+    auth.set(home9c, "gemini", { kind = "oauth", access_token = "tok-confirm-9c" })
+    uimc._execute_command("logout", "")
+    for i = 1, #"ope" do
+      uimc._handle_key({ kind = "text", char = ("ope"):sub(i, i) })
+    end
+    assert_eq(#Sc.palette_items, 1, "T290 the list filters to one provider")
+    uimc._handle_key({ kind = "enter" })
+    assert_eq(Sc._logout_confirm, "openai", "T290 the step targets the filtered row")
+    uimc._handle_key({ kind = "esc" })
+    assert_eq(Sc.palette_mode, "logout", "T290 Esc returns to the provider list")
+    assert_true(Sc.palette_active, "T290 Esc does not close the palette")
+    assert_eq(Sc.palette_query, "ope", "T290 the filter survives the step")
+    assert_eq(#Sc.palette_items, 1, "T290 the filtered rows come back")
+    assert_eq(Sc.palette_sel, 1, "T290 the highlight comes back")
+    assert_notnil(auth.get(home9c, "openai"), "T290 backing out deletes nothing")
+    uimc._handle_key({ kind = "enter" })
+    uimc._handle_key({ kind = "special", name = "down" })
+    assert_eq(Sc.palette_sel, 2, "T290 the arrows move inside the step")
+    uimc._handle_key({ kind = "enter" })
+    assert_eq(Sc.palette_mode, "logout", "T290 Enter on the keep row returns to the list")
+    assert_notnil(auth.get(home9c, "openai"), "T290 keeping deletes nothing")
+
+    -- T291: state hygiene on the plain close, and a reopened picker is a list.
+    uimc._handle_key({ kind = "text", char = "n" })
+    assert_eq(Sc.palette_mode, "logout", "T291 n returns to the list")
+    uimc._handle_key({ kind = "esc" })
+    assert_eq(Sc.palette_query, "", "T291 Esc clears the filter first")
+    uimc._handle_key({ kind = "esc" })
+    assert_true(Sc.palette_active == false, "T291 the second Esc closes the picker")
+    assert_eq(Sc.palette_mode, "command", "T291 the palette is back to command")
+    assert_eq(Sc._logout_confirm, nil, "T291 no target survives the close")
+    assert_eq(Sc._logout_sel, nil, "T291 no index survives the close")
+    uimc._execute_command("logout", "")
+    assert_eq(Sc.palette_mode, "logout", "T291 a second bare /logout opens the plain list")
+    assert_eq(#Sc.palette_items, 2, "T291 no row of the step leaks into the list")
+
+    -- T292: the pointer takes the same path as the keyboard, row for row.
+    local Lc = uimc._layout()
+    uimc._handle_key({ kind = "mouse", name = "press", row = Lc.palette_row + 2, col = 5, button = 0 })
+    assert_eq(Sc.palette_mode, "logout-confirm", "T292 a click on a provider opens the step")
+    assert_eq(Sc._logout_confirm, "openai", "T292 the click targets the row it hit")
+    assert_notnil(auth.get(home9c, "openai"), "T292 a click deletes nothing by itself")
+    Lc = uimc._layout()
+    uimc._handle_key({ kind = "mouse", name = "press", row = Lc.palette_row + 2, col = 5, button = 0 })
+    assert_eq(Sc.palette_mode, "logout", "T292 clicking the keep row returns to the list")
+    assert_notnil(auth.get(home9c, "openai"), "T292 keeping by click deletes nothing")
+    Lc = uimc._layout()
+    uimc._handle_key({ kind = "mouse", name = "press", row = Lc.palette_row + 1, col = 5, button = 0 })
+    assert_eq(Sc._logout_confirm, "gemini", "T292 the step is open for the first row")
+    Lc = uimc._layout()
+    uimc._handle_key({ kind = "mouse", name = "press", row = Lc.palette_row + 1, col = 5, button = 0 })
+    assert_true(Sc.palette_active == false, "T292 clicking the delete row closes")
+    assert_true(auth.get(home9c, "gemini") == nil, "T292 the click deleted that entry")
+    assert_notnil(auth.get(home9c, "openai"), "T292 the other entry is untouched")
+
+    auth.path = orig_pathc
+    _G.auth = orig_authc
+    os.execute("rm -rf '" .. home9c .. "'")
+    print("T289-T292 logout confirmation step: OK")
+  end
 
   -- T151: refresh-on-401 in agent attempt loop (one refresh, then retry once)
   local names = {"agent", "session", "config", "api", "tools", "context", "tether", "retry", "auth"}
@@ -15962,7 +16087,9 @@ do
     resume = "↑↓ select  enter resume  esc dismiss",
     model = "type filter  ↑↓ select  enter pick  esc close",
     login = "type filter  ↑↓ select  enter connect  esc close",
-    logout = "type filter  ↑↓ select  enter delete  esc close",
+    logout = "type filter  ↑↓ select  enter confirm  esc close",
+    -- logout-confirm 2.4: the step has no filter buffer, so no `type` pair
+    ["logout-confirm"] = "↑↓ select  enter delete  y/n choose  esc back",
     think = "↑↓ select  enter set  esc close",
   }
   for mode, text in pairs(want) do
@@ -16037,9 +16164,16 @@ do
   local _, _, h6 = paint_mode("login", one, "op")
   assert_true(h6:find("enter connect", 1, true) ~= nil, "T273 login mode names connect")
   local uim7, L7, h7 = paint_mode("logout", {}, "ope")
-  assert_true(h7:find("enter delete", 1, true) ~= nil, "T273 logout mode names delete")
+  assert_true(h7:find("enter confirm", 1, true) ~= nil, "T273 logout mode asks for a confirm")
   assert_true(uim7._strip_sgr(uim7._row(L7.palette_row + 1) or ""):find("> ope (no matches)", 1, true) ~= nil,
     "T273 the query row keeps its slot above the blank and the hint")
+  -- logout-confirm 2.4/D2: the step paints its own hint and reserves no query
+  -- row — a leftover query from the list must not show up under it.
+  local uim8, L8, h8 = paint_mode("logout-confirm", { { label = "yes" }, { label = "no" } }, "ope")
+  assert_true(h8:find("↑↓ select  enter delete  y/n choose  esc back", 1, true) ~= nil,
+    "T273 the step hints the step's keys: [" .. h8 .. "]")
+  assert_true(uim8._strip_sgr(uim8._row(L8.palette_row + 3) or ""):find(">", 1, true) == nil,
+    "T273 the step reserves no query row")
   print("T273 per-mode dock hints paint: OK")
 end
 
