@@ -3491,19 +3491,42 @@ end
 
 -- add-llm-compaction: `rest` is the free text after the command word
 -- (e.g. focus instructions for /compact).
+-- Phase C 3.1: slash dispatch lives in commands.dispatch (name ->
+-- handler, bag/callback shape). One chunk local (the file sits at Lua's
+-- 200-locals limit): handlers assign straight into the callback table.
+local slash_callbacks = {}
+
 local function execute_command(cmd, rest)
     input_clear()
     debug_log("command: " .. tostring(cmd))
-    if cmd == "quit" then S.quit = true; return end
-    -- M9: /help, /status, /log removed per user request (unknown commands
-    -- fall through to the warning below)
-    if cmd == "clear" then
+    -- the if-chain is gone: exact-name dispatch, unknown names no-op
+    -- as the old fall-through did. Global+fallback: stubs of the
+    -- commands global (tests/dev) predate the table — routing shape
+    -- then comes from the file while bodies keep the stub's list_*
+    -- surface. M-field, not a chunk local (200-locals limit).
+    local dispatch = commands.dispatch
+    if not dispatch then
+        if not M._slash_dispatch then
+            local chunk = loadfile("src/tether/commands.lua")
+            M._slash_dispatch = (chunk and chunk().dispatch) or nil
+        end
+        dispatch = M._slash_dispatch
+    end
+    local h = dispatch and dispatch[cmd]
+    if h then h(S, slash_callbacks, cmd, rest) end
+end
+
+slash_callbacks.quit = function(bag, cmd, rest)
+    S.quit = true
+end
+
+slash_callbacks.clear = function(bag, cmd, rest)
         -- §6.8: clears in-memory transcript only; disk session untouched.
         -- The splash returns so /clear reads as a fresh start.
         reset_transcript({ M._splash_entry() })
-        return
-    end
-    if cmd == "compact" then
+end
+
+slash_callbacks.compact = function(bag, cmd, rest)
         -- force summarization (threshold bypassed); optional focus text
         local focus = (type(rest) == "string" and rest:match("^%s*(.-)%s*$")) or ""
         if focus == "" then focus = nil end
@@ -3519,13 +3542,13 @@ local function execute_command(cmd, rest)
             S.tokens_used = agent.estimate_tokens(agent.get_history())
         end
         bump_transcript()
-        return
-    end
-    if cmd == "new" then
-        start_new_session()
-        return
-    end
-    if cmd == "copy" then
+end
+
+slash_callbacks.new = function(bag, cmd, rest)
+    start_new_session()
+end
+
+slash_callbacks.copy = function(bag, cmd, rest)
         -- 5.2: open the copy palette; targets are built from the transcript
         local targets = M.copy_targets(transcript.entries())
         local items = {}
@@ -3537,27 +3560,27 @@ local function execute_command(cmd, rest)
         S.palette_items = items
         S.palette_sel = 1
         S._in_copy_palette = true
-        return
+end
+
+-- expand-provider-catalog: model items builder, reused when a background
+-- refresh lands while the palette is open (was nested in execute_command;
+-- hoisted: redefining it per call was a no-op). M-field: callers and the
+-- background path use the M.* name.
+function M._build_model_items(models)
+    local items = {}
+    for _, m in ipairs(models or {}) do
+        local desc = m.name or m.id or ""
+        if m.provider then desc = m.provider .. " • " .. desc end
+        items[#items + 1] = {
+            label = m.id or m,
+            desc = desc,
+            provider = m.provider,
+        }
     end
-    -- unified-slash-palette: /skills removed — skills are entries of the one
-    -- palette, so the separate palette mode and the [skill: …] reference are gone
-    -- expand-provider-catalog: model items builder, reused when a background
-    -- refresh lands while the palette is open (module field: file-local
-    -- budget is reserved for state).
-    function M._build_model_items(models)
-        local items = {}
-        for _, m in ipairs(models or {}) do
-            local desc = m.name or m.id or ""
-            if m.provider then desc = m.provider .. " • " .. desc end
-            items[#items + 1] = {
-                label = m.id or m,
-                desc = desc,
-                provider = m.provider,
-            }
-        end
-        return items
-    end
-    if cmd == "model" then
+    return items
+end
+
+slash_callbacks.model = function(bag, cmd, rest)
         -- all keyed providers (active first); legacy single-provider path
         -- when the commands surface predates list_models_all (tests).
         local models, bg, merr = nil, nil, nil
@@ -3598,9 +3621,9 @@ local function execute_command(cmd, rest)
                 debug_log("providers catalog age: " .. age.text)
             end
         end
-        return
-    end
-    if cmd == "resume" then
+end
+
+slash_callbacks.resume = function(bag, cmd, rest)
         local items = {}
         for _, f in ipairs(commands.list_sessions(S.workspace)) do
             -- session ts is ISO ("2026-09-24T10:00:00"): show the clock time,
@@ -3621,13 +3644,13 @@ local function execute_command(cmd, rest)
         S.palette_items = items
         S.palette_sel = 1
         S._in_resume_palette = true
-        return
-    end
-    -- add-provider-login: interactive credential flow / store clear
-    if cmd == "login" then
+end
+
+slash_callbacks.login = function(bag, cmd, rest)
+        -- add-provider-login: interactive credential flow / store clear
         local provider = (type(rest) == "string" and rest:match("^%s*(.-)%s*$")) or ""
         if S.cfg and S.cfg.non_interactive then
-S.error_banner = M._copy.errors.login_interactive_only
+            S.error_banner = M._copy.errors.login_interactive_only
             return
         end
         -- Bare /login → shared palette in login mode (same mechanism as
@@ -3657,9 +3680,9 @@ S.error_banner = M._copy.errors.login_interactive_only
         end
         provider = provider:lower()
         begin_login(provider)
-        return
-    end
-    if cmd == "logout" then
+end
+
+slash_callbacks.logout = function(bag, cmd, rest)
         local provider = (type(rest) == "string" and rest:match("^%s*(.-)%s*$")) or ""
         -- logout-picker: bare /logout opens a stored-only picker in the
         -- shared palette (never a silent default to the active provider).
@@ -3718,11 +3741,11 @@ S.error_banner = M._copy.errors.login_interactive_only
             return
         end
         M._logout_delete(provider)
-        return
-    end
-    -- add-reasoning-level: reasoning level — a level argument applies
-    -- directly, no argument opens the level picker in the shared palette.
-    if cmd == "think" then
+end
+
+slash_callbacks.think = function(bag, cmd, rest)
+        -- add-reasoning-level: reasoning level — a level argument applies
+        -- directly, no argument opens the level picker in the shared palette.
         local level = (type(rest) == "string" and rest:match("^%s*(.-)%s*$")) or ""
         if level == "" then
             local ORDER = { "off", "low", "medium", "high" }
@@ -3747,9 +3770,11 @@ S.error_banner = M._copy.errors.login_interactive_only
             return
         end
         pick.think(level)
-        return
-    end
 end
+
+-- (slash_callbacks entries assign directly above; unknown names have
+-- no entry and no-op, as the old if-chain's fall-through did.)
+
 -- Test seam: drive slash dispatch without going through the byte pump.
 M._execute_command = function(cmd, rest) if S then execute_command(cmd, rest) end end
 

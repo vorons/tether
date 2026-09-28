@@ -624,4 +624,24 @@ function M.list_sessions(workspace)
     return session.session_files(workspace) or {}
 end
 
+-- Phase C 3.1: slash-dispatch table (name -> handler, bag/callback shape).
+-- Routing is an exact-name match (no order sensitivity, unlike key
+-- dispatch), so no route() oracle is needed. Each entry forwards to the
+-- facade callback of the same name: bag is the ui state, cb carries the
+-- S-mutating command bodies the facade owns until Phase C completes.
+-- Unknown names have no entry — the facade proxy no-ops, as the old
+-- if-chain's fall-through did.
+--   dispatch[name](bag, cb, cmd, rest)
+local slash_names = { "quit", "clear", "compact", "new", "copy",
+    "model", "resume", "login", "logout", "think" }
+local dispatch = {}
+for _, name in ipairs(slash_names) do
+    dispatch[name] = function(bag, cb, cmd, rest)
+        local fn = cb and cb[name]
+        if type(fn) == "function" then return fn(bag, cmd, rest) end
+    end
+end
+M.dispatch = dispatch
+M.slash_names = slash_names
+
 return M

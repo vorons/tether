@@ -1863,6 +1863,47 @@ do
   print("T177 config file is the source of truth: OK")
 end
 
+-- Phase C 3.1: slash dispatch lives in commands.dispatch (name -> handler,
+-- bag/callback shape); the facade proxy routes by exact name. Two layers:
+-- module coverage + facade source shape + behavior through the seam.
+do
+  local cmds = assert(loadfile("src/tether/commands.lua"))()
+  for _, name in ipairs(cmds.slash_names) do
+    assert_eq(type(cmds.dispatch[name]), "function", "T3.1 dispatch owns /" .. name)
+  end
+  -- dispatch forwards to the callback table (bag/callback shape)
+  local called = {}
+  cmds.dispatch["clear"]({}, { clear = function() called[#called + 1] = "clear" end }, "clear", "")
+  assert_eq(table.concat(called, ","), "clear", "T3.1 dispatch forwards to cb")
+  assert_eq(cmds.dispatch["nope"], nil, "T3.1 unknown names no-op")
+  -- facade proxy: execute_command is route-by-name, the if-chain is gone
+  local f = io.open("src/tether/ui.lua", "r")
+  local src = f:read("*a")
+  f:close()
+  local s = src:find("local function execute_command(cmd, rest)", 1, true)
+  assert_notnil(s, "T3.1 execute_command found")
+  local e = src:find("\nend\n", s)
+  local chunk = src:sub(s, e)
+  assert_true(chunk:find("commands.dispatch", 1, true) ~= nil, "T3.1 facade drives the table")
+  assert_true(chunk:find("cmd ==", 1, true) == nil, "T3.1 no if-chain in execute_command")
+  -- behavior: /clear through the seam leaves only the splash
+  local function str_bytes(str)
+    local b = {}
+    for i = 1, #str do b[#b + 1] = str:byte(i) end
+    return b
+  end
+  local bytes = {}
+  for _, b in ipairs(str_bytes("hello")) do bytes[#bytes + 1] = b end
+  bytes[#bytes + 1] = 13
+  for _, b in ipairs(str_bytes("/clear")) do bytes[#bytes + 1] = b end
+  bytes[#bytes + 1] = 13
+  bytes[#bytes + 1] = 17
+  local uimod = run_ui_with(bytes,
+    { agent = { turn = function() return true end, get_history = function() return {} end } })
+  assert_eq(#tentries(uimod), 1, "T3.1 /clear leaves only the splash")
+  print("T3.1 slash dispatch table: OK")
+end
+
 
 if failed > 0 then
     os.exit(1)
