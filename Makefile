@@ -94,49 +94,11 @@ $(EMBED_OUT): $(LUA_MODS) tools/embed.lua build/embed_list.mk src/host/embed_mod
 	@lua tools/embed.lua $(EMBED_OUT) $(EMBED_ARGS)
 
 test: tether
-	@luac -p src/tether/app.lua
-	@luac -p src/tether/ui.lua
-	@luac -p src/tether/ui/copy.lua
-	@luac -p src/tether/ui/markdown.lua
-	@luac -p src/tether/ui/highlight.lua
-	@luac -p src/tether/ui/keys.lua
-	@luac -p src/tether/ui/palette.lua
-	@luac -p src/tether/ui/auth.lua
-	@luac -p src/tether/ui/confirm.lua
-	@luac -p src/tether/ui/ask.lua
-	@luac -p src/tether/transcript.lua
-	@luac -p src/tether/commands.lua
-	@luac -p src/tether/turn.lua
-	@luac -p src/tether/config_schema.lua
-	@luac -p src/tether/config_auth.lua
-	@luac -p src/tether/config.lua
-	@luac -p src/tether/session.lua
-	@luac -p src/tether/api.lua
-	@luac -p src/tether/providers/common.lua
-	@luac -p src/tether/providers/catalog.lua
-	@luac -p src/tether/providers/openai.lua
-	@luac -p src/tether/providers/anthropic.lua
-	@luac -p src/tether/providers/gemini.lua
-	@luac -p src/tether/providers/azure-openai.lua
-	@luac -p src/tether/providers/amazon-bedrock.lua
-	@luac -p src/tether/providers/google-vertex.lua
-	@luac -p src/tether/providers/cloudflare-ai-gateway.lua
-	@luac -p src/tether/providers/radius.lua
-	@luac -p src/tether/providers/openai-codex.lua
-	@luac -p src/tether/agent.lua
-	@luac -p src/tether/tool_dispatch.lua
-	@luac -p src/tether/retry.lua
-	@luac -p src/tether/ask.lua
-	@luac -p src/tether/confirm_policy.lua
-	@luac -p src/tether/compression.lua
-	@luac -p src/tether/projection.lua
-	@luac -p src/tether/approval.lua
-	@luac -p src/tether/auth.lua
-	@luac -p src/tether/reactor.lua
-	@luac -p src/tether/context.lua
-	@luac -p src/tether/tools.lua
-	@luac -p src/tether/subagent.lua
-	@luac -p src/tether/diff.lua
+	# 6.1: the syntax check covers every embedded module with no manual
+	# list — LUA_MODS is generated from tools/embed_order.txt (the same
+	# single source as the binary embed). Adding a module to the order
+	# file covers it here automatically.
+	@for m in $(LUA_MODS); do luac -p $$m || exit $$?; done
 	@echo "=== luac ok ==="
 	@LUA_HOME=$$(mktemp -d); rm -rf "$$LUA_HOME"; mkdir -p "$$LUA_HOME"; \
 		for t in tests/*_tests.lua; do \
