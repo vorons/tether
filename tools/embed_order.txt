@@ -56,6 +56,7 @@ auth src/tether/auth.lua
 reactor src/tether/reactor.lua
 context src/tether/context.lua
 agent src/tether/agent.lua
+tool_dispatch src/tether/tool_dispatch.lua
 tools src/tether/tools.lua
 subagent src/tether/subagent.lua
 diff src/tether/diff.lua
@@ -134,5 +135,7 @@ provider_radius
 provider_openai_codex
 api
 context
+## tool_dispatch: one synchronous tool call for the turn loop
+tool_dispatch
 agent
 app

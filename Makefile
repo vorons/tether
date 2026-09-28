@@ -124,6 +124,7 @@ test: tether
 	@luac -p src/tether/providers/radius.lua
 	@luac -p src/tether/providers/openai-codex.lua
 	@luac -p src/tether/agent.lua
+	@luac -p src/tether/tool_dispatch.lua
 	@luac -p src/tether/retry.lua
 	@luac -p src/tether/ask.lua
 	@luac -p src/tether/confirm_policy.lua

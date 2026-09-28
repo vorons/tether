@@ -87,6 +87,17 @@ local turn_mod = _G.turn
     end)()
 assert(turn_mod, "agent: cannot load turn")
 
+-- modular-remainder E: one synchronous tool call (execute + report) —
+-- a global in the built binary and a loadfile fallback for dev/test runs.
+-- The turn/confirm/answer_ask/continue entries below keep calling the
+-- local wrapper, so their contract is unchanged.
+local tool_dispatch = _G.tool_dispatch
+    or (function()
+        local chunk = loadfile("src/tether/tool_dispatch.lua")
+        return chunk and chunk()
+    end)()
+assert(tool_dispatch, "agent: cannot load tool_dispatch")
+
 M.history = {}
 M.pending = nil            -- confirmation queue for the current tool-call step
 M.bg_calls = nil           -- background subagent calls awaiting pickup: survives
@@ -467,58 +478,14 @@ end
 -- when none could be computed); it supplies the previous content for the
 -- applied diff without a second file read.
 local function run_tool_call(cfg, on_event, id, name, args, projection)
-    local result, err = execute_tool(name, args, cfg)
-    local res
-    if result then
-        res = result
-    else
-        res = { error = err or "tool failed" }
-    end
-    -- pretty-transcript-rendering 2.3/2.4: write and patch report their change
-    -- as the applied unified diff (the same text the UI expands), with a
-    -- `+N −M` summary; when no projection was available the existing body and
-    -- summary are kept so a failure never claims counts it does not have.
-    local body, summary
-    if res.error then
-        body = tostring(res.error)
-        summary = nil
-    elseif name == "write" and projection then
-        body = projection.diff
-        local word = projection.is_new and "created" or "overwritten"
-        summary = string.format("+%d −%d %s", projection.add, projection.del, word)
-    elseif name == "patch" and projection then
-        body = projection.diff
-        summary = tool_summary(name, res)
-    else
-        body = tool_body(name, res)
-        summary = tool_summary(name, res)
-    end
-    -- fix-audit-findings 1.2: the model must see the tool's output body, not
-    -- just whatever happened to live under `content` (only `read` had one).
-    local history_result
-    if res.error then
-        history_result = { error = tostring(res.error) }
-    else
-        history_result = { content = truncate_body(body) or "" }
-    end
-    M.add_tool_result(id, history_result)
-    -- the journal keeps the bounded body too (summary alone lobotomized
-    -- resumed turns: the model only saw "17 entries" instead of output).
-    slog(cfg, {
-        ts = os.date(), type = "tool_result",
-        tool_call_id = id, name = name,
-        result = res.error and { error = res.error }
-            or { summary = summary, body = truncate_body(body) or "" },
+    return tool_dispatch.run_tool_call(cfg, on_event, id, name, args, projection, {
+        execute = execute_tool,
+        summarize = tool_summary,
+        body = tool_body,
+        truncate = truncate_body,
+        add_history = function(call_id, res) M.add_tool_result(call_id, res) end,
+        journal = function(entry) slog(cfg, entry) end,
     })
-    if on_event then
-        on_event({
-            type = "tool_result", id = id, name = name,
-            error = res.error or nil,
-            summary = res.error and ("✗ " .. tostring(res.error)) or summary,
-            body = res.error and tostring(res.error) or body,
-        })
-    end
-    return res
 end
 
 -- Background spawn failure (validation): same three writes as a sync tool
