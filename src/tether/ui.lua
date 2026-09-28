@@ -920,6 +920,41 @@ M.trunc = trunc -- export (M9/T39)
 -- palette-only T2: digit shortcuts for the confirmation menu (1..5)
 local CONFIRM_DIGITS = { "allow", "session", "always", "deny", "cancel" }
 M.CONFIRM_DIGITS = CONFIRM_DIGITS
+-- confirm-menu-redesign D1/D5: per-tool question row and the muted hint.
+-- M-fields, not chunk locals (ui.lua sits at Lua's 200-locals limit).
+M.CONFIRM_QUESTIONS = {
+    run = "Allow command execution?",
+    write = "Allow writing this file?",
+    patch = "Allow applying this patch?",
+}
+M.CONFIRM_QUESTION_FALLBACK = "Allow this action?"
+-- palette-hints: hint rows are {key, act} pair tables painted by M.hint_paint
+-- (key tokens dim, action words muted, two-space pair separators).
+M.CONFIRM_HINT = {
+    { key = "↑↓", act = "select" },
+    { key = "enter", act = "submit" },
+    { key = "esc", act = "dismiss" },
+}
+-- palette-hints D2: per-mode dock hints — only the keys the mode's handler
+-- actually consumes (verified against the S.palette_mode branches).
+M.PALETTE_HINTS = {
+    command = { { key = "type", act = "filter" }, { key = "↑↓", act = "select" },
+                { key = "enter", act = "run" }, { key = "tab", act = "insert" },
+                { key = "esc", act = "close" } },
+    path = { { key = "tab", act = "cycle" }, { key = "esc", act = "restore" } },
+    copy = { { key = "↑↓", act = "select" }, { key = "enter", act = "copy" },
+             { key = "esc", act = "close" } },
+    resume = { { key = "↑↓", act = "select" }, { key = "enter", act = "resume" },
+               { key = "esc", act = "dismiss" } },
+    model = { { key = "type", act = "filter" }, { key = "↑↓", act = "select" },
+              { key = "enter", act = "pick" }, { key = "esc", act = "close" } },
+    login = { { key = "type", act = "filter" }, { key = "↑↓", act = "select" },
+              { key = "enter", act = "connect" }, { key = "esc", act = "close" } },
+    logout = { { key = "type", act = "filter" }, { key = "↑↓", act = "select" },
+               { key = "enter", act = "delete" }, { key = "esc", act = "close" } },
+    think = { { key = "↑↓", act = "select" }, { key = "enter", act = "set" },
+              { key = "esc", act = "close" } },
+}
 
 -- §6.6: spinner frames for the busy status indicator and thinking rows
 -- field. ASCII variant for TERM=dumb / NO_COLOR (M8/R1). Declared here (not
@@ -1403,24 +1438,28 @@ local function layout()
     local want_palette_h = 0
     -- palette-fuzzy-search: an active modal query reserves its row even with
     -- zero matches, so the "> query (no matches)" notice has a place to
-    -- paint (same win+2 budget shape, win is 0). Other modes keep the
+    -- paint (same win+3 budget shape, win is 0). Other modes keep the
     -- collapse-when-empty behavior.
     local modal_query = (S.palette_mode == "model" or S.palette_mode == "login"
         or S.palette_mode == "logout")
         and (S.palette_query or "") ~= ""
     if S.palette_active and (#S.palette_items > 0 or modal_query) then
-        -- 2.4: the reserved region follows the window (items + 2); the indicator
-        -- row the palette may paint fits inside it (see render_palette)
+        -- 2.4: the reserved region follows the window; palette-hints: the
+        -- indicator/query slot plus the blank+hint rows fit inside win + 3
+        -- (the old win + 2 already held one slack row before the footer —
+        -- it becomes the blank before the hint)
         local win = palette_window(S.h, #S.palette_items, S.palette_sel)
-        want_palette_h = win + 2
+        want_palette_h = win + 3
     end
 
     -- slim-footer-indicators: the dock runs, top to bottom — a gap row above
     -- the box, the box's top rule, the input's rows, its bottom rule, the
     -- palette, and the footer's single row. Everything is reserved here so no
     -- region can overlap another; the error banner keeps its row above the box.
+    -- While the palette region is painted a full-width separator rule runs
+    -- between it and the footer (old footer-separator, restored).
     local function reserve(pal_h)
-        return 2 + shown_in + pal_h + 1 + 1
+        return 2 + shown_in + pal_h + 1 + 1 + (pal_h > 0 and 1 or 0)
     end
     local function th_for(pal_h)
         local th = S.h - error_h - reserve(pal_h)
@@ -1448,7 +1487,8 @@ local function layout()
     local gap_row = error_row + error_h
     local rule_top_row = gap_row + 1
     local rule_bottom_row = rule_top_row + 1 + shown_in
-    local footer_row = rule_bottom_row + palette_h + 1
+    local separator_row = palette_h > 0 and rule_bottom_row + palette_h + 1 or nil
+    local footer_row = rule_bottom_row + palette_h + (separator_row and 1 or 0) + 1
 
     return {
         w = S.w, h = S.h,
@@ -1464,6 +1504,7 @@ local function layout()
         rule_bottom_row = rule_bottom_row,
         palette_row = rule_bottom_row,
         palette_h = palette_h,
+        separator_row = separator_row,  -- rule above the footer while the palette paints
         footer_row = footer_row,      -- the single footer row
         stats_row = footer_row,       -- same row (path/stats/model/flags combined)
         flags_row = nil,              -- no separate flag row
@@ -2336,7 +2377,7 @@ function M._splash_rows(res, width, pad)
         -- byte-width asserts with its multibyte ellipsis.
         local inner = math.max(width - 2, 1)
         for _, l in ipairs(wrap(table.concat(items, ", "), inner)) do
-            rows[#rows + 1] = muted("  " .. l)
+            rows[#rows + 1] = dim("  " .. l)
         end
     end
     section("[Context]", res.agents)
@@ -2440,7 +2481,45 @@ local function ask_selected(answer, label)
     return false
 end
 
--- ask-block-b: the hint row's text for the current phase and mode. Short
+-- palette-hints D1: the shared segmented hint painter. A hint is an array of
+-- {key, act} pairs; the key token paints in the dim tier, the action word in
+-- the muted tier, pairs join with two spaces and no `·` separator.
+-- hint_plain is the same text unstyled (the drift guards T228/T267 assert
+-- against it); hint_paint clips to `inner` display columns when given,
+-- keeping the tiers of whatever survives the clip. ASCII twins arrive through
+-- sgr_role -> to_ascii (GLYPH_MAP carries ↑ ↓ ⇆), so neither helper needs an
+-- ascii flag. M-fields: ui.lua sits at Lua's 200-locals limit.
+function M.hint_plain(pairs)
+    local t = {}
+    for _, p in ipairs(pairs) do t[#t + 1] = p.key .. " " .. p.act end
+    return table.concat(t, "  ")
+end
+
+function M.hint_paint(pairs, inner)
+    local parts, used = {}, 0
+    for _, p in ipairs(pairs) do
+        if used > 0 then
+            if inner and used + 2 > inner then break end
+            parts[#parts + 1] = "  "
+            used = used + 2
+        end
+        local seg = p.key .. " " .. p.act
+        if inner and used + vlen(seg) > inner then
+            local kp = clip(p.key, math.max(inner - used, 1))
+            parts[#parts + 1] = dim(kp)
+            used = used + vlen(kp)
+            if inner - used >= 2 then
+                parts[#parts + 1] = " " .. muted(clip(p.act, inner - used - 1))
+            end
+            break
+        end
+        parts[#parts + 1] = dim(p.key) .. " " .. muted(p.act)
+        used = used + vlen(seg)
+    end
+    return table.concat(parts)
+end
+
+-- ask-block-b: the hint row's pairs for the current phase and mode. Short
 -- verbs only — the row is clipped to the width (never wrapped), so the full
 -- ASK_KEYS phrases would not fit. Every key named here exists in ASK_KEYS
 -- (asserted by T228), so the painted hints cannot drift from the handled
@@ -2448,23 +2527,31 @@ end
 -- names submit/dismiss, editors name save/discard instead.
 -- (M-field, not chunk local: ui.lua sits at Lua's 200-locals limit.)
 function M._ask_hint(a, q)
+    local K, A = "key", "act"
     if a.phase == "confirm" then
-        return "⇆ tab · enter submit · esc dismiss"
+        return { { [K] = "⇆", [A] = "tab" }, { [K] = "enter", [A] = "submit" },
+                 { [K] = "esc", [A] = "dismiss" } }
     end
     if a.mode == "note" then
-        return "type note · Enter save · Esc discard"
+        return { { [K] = "type", [A] = "note" }, { [K] = "Enter", [A] = "save" },
+                 { [K] = "Esc", [A] = "discard" } }
     end
     if a.mode == "other" then
-        return "type answer · Enter save · Esc discard"
+        return { { [K] = "type", [A] = "answer" }, { [K] = "Enter", [A] = "save" },
+                 { [K] = "Esc", [A] = "discard" } }
     end
     local multi_set = #a.questions > 1
     if q.multi then
-        return "↑↓ move · Space toggle · Enter accept · Tab note · Esc cancel"
+        return { { [K] = "↑↓", [A] = "move" }, { [K] = "Space", [A] = "toggle" },
+                 { [K] = "Enter", [A] = "accept" }, { [K] = "Tab", [A] = "note" },
+                 { [K] = "Esc", [A] = "cancel" } }
     end
     if multi_set then
-        return "⇆ tab · ↑↓ select · enter confirm · esc dismiss"
+        return { { [K] = "⇆", [A] = "tab" }, { [K] = "↑↓", [A] = "select" },
+                 { [K] = "enter", [A] = "confirm" }, { [K] = "esc", [A] = "dismiss" } }
     end
-    return "↑↓ select · enter submit · esc dismiss"
+    return { { [K] = "↑↓", [A] = "select" }, { [K] = "enter", [A] = "submit" },
+             { key = "esc", act = "dismiss" } }
 end
 
 -- ask-block-redesign: the tab strip for multi-question sets. One clipped tab
@@ -2521,7 +2608,7 @@ local function render_ask(width)
             local apart = clip(ans_text, math.max(inner - vlen(qpart) - 2, 4))
             out[#out + 1] = "  " .. dim(qpart .. ": ") .. apart
         end
-        out[#out + 1] = muted(clip(M._ask_hint(a, q), inner))
+        out[#out + 1] = M.hint_paint(M._ask_hint(a, q), inner)
         return out
     end
     if #a.questions > 1 then
@@ -2578,7 +2665,7 @@ local function render_ask(width)
     end
     -- ask-block-b: one muted hint row under the freeform row, clipped to the
     -- width so it never wraps into extra rows.
-    out[#out + 1] = muted(clip(M._ask_hint(a, q), inner))
+    out[#out + 1] = M.hint_paint(M._ask_hint(a, q), inner)
     return out
 end
 
@@ -2631,14 +2718,23 @@ local function render_entry(e, width, prev_role)
     elseif e.virt == "confirm" then
         local c = S.confirmation
         if not c then return {} end
+        -- confirm-menu-redesign: header, optional payload body (patch diff /
+        -- danger warning) directly under it, question, options, muted hint.
         local co = { "", yellow("⚠ " .. (c.label or "confirmation")) }
-        for _, l in ipairs(wrap(c.body or "", width - 2)) do
-            co[#co + 1] = "  " .. l
+        if c.body and c.body ~= "" then
+            for _, l in ipairs(wrap(c.body, width - 2)) do
+                co[#co + 1] = "  " .. l
+            end
         end
+        co[#co + 1] = ""
+        co[#co + 1] = (c.question or "Allow this action?")
+        co[#co + 1] = ""
         for i, opt in ipairs(c.options or {}) do
             local t = "  " .. opt
             co[#co + 1] = (i == S.confirmation_sel) and rev(t) or t
         end
+        co[#co + 1] = ""
+        co[#co + 1] = "  " .. M.hint_paint(M.CONFIRM_HINT)
         out = co
     else
         local role = e.role or "system"
@@ -2648,11 +2744,11 @@ local function render_entry(e, width, prev_role)
             out = M._splash_rows({ version = e.version,
                 agents = e.agents, skills = e.skills }, width, ui_pad(width))
         elseif role == "separator" then
-            -- tui: Turn separators — dim rule with the local submission time
+            -- tui: Turn separators — muted rule with the local submission time
             local label = "── " .. (e.text or "") .. " "
             local fill = width - vlen(label)
             if fill < 1 then fill = 1 end
-            out = { dim(label .. string.rep("─", fill)) }
+            out = { muted(label .. string.rep("─", fill)) }
         elseif role == "user" then
             out = with_prefix(cyan("›") .. " ", 2,
                 wrap(e.text or "", math.max(width - 2, 1)))
@@ -3127,7 +3223,7 @@ local function rule_row(width, status, label)
         local lw = vlen(label)
         if lw + 2 <= width then
             local start = math.floor((width - lw) / 2)
-            return dim(fill(start) .. label .. fill(width - start - lw))
+            return muted(fill(start) .. label .. fill(width - start - lw))
         end
     end
     return muted(fill(width))
@@ -3256,9 +3352,23 @@ local function render_palette(L)
     -- directly under the editor's bottom border.)
     local n = #S.palette_items
     local win, off = palette_window(L.h, n, S.palette_sel)
-    local last = L.footer_row - 1
+    -- palette-hints D3: the blank+hint pair anchors to the region bottom —
+    -- hint on the last reserved row, blank one above, footer flush under it.
+    -- Entries and the indicator/query row keep the top-flush layout inside
+    -- the rows above the blank, so the shrink loop in layout() cuts the
+    -- entry window first and the hint is the last content dropped (it
+    -- survives down to palette_h == 1).
+    local hint_row = L.palette_row + L.palette_h
+    local room = math.max(0, hint_row - 2 - L.palette_row)
+    local paint_win = math.min(win, room - (q ~= "" and 1 or 0))
+    if paint_win < 0 then paint_win = 0 end
     local cw = M._content_width(L.w)
     local g = string.rep(" ", ui_pad(L.w))
+    -- Rows inside the region that end up holding no entry, indicator or
+    -- query must stay blank: clear the region up to (not including) the hint
+    -- row, so a dock that shifted between frames leaves no stale content in
+    -- the reserved blank.
+    for r = L.palette_row + 1, hint_row - 1 do set_row(r, g) end
     -- descriptions align: the name column is padded to the widest name+hint
     -- across all listed entries (computed once per paint)
     local label_w = 0
@@ -3268,9 +3378,7 @@ local function render_palette(L)
         local vw = vlen(l)
         if vw > label_w then label_w = vw end
     end
-    for i = 1, win do
-        local row = L.palette_row + i
-        if row > last then break end
+    for i = 1, paint_win do
         local it = S.palette_items[off + i - 1]
         if it then
             -- 3.1: the argument hint sits after the name when the entry has one
@@ -3278,20 +3386,31 @@ local function render_palette(L)
             if it.hint then label = label .. " " .. it.hint end
             local pad = string.rep(" ", math.max(label_w - vlen(label), 0))
             local text = trunc(string.format(" %s%s %s", label, pad, it.desc or ""), cw)
-            set_row(row, g .. ((off + i - 1 == S.palette_sel) and sgr_role("accent", text) or dim(text)))
+            set_row(L.palette_row + i, g .. ((off + i - 1 == S.palette_sel) and sgr_role("accent", text) or dim(text)))
         end
     end
-    local irow = L.palette_row + win + 1
-    if q ~= "" and irow <= last then
-        local txt = "> " .. q
-        if n == 0 then
-            txt = txt .. " (no matches)"
-        elseif n > win then
-            txt = txt .. string.format(" (%d/%d)", S.palette_sel, n)
+    local irow = L.palette_row + paint_win + 1
+    if irow <= L.palette_row + room then
+        if q ~= "" then
+            local txt = "> " .. q
+            if n == 0 then
+                txt = txt .. " (no matches)"
+            elseif n > paint_win then
+                txt = txt .. string.format(" (%d/%d)", S.palette_sel, n)
+            end
+            set_row(irow, g .. dim(trunc(" " .. txt, cw)))
+        elseif n > paint_win then
+            set_row(irow, g .. dim(trunc(string.format(" %d/%d", S.palette_sel, n), cw)))
         end
-        set_row(irow, g .. dim(trunc(" " .. txt, cw)))
-    elseif n > win and irow <= last then
-        set_row(irow, g .. dim(trunc(string.format(" %d/%d", S.palette_sel, n), cw)))
+    end
+    if L.palette_h >= 1 then
+        local hp = M.PALETTE_HINTS[S.palette_mode] or M.PALETTE_HINTS.command
+        set_row(hint_row, g .. M.hint_paint(hp, cw))
+    end
+    -- footer-separator: while the palette paints, a full-width rule like the
+    -- box's own separates the dock from the footer row.
+    if L.separator_row then
+        set_row(L.separator_row, g .. rule_row(cw))
     end
 end
 
@@ -4729,30 +4848,30 @@ local function handle_agent_event(ev)
         local detail = ev.details and ev.details[1]
         if detail then
             local args = detail.args or {}
-            local label = detail.name .. " " .. (args.path or args.command or "")
+            local name = detail.name
+            -- confirm-menu-redesign D3: the header is the single place the
+            -- target is shown (no duplicated body row for run/write).
+            local label = name .. " " .. (args.path or args.command or args.cwd or "")
+            if name == "run" and args.cwd and (args.command or "") ~= "" then
+                label = label .. "  (cwd=" .. args.cwd .. ")"
+            end
             local body = ""
-            if detail.name == "patch" and args.patch then
+            if name == "patch" and args.patch then
                 body = args.patch
-            elseif detail.name == "run" then
-                body = args.command or ""
-                if args.cwd then body = body .. "  (cwd=" .. args.cwd .. ")" end
+            elseif name == "run" and ui_is_dangerous(args.command or "") then
                 -- §6.10: warn on dangerous commands
                 -- M7/D1+D2: extracted to ui.is_dangerous() (crash: %f is a Lua
                 -- pattern boundary prefix, %frm%s was an invalid pattern).
-                if ui_is_dangerous(body) then
-                    body = body .. "\n⚠ potentially dangerous command"
-                end
-            elseif args.content and args.path then
-                body = "write → " .. args.path .. " (" .. #args.content .. " B)"
+                body = "⚠ potentially dangerous command"
             end
-            local options = {"[1/y] once     allow once",
-                             "[2/a] session  allow until the session ends",
-                             "[3/A] always   save to auto_approve",
-                             "[4/n] deny     decline",
-                             "[5/Esc] cancel abort the agent turn"}
+            local options = {"[once]     allow once",
+                             "[session]  allow until the session ends",
+                             "[always]   save to auto_approve",
+                             "[deny]     decline"}
             S.confirmation = {
                 label = label,
                 body = body,
+                question = M.CONFIRM_QUESTIONS[name] or M.CONFIRM_QUESTION_FALLBACK,
                 options = options,
                 detail = detail,
             }
@@ -5770,8 +5889,9 @@ local function handle_confirmation_key(k)
             local L = layout()
             local cw = M._content_width(L.w)
             local total = ensure_index(cw)
-            -- options are the LAST transcript lines of the block
-            local above = total - #c.options
+            -- options are the last block lines except the trailing
+            -- confirm-menu-redesign blank + hint rows (2 lines)
+            local above = total - #c.options - 2
             -- k.row is a SCREEN row; map it to a transcript line index the
             -- same way the tool-row click below does (mixing screen rows with
             -- line indices picked the wrong option, i.e. the wrong verdict).
@@ -5864,9 +5984,11 @@ handle_key = function(k)
             local L = layout()
             if S.palette_active and k.row >= L.palette_row + 1 then
                 -- 2.5: hit-test through the window offset; the indicator row
-                -- selects nothing
+                -- selects nothing; palette-hints: neither the blank nor the
+                -- hint row does (they occupy the region's last two rows).
                 local win, off = palette_window(L.h, #S.palette_items, S.palette_sel)
-                local last = math.min(L.palette_row + win, L.footer_row - 1)
+                local last = math.min(L.palette_row + win,
+                    L.palette_row + L.palette_h - 2)
                 if k.row <= last then
                     local it = S.palette_items[off + (k.row - L.palette_row) - 1]
                     if it then

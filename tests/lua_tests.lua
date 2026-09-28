@@ -4280,25 +4280,25 @@ do
   print("T62 2.1 turn separators: OK")
 end
 
--- T63: 2.2 — separator rows render dim in color mode, ASCII-downgraded in
+-- T63: 2.2 — separator rows render muted in color mode, ASCII-downgraded in
 -- ASCII mode (verified through the frame renderer's _render_all seam).
 do
   local str_bytes = function(s) local b = {} for i = 1, #s do b[#b + 1] = s:byte(i) end return b end
   local ESC = "\27"
   local q1 = str_bytes("q1"); q1[#q1 + 1] = 13; q1[#q1 + 1] = 17
 
-  -- color mode: dim SGR present around the separator row
+  -- color mode: muted SGR present around the separator row
   local sink_c = {}
   local uimod_c, S_c = run_ui_with(q1,
     { agent = { turn = function() return true end, get_history = function() return {} end } })
   local sep_c = uimod_c._render_all(80)
-  local found_dim = false
+  local found_muted = false
   for _, r in ipairs(sep_c) do
-    if r:find("──", 1, true) then
-      if r:find(ESC .. "[2m", 1, true) then found_dim = true end
+    if r:find("──", 1, true) and r:find("%d%d:%d%d") then
+      if r:find(ESC .. "[90m", 1, true) then found_muted = true end
     end
   end
-  assert_true(found_dim, "T63 separator row carries dim SGR in color mode")
+  assert_true(found_muted, "T63 separator row carries muted SGR in color mode")
 
   -- ASCII mode: separator row is -- HH:MM -- with no non-ASCII bytes.
   -- The env probe (NO_COLOR/TERM=dumb) would also downgrade the glyph map,
@@ -4321,7 +4321,7 @@ do
     end
   end
   assert_true(found_ascii, "T63 ASCII separator has no non-ASCII bytes")
-  print("T63 2.2 separator dim/ascii rendering: OK")
+  print("T63 2.2 separator muted/ascii rendering: OK")
 end
 
 -- T64: 2.3 — separators gated behind ui.turn_separators; -r / /resume
@@ -8631,9 +8631,9 @@ do
   -- (the transcript minimum takes priority); what must
   -- hold is that entries still paint inside the region and never past it.
   assert_true(L12.palette_h >= 1, "T83 the reserved region is non-empty")
-  assert_true(L12.palette_h <= w12 + 2, "T83 the reserved region is at most window+2")
+  assert_true(L12.palette_h <= w12 + 3, "T83 the reserved region is at most window+3")
   local painted12 = 0
-  local last12 = L12.footer_row - 1
+  local last12 = L12.palette_row + L12.palette_h
   for r = L12.palette_row + 1, last12 do
     if strip(t12._row(r)):find("/", 1, true) then painted12 = painted12 + 1 end
   end
@@ -8663,7 +8663,13 @@ do
     assert_true(strip(t8._row(r)):match("%d+/%d+") == nil,
       "T83 no indicator is painted when it does not fit (row " .. r .. ")")
   end
-  assert_true(#rows_with(t8, S8, "/clear") > 0, "T83 the palette still paints its window")
+  -- palette-hints: on an 8-row terminal the region shrinks to the hint alone —
+  -- the entry window is cut first, the hint is the last content standing.
+  -- footer-separator: the rule above the footer keeps its row even then.
+  assert_true(strip(t8._row(L8.footer_row - 1)):find("─", 1, true) ~= nil,
+    "T83 the separator rule survives the shrink on an 8-row terminal")
+  assert_true(strip(t8._row(L8.footer_row - 2)):find("select", 1, true) ~= nil,
+    "T83 the hint row survives the shrink on an 8-row terminal")
   assert_true(strip(t8._row(L8.rule_bottom_row)):find("─", 1, true) ~= nil,
     "T83 the bottom rule is never painted by the palette")
   assert_true(strip(t8._row(L8.footer_row)) ~= nil and strip(t8._row(L8.footer_row)) ~= "",
@@ -10691,7 +10697,8 @@ do
     uimod_p._paint(true)
     local Lp = uimod_p._layout()
     assert_true(Lp.palette_h >= 1, "pi 2.1 open palette reserves rows")
-    assert_eq(Lp.footer_row, Lp.rule_bottom_row + Lp.palette_h + 1, "pi 2.1 footer follows the palette region")
+    assert_eq(Lp.separator_row, Lp.rule_bottom_row + Lp.palette_h + 1, "pi 2.1 separator follows the palette region")
+    assert_eq(Lp.footer_row, Lp.separator_row + 1, "pi 2.1 footer follows the separator")
 
     -- error banner sits above the box and is included in the layout
     uimod._set_error_banner("boom")
@@ -12244,11 +12251,10 @@ do
     label = "write /tmp/x",
     body = "write",
     options = {
-      "[1/y] once     разрешить один раз",
-      "[2/a] session  разрешить до конца сессии",
-      "[3/A] always   сохранить в auto_approve",
-      "[4/n] deny     отклонить",
-      "[5/Esc] cancel прервать ход агента",
+      "[once]     allow once",
+      "[session]  allow until the session ends",
+      "[always]   save to auto_approve",
+      "[deny]     decline",
     },
     detail = { id = "c1", name = "write", args = { path = "/tmp/x", content = "hi" } },
   }
@@ -15511,6 +15517,358 @@ do
   _G.tether = orig
   os.execute("rm -rf " .. dir)
   print("T264 the resume picker reads bounded windows: OK")
+end
+
+-- T265: confirm-menu-redesign R1/R2/D1-D3 — the confirmation event builds
+-- the state: per-tool question, four name-labeled options, no body echo for
+-- run/write, cwd in the header, danger warning as the whole body, patch
+-- keeps the diff.
+do
+  local function menu_for(name, args)
+    local uim, S = run_ui_with({ 17 }, {
+      agent = { turn = function() return true end, get_history = function() return {} end },
+    })
+    uim._handle_agent_event({ type = "confirmation",
+      details = { { id = "c1", name = name, args = args } } })
+    local c = S.confirmation
+    assert_notnil(c, "T265 menu raised for " .. name)
+    return c
+  end
+  local run = menu_for("run", { command = "make test" })
+  assert_eq(run.question, "Allow command execution?", "T265 run question")
+  assert_eq(#run.options, 4, "T265 four options")
+  assert_eq(run.options[1], "[once]     allow once", "T265 once row")
+  assert_eq(run.options[4], "[deny]     decline", "T265 deny row")
+  assert_eq(run.body, "", "T265 run body does not echo the command")
+  local wr = menu_for("write", { path = "/etc/x", content = "abc" })
+  assert_eq(wr.question, "Allow writing this file?", "T265 write question")
+  assert_eq(wr.body, "", "T265 write body is not shown twice")
+  local pt = menu_for("patch", { patch = "+++ b/src/x.c\n@@ -1 +1 @@\n-a\n+b" })
+  assert_eq(pt.question, "Allow applying this patch?", "T265 patch question")
+  assert_true(pt.body:find("+++ b/src/x.c", 1, true) ~= nil, "T265 patch keeps the diff body")
+  assert_eq(menu_for("subagent", { task = "x" }).question,
+    "Allow this action?", "T265 fallback question")
+  local cwd = menu_for("run", { command = "ls", cwd = "/tmp/outside" })
+  assert_true(cwd.label:find("(cwd=/tmp/outside)", 1, true) ~= nil, "T265 cwd rides in the header")
+  local dng = menu_for("run", { command = "rm -rf /tmp/xx" })
+  assert_eq(dng.body, "⚠ potentially dangerous command",
+    "T265 the danger warning is the whole body")
+  print("T265 confirmation state: question, options, body policy: OK")
+end
+
+-- T266: confirm-menu-redesign — the painted menu rows: header, optional body
+-- under it, blank, question, blank, four options, blank, muted hint; no body
+-- rows when the body is empty.
+do
+  local uim, S = run_ui_with({ 17 }, {
+    agent = { turn = function() return true end, get_history = function() return {} end },
+  })
+  uim._handle_agent_event({ type = "confirmation",
+    details = { { id = "c1", name = "run", args = { command = "make test" } } } })
+  local function plain(rows)
+    return table.concat(rows, "\n"):gsub("\27%[[%d;]*m", "")
+  end
+  local raw = table.concat(uim._render_all(80), "\n")
+  local joined = plain(uim._render_all(80))
+  local function pos(pat) local i = joined:find(pat, 1, true); return i end
+  local h, q = pos("⚠ run make test"), pos("Allow command execution?")
+  local o1, o4 = pos("[once]     allow once"), pos("[deny]     decline")
+  local hm = pos(uim.hint_plain(uim.CONFIRM_HINT))
+  assert_true(h ~= nil and q ~= nil and o1 ~= nil and o4 ~= nil and hm ~= nil,
+    "T266 all menu parts painted")
+  assert_true(h < q and q < o1 and o1 < o4 and o4 < hm, "T266 row order header→hint")
+  -- the command is painted exactly once (header), never echoed as a body row
+  assert_true(joined:find("make test", h + 10, true) == nil,
+    "T266 the command shows only in the header")
+  -- palette-hints: the hint row is segmented — dim key token, muted action
+  -- word, joined by a plain space (pairs separated by two spaces)
+  assert_true(raw:find("  " .. uim.sgr_role("dim", "↑↓") .. " " ..
+    uim.sgr_role("muted", "select"), 1, true) ~= nil,
+    "T266 the hint row tiers keys and actions")
+  print("T266 confirmation menu layout: OK")
+end
+
+-- T267: confirm-menu-redesign hint drift guard (T228 style) — every verb
+-- painted in CONFIRM_HINT must exist in the handled confirmation bindings.
+do
+  local ui = dofile("src/tether/ui.lua")
+  local hint = ui.hint_plain(ui.CONFIRM_HINT)
+  assert_true(hint:find("↑↓ select", 1, true) ~= nil, "T267 hint names the arrows")
+  assert_true(hint:find("enter submit", 1, true) ~= nil, "T267 hint names enter")
+  assert_true(hint:find("esc dismiss", 1, true) ~= nil, "T267 hint names esc")
+  -- bindings: esc cancels, digits 1..5 and y/a/A/n resolve, arrows move the
+  -- selection over the four rows. Remove a binding and a line fails.
+  assert_true(ui.KEYMAP["esc"] ~= nil and ui.KEYMAP["esc"]:find("cancel", 1, true) ~= nil,
+    "T267 esc is bound to confirmation cancel")
+  local dm = ui.CONFIRM_DIGITS
+  assert_eq(#dm, 5, "T267 five confirmation digits stay bound (5 = cancel alias)")
+  assert_eq(dm[5], "cancel", "T267 digit 5 is the cancel alias")
+  assert_eq(ui.KEYMAP["4"], "confirm deny", "T267 digit 4 still denies")
+  print("T267 confirmation hint matches the bindings: OK")
+end
+
+-- T268: confirm-menu-redesign — cancel is not a selectable row: ↓ walks the
+-- selection over exactly the four event-built options and Enter takes deny,
+-- never cancel.
+do
+  local resolved = {}
+  local orig_turn = _G.turn
+  _G.turn = {
+    confirm = function(id, dec) resolved[#resolved + 1] = dec; return true end,
+    continue = function() return true end,
+    start = function() return true end,
+    abort = function() end,
+  }
+  local uim, S = run_ui_with({ 17 }, {
+    agent = { turn = function() return true end, get_history = function() return {} end },
+  })
+  uim._handle_agent_event({ type = "confirmation",
+    details = { { id = "c1", name = "run", args = { command = "ls" } } } })
+  for _ = 1, 6 do uim._handle_key({ kind = "special", name = "down" }) end
+  assert_eq(S.confirmation_sel, 4, "T268 down clamps at the fourth row")
+  uim._handle_key({ kind = "enter" })
+  assert_eq(resolved[1], "deny", "T268 Enter on the clamped row takes deny")
+  _G.turn = orig_turn
+  print("T268 arrows cannot reach cancel: OK")
+end
+
+-- T269: confirm-menu-redesign — a click on the [deny] row of the painted
+-- four-option menu resolves deny (prefix match survives the relabeling and
+-- the trailing hint rows).
+do
+  local resolved = {}
+  local orig_turn = _G.turn
+  _G.turn = {
+    confirm = function(id, dec) resolved[#resolved + 1] = dec; return true end,
+    continue = function() return true end,
+    start = function() return true end,
+    abort = function() end,
+  }
+  local uim, S = run_ui_with({ 17 }, {
+    agent = { turn = function() return true end, get_history = function() return {} end },
+  })
+  uim._handle_agent_event({ type = "confirmation",
+    details = { { id = "c1", name = "run", args = { command = "ls" } } } })
+  local L = uim._layout()
+  local cw = uim._content_width(L.w)
+  local total = uim._transcript.ensure_index(cw)
+  -- rows from the block tail: hint, blank, then options; [once] = first option
+  local idx = total - #S.confirmation.options - 1
+  local bottom = math.min(total, total - S.scroll)
+  if bottom < 1 then bottom = 1 end
+  local top = bottom - L.transcript_h + 1
+  if top < 1 then top = 1 end
+  local row = L.transcript_row + (idx - top)
+  uim._handle_key({ kind = "mouse", name = "press", row = row, col = 5, button = 0 })
+  assert_eq(resolved[1], "allow", "T269 click on the first option row takes allow")
+  uim._handle_agent_event({ type = "confirmation",
+    details = { { id = "c2", name = "run", args = { command = "ls" } } } })
+  local L2 = uim._layout()
+  local total2 = uim._transcript.ensure_index(uim._content_width(L2.w))
+  local idx2 = total2 - 2 -- deny = fourth option = tail minus blank+hint
+  local bottom2 = math.min(total2, total2 - S.scroll)
+  if bottom2 < 1 then bottom2 = 1 end
+  local top2 = bottom2 - L2.transcript_h + 1
+  if top2 < 1 then top2 = 1 end
+  uim._handle_key({ kind = "mouse", name = "press",
+    row = L2.transcript_row + (idx2 - top2), col = 5, button = 0 })
+  assert_eq(resolved[2], "deny", "T269 click on the [deny] row takes deny")
+  _G.turn = orig_turn
+  print("T269 confirmation mouse clicks map to the painted option: OK")
+end
+
+-- T270: palette-hints 1.1 — the shared segmented hint painter: plain text,
+-- dim key / muted word tiers, two-space separators, ASCII twins, clipping.
+do
+  local ui = dofile("src/tether/ui.lua")
+  local hp = { { key = "↑↓", act = "select" }, { key = "enter", act = "submit" },
+               { key = "esc", act = "dismiss" } }
+  assert_eq(ui.hint_plain(hp), "↑↓ select  enter submit  esc dismiss",
+    "T270 plain joins pairs with two spaces")
+  assert_true(ui.hint_plain(hp):find("·", 1, true) == nil, "T270 plain has no · separator")
+  local painted = ui.hint_paint(hp)
+  assert_eq(ui._strip_sgr(painted), ui.hint_plain(hp), "T270 painted text equals plain")
+  assert_true(painted:find(ui.sgr_role("dim", "↑↓") .. " " .. ui.sgr_role("muted", "select"),
+    1, true) ~= nil, "T270 key token dim, action word muted")
+  -- narrow width: the row clips to the budget and still carries the tiers
+  local clipped = ui.hint_paint(hp, 12)
+  assert_true(ui.vlen(ui._strip_sgr(clipped)) <= 12, "T270 clipped hint fits the width")
+  assert_true(clipped:find(ui.sgr_role("dim", "↑↓"), 1, true) ~= nil,
+    "T270 clipping keeps the dim tier")
+  -- ASCII mode routes the glyphs through the GLYPH_MAP twins
+  ui._ascii_mode = true
+  local ascii = ui._strip_sgr(ui.hint_paint(hp))
+  assert_true(ascii:find("^v select", 1, true) ~= nil, "T270 ASCII twin for the arrows")
+  assert_true(ascii:find("↑", 1, true) == nil, "T270 ASCII hint carries no non-ASCII glyph")
+  ui._ascii_mode = false
+  print("T270 segmented hint painter: OK")
+end
+
+-- T271: palette-hints 4.1 — per-mode hint texts match the spec table exactly.
+do
+  local ui = dofile("src/tether/ui.lua")
+  local want = {
+    command = "type filter  ↑↓ select  enter run  tab insert  esc close",
+    path = "tab cycle  esc restore",
+    copy = "↑↓ select  enter copy  esc close",
+    resume = "↑↓ select  enter resume  esc dismiss",
+    model = "type filter  ↑↓ select  enter pick  esc close",
+    login = "type filter  ↑↓ select  enter connect  esc close",
+    logout = "type filter  ↑↓ select  enter delete  esc close",
+    think = "↑↓ select  enter set  esc close",
+  }
+  for mode, text in pairs(want) do
+    assert_eq(ui.hint_plain(ui.PALETTE_HINTS[mode]), text, "T271 " .. mode .. " hint text")
+  end
+  print("T271 per-mode palette hint texts: OK")
+end
+
+-- T272: palette-hints 4.3 — the command palette paints the indicator, then a
+-- blank row, then the two-tone hint flush under the footer anchor.
+do
+  local uim, S = run_ui_with({ 17 }, {
+    agent = { turn = function() return true end, get_history = function() return {} end },
+  })
+  uim._skills_stub = function() return {} end
+  uim._handle_key({ kind = "text", char = "/" })
+  uim._paint(true)
+  local L = uim._layout()
+  local function plain(r) return uim._strip_sgr(uim._row(r) or "") end
+  local hint_row = L.palette_row + L.palette_h
+  assert_eq(L.footer_row, hint_row + 2, "T272 the separator and the footer follow the hint")
+  assert_true(plain(hint_row + 1):find("─", 1, true) ~= nil,
+    "T272 the separator rule sits between the hint and the footer")
+  local hint = plain(hint_row)
+  assert_true(hint:find("type filter", 1, true) ~= nil and hint:find("esc close", 1, true) ~= nil,
+    "T272 command hint painted on the last region row: " .. hint)
+  assert_true((uim._row(hint_row) or ""):find(
+    uim.sgr_role("dim", "type") .. " " .. uim.sgr_role("muted", "filter"), 1, true) ~= nil,
+    "T272 hint row tiers keys and words")
+  assert_true(plain(hint_row - 1):match("^%s*$") ~= nil,
+    "T272 one blank row above the hint: [" .. plain(hint_row - 1) .. "]")
+  -- 10 commands over a window of 8: indicator stays directly below the entries
+  assert_true(plain(L.palette_row + 9):match("^%s*1/10%s*$") ~= nil,
+    "T272 the indicator keeps its slot below the painted entries")
+  -- 4.4: a click on the hint or the blank row selects nothing
+  uim._handle_key({ kind = "mouse", name = "press", row = hint_row, col = 5, button = 0 })
+  uim._handle_key({ kind = "mouse", name = "press", row = hint_row - 1, col = 5, button = 0 })
+  assert_true(S.palette_active, "T272 clicks on hint/blank leave the palette open")
+  assert_eq(S.input, "/", "T272 clicks on hint/blank insert nothing")
+  print("T272 command palette hint painting + click bounds: OK")
+end
+
+-- T273: palette-hints 4.3 — every dock mode paints its own hint, the modal
+-- query row keeps its slot above the blank, ASCII mode keeps the row pure.
+do
+  local function paint_mode(mode, items, query, size)
+    local uim, S = run_ui_with({ 17 }, {
+      agent = { turn = function() return true end, get_history = function() return {} end },
+      size = size,
+    })
+    S.palette_active = true
+    S.palette_mode = mode
+    S.palette_items = items
+    S.palette_sel = 1
+    if query then S.palette_query = query end
+    uim._paint(true)
+    local L = uim._layout()
+    return uim, L, uim._strip_sgr(uim._row(L.palette_row + L.palette_h) or "")
+  end
+  local one = { { label = "a", desc = "d" }, { label = "b", desc = "e" } }
+  local _, _, h1 = paint_mode("copy", one, nil)
+  assert_true(h1:find("enter copy", 1, true) ~= nil, "T273 copy mode hint")
+  local _, _, h2 = paint_mode("resume", one, nil)
+  assert_true(h2:find("enter resume", 1, true) ~= nil, "T273 resume mode hint")
+  local _, _, h3 = paint_mode("think", one, nil)
+  assert_true(h3:find("enter set", 1, true) ~= nil, "T273 think mode hint")
+  local _, _, h4 = paint_mode("path", one, nil)
+  assert_true(h4:find("tab cycle", 1, true) ~= nil and h4:find("esc restore", 1, true) ~= nil,
+    "T273 path completion hint")
+  local _, _, h5 = paint_mode("model", one, "gp")
+  assert_true(h5:find("enter pick", 1, true) ~= nil, "T273 model mode names its own verb")
+  local _, _, h6 = paint_mode("login", one, "op")
+  assert_true(h6:find("enter connect", 1, true) ~= nil, "T273 login mode names connect")
+  local uim7, L7, h7 = paint_mode("logout", {}, "ope")
+  assert_true(h7:find("enter delete", 1, true) ~= nil, "T273 logout mode names delete")
+  assert_true(uim7._strip_sgr(uim7._row(L7.palette_row + 1) or ""):find("> ope (no matches)", 1, true) ~= nil,
+    "T273 the query row keeps its slot above the blank and the hint")
+  print("T273 per-mode dock hints paint: OK")
+end
+
+-- T274: palette-hints 4.3 — on a short terminal the entry window shrinks
+-- first; the hint is the last content standing; ASCII keeps the row plain.
+do
+  local uim, S = run_ui_with({ 17 }, {
+    agent = { turn = function() return true end, get_history = function() return {} end },
+    size = { width = 80, height = 12 },
+  })
+  uim._skills_stub = function() return {} end
+  uim._handle_key({ kind = "text", char = "/" })
+  uim._paint(true)
+  local L = uim._layout()
+  assert_true(L.palette_h >= 1, "T274 the region survives")
+  assert_true(uim._strip_sgr(uim._row(L.palette_row + L.palette_h) or ""):find("esc close", 1, true) ~= nil,
+    "T274 the hint survives the shrink")
+  local entries = 0
+  for r = L.palette_row + 1, L.palette_row + L.palette_h - 2 do
+    if uim._strip_sgr(uim._row(r) or ""):find("/clear", 1, true) then entries = entries + 1 end
+  end
+  local w12 = uim._palette_window(S.h, #S.palette_items, S.palette_sel)
+  assert_true(entries < w12, "T274 the entry window shrank before the hint dropped")
+  -- ASCII mode: no non-ASCII glyph on the hint row
+  local uia = run_ui_with({ 17 }, {
+    agent = { turn = function() return true end, get_history = function() return {} end },
+  })
+  uia._ascii_mode = true
+  uia._skills_stub = function() return {} end
+  uia._handle_key({ kind = "text", char = "/" })
+  uia._paint(true)
+  local La = uia._layout()
+  local ahint = uia._strip_sgr(uia._row(La.palette_row + La.palette_h) or "")
+  assert_true(ahint:find("esc close", 1, true) ~= nil, "T274 ASCII hint keeps its verbs")
+  assert_true(not ahint:find("[\128-\255]", 1) , "T274 ASCII hint row is pure ASCII")
+  uia._ascii_mode = false
+  print("T274 hint survives the window shrink: OK")
+end
+
+-- T275: footer-separator — while the palette paints, a full-width muted rule
+-- runs between the hint and the footer; with the palette closed there is
+-- exactly one rule (the box's bottom) and no separator row.
+do
+  local uim, S = run_ui_with({ 17 }, {
+    agent = { turn = function() return true end, get_history = function() return {} end },
+  })
+  uim._skills_stub = function() return {} end
+  uim._handle_key({ kind = "text", char = "/" })
+  uim._paint(true)
+  local L = uim._layout()
+  local function plain(r) return uim._strip_sgr(uim._row(r) or "") end
+  assert_eq(L.separator_row, L.palette_row + L.palette_h + 1,
+    "T275 the separator sits directly under the palette region")
+  assert_eq(L.footer_row, L.separator_row + 1, "T275 the footer sits directly under the separator")
+  local sep = plain(L.separator_row)
+  assert_true(sep:find("─", 1, true) ~= nil, "T275 the separator is a rule: " .. sep)
+  assert_true(sep:gsub("─", ""):match("^%s*$") ~= nil, "T275 the separator row holds only the rule")
+  -- closed palette: no separator row, footer right below the box's bottom rule
+  uim._handle_key({ kind = "esc" })
+  uim._paint(true)
+  local Lc = uim._layout()
+  assert_eq(Lc.separator_row, nil, "T275 no separator while the palette is closed")
+  assert_eq(Lc.footer_row, Lc.rule_bottom_row + 1, "T275 the closed dock keeps a single rule")
+  -- ASCII mode downgrades the separator through the same glyph map as the rules
+  local uia = run_ui_with({ 17 }, {
+    agent = { turn = function() return true end, get_history = function() return {} end },
+  })
+  uia._ascii_mode = true
+  uia._skills_stub = function() return {} end
+  uia._handle_key({ kind = "text", char = "/" })
+  uia._paint(true)
+  local La = uia._layout()
+  local asep = uia._strip_sgr(uia._row(La.separator_row) or "")
+  assert_true(asep:find("-", 1, true) ~= nil and not asep:find("[\128-\255]", 1),
+    "T275 ASCII separator is pure ASCII: " .. asep)
+  uia._ascii_mode = false
+  print("T275 footer separator rule: OK")
 end
 
 if failed > 0 then
