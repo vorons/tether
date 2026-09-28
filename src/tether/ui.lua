@@ -1,6 +1,80 @@
 -- tether / ui.lua — TUI with line-diff redraw.
 local M = {}
 
+-- ui_copy: UI strings safe-edit zone (embedded global `ui_copy` in the
+-- host, loadfile fallback for tests/dev). Loaded first: the Constants
+-- section below reads its tables. M-field (not a chunk local): the main
+-- chunk sits at Lua's 200-locals limit.
+M._copy = _G.ui_copy
+if type(M._copy) ~= "table" then
+    local chunk = loadfile("src/tether/ui/copy.lua")
+    M._copy = (chunk and chunk()) or {}
+end
+
+-- ui_markdown: markdown-lite inline-strip pass (embedded global
+-- `ui_markdown`, loadfile fallback for tests/dev). M-fields, not chunk
+-- locals: the main chunk sits at Lua's 200-locals limit.
+M._markdown = _G.ui_markdown
+if type(M._markdown) ~= "table" then
+    local chunk = loadfile("src/tether/ui/markdown.lua")
+    M._markdown = (chunk and chunk()) or {}
+end
+-- Callers use M._markdown.strip_inline directly (proxy removed in 2.4).
+
+-- ui_highlight: syntax token scanner + painter (embedded global
+-- `ui_highlight`, loadfile fallback for tests/dev). Same M-field pattern.
+M._highlight = _G.ui_highlight
+if type(M._highlight) ~= "table" then
+    local chunk = loadfile("src/tether/ui/highlight.lua")
+    M._highlight = (chunk and chunk()) or {}
+end
+
+-- ui_keys: key reading, bytes -> typed events (embedded global `ui_keys`,
+-- loadfile fallback for tests/dev). Same M-field pattern. The bag is M
+-- itself: M._byte_stash / M._esc_stash_s below are the state the module
+-- operates on, so tests keep poking the same M.* seams.
+M._keys = _G.ui_keys
+if type(M._keys) ~= "table" then
+    local chunk = loadfile("src/tether/ui/keys.lua")
+    M._keys = (chunk and chunk()) or {}
+end
+
+-- ui_palette: palette view-model — ranking, window geometry, indicator rows
+-- (embedded global `ui_palette`, loadfile fallback for tests/dev). Pure
+-- values in, rows out; the S-mutating interaction stays here until the
+-- S-ownership follow-up. Same M-field pattern.
+M._palette = _G.ui_palette
+if type(M._palette) ~= "table" then
+    local chunk = loadfile("src/tether/ui/palette.lua")
+    M._palette = (chunk and chunk()) or {}
+end
+
+-- ui_regions: dock region renderers — input, footer, error banner
+-- (embedded global `ui_regions`, loadfile fallback for tests/dev).
+-- Slice in, ordered rowmap out; terminal I/O (set_row) stays here.
+M._regions = _G.ui_regions
+if type(M._regions) ~= "table" then
+    local chunk = loadfile("src/tether/ui/regions.lua")
+    M._regions = (chunk and chunk()) or {}
+end
+
+-- ui_ask_view: structured-question block view (embedded global `ui_ask_view`,
+-- loadfile fallback for tests/dev). Ask state in, row strings out; keyboard
+-- ownership and S.ask mutation stay here. Same M-field pattern.
+M._ask_view = _G.ui_ask_view
+if type(M._ask_view) ~= "table" then
+    local chunk = loadfile("src/tether/ui/ask_view.lua")
+    M._ask_view = (chunk and chunk()) or {}
+end
+
+-- ui_busy: busy pump and queue affordances (embedded global `ui_busy`,
+-- loadfile fallback for tests/dev). Same M-field pattern; S is the bag.
+M._busy = _G.ui_busy
+if type(M._busy) ~= "table" then
+    local chunk = loadfile("src/tether/ui/busy.lua")
+    M._busy = (chunk and chunk()) or {}
+end
+
 -- ============================================================
 -- ANSI
 -- ============================================================
@@ -481,62 +555,10 @@ M.wrap_lines = wrap -- export (M8/R2)
 -- Grammar: fenced code blocks ```lang, inline `code`, **bold**, *italic*,
 -- #/##/### headings, -/*/1. lists. Escapes: \` and \* are literal.
 -- No backtracking patterns (ADR lesson); per-line state machine.
-local function md_strip_inline(s, ansi_fn)
-    -- ansi_fn(kind, text) applies role colors; nil = strip markers only
-    local out = {}
-    local i = 1
-    local n = #s
-    while i <= n do
-        local c = s:sub(i, i)
-        if c == "\\" and i < n and (s:sub(i + 1, i + 1) == "`" or s:sub(i + 1, i + 1) == "*") then
-            out[#out + 1] = s:sub(i + 1, i + 1) -- escaped literal
-            i = i + 2
-        elseif c == "`" then
-            local close = s:find("`", i + 1, true)
-            if close then
-                local code = s:sub(i + 1, close - 1)
-                if ansi_fn then
-                    out[#out + 1] = ansi_fn("code", code)
-                else
-                    out[#out + 1] = code
-                end
-                i = close + 1
-            else
-                out[#out + 1] = c; i = i + 1
-            end
-        elseif c == "*" and s:sub(i + 1, i + 1) == "*" then
-            local close = s:find("**", i + 2, true)
-            if close then
-                local bold = s:sub(i + 2, close - 1)
-                if ansi_fn then
-                    out[#out + 1] = ansi_fn("bold", bold)
-                else
-                    out[#out + 1] = bold
-                end
-                i = close + 2
-            else
-                out[#out + 1] = c; i = i + 1
-            end
-        elseif c == "*" then
-            local close = s:find("*", i + 1, true)
-            if close then
-                local ital = s:sub(i + 1, close - 1)
-                if ansi_fn then
-                    out[#out + 1] = ansi_fn("italic", ital)
-                else
-                    out[#out + 1] = ital
-                end
-                i = close + 1
-            else
-                out[#out + 1] = c; i = i + 1
-            end
-        else
-            out[#out + 1] = c
-            i = i + 1
-        end
-    end
-    return table.concat(out)
-end
+-- The inline-strip pass moved to ui_markdown (src/tether/ui/markdown.lua);
+-- callers use M._markdown.strip_inline directly. md_render stays here until
+-- the regions cut (it needs wrap/trunc/highlight); M.md_ansi stays until the
+-- themes cut (it is theme-bound via sgr_role).
 
 -- M11/7.1: code-block syntax highlighting (7.2 tokenizer, 7.3 integration).
 -- Depth: COLORTERM=truecolor|24bit -> "truecolor", else "256"; ascii/
@@ -550,167 +572,10 @@ end
 -- ============================================================
 -- 7.2: per-line syntax token scanner (stateful for block comments)
 -- ============================================================
--- tokenize_line(line, lang, state) → ordered {text, kind} tokens, kind in
--- {comment, string, number, keyword, plain}. `state` is an in/out table
--- (one per fence block): state.bc = inside /* */ , state.str = open triple
--- quote (python). Unknown lang → single plain token (7.5).
-local function _kwset(list)
-    local s = {}
-    for _, w in ipairs(list) do s[w] = true end
-    return s
-end
-local HL_LANGS = {
-    lua = { lc = "--", kw = _kwset({"local","function","end","return","if","then","else","elseif","for","while","do","in","nil","true","false","repeat","until","not","and","or","break"}) },
-    c   = { lc = "//", bo = "/*", bc = "*/", kw = _kwset({"int","char","void","if","else","for","while","do","return","static","const","struct","typedef","sizeof","unsigned","long","float","double","switch","case","break","continue","sizeof"}) },
-    sh  = { lc = "#", kw = _kwset({"if","then","else","fi","for","do","done","while","case","esac","function","local","return","echo","export","set","readonly"}) },
-    python = { lc = "#", triple = true, kw = _kwset({"def","return","if","else","elif","for","while","import","from","as","class","try","except","finally","with","in","not","and","or","None","True","False","lambda","pass","yield","global","assert","raise","print","len"}) },
-    js  = { lc = "//", bo = "/*", bc = "*/", kw = _kwset({"var","let","const","function","return","if","else","for","while","class","new","export","import","from","async","await","true","false","null","undefined","of","in","typeof"}) },
-    go  = { lc = "//", bo = "/*", bc = "*/", kw = _kwset({"func","package","return","if","else","for","range","go","defer","chan","map","type","struct","interface","var","const","true","false","nil","error","len","make"}) },
-    rust = { lc = "//", bo = "/*", bc = "*/", kw = _kwset({"fn","let","mut","if","else","for","while","match","return","impl","trait","pub","use","mod","struct","enum","const","true","false","loop","async","await","where","crate","self","move","dyn"}) },
-    json = { kw = _kwset({"true","false","null"}) },
-}
-HL_LANGS.h = HL_LANGS.c
-HL_LANGS.bash = HL_LANGS.sh
-HL_LANGS.ts = HL_LANGS.js
--- common aliases (spec delta): share the canonical tokenizer/table
-HL_LANGS.javascript, HL_LANGS.tsx, HL_LANGS.jsx = HL_LANGS.js, HL_LANGS.js, HL_LANGS.js
-HL_LANGS.py = HL_LANGS.python
-HL_LANGS.shell, HL_LANGS.zsh = HL_LANGS.sh, HL_LANGS.sh
-HL_LANGS["c++"], HL_LANGS.cpp, HL_LANGS.cc, HL_LANGS.cxx = HL_LANGS.c, HL_LANGS.c, HL_LANGS.c, HL_LANGS.c
-HL_LANGS.rs = HL_LANGS.rust
-HL_LANGS.golang = HL_LANGS.go
--- supported languages with no keyword set: string literals and numbers only
-HL_LANGS.yaml = { kw = _kwset({}), strq = { "'", '"' } }
-HL_LANGS.yml, HL_LANGS.rb = HL_LANGS.yaml, HL_LANGS.yaml
--- string quotes per language family
-HL_LANGS.c.strq, HL_LANGS.h.strq = { '"', "'" }, { '"', "'" }
-HL_LANGS.go.strq = { '"', "'", '`' }
-HL_LANGS.js.strq, HL_LANGS.ts.strq = { "'", '"', "`" }, { "'", '"', "`" }
-HL_LANGS.rust.strq = { "'", '"' }
-HL_LANGS.lua.strq = { "'", '"' }
-HL_LANGS.sh.strq, HL_LANGS.bash.strq = { "'", '"' }, { "'", '"' }
-HL_LANGS.python.strq = { "'", '"' }
-HL_LANGS.json.strq = { '"' }
-
-function M.tokenize_line(line, lang, state)
-    lang = lang and lang:lower()
-    local L = lang and HL_LANGS[lang]
-    if not L then return {{ text = line, kind = "plain" }} end
-    state = state or {}
-    local toks, n, i = {}, #line, 1
-    local buf = {}
-    local function flush()
-        if #buf > 0 then toks[#toks + 1] = { text = table.concat(buf), kind = "plain" } end
-        buf = {}
-    end
-    local function add(kind, t) if t ~= "" then toks[#toks + 1] = { text = t, kind = kind } end end
-    local strq = L.strq or { "'", '"' }
-    while i <= n do
-        local c = line:sub(i, i)
-        local closed, j, q
-        -- open/continue triple-quoted string (python)
-        if L.triple and (state.str or line:sub(i, i + 2):match("^[[\"']{3}$")) then
-            local tri = state.str or line:sub(i, i + 2)
-            local start = state.str and i or i + 3
-            local cclose = line:find(tri, start, true)
-            if cclose then
-                flush()
-                add("string", line:sub(i, cclose + 2))
-                state.str = nil; i = cclose + 3
-            else
-                flush()
-                add("string", line:sub(i))
-                state.str = tri; i = n + 1
-            end
-        else
-            local consumed = false
-            -- block comment (c/js/go/rust family)
-            if L.bo then
-                if state.bc then
-                    cclose = line:find(L.bc, i, true)
-                    if cclose then
-                        add("comment", line:sub(i, cclose + #L.bc - 1)); state.bc = nil; i = cclose + #L.bc
-                    else
-                        add("comment", line:sub(i)); i = n + 1
-                    end
-                    consumed = true
-                elseif line:sub(i, i + #L.bo - 1) == L.bo then
-                    flush()
-                    cclose = line:find(L.bc, i + #L.bo, true)
-                    if cclose then
-                        add("comment", line:sub(i, cclose + #L.bc - 1)); i = cclose + #L.bc
-                    else
-                        add("comment", line:sub(i)); state.bc = true; i = n + 1
-                    end
-                    consumed = true
-                end
-            end
-            if not consumed then
-                -- line comment
-                if L.lc and line:sub(i, i + #L.lc - 1) == L.lc then
-                    flush(); add("comment", line:sub(i)); i = n + 1; consumed = true
-                elseif c:match("[%\"']") then
-                    local qmatch = strq[1]
-                    for _, qq in ipairs(strq) do if c == qq then qmatch = qq; break end end
-                    if c == qmatch then
-                        flush()
-                        j = i + 1
-                        closed = false
-                        while j <= n do
-                            local cj = line:sub(j, j)
-                            if cj == "\\" then j = j + 2
-                            elseif cj == qmatch then closed = true; break
-                            else j = j + 1 end
-                        end
-                        if closed then add("string", line:sub(i, j)); i = j + 1; consumed = true
-                        else add("string", line:sub(i)); i = n + 1; consumed = true end
-                    end
-                end
-            end
-            if not consumed and c:match("%d") then
-                local num
-                if c == "0" and line:sub(i + 1, i + 1):lower() == "x" then
-                    num = line:match("0[xX][%a%d_]*", i)
-                else
-                    num = line:match("%d+", i)
-                end
-                if num and num ~= "." then
-                    flush(); add("number", num); i = i + #num; consumed = true
-                end
-            end
-            if not consumed and c:match("[%a_]\z") then
-                local w = line:match("^[%a_][%a%d_]*", i)
-                if w then
-                    if L.kw[w] then flush(); add("keyword", w)
-                    else buf[#buf + 1] = w end
-                    i = i + #w; consumed = true
-                end
-            end
-            if not consumed then
-                buf[#buf + 1] = c; i = i + 1
-            end
-        end
-    end
-    flush()
-    return toks
-end
-
--- 7.3: render a source line as SGR-colored text (token-scoped SGR wraps, so
--- the existing SGR-aware wrap() can split it at any char boundary later).
--- Plain tokens emit no SGR at all (default foreground).
-local HL_ROLE = { comment = "comment", string = "string", number = "number", keyword = "keyword" }
-function M.highlight_line(line, lang, state)
-    local toks = M.tokenize_line(line, lang, state)
-    local out = {}
-    for _, t in ipairs(toks) do
-        local role = HL_ROLE[t.kind]
-        -- 7.4: mono theme ⇒ sgr_role returns the raw token (roles missing),
-        -- so the strip-invariant is byte-exact even when roles are requested.
-        if role then out[#out + 1] = sgr_role(role, t.text)
-        else out[#out + 1] = t.text end
-    end
-    return table.concat(out)
-end
+-- Moved to ui_highlight (src/tether/ui/highlight.lua): langs table,
+-- tokenize() and highlight() with identical behavior. Callers use
+-- M._highlight.tokenize / M._highlight.highlight directly (proxies removed
+-- in 2.4); highlight sites inject the theme-bound sgr_role.
 
 -- `lite` (user text): inline markup and fenced blocks render, block structure
 -- does not — heading, list and table markers stay literal so the row remains a
@@ -749,7 +614,7 @@ local function md_render(text, width, ansi_fn, lite)
             -- line, emit SGR-colored text, then run it through the existing
             -- SGR-aware wrap (zero-width SGR cells, so split boundaries never
             -- land inside a sequence).
-            local hl_state = HL_LANGS[lang:lower()] and highlight_enabled() and {} or nil
+            local hl_state = M._highlight.langs[lang:lower()] and highlight_enabled() and {} or nil
             i = i + 1
             -- continuation indent needs room; absurdly narrow frames fall
             -- back to plain wrapping with no indent
@@ -758,7 +623,7 @@ local function md_render(text, width, ansi_fn, lite)
             while i <= #lines and not lines[i]:match("^%s*%`%`%`%s*$") do
                 local body_line = lines[i]
                 if hl_state then
-                    body_line = M.highlight_line(body_line, lang, hl_state)
+                    body_line = M._highlight.highlight(body_line, lang, hl_state, sgr_role)
                 end
                 for _, seg in ipairs(wrap_words(body_line, inner, cpre, cw)) do
                     out[#out + 1] = dim(box.v) .. " " .. seg
@@ -786,7 +651,7 @@ local function md_render(text, width, ansi_fn, lite)
                     local bar = inner:find("|", pos, true)
                     local chunk = bar and inner:sub(pos, bar - 1) or inner:sub(pos)
                     chunk = chunk:gsub("^%s*(.-)%s*$", "%1")
-                    cells[#cells + 1] = md_strip_inline(chunk, ansi_fn)
+                    cells[#cells + 1] = M._markdown.strip_inline(chunk, ansi_fn)
                     if not bar then break end
                     pos = bar + 1
                 end
@@ -829,7 +694,7 @@ local function md_render(text, width, ansi_fn, lite)
             local hashes, rest = line:match("^(#+)%s+(.*)")
             if not lite and hashes and rest then
                 -- headings: wrap to width, heading role colour, no trailing blank
-                local htext = md_strip_inline(rest, ansi_fn)
+                local htext = M._markdown.strip_inline(rest, ansi_fn)
                 htext = sgr_role("heading", htext)
                 for _, wl in ipairs(wrap(htext, width)) do
                     out[#out + 1] = wl
@@ -839,7 +704,7 @@ local function md_render(text, width, ansi_fn, lite)
                 -- ordered list: numbered prefix + aligned continuation indent
                 local num = line:match("^%s*(%d+%.?)%s+")
                 local item = line:gsub("^%s*%d+%.%s+", "", 1)
-                local body = md_strip_inline(item, ansi_fn)
+                local body = M._markdown.strip_inline(item, ansi_fn)
                 local prefix = num .. " "
                 local prew = vlen(prefix)
                 local wrapped = wrap(body, math.max(width - prew, 1))
@@ -850,7 +715,7 @@ local function md_render(text, width, ansi_fn, lite)
                 i = i + 1
             elseif not lite and line:match("^%s*[%-%*]%s+") then
                 local item = line:gsub("^%s*[%-%*]%s+", "", 1)
-                local body = md_strip_inline(item, ansi_fn)
+                local body = M._markdown.strip_inline(item, ansi_fn)
                 local prefix = bullet .. " "
                 local prew = vlen(prefix)
                 local wrapped = wrap(body, math.max(width - prew, 1))
@@ -860,7 +725,7 @@ local function md_render(text, width, ansi_fn, lite)
                 end
                 i = i + 1
             else
-                local rendered = md_strip_inline(line, ansi_fn)
+                local rendered = M._markdown.strip_inline(line, ansi_fn)
                 for _, wl in ipairs(wrap(rendered, width)) do
                     out[#out + 1] = wl
                 end
@@ -925,160 +790,40 @@ M.trunc = trunc -- export (M9/T39)
 -- Constants
 -- ============================================================
 -- palette-only T2: digit shortcuts for the confirmation menu (1..5)
-local CONFIRM_DIGITS = { "allow", "session", "always", "deny", "cancel" }
+-- Values live in ui_copy (safe-edit zone); this local keeps call sites unchanged.
+local CONFIRM_DIGITS = M._copy.confirm.digits
 M.CONFIRM_DIGITS = CONFIRM_DIGITS
 -- confirm-menu-redesign D1/D5: per-tool question row and the muted hint.
 -- M-fields, not chunk locals (ui.lua sits at Lua's 200-locals limit).
-M.CONFIRM_QUESTIONS = {
-    run = "Allow command execution?",
-    write = "Allow writing this file?",
-    patch = "Allow applying this patch?",
-}
-M.CONFIRM_QUESTION_FALLBACK = "Allow this action?"
+M.CONFIRM_QUESTIONS = M._copy.confirm.questions
+M.CONFIRM_QUESTION_FALLBACK = M._copy.confirm.question_fallback
 -- palette-hints: hint rows are {key, act} pair tables painted by M.hint_paint
 -- (key tokens dim, action words muted, two-space pair separators).
-M.CONFIRM_HINT = {
-    { key = "↑↓", act = "select" },
-    { key = "enter", act = "submit" },
-    { key = "esc", act = "dismiss" },
-}
+M.CONFIRM_HINT = M._copy.confirm.hint
 -- palette-hints D2: per-mode dock hints — only the keys the mode's handler
 -- actually consumes (verified against the S.palette_mode branches).
-M.PALETTE_HINTS = {
-    command = { { key = "type", act = "filter" }, { key = "↑↓", act = "select" },
-                { key = "enter", act = "run" }, { key = "tab", act = "insert" },
-                { key = "esc", act = "close" } },
-    path = { { key = "tab", act = "cycle" }, { key = "esc", act = "restore" } },
-    -- at-file-picker: the "@" preview inserts on Enter and on Tab, so "cycle"
-    -- would lie — it never walks the list without applying.
-    mention = { { key = "type", act = "filter" }, { key = "↑↓", act = "move" },
-                { key = "enter/tab", act = "insert" }, { key = "esc", act = "close" } },
-    copy = { { key = "↑↓", act = "select" }, { key = "enter", act = "copy" },
-             { key = "esc", act = "close" } },
-    resume = { { key = "↑↓", act = "select" }, { key = "enter", act = "resume" },
-               { key = "esc", act = "dismiss" } },
-    model = { { key = "type", act = "filter" }, { key = "↑↓", act = "select" },
-              { key = "enter", act = "pick" }, { key = "esc", act = "close" } },
-    login = { { key = "type", act = "filter" }, { key = "↑↓", act = "select" },
-              { key = "enter", act = "connect" }, { key = "esc", act = "close" } },
-    logout = { { key = "type", act = "filter" }, { key = "↑↓", act = "select" },
-               { key = "enter", act = "confirm" }, { key = "esc", act = "close" } },
-    -- logout-confirm: the deletion step has no filter buffer, so no `type` pair
-    -- and no `enter delete` until the row is the one being confirmed.
-    ["logout-confirm"] = { { key = "↑↓", act = "select" },
-                           { key = "enter", act = "delete" },
-                           { key = "y/n", act = "choose" }, { key = "esc", act = "back" } },
-    think = { { key = "↑↓", act = "select" }, { key = "enter", act = "set" },
-              { key = "esc", act = "close" } },
-}
+M.PALETTE_HINTS = M._copy.palette_hints
 
 -- §6.6: spinner frames for the busy status indicator and thinking rows
 -- field. ASCII variant for TERM=dumb / NO_COLOR (M8/R1). Declared here (not
 -- next to their first use) so both the transcript tail and the status line
--- can reach them as upvalues.
-local SPINNER = { "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏" }
-local SPINNER_ASCII = { "|", "/", "-", "\\" }
+-- can reach them as upvalues. Glyphs live in ui_copy (safe-edit zone).
+local SPINNER = M._copy.spinner.frames
+local SPINNER_ASCII = M._copy.spinner.ascii
 M.SPINNER_ASCII = SPINNER_ASCII
 
-local SLASH_COMMANDS = {
-    -- M9: /help, /status, /log removed per user request
-    { label = "/clear",   desc = "clear the transcript",            cmd = "clear" },
-    { label = "/compact", desc = "compact context (summarize)",       cmd = "compact" },
-    { label = "/model",   desc = "switch model",                      cmd = "model" },
-    { label = "/resume",  desc = "resume session for workspace",      cmd = "resume" },
-    { label = "/new",     desc = "start a new session",               cmd = "new" },
-    { label = "/quit",    desc = "exit",                              cmd = "quit" },
-    { label = "/copy",    desc = "copy from the transcript",          cmd = "copy" },
-    -- add-provider-login: OAuth/API-key store
-    { label = "/login",   desc = "log in with a provider (API key/OAuth)", cmd = "login" },
-    { label = "/logout",  desc = "log out from a provider (drop the key)",  cmd = "logout" },
-    -- add-reasoning-level: reasoning effort picker
-    { label = "/think",   desc = "thinking level",                    cmd = "think" },
-    -- unified-slash-palette: /skills removed — skills are entries of this list
-}
+local SLASH_COMMANDS = M._copy.commands
 M.SLASH_COMMANDS = SLASH_COMMANDS
 
 -- 3.1: fuzzy_match / fuzzy_score — subsequence matcher, prefix ranked first,
--- declaration-order ties, empty filter lists all. Exported so tests and the
--- palette_sync rewrite can use the same primitive.
-function M.fuzzy_score(filter, label)
-    -- prefix gets the best score; subsequence gets a lower score; no match → nil
-    local fl = filter:lower()
-    local ll = label:lower()
-    if fl == "" then return 1000 end
-    if ll:find(fl, 1, true) == 1 then return 1000 end
-    -- subsequence scan
-    local pos = 1
-    for c in fl:gmatch("(.)") do
-        local found = ll:find(c, pos, true)
-        if not found then return nil end
-        pos = found + 1
-    end
-    -- count gap for ranking (smaller gap → better); ties broken by label length
-    local gaps = 0
-    local p2 = 1
-    for c in fl:gmatch("(.)") do
-        local f = ll:find(c, p2, true)
-        gaps = gaps + (f - p2)
-        p2 = f + 1
-    end
-    return math.max(0, 500 - gaps)
-end
-
-function M.fuzzy_rank(filter, labels)
-    -- returns indices into labels sorted by score desc, declaration-order ties
-    local scored = {}
-    for i, lab in ipairs(labels) do
-        local s = M.fuzzy_score(filter, lab)
-        if s then scored[#scored + 1] = { idx = i, score = s } end
-    end
-    table.sort(scored, function(a, b)
-        if a.score == b.score then return a.idx < b.idx end
-        return a.score > b.score
-    end)
-    local out = {}
-    for i, x in ipairs(scored) do out[i] = x.idx end
-    return out
-end
+-- declaration-order ties, empty filter lists all. Moved to ui_palette
+-- (src/tether/ui/palette.lua); callers use M._palette.* directly.
 
 -- M10: keymap as data (idea from terminal.lua input.keymap) — the single
 -- source of truth for keyboard bindings. Consumed by docs/tests; the help
 -- screen is gone (M9), so this table is where bindings stay documented.
-local KEYMAP = {
-    ["enter"]      = "send",
-    ["ctrl+j"]     = "newline",
-    ["ctrl+c"]     = "abort/quit",
-    ["ctrl+q"]     = "quit",
-    ["ctrl+r"]     = "resume picker",
-    ["ctrl+n"]     = "new session",
-    ["ctrl+o"]     = "toggle newest tool result",
-    ["ctrl+shift+o"] = "expand/collapse all tool results",
-    ["ctrl+t"]     = "toggle thinking",
-    ["ctrl+l"]     = "clear screen",
-    ["ctrl+a"]     = "line start",
-    ["ctrl+e"]     = "line end",
-    ["ctrl+u"]     = "kill to start",
-    ["ctrl+w"]     = "kill word",
-    ["ctrl+k"]     = "kill to end",
-    ["ctrl+up"]    = "history prev",
-    ["ctrl+down"]  = "history next",
-    ["up"]         = "history prev / cursor up (multi-line, Shift+)",
-    ["down"]       = "history next / cursor down (multi-line, Shift+)",
-    ["pgup"]       = "scroll up",
-    ["pgdn"]       = "scroll down",
-    ["home"]       = "jump to top (input empty)",
-    ["end"]        = "jump to bottom (input empty)",
-    ["esc"]        = "cancel/confirmation deny",
-    ["1"]          = "confirm allow",
-    ["2"]          = "confirm session",
-    ["3"]          = "confirm always",
-    ["4"]          = "confirm deny",
-    ["5"]          = "confirm cancel",
-    ["y"]          = "confirm allow",
-    ["a"]          = "confirm session",
-    ["A"]          = "confirm always",
-    ["n"]          = "confirm deny",
-}
+-- Values live in ui_copy (safe-edit zone).
+local KEYMAP = M._copy.keys.map
 M.KEYMAP = KEYMAP
 
 -- add-ask-tool: the question block's own bindings, as data. While the block is
@@ -1088,19 +833,8 @@ M.KEYMAP = KEYMAP
 -- option of a single question (toggling it on a `multi` one), Enter submits/
 -- accepts, Tab edits the highlighted row (a note on an option, the freeform
 -- answer on its row), ←/→ walk the question set and Esc cancels it without
--- stopping the turn.
-local ASK_KEYS = {
-    ["up"]        = "previous option",
-    ["down"]      = "next option",
-    ["enter"]     = "submit / accept the question",
-    ["1"]         = "pick option 1",
-    ["space"]     = "pick the highlighted option (toggle on a multi question)",
-    ["tab"]       = "edit the highlighted option's note / the freeform answer",
-    ["left"]      = "previous question",
-    ["right"]     = "next question",
-    ["esc"]       = "cancel the question set",
-    ["backspace"] = "edit the open note / freeform editor",
-}
+-- stopping the turn. Values live in ui_copy (safe-edit zone).
+local ASK_KEYS = M._copy.keys.ask
 M.ASK_KEYS = ASK_KEYS
 
 -- transcript: embedded global (main.c mods[]); loadfile fallback for tests.
@@ -1321,27 +1055,19 @@ end
 M._touch_entry = touch_entry
 M._invalidate_all = invalidate_all
 
--- A: spinner frame. TW2 regression: the frame advanced once per paint(), so
--- the glyph changed per event batch — a slideshow whose speed depended on how
--- fast tokens arrived (idle = frozen, burst = blur). Like pi's Loader (80 ms
--- interval), the frame is derived from elapsed wall-clock time since the turn
--- started. Nil-safe like the other seams: callers may run before run() created S.
+-- A: spinner frame (TW2: time-based, not paint-count-based). Canonical
+-- implementation lives in ui_regions; the seams below delegate with the
+-- facade's painters so tests keep the M.* names. Nil-safe like the other
+-- seams: callers may run before run() created S.
 local SPINNER_INTERVAL_MS = 80
 local function spinner_glyph()
-    local frames = (M._ascii_mode or M._env_ascii or _ascii) and SPINNER_ASCII or SPINNER
-    local ms = 0
-    if S and S.busy_started_at_ms then
-        local now = (tether.monotonic_ms and tether.monotonic_ms()) or 0
-        ms = now - S.busy_started_at_ms
-    end
-    return frames[(math.floor(ms / SPINNER_INTERVAL_MS) % #frames) + 1]
+    return M._regions.spinner_glyph({ busy_started_at_ms = S and S.busy_started_at_ms }, M._painters)
 end
 M.spinner_glyph = spinner_glyph
 M._spinner_interval_ms = SPINNER_INTERVAL_MS
 -- TW2 test seam: glyph for a given elapsed-ms (pure, no S dependency)
 M._spinner_glyph_at = function(ms)
-    local frames = (M._ascii_mode or M._env_ascii or _ascii) and SPINNER_ASCII or SPINNER
-    return frames[(math.floor(ms / SPINNER_INTERVAL_MS) % #frames) + 1]
+    return M._regions.spinner_glyph_at(ms, M._painters)
 end
 
 -- A: caret marking the tail of text that is still arriving.
@@ -1354,45 +1080,12 @@ M.caret_glyph = caret_glyph
 -- Layout
 -- ============================================================
 local function input_lines()
-    local out = {}
-    local pos = 1
-    while true do
-        local nl = S.input:find("\n", pos, true)
-        if not nl then
-            out[#out + 1] = { text = S.input:sub(pos), from = pos - 1 }
-            break
-        end
-        out[#out + 1] = { text = S.input:sub(pos, nl - 1), from = pos - 1 }
-        pos = nl + 1
-    end
-    return out
+    return M._regions.input_lines(S.input)
 end
 
--- unified-slash-palette 2.1: palette window geometry. Pure, so tests can call
--- it directly. Height: at most 8 rows and at most half the terminal height,
--- never below one. Offset: shifts so the selected row stays inside the window.
-local function palette_window(h, n, sel)
-    if n <= 0 then return 0, 1 end
-    local win = math.min(n, 8, math.max(1, math.floor(h / 2)))
-    if sel < 1 then sel = 1 end
-    if sel > n then sel = n end
-    local off = 1
-    if win < n then
-        off = sel - math.floor(win / 2)
-        if off < 1 then off = 1 end
-        if off > n - win + 1 then off = n - win + 1 end
-    end
-    return win, off
-end
-M._palette_window = palette_window
-
--- pi-style-input-and-footer: the box's rule glyph and the labels its rules
--- carry for the input rows hidden above/below the window. ASCII twins come from
--- GLYPH_MAP (─ → -, ↑ → ^, ↓ → v) through the dim() role, so no branch is
--- needed here.
-local RULE_GLYPH = "─"
-local RULE_LABEL_UP = "↑ %d more"
-local RULE_LABEL_DOWN = "↓ %d more"
+-- unified-slash-palette 2.1: palette window geometry. Wiring seam over
+-- ui_palette.window (pure); integration tests drive it with S-derived args.
+M._palette_window = M._palette.window
 
 -- pi-style-input-and-footer: horizontal padding inside the box's rules: whole
 -- columns, 0..3 (pi's editorPaddingX), further clamped so the content keeps at
@@ -1434,13 +1127,7 @@ function M._content_width(width)
     return math.max(1, (width or 1) - 2 * ui_pad(width))
 end
 
--- slim-footer-indicators: transient flags only (the one-shot toast);
--- mouse/keyboard mode icons are gone. Everything lives on the single footer row.
-local function static_flags()
-    local out = {}
-    if S.toast then out[#out + 1] = green(S.toast) end
-    return out
-end
+-- slim-footer-indicators: transient flags live in ui_regions.static_flags.
 
 -- Scroll position math (count of transcript rows hidden below the
 -- viewport, or nil while following). The footer "↓ +N" flag itself was
@@ -1466,7 +1153,7 @@ local function layout()
         -- indicator/query slot plus the blank+hint rows fit inside win + 3
         -- (the old win + 2 already held one slack row before the footer —
         -- it becomes the blank before the hint)
-        local win = palette_window(S.h, #S.palette_items, S.palette_sel)
+        local win = M._palette.window(S.h, #S.palette_items, S.palette_sel)
         want_palette_h = win + 3
     end
 
@@ -1554,6 +1241,12 @@ end
 
 -- Test seam: last-painted content of a screen row (F1b/5b assertions).
 M._row = function(row) return S and S.screen[row] or nil end
+
+-- Apply an ordered rowmap from ui_regions ({row, text} pairs, deterministic
+-- order so captured frames stay stable). Terminal I/O stays in the facade.
+local function apply_rows(rows)
+    for _, r in ipairs(rows) do set_row(r[1], r[2]) end
+end
 
 -- ============================================================
 -- Palette: derived from input
@@ -1660,7 +1353,7 @@ palette_sync = function()
     for _, r in ipairs(S.palette_skills or {}) do entries[#entries + 1] = r end
     local labels = {}
     for _, e in ipairs(entries) do labels[#labels + 1] = e.label end
-    local order = M.fuzzy_rank(filter, labels)
+    local order = M._palette.fuzzy_rank(filter, labels)
     local items = {}
     for _, idx in ipairs(order) do
         items[#items + 1] = entries[idx]
@@ -1682,7 +1375,7 @@ function M._palette_apply_query()
     local labels = {}
     for _, it in ipairs(all) do labels[#labels + 1] = it.label or "" end
     local items = {}
-    for _, idx in ipairs(M.fuzzy_rank(S.palette_query or "", labels)) do
+    for _, idx in ipairs(M._palette.fuzzy_rank(S.palette_query or "", labels)) do
         items[#items + 1] = all[idx]
     end
     S.palette_items = items
@@ -2047,14 +1740,7 @@ local function input_clear()
 end
 
 local function cursor_line_col()
-    local lines = input_lines()
-    for i, ln in ipairs(lines) do
-        if S.cursor >= ln.from and S.cursor <= ln.from + #ln.text then
-            return i, S.cursor - ln.from
-        end
-    end
-    local last = lines[#lines]
-    return #lines, #last.text
+    return M._regions.cursor_line_col(S.input, S.cursor)
 end
 
 local function set_cursor(li, col)
@@ -2315,7 +2001,7 @@ local function sanitize_output(text)
 end
 M.sanitize_output = sanitize_output
 
--- 4.1: extension -> highlighter language (the highlighter keys are in HL_LANGS).
+-- 4.1: extension -> highlighter language (keys live in ui_highlight.langs).
 local EXT_LANG = {
     lua = "lua", c = "c", h = "c", sh = "sh", bash = "sh", py = "python",
     js = "js", ts = "ts", go = "go", rs = "rust", json = "json",
@@ -2351,10 +2037,10 @@ end
 -- add/remove/context base role, plain tokens take the base role.
 local function highlight_diff_line(text, lang, state, base_fn)
     if not lang then return base_fn(text) end
-    local toks = M.tokenize_line(text, lang, state)
+    local toks = M._highlight.tokenize(text, lang, state)
     local out = {}
     for _, t in ipairs(toks) do
-        local role = HL_ROLE[t.kind]
+        local role = M._highlight.roles[t.kind]
         if role then out[#out + 1] = sgr_role(role, t.text)
         else out[#out + 1] = base_fn(t.text) end
     end
@@ -2453,7 +2139,7 @@ local function render_tool_body(name, e, inner)
             for line in body_line_iter(body) do
                 local num, content = line:match("^(%d+)\t(.*)$")
                 if num then
-                    coloured[#coloured + 1] = num .. "\t" .. M.highlight_line(content, lang, state)
+                    coloured[#coloured + 1] = num .. "\t" .. M._highlight.highlight(content, lang, state, sgr_role)
                 else
                     coloured[#coloured + 1] = line
                 end
@@ -2469,7 +2155,7 @@ local function render_tool_body(name, e, inner)
             if l then
                 state_by[l] = state_by[l] or {}
                 coloured[#coloured + 1] = line:gsub("^(.-:%d+: )(.*)$", function(pfx, c)
-                    return pfx .. M.highlight_line(c, l, state_by[l])
+                    return pfx .. M._highlight.highlight(c, l, state_by[l], sgr_role)
                 end)
             else
                 coloured[#coloured + 1] = line
@@ -2485,10 +2171,8 @@ end
 -- tests drive it directly. Wordmark in the accent role (no bold, per the
 -- accent contract), version muted, section headers accent, values muted.
 -- Sections with empty lists do not render. No hints, no footer content.
-M.SPLASH_WORDMARK = {
-    " ▀█▀ █▀▀ ▀█▀ █░█ █▀▀ █▀█",
-    " ░█░ ██▄ ░█░ █▀█ ██▄ █▀▄",
-}
+-- Wordmark glyphs live in ui_copy (safe-edit zone).
+M.SPLASH_WORDMARK = M._copy.splash.wordmark
 
 function M._tilde_path(p, home)
     home = home or os.getenv("HOME") or ""
@@ -2515,7 +2199,7 @@ function M._splash_rows(res, width, pad)
         if vlen(ln) > width then narrow = true break end
     end
     if narrow then
-        rows[#rows + 1] = cyan(" Tether")
+        rows[#rows + 1] = cyan(M._copy.splash.narrow_title)
     else
         for _, ln in ipairs(M.SPLASH_WORDMARK) do
             rows[#rows + 1] = cyan(ln)
@@ -2539,8 +2223,8 @@ function M._splash_rows(res, width, pad)
             rows[#rows + 1] = dim("  " .. l)
         end
     end
-    section("[Context]", res.agents)
-    section("[Skills]", res.skills)
+    section(M._copy.splash.context_header, res.agents)
+    section(M._copy.splash.skills_header, res.skills)
     return rows
 end
 
@@ -2633,12 +2317,7 @@ function M._splash_entry()
 end
 
 -- add-ask-tool: is `label` among this question's selected answers?
-local function ask_selected(answer, label)
-    for _, l in ipairs((answer and answer.selected) or {}) do
-        if l == label then return true end
-    end
-    return false
-end
+-- Canonical implementation lives in ui_ask_view (module-local).
 
 -- palette-hints D1: the shared segmented hint painter. A hint is an array of
 -- {key, act} pairs; the key token paints in the dim tier, the action word in
@@ -2685,148 +2364,14 @@ end
 -- keys: list modes name navigation + commit + cancel, the confirm phase
 -- names submit/dismiss, editors name save/discard instead.
 -- (M-field, not chunk local: ui.lua sits at Lua's 200-locals limit.)
-function M._ask_hint(a, q)
-    local K, A = "key", "act"
-    if a.phase == "confirm" then
-        return { { [K] = "⇆", [A] = "tab" }, { [K] = "enter", [A] = "submit" },
-                 { [K] = "esc", [A] = "dismiss" } }
-    end
-    if a.mode == "note" then
-        return { { [K] = "type", [A] = "note" }, { [K] = "Enter", [A] = "save" },
-                 { [K] = "Esc", [A] = "discard" } }
-    end
-    if a.mode == "other" then
-        return { { [K] = "type", [A] = "answer" }, { [K] = "Enter", [A] = "save" },
-                 { [K] = "Esc", [A] = "discard" } }
-    end
-    local multi_set = #a.questions > 1
-    if q.multi then
-        return { { [K] = "↑↓", [A] = "move" }, { [K] = "Space", [A] = "toggle" },
-                 { [K] = "Enter", [A] = "accept" }, { [K] = "Tab", [A] = "note" },
-                 { [K] = "Esc", [A] = "cancel" } }
-    end
-    if multi_set then
-        return { { [K] = "⇆", [A] = "tab" }, { [K] = "↑↓", [A] = "select" },
-                 { [K] = "enter", [A] = "confirm" }, { [K] = "esc", [A] = "dismiss" } }
-    end
-    return { { [K] = "↑↓", [A] = "select" }, { [K] = "enter", [A] = "submit" },
-             { key = "esc", act = "dismiss" } }
-end
+-- ask-view hint pairs + tab strip: canonical implementations live in
+-- ui_ask_view (ask_hint/render_tabs); the question-block renderer moved
+-- there as render(). Keyboard ownership and S.ask mutation stay here.
 
--- ask-block-redesign: the tab strip for multi-question sets. One clipped tab
--- per question plus a trailing Confirm tab; equal width budgets so any set
--- size fits one row (minimum 8 columns per tab). Active phase/tab = accent
--- text; the strip is decoration-only — all routing stays in handle_ask_key.
-function M._render_ask_tabs(a, width)
-    local inner = math.max(width - 2, 1)
-    local tabs = {}
-    for _, qq in ipairs(a.questions or {}) do tabs[#tabs + 1] = qq.question or "" end
-    tabs[#tabs + 1] = "Confirm"
-    local count = #tabs
-    local sepw = 3 * (count - 1) -- "   " between tabs
-    local budget = math.max(math.floor((inner - sepw) / count), 8)
-    local active = (a.phase == "confirm") and count or a.qidx
-    local parts = {}
-    for i, label in ipairs(tabs) do
-        local text = clip(label, budget)
-        if i == active then
-            parts[#parts + 1] = sgr_role("dim", " ") .. sgr_role("accent", text)
-                .. sgr_role("dim", " ")
-        else
-            parts[#parts + 1] = muted(text)
-        end
-    end
-    return table.concat(parts, "   ")
-end
-
--- The question block's rows. Rendered from S.ask directly, so the highlight and
--- the rows can never disagree about what is selectable: option rows are 1..n in
--- order, then the always-present freeform row at n+1.
-local function render_ask(width)
-    local a = S.ask
-    if not a then return {} end
-    local q = a.questions and a.questions[a.qidx]
-    if not q then return {} end
-    local answer = a.answers[a.qidx] or {}
-    local n = #q.options
-    local inner = math.max(width - 2, 1)
-    local out = { "" }
-
-    -- ask-block-redesign: multi-question sets open with a tab strip — one
-    -- clipped tab per question plus a trailing Confirm tab. The active tab
-    -- is dim-background + accent text; others stay muted. Single-question
-    -- sets draw no strip (immediate submit, no confirm phase).
-    if a.phase == "confirm" then
-        out[#out + 1] = M._render_ask_tabs(a, width)
-        for qi, qq in ipairs(a.questions or {}) do
-            local ans = a.answers[qi] or {}
-            local sel_text = (type(ans.selected) == "table" and #ans.selected > 0)
-                and table.concat(ans.selected, ", ") or nil
-            local ans_text = (ans.other and ans.other ~= "") and ans.other or sel_text or "—"
-            local qpart = clip(qq.question or "", math.max(math.floor(inner * 0.6), 8))
-            local apart = clip(ans_text, math.max(inner - vlen(qpart) - 2, 4))
-            out[#out + 1] = "  " .. dim(qpart .. ": ") .. apart
-        end
-        out[#out + 1] = M.hint_paint(M._ask_hint(a, q), inner)
-        return out
-    end
-    if #a.questions > 1 then
-        out[#out + 1] = M._render_ask_tabs(a, width)
-    end
-    local progress = #a.questions > 1
-        and string.format(" (%d/%d)", a.qidx, #a.questions) or ""
-    out[#out + 1] = cyan("? ") .. (q.question or "") .. dim(progress)
-    if q.description and q.description ~= "" then
-        for _, l in ipairs(md_render(q.description, inner, M.md_ansi)) do
-            out[#out + 1] = "  " .. l
-        end
-    end
-
-    for i, opt in ipairs(q.options) do
-        local row = {}
-        -- multi keeps its square markers so the toggled state stays visible;
-        -- single renders a clean numbered list (the accent cursor marks position)
-        if q.multi then
-            row[#row + 1] = ask_selected(answer, opt.label) and "[x] " or "[ ] "
-        end
-        row[#row + 1] = i .. ". " .. opt.label
-        if q.recommended == i then row[#row + 1] = dim("  (recommended)") end
-        local active = (i == a.sel and a.mode == "list")
-        local text = "  " .. table.concat(row)
-        out[#out + 1] = active and sgr_role("accent", text) or text
-        if opt.description and opt.description ~= "" then
-            for _, l in ipairs(wrap(opt.description, inner - 4)) do
-                out[#out + 1] = "      " .. dim(l)
-            end
-        end
-        if a.mode == "note" and a.note_sel == i then
-            out[#out + 1] = "    " .. dim("note> ") .. (a.editor or "") .. caret_glyph()
-        else
-            local note = answer.notes and answer.notes[opt.label]
-            if note and note ~= "" then
-                out[#out + 1] = "    " .. dim("↳ " .. note)
-            end
-        end
-    end
-
-    local freeform = ask.FREEFORM_LABEL
-    if a.mode == "other" then
-        out[#out + 1] = "  " .. freeform .. ": " .. (a.editor or "") .. caret_glyph()
-    else
-        local text = "  " .. freeform
-        if answer.other and answer.other ~= "" then
-            text = text .. dim("  («" .. answer.other .. "»)")
-        end
-        if a.sel == n + 1 and a.mode == "list" then
-            text = sgr_role("accent", text)
-        end
-        out[#out + 1] = text
-    end
-    -- ask-block-b: one muted hint row under the freeform row, clipped to the
-    -- width so it never wraps into extra rows.
-    out[#out + 1] = M.hint_paint(M._ask_hint(a, q), inner)
-    return out
-end
+-- The question block's rows: canonical implementation lives in
+-- ui_ask_view.render (ask state in, rows out). Rendered from S.ask via the
+-- render_entry call site so the highlight and the rows can never disagree
+-- about what is selectable.
 
 -- The call's primary argument for the tool row head: which file ran what.
 -- Pure data in (parsed args, fallback path) so tests drive it directly.
@@ -2869,7 +2414,7 @@ local function render_entry(e, width, prev_role)
     -- the leading block gap (see transcript-visual-refresh).
     local out
     if e.virt == "ask" then
-        out = render_ask(width)    elseif e.virt == "placeholder" then
+        out = M._ask_view.render(S.ask, width, M._painters)    elseif e.virt == "placeholder" then
         -- turn-feedback-restyling: no waiting row in the transcript (the
         -- input box carries the Working indicator); kept as a no-op for any
         -- stale tail reference.
@@ -3151,448 +2696,103 @@ end
 -- ============================================================
 -- M8/R3: scroll indicator math. Returns nil when following (bottom-anchored),
 -- else the count of lines hidden below the visible window.
-local function scroll_indicator(total, scroll, visible_h)
-    if scroll <= 0 then return nil end
-    local bottom = total - scroll
-    if bottom >= total then return nil end
-    local hidden_below = total - bottom
-    if hidden_below <= 0 then return nil end
-    return hidden_below
-end
-M.scroll_indicator = scroll_indicator
+-- Scroll math + DECSTBM sequences: canonical implementations live in
+-- ui_regions (identical signatures); aliases keep the M.* seams tests drive.
+M.scroll_indicator = M._regions.scroll_indicator
 
 -- M10: hardware scroll-region shift, adapted from terminal.lua's
--- terminal.scroll approach. Returns an escape sequence that sets DECSTBM
--- (top..bottom inclusive, 1-based screen rows), scrolls the region by
--- |shift| lines with SU (up) / SD (down), then resets the region.
--- Guard rails: zero/nil shift, shift >= region size or an invalid region
--- return "" — the caller then falls back to per-row repaint.
-function M.scroll_shift_seq(h, top, bottom, shift)
-    if not shift or shift == 0 then return "" end
-    if not h or not top or not bottom then return "" end
-    if top < 1 or bottom > h or top > bottom then return "" end
-    local region = bottom - top + 1
-    local amount = shift > 0 and shift or -shift
-    if amount >= region then return "" end
-    local move = (shift > 0)
-        and (ESC .. "[" .. amount .. "S")
-        or  (ESC .. "[" .. amount .. "T")
-    return ESC .. "[" .. top .. ";" .. bottom .. "r" .. move .. ESC .. "[r"
-end
+-- terminal.scroll approach (see ui_regions header for the contract).
+M.scroll_shift_seq = M._regions.scroll_shift_seq
 
+-- Phase A 1.1: viewport render lives in transcript.render_viewport
+-- (slice in, ordered rowmap out); this facade builds the slice, applies
+-- S.scroll/last_* bookkeeping + terminal I/O, and paints the rowmap.
 local function render_transcript(L)
     local cw = M._content_width(L.w)
-    local gutter = string.rep(" ", ui_pad(L.w))
-    local total = ensure_index(cw)
-    S.last_transcript_h = L.transcript_h -- cache bound follows the viewport
-    -- viewport pin: while scrolled away from the tail, rows arriving (or
-    -- dropped by a retry) below the viewport must not move it — fold the
-    -- total drift back into the offset so the same rows stay visible. Only
-    -- when the offset itself sat still: a user scroll between paints takes
-    -- precedence, so preset offsets are never rewritten.
-    if S.user_scrolled and S._last_total ~= nil and total ~= S._last_total
-        and S.scroll == (S._last_scroll or S.scroll) then
-        S.scroll = S.scroll + (total - S._last_total)
-    end
-    -- M10: clamp scroll so the viewport can never move past the top of the
-    -- transcript. Over-scroll made top negative and the scroll indicator
-    -- report nonsense (⏸ +36 on a 4-line transcript).
-    local max_scroll = total - 1
-    if max_scroll < 0 then max_scroll = 0 end
-    if S.scroll > max_scroll then S.scroll = max_scroll end
-    if S.scroll < 0 then S.scroll = 0 end
+    local slice = {
+        content_width = cw,
+        gutter = string.rep(" ", ui_pad(L.w)),
+        scroll = S.scroll,
+        user_scrolled = S.user_scrolled,
+        _last_total = S._last_total,
+        _last_scroll = S._last_scroll,
+        last_transcript_top = S.last_transcript_top,
+        last_transcript_w = S.last_transcript_w,
+        streaming = S.streaming,
+        palette_active = S.palette_active,
+        confirmation = S.confirmation,
+        ask = S.ask,
+        login_secret = S.login_secret,
+        alt_screen = S.cfg and S.cfg.ui and S.cfg.ui.alt_screen,
+    }
+    local res = transcript.render_viewport(slice, L, {
+        trunc = trunc,
+        caret = caret_glyph,
+        scroll_shift_seq = M.scroll_shift_seq,
+    })
+    S.last_transcript_h = res.last_transcript_h -- cache bound follows the viewport
+    S.scroll = res.scroll
     -- baseline AFTER the clamp: the pin compares against what is actually
     -- painted, never a pre-clamp value.
-    S._last_total, S._last_scroll = total, S.scroll
-    local bottom = total - S.scroll
-    if bottom > total then bottom = total end
-    if bottom < 1 then bottom = 1 end
-    local top = bottom - L.transcript_h + 1
-    if top < 1 then top = 1 end
+    S._last_total, S._last_scroll = res.last_total, res.last_scroll
     -- M9: scrolling shifts every visible row; the row diff must not compare
-    -- against rows painted for the PREVIOUS viewport (they had different
-    -- content and interleaved SGR open/close), otherwise stale fragments
-    -- leak through as stray characters. Invalidate the window when the
-    -- scroll offset changes.
-    if S.last_transcript_top ~= top then
-        -- M10: hardware scroll-region shift (terminal.lua approach).
-        -- When the previous viewport is a strict subset/superset of the new
-        -- one and the shift is smaller than the region, scroll the region
-        -- with SU/SD instead of repainting every row; only the newly
-        -- exposed rows are then repainted by the normal diff below.
-        if S.last_transcript_top
-            and S.last_transcript_w == cw
-            and S.cfg.ui.alt_screen ~= true then
-            local old_top = S.last_transcript_top
-            local delta = old_top - top -- >0: content moved up (scroll down)
-            -- M10 fix: the scroll region operates on SCREEN rows of the
-            -- transcript window (transcript_row..transcript_row+h-1), NOT on
-            -- transcript line indices. Mixing them (as the first draft did)
-            -- produced a tiny/invalid region and SU/SD never fired.
-            local seq = M.scroll_shift_seq(L.h, L.transcript_row,
-                L.transcript_row + L.transcript_h - 1, delta)
-            if seq ~= "" and delta ~= 0 then
-                frame_put(seq)
-                -- the shift physically moved row contents: forget every
-                -- cached row inside the region so the diff repaints the
-                -- freshly exposed lines (and only them)
-                for r = L.transcript_row, L.transcript_row + L.transcript_h - 1 do
-                    S.screen[r] = nil
-                end
+    -- against rows painted for the PREVIOUS viewport — invalidate the
+    -- window when the scroll offset changes.
+    if res.top_changed then
+        if res.shift_seq then
+            frame_put(res.shift_seq)
+            -- the shift physically moved row contents: forget every
+            -- cached row inside the region so the diff repaints the
+            -- freshly exposed lines (and only them)
+            for r = L.transcript_row, L.transcript_row + L.transcript_h - 1 do
+                S.screen[r] = nil
             end
         end
         for r = L.transcript_row, L.transcript_row + L.transcript_h - 1 do
             S.screen[r] = nil
         end
-        S.last_transcript_top = top
-        S.last_transcript_w = cw
+        S.last_transcript_top = res.last_top
+        S.last_transcript_w = res.last_w
     end
-    -- A: live tail — the caret while deltas are still streaming (the waiting
-    -- spinner moved to the input box: the transcript carries no placeholder).
-    -- Applied at paint time so the wrapped-line cache stays untouched.
-    -- tui spec: the caret must NOT be drawn while the palette, confirmation,
-    -- ask block or login secret mode owns the keyboard (the busy pump lets
-    -- the palette open mid-turn, so the guard must be explicit here).
-    local tail = ""
-    if not S.user_scrolled and total > 0 then
-        if S.streaming and not S.palette_active
-            and not S.confirmation and not S.ask and not S.login_secret then
-            tail = caret_glyph()
-        end
-    end
-    local last_painted = math.min(total, bottom)
-    local lo = entry_of_row(top, cw) or 0
-    local hi = entry_of_row(last_painted, cw) or -1
-    transcript.set_visible(lo, hi)
-    for i = 1, L.transcript_h do
-        local idx = top + i - 1
-        local text = ""
-        if idx >= 1 and idx <= total then
-            text = row_text(idx, cw)
-        end
-        if idx == total and tail ~= "" then
-            local last_i = transcript.entry_of_row(total, cw)
-            local last_e = last_i and transcript.entry_at(last_i)
-            if not (last_e and last_e.role == "thinking") then
-                text = trunc(text, cw - 2) .. tail
-            end
-        end
-        -- ui-padding: the gutter prefixes every row but the splash block,
-        -- which carries its own leading space (blank rows stay blank)
-        local prefix = ""
-        if text ~= "" then
-            local ei = entry_of_row(idx, cw)
-            if not (ei and (entry_at(ei) or {}).role == "splash") then
-                prefix = gutter
-            end
-        end
-        set_row(L.transcript_row + i - 1, prefix .. text)
-    end
+    apply_rows(res.rows)
 end
 
 local function render_error_banner(L)
-    if not S.error_banner then return end
-    local cw = M._content_width(L.w)
-    set_row(L.error_row, string.rep(" ", ui_pad(L.w)) .. rev(red(" ! ")) .. " " .. red(trunc(S.error_banner, cw - 4)))
+    apply_rows(M._regions.render_error_banner(M._dock_slice(L), L, M._painters))
 end
 
--- pi-style-input-and-footer: does the active renderer emit video attributes
--- at all? ASCII/NO_COLOR and the `mono` theme emit none, so the block caret
--- would be invisible there and a bar glyph stands in for it.
-local function caret_block()
-    local theme = THEMES[_theme_name] or THEMES.default
-    return M.color_depth() ~= "none" and theme.reverse ~= nil
-end
-
--- Display-column slicing of a row body: drop `n` columns from the start, and
--- keep at most `width` columns from the start. Both are SGR- and wide-char
--- aware (they walk cells(), not bytes).
-local function drop_cols(s, n)
-    if not s or s == "" or n <= 0 then return s or "" end
-    local out, col = {}, 0
-    for _, c in ipairs(cells(s)) do
-        col = col + c.w
-        if col > n then out[#out + 1] = c.t end
-    end
-    return table.concat(out)
-end
-
-local function take_cols(s, width)
-    local out, col = {}, 0
-    if width <= 0 then return "", 0 end
-    for _, c in ipairs(cells(s)) do
-        if col + c.w > width then break end
-        out[#out + 1] = c.t
-        col = col + c.w
-    end
-    return table.concat(out), col
-end
-
--- One input row's body: the line windowed to `width` display columns with the
--- caret inside the window, padded out so every input row and both rules share
--- one display width. `caret_off` is the cursor's byte offset inside `text`, or
--- nil on the rows the cursor is not on. A line wider than the row scrolls so
--- the caret stays visible, the way a one-line editor scrolls.
-local function input_row_text(text, caret_off, width)
-    text = text or ""
-    local before, caret, after
-    if caret_off then
-        before = text:sub(1, caret_off)
-        local rest = text:sub(caret_off + 1)
-        local ch = rest:match("^" .. utf8.charpattern) or ""
-        if caret_block() then
-            -- pi's caret: the cell under the cursor painted in reverse video,
-            -- or a reverse-video space at the end of the row
-            caret = rev(ch ~= "" and ch or " ")
-            after = ch ~= "" and rest:sub(#ch + 1) or ""
-        else
-            caret = "|"
-            after = rest
-        end
-    else
-        before, caret, after = text, "", ""
-    end
-    local caret_col = vlen(before)
-    local caret_w = vlen(caret)
-    local total_w = caret_col + caret_w + vlen(after)
-    local from = 0
-    if total_w > width then
-        -- scroll right just far enough to bring the caret's own cell inside
-        from = math.min(math.max(0, total_w - width),
-                        math.max(0, caret_col + caret_w - width))
-    end
-    local shown = take_cols(drop_cols(before .. caret .. after, from), width)
-    local w = vlen(shown)
-    if w < width then shown = shown .. string.rep(" ", width - w) end
-    return shown
-end
-
--- A rule row: the box's top and bottom rules. It can carry the turn's status at
--- the left (pi's "── status ────") and a centered "N more" label naming the
--- input rows the window hides. Always exactly `width` columns, muted in every
--- theme; the ASCII rules come from GLYPH_MAP through muted().
-local function rule_row(width, status, label)
-    if width <= 0 then return "" end
-    local function fill(n) return string.rep(RULE_GLYPH, math.max(0, n)) end
-    local sw = status and vlen(status) or 0
-    if status and sw > 0 and sw + 4 <= width then
-        local rest = width - 3 - sw - 1
-        if label then
-            local lw = vlen(label)
-            local start = math.floor((width - lw) / 2)
-            local left_block = 3 + sw + 1
-            -- the label survives only when it clears the status by a column
-            if lw + 2 <= width and start - left_block >= 1 then
-                return muted(fill(3)) .. status ..
-                    muted(" " .. fill(start - left_block) .. label ..
-                        fill(width - start - lw))
-            end
-        end
-        return muted(fill(3)) .. status .. muted(" " .. fill(rest))
-    end
-    if status and sw > 0 then
-        -- too narrow for the "── " head: the status alone, truncated to fit
-        return trunc(status, width)
-    end
-    if label then
-        local lw = vlen(label)
-        if lw + 2 <= width then
-            local start = math.floor((width - lw) / 2)
-            return muted(fill(start) .. label .. fill(width - start - lw))
-        end
-    end
-    return muted(fill(width))
-end
-
--- The turn's status for the box's top rule: the spinner with Working... while
--- busy. Leading space separates the indicator from the rule's left edge.
-local function turn_status()
-    if S.busy then
-        return " " .. cyan(spinner_glyph()) .. dim(" Working...")
-    end
-    return nil
-end
-M._turn_status = turn_status
+-- pi-style-input-and-footer: caret visibility (ASCII/mono themes) lives in
+-- M._painters.caret_reverse for ui_regions; column slicing below moved there.
 
 local function render_input(L)
-    -- palette-only R5: secret mode paints a masked line in the input box —
-    -- never the plaintext, never S.input.
-    if S.login_secret then
-        local cw = M._content_width(L.w)
-        local g = string.rep(" ", ui_pad(L.w))
-        local pad = box_padding(cw)
-        local content_w = math.max(1, cw - pad * 2)
-        local side = string.rep(" ", pad)
-        -- the secret line names what to paste: env var when the provider
-        -- takes an API key, device URL for device flows, auth code otherwise.
-        local hint = "paste API key"
-        local env_name
-        if S.cfg and S.cfg.providers and S.cfg.providers[S.login_provider]
-            and S.cfg.providers[S.login_provider].api_key_env then
-            env_name = S.cfg.providers[S.login_provider].api_key_env
-        elseif M._provider_catalog and M._provider_catalog.get then
-            local entry = M._provider_catalog.get(S.login_provider or "")
-            if entry then env_name = entry.api_key_env end
-        end
-        -- dynamic-provider-catalog: api_key_env is a list of vars ("first
-        -- set wins") for pipeline presets like opencode — resolve to one
-        -- name before concatenating. Nil/"" stays keyless (OAuth/store).
-        if M._provider_catalog and M._provider_catalog.env_name then
-            env_name = M._provider_catalog.env_name(env_name)
-        elseif type(env_name) == "table" then
-            env_name = type(env_name[1]) == "string" and env_name[1] or nil
-        end
-        if env_name and env_name ~= "" then
-            hint = hint .. " (" .. env_name .. ")"
-        end
-        if S.login_flow and S.login_flow.device and S.login_flow.device_code then
-            -- full device flow: the TUI polls; the user just authorizes
-            hint = "open " .. tostring(S.login_flow.verification_uri
-                or S.login_flow.device_url)
-                .. " and enter " .. tostring(S.login_flow.user_code or "")
-                .. " — waiting (Esc cancels)"
-        elseif S.login_flow and S.login_flow.device and S.login_flow.device_url then
-            hint = "open " .. S.login_flow.device_url .. ", paste token"
-        elseif S.login_flow and S.login_flow.authorize_url then
-            hint = hint .. " or auth code"
-        end
-        local label = "login " .. tostring(S.login_provider or "") .. ": " .. hint
-        local mask = string.rep("*", #(S.login_secret.buf or ""))
-        local text = label .. ": " .. mask
-        set_row(L.rule_top_row, g .. rule_row(cw, turn_status(), nil))
-        set_row(L.input_row, g .. side .. input_row_text(text, #text, content_w) .. side)
-        for i = 2, L.input_h do
-            set_row(L.input_row + i - 1, g .. side .. string.rep(" ", content_w) .. side)
-        end
-        set_row(L.rule_bottom_row, g .. rule_row(cw, nil, nil))
-        return
-    end
-    local lines = input_lines()
-    local total = #lines
-    local shown = L.input_h
-    local start = 1
-    if total > shown then
-        local li = cursor_line_col()
-        start = li - math.floor(shown / 2)
-        if start < 1 then start = 1 end
-        if start > total - shown + 1 then start = total - shown + 1 end
-    end
-    local cw = M._content_width(L.w)
-    local g = string.rep(" ", ui_pad(L.w))
-    local pad = box_padding(cw)
-    local content_w = math.max(1, cw - pad * 2)
-    local side = string.rep(" ", pad)
-    local cursor_li = cursor_line_col()
-
-    -- pi-style-input-and-footer: the box. The top rule carries the turn's
-    -- status and, like the bottom rule, names the input rows the window hides.
-    local hidden_above = start - 1
-    local hidden_below = total - (start + shown - 1)
-    set_row(L.rule_top_row, g .. rule_row(cw, turn_status(),
-        hidden_above > 0 and string.format(RULE_LABEL_UP, hidden_above) or nil))
-
-    for i = 1, shown do
-        local li = start + i - 1
-        local ln = lines[li]
-        if not ln then
-            set_row(L.input_row + i - 1, g .. side .. string.rep(" ", content_w) .. side)
-        else
-            local caret_off = (li == cursor_li) and (S.cursor - ln.from) or nil
-            set_row(L.input_row + i - 1,
-                g .. side .. input_row_text(ln.text, caret_off, content_w) .. side)
-        end
-    end
-
-    set_row(L.rule_bottom_row, g .. rule_row(cw, nil,
-        hidden_below > 0 and string.format(RULE_LABEL_DOWN, hidden_below) or nil))
+    apply_rows(M._regions.render_input(M._dock_slice(L), L, M._painters))
 end
 
+-- Phase A 1.2: palette region painting lives in ui_palette.render
+-- (slice in, ordered rowmap out); this facade builds the slice, applies it.
 local function render_palette(L)
     if not S.palette_active then return end
-    -- palette-fuzzy-search: modal query row. Only the model/login palettes
-    -- ever set S.palette_query, so the command palette's digits-only
-    -- indicator path below is untouched. The query row paints even with
-    -- zero matches (unlike entry rows) so the typed filter stays visible.
-    local q = ""
-    if S.palette_mode == "model" or S.palette_mode == "login"
-        or S.palette_mode == "logout" then
-        q = S.palette_query or ""
-    end
-    if #S.palette_items == 0 and q == "" then return end
-    -- M9: no frame; selected item is accent-colored, not reverse-video
-    -- 2.2/2.3: a window over the ranked list, shifted so the selected row is
-    -- inside it, plus a dim pos/total row when the list overflows it. The
-    -- palette starts below the box's bottom rule and neither rule nor any
-    -- footer row is ever painted here. (pi renders its dropdown the same way:
-    -- directly under the editor's bottom border.)
-    local n = #S.palette_items
-    local win, off = palette_window(L.h, n, S.palette_sel)
-    -- palette-hints D3: the blank+hint pair anchors to the region bottom —
-    -- hint on the last reserved row, blank one above, footer flush under it.
-    -- Entries and the indicator/query row keep the top-flush layout inside
-    -- the rows above the blank, so the shrink loop in layout() cuts the
-    -- entry window first and the hint is the last content dropped (it
-    -- survives down to palette_h == 1).
-    local hint_row = L.palette_row + L.palette_h
-    local room = math.max(0, hint_row - 2 - L.palette_row)
-    local paint_win = math.min(win, room - (q ~= "" and 1 or 0))
-    if paint_win < 0 then paint_win = 0 end
     local cw = M._content_width(L.w)
-    local g = string.rep(" ", ui_pad(L.w))
-    -- Rows inside the region that end up holding no entry, indicator or
-    -- query must stay blank: clear the region up to (not including) the hint
-    -- row, so a dock that shifted between frames leaves no stale content in
-    -- the reserved blank.
-    for r = L.palette_row + 1, hint_row - 1 do set_row(r, g) end
-    -- descriptions align: the name column is padded to the widest name+hint
-    -- across all listed entries (computed once per paint)
-    local label_w = 0
-    for _, it in ipairs(S.palette_items) do
-        local l = it.label or ""
-        if it.hint then l = l .. " " .. it.hint end
-        local vw = vlen(l)
-        if vw > label_w then label_w = vw end
-    end
-    for i = 1, paint_win do
-        local it = S.palette_items[off + i - 1]
-        if it then
-            -- 3.1: the argument hint sits after the name when the entry has one
-            local label = it.label or ""
-            if it.hint then label = label .. " " .. it.hint end
-            local pad = string.rep(" ", math.max(label_w - vlen(label), 0))
-            local text = trunc(string.format(" %s%s %s", label, pad, it.desc or ""), cw)
-            set_row(L.palette_row + i, g .. ((off + i - 1 == S.palette_sel) and sgr_role("accent", text) or dim(text)))
-        end
-    end
-    local irow = L.palette_row + paint_win + 1
-    local more = S.completion and S.completion.truncated
-    if irow <= L.palette_row + room then
-        if q ~= "" then
-            local txt = "> " .. q
-            if n == 0 then
-                txt = txt .. " (no matches)"
-            elseif n > paint_win then
-                txt = txt .. string.format(" (%d/%d)", S.palette_sel, n)
-            end
-            set_row(irow, g .. dim(trunc(" " .. txt, cw)))
-        elseif n > paint_win or more then
-            -- at-file-picker: a trailing `+` says the ranked list was cut (the
-            -- 200-candidate cap or the walk's own budget), so `1/200` doesn't
-            -- read like the whole tree. Painted even when everything fits: a
-            -- stopped walk hides entries no window would have shown anyway.
-            set_row(irow, g .. dim(trunc(string.format(" %d/%d%s",
-                S.palette_sel, n, more and "+" or ""), cw)))
-        end
-    end
-    if L.palette_h >= 1 then
-        local hp = M.PALETTE_HINTS[S.palette_mode] or M.PALETTE_HINTS.command
-        set_row(hint_row, g .. M.hint_paint(hp, cw))
-    end
-    -- footer-separator: while the palette paints, a full-width rule like the
-    -- box's own separates the dock from the footer row.
-    if L.separator_row then
-        set_row(L.separator_row, g .. rule_row(cw))
-    end
+    local rows = M._palette.render({
+        active = S.palette_active,
+        items = S.palette_items,
+        sel = S.palette_sel,
+        mode = S.palette_mode,
+        query = S.palette_query,
+        truncated = S.completion and S.completion.truncated,
+        hints = M.PALETTE_HINTS,
+        copy = M._copy.palette,
+        content_width = cw,
+        gutter = string.rep(" ", ui_pad(L.w)),
+    }, L, {
+        trunc = trunc,
+        vlen = vlen,
+        dim = dim,
+        accent = function(t) return sgr_role("accent", t) end,
+        rule = function(w) return M._regions.rule_row(w, nil, nil, M._painters) end,
+        hint = function(pairs, w) return M.hint_paint(pairs, w) end,
+    })
+    apply_rows(rows)
 end
 
 -- M7/D1+N1: dangerous-command detection, extracted for testability.
@@ -3618,81 +2818,30 @@ end
 -- M9: token usage as plain text; colors kept: green <summarize_at, yellow
 -- >=summarize_at (default 70%%), red >=90%%. Clamped to 0..100.
 -- T47: user-requested format "4.1k/32k (13%)" — used/budget/percent.
+-- Token cells + footer composition: canonical implementations live in
+-- ui_regions; theme-bound entry points stay here (painters live in ui
+-- until the themes cut) so tests and callers keep the M.* names.
 function M.token_pct(pct, summarize_at)
-    summarize_at = summarize_at or 0.7
-    if pct < 0 then pct = 0 elseif pct > 1 then pct = 1 end
-    local color = pct >= 0.9 and red or (pct >= summarize_at and yellow or green)
-    return color(string.format("%d%%", math.floor(pct * 100)))
+    return M._regions.token_pct(pct, summarize_at, M._painters)
 end
 
--- T47: "4.1k/32k (13%)" — used over budget (KiB-style /1024, so the default
--- 32768 budget reads as "32k"), colored by the same thresholds.
+-- T47: "4.1k/32k (13%)" — see ui_regions.token_usage.
 function M.token_usage(used, max_tokens, summarize_at)
-    if type(used) ~= "number" or used < 0 then used = 0 end
-    if type(max_tokens) ~= "number" or max_tokens <= 0 then max_tokens = 1024 end
-    local pct = math.min(used / max_tokens, 1)
-    -- the cell reads dim like the rest of the footer; the thresholds only
-    -- tint it — nested SGR composes faint with the color (dim yellow/red).
-    local tint = nil
-    if pct >= 0.9 then tint = red
-    elseif pct >= (summarize_at or 0.7) then tint = yellow end
-    local k = function(n)
-        local s = string.format("%.1fk", n / 1024)
-        return (s:gsub("%.0k$", "k"))
-    end
-    local s = string.format("%s/%s (%d%%)", k(used), k(max_tokens),
-        math.floor(pct * 100 + 0.5))
-    if tint then return dim(tint(s)) end
-    return dim(s)
+    return M._regions.token_usage(used, max_tokens, summarize_at, M._painters)
 end
 
 -- pi-style-input-and-footer: compact token counts for the footer, mirrored
--- from pi's footer formatter (plain below 1000, one decimal k, rounded k, M).
+-- from pi's footer formatter (see ui_regions.format_count).
 function M.format_count(n)
-    n = tonumber(n) or 0
-    if n < 0 then n = 0 end
-    n = math.floor(n)
-    if n < 1000 then return tostring(n) end
-    if n < 10000 then return string.format("%.1fk", n / 1000) end
-    if n < 1000000 then return string.format("%dk", math.floor(n / 1000 + 0.5)) end
-    if n < 10000000 then return string.format("%.1fM", n / 1000000) end
-    return string.format("%dM", math.floor(n / 1000000 + 0.5))
+    return M._regions.format_count(n)
 end
 
--- The tail of `s`, at most `maxw` display columns. The footer keeps the model
--- name readable from its end, where the model id actually lives.
-local function tail_cols(s, maxw)
-    if maxw <= 0 then return "" end
-    if vlen(s) <= maxw then return s end
-    local cs = cells(s)
-    local out, col = {}, 0
-    for i = #cs, 1, -1 do
-        local c = cs[i]
-        if col + c.w > maxw then break end
-        table.insert(out, 1, c.t)
-        col = col + c.w
-    end
-    return table.concat(out)
-end
+-- The tail of `s`, at most `maxw` display columns: canonical implementation
+-- lives in ui_regions (footer_stats calls it via the module).
 
--- The footer row composition: `left` at the start, `right` right-aligned and kept
--- at least two columns away. Both sides may carry SGR; widths are display
--- columns. When they cannot both fit, the right side loses its start (so its
--- tail survives) and is dropped only when nothing of it fits; the left side is
--- truncated only when it alone exceeds the row.
+-- The footer row composition (see ui_regions.footer_stats).
 function M.footer_stats(left, right, width)
-    if width <= 0 then return "" end
-    left, right = left or "", right or ""
-    local lw = vlen(left)
-    if lw >= width then return to_ascii(trunc(left, width)) end
-    local room = width - lw - 2 -- the two columns the model must stay clear of
-    local rw = vlen(right)
-    if rw == 0 or room <= 0 then
-        return left .. string.rep(" ", width - lw)
-    end
-    local kept = rw <= room and right or tail_cols(right, room)
-    local kw = vlen(kept)
-    return left .. string.rep(" ", width - lw - kw) .. kept
+    return M._regions.footer_stats(left, right, width, M._painters)
 end
 
 -- slim-footer-indicators: one dim footer row below the box — path ($HOME → ~),
@@ -3702,100 +2851,7 @@ end
 -- right-truncate; model is handled separately by footer_stats. No reverse
 -- video, no mode icons.
 local function render_footer(L)
-    local home = os.getenv("HOME") or ""
-    local ws = S.workspace
-    if home ~= "" and ws:sub(1, #home) == home then
-        ws = "~" .. ws:sub(#home + 1)
-    end
-
-    local stats = {}
-    if (S.tokens_in or 0) > 0 then
-        stats[#stats + 1] = dim("↑" .. M.format_count(S.tokens_in))
-    end
-    if (S.tokens_out or 0) > 0 then
-        stats[#stats + 1] = dim("↓" .. M.format_count(S.tokens_out))
-    end
-    if S.tokens_max and S.tokens_max > 0 then
-        local summarize_at = (S.cfg.context and S.cfg.context.summarize_at) or 0.7
-        -- no estimated prefix: the ≈/· marker in front of the context cell
-        -- was dropped (the cell itself already reads as an estimate)
-        stats[#stats + 1] = M.token_usage(S.tokens_used, S.tokens_max, summarize_at)
-    end
-    -- blocks joined by `·` separators: path · stats · flags (user request)
-    local stats_str = table.concat(stats, dim(" · "))
-
-    local flags = static_flags()
-    local flags_str = #flags > 0 and to_ascii(table.concat(flags, " ")) or ""
-
-    local width = M._content_width(L.w)
-    local g = string.rep(" ", ui_pad(L.w))
-    -- Visual order: path, stats, flags — joined with ` · ` separators.
-    -- Truncation order (spec): path first (to_ascii so ASCII mode gets
-    -- "..." not "…"), then toast, then stats — each step
-    -- re-fits the path into the room that opened up.
-    local SEP = dim(" · ")
-    local function join(path_s, s_str, f_str)
-        local parts = {}
-        if path_s ~= "" then parts[#parts + 1] = path_s end
-        if s_str ~= "" then parts[#parts + 1] = s_str end
-        if f_str ~= "" then parts[#parts + 1] = f_str end
-        return table.concat(parts, SEP)
-    end
-
-    local function fit_path(f_str, s_str)
-        -- separators widen the row by 3 columns per join; reserve room for
-        -- them so the truncated path still fits alongside the other blocks
-        local rest = 0
-        if s_str ~= "" then rest = rest + 3 + vlen(s_str) end
-        if f_str ~= "" then rest = rest + 3 + vlen(f_str) end
-        local room = width - rest
-        if room < 1 then return "" end
-        return to_ascii(trunc(dim(ws), room))
-    end
-
-    local f_str, s_str = flags_str, stats_str
-    local path_s = fit_path(f_str, s_str)
-    local left = join(path_s, s_str, f_str)
-
-    if vlen(left) > width then
-        -- Drop the toast when over width.
-        if S.toast and f_str:find(to_ascii(green(S.toast)), 1, true) then
-            f_str = ""
-            path_s = fit_path(f_str, s_str)
-            left = join(path_s, s_str, f_str)
-        end
-    end
-    if vlen(left) > width and f_str ~= "" then
-        f_str = ""
-        path_s = fit_path(f_str, s_str)
-        left = join(path_s, s_str, f_str)
-    end
-    if vlen(left) > width then
-        local stats_room = width - (path_s ~= "" and vlen(path_s) + 3 or 0)
-        if stats_room >= 1 then
-            s_str = to_ascii(trunc(s_str, stats_room))
-        else
-            s_str = ""
-        end
-        path_s = fit_path(f_str, s_str)
-        left = join(path_s, s_str, f_str)
-        if vlen(left) > width then
-            left = to_ascii(trunc(left, width))
-        end
-    end
-
-    -- right-aligned cell: provider/model · <level> (provider omitted when
-    -- unknown; the level always shows, `off` included — spec tui: Footer).
-    -- No model chosen drops the slash with it: `llama-cpp · off`, never
-    -- a dangling `llama-cpp/`.
-    local name = S.model_name
-    local provider = (type(S.cfg) == "table" and S.cfg.provider) or nil
-    local level = (type(S.cfg) == "table" and type(S.cfg.reasoning) == "string"
-        and S.cfg.reasoning) or "off"
-    local model_cell = provider
-        and ((name and (provider .. "/" .. name) or provider) .. " · " .. level)
-        or ((name or "?") .. " · " .. level)
-    set_row(L.footer_row, g .. M.footer_stats(left, dim(model_cell), width))
+    apply_rows(M._regions.render_footer(M._dock_slice(L), L, M._painters))
 end
 
 -- ============================================================
@@ -3866,6 +2922,63 @@ local function paint(force)
 end
 M._paint = paint
 
+-- Painter/capability table for ui_regions (built once; the module never
+-- touches ui locals, S, or globals). Theme-bound painters stay here until
+-- the themes cut — the module receives them as values.
+M._painters = {
+    dim = dim, muted = muted, red = red, green = green, yellow = yellow,
+    cyan = cyan, accent = cyan, rev = rev, italic = italic,
+    trunc = trunc, vlen = vlen, to_ascii = to_ascii, cells = cells,
+    clip = clip, wrap = wrap,
+    copy = M._copy,
+    now_ms = M._paint_clock,
+    role = function(kind, text) return sgr_role(kind, text) end,
+    md = function(text, inner) return md_render(text, inner, M.md_ansi) end,
+    hint = function(pairs, inner) return M.hint_paint(pairs, inner) end,
+    caret = function() return caret_glyph() end,
+    freeform = ask.FREEFORM_LABEL,
+    ascii_none = function() return M.color_depth() == "none" end,
+    caret_reverse = function()
+        local theme = THEMES[_theme_name] or THEMES.default
+        return M.color_depth() ~= "none" and theme.reverse ~= nil
+    end,
+    spinner_interval_ms = SPINNER_INTERVAL_MS,
+}
+
+-- State slice for ui_regions, built per paint (geometry + read fields only;
+-- screen application stays in apply_rows near set_row above).
+function M._dock_slice(L)
+    local cw = M._content_width(L.w)
+    local pad = box_padding(cw)
+    local prov_cfg = S.cfg or {}
+    local home = os.getenv("HOME") or ""
+    local ws = S.workspace or ""
+    if home ~= "" and ws:sub(1, #home) == home then
+        ws = "~" .. ws:sub(#home + 1)
+    end
+    return {
+        w = L.w, content_width = cw, gutter = string.rep(" ", ui_pad(L.w)),
+        pad = pad, side = string.rep(" ", pad),
+        content_w = math.max(1, cw - pad * 2),
+        input = S.input, cursor = S.cursor,
+        busy = S.busy, busy_started_at_ms = S.busy_started_at_ms,
+        error_banner = S.error_banner, toast = S.toast,
+        tokens_used = S.tokens_used, tokens_max = S.tokens_max,
+        tokens_in = S.tokens_in, tokens_out = S.tokens_out,
+        model_name = S.model_name,
+        cfg_provider = prov_cfg.provider,
+        cfg_reasoning = type(prov_cfg.reasoning) == "string" and prov_cfg.reasoning or nil,
+        cfg_summarize_at = prov_cfg.context and prov_cfg.context.summarize_at or nil,
+        cfg_providers = prov_cfg.providers,
+        ws_tilde = ws, home = home,
+        login = S.login_secret and {
+            buf = S.login_secret.buf, provider = S.login_provider, flow = S.login_flow,
+        } or nil,
+        -- read fresh per paint: tests/host can re-point the catalog at runtime.
+        catalog = M._provider_catalog,
+    }
+end
+
 -- Busy-spinner tick: repaints the ` Working...` indicator and drains keys
 -- while a turn runs, so a silent stretch (TTFT, backoff, a tool command)
 -- never freezes the TUI or queues a wheel tick until the next event. Two
@@ -3911,333 +3024,30 @@ end
 -- ============================================================
 -- Key reading — bytes → typed events (narrow contract)
 -- ============================================================
--- Event shapes produced here (and the only ones handle_key consumes):
---   { kind = "esc" | "enter" | "newline" | "backspace" | "tab" }
---   { kind = "text",  char = string }
---   { kind = "paste", text = string }
---   { kind = "ctrl",  code = number, shift = bool?, alt = bool? }
---   { kind = "alt",   code = number }
---   { kind = "special", name = string, ctrl = bool?, shift = bool? }
---   { kind = "mouse", name = string, col = number, row = number, button = number }
--- No layout, palette, or mode knowledge lives here — decode is pure
--- bytes → event. Terminal quirks (kitty CSI-u, modifyOtherKeys, X11 copy
--- chords) are normalized into the typed fields above before return.
-
--- kitty keyboard protocol (spec: "Comprehensive keyboard handling in
--- terminals"). We push flag 1 (disambiguate escape codes) at startup and pop
--- it on exit, so modified keys arrive as `CSI <code>; <mods> u` instead of
--- ambiguous legacy bytes. Modifiers are a bit field plus one:
--- shift 1, alt 2, ctrl 4, super 8 (so the encoded value is mask + 1).
-local function decode_mods(mask)
-    return {
-        shift = mask % 2 == 1,
-        alt   = math.floor(mask / 2) % 2 == 1,
-        ctrl  = math.floor(mask / 4) % 2 == 1,
-    }
-end
-
--- xterm modifyOtherKeys uses its own encoding: 2 shift, 3 alt, 4 shift+alt,
--- 5 ctrl, 6 shift+ctrl, 7 alt+ctrl, 8 shift+alt+ctrl (1 = no modifiers).
-local function mods_from_xterm(m)
-    local shift = m == 2 or m == 4 or m == 6 or m == 8
-    local alt   = m == 3 or m == 4 or m == 7 or m == 8
-    local ctrl  = m == 5 or m == 6 or m == 7 or m == 8
-    return { shift = shift, alt = alt, ctrl = ctrl }
-end
-
--- One key with explicit modifiers -> the same key table read_key builds for
--- legacy bytes, so the rest of the TUI is encoding-agnostic.
-local function decode_modified_key(code, mods)
-    if code == 27 then return { kind = "esc" } end
-    if code == 13 then
-        -- Enter stays legacy when unmodified; any modifier means the terminal
-        -- sends it here (Shift/Ctrl/Alt+Enter insert a newline). Alt is kept
-        -- on the event so the busy pump can tell Alt+Enter (follow-up) from
-        -- Shift/Ctrl+Enter (plain newline).
-        if mods.shift or mods.ctrl or mods.alt then
-            return { kind = "newline", alt = mods.alt or nil }
-        end
-        return { kind = "enter" }
-    end
-    if code == 9 then return { kind = "tab" } end
-    if code == 127 or code == 8 then return { kind = "backspace" } end
-    if mods.ctrl then
-        -- legacy ctrl mapping: a-z -> 1..26, space -> 0, rest masked to 0x1f
-        local c = code
-        if c >= 97 and c <= 122 then c = c - 96
-        elseif c == 32 then c = 0
-        else c = c % 32 end
-        return { kind = "ctrl", code = c, shift = mods.shift, alt = mods.alt }
-    end
-    if mods.alt and code >= 32 then return { kind = "alt", code = code } end
-    -- No modifiers: only terminals reporting every key (flag 8) send text here
-    if code >= 32 and code < 57344 then return { kind = "text", char = utf8.char(code) } end
-    return { kind = "special", name = "unknown" }
-end
-
--- kitty CSI-u: `<code>[:shifted[:base]] [;<mods>[:event]] [;<text>] u`
-local function decode_csi_u(p)
-    local code = p:match("^(%d+)")
-    if not code then return nil end
-    local rest = p:sub(#code + 1)
-    local mods_field = rest:match("^[^;]*;([^;]*)") or ""
-    local mods = tonumber(mods_field:match("^(%d+)")) or 1
-    return decode_modified_key(tonumber(code), decode_mods(mods - 1))
-end
-
--- xterm modifyOtherKeys (mode 2): `27 ; <xterm mods> ; <code> ~`
-local function decode_modify_other_keys(p)
-    local m, code = p:match("^27;(%d+);(%d+)$")
-    if not m then return nil end
-    return decode_modified_key(tonumber(code), mods_from_xterm(tonumber(m)))
-end
-
--- Modifier mask from an arrow/Home/End style CSI parameter list: the standard
--- form is `1;<mods>`, and the odd bare `5;` form old terminals sent.
-local function legacy_csi_mods(p)
-    local m = p:match("^1;(%d+)$") or p:match("^(%d+);$")
-    return m and decode_mods(tonumber(m) - 1) or nil
-end
-
--- T176: non-ASCII keys arrive as multibyte UTF-8, but decode_first_byte
--- only owns one byte — the rest of the keypress is already queued behind it.
--- A lead byte pulls its continuation bytes (non-blocking: they arrive
--- atomically with the keypress) and emits ONE text event. A peeked byte that
--- is not a valid continuation starts the next event and is stashed for the
--- next read; a truncated tail emits what arrived (display code degrades it
--- instead of raising). Previously every byte became its own text event, so
--- S.input filled with invalid UTF-8 fragments and vlen raised
--- "invalid UTF-8 code" on any Russian input.
--- M-fields (not chunk locals): ui.lua already sits at Lua's 200-locals
--- limit for the main chunk.
+-- Moved to ui_keys (src/tether/ui/keys.lua): pure decoders plus
+-- decode_first_byte/read_key/read_key_nb operating on the bag (M).
+-- M-fields below are the state bag + thin forwarders; every pre-existing
+-- M.* seam keeps working (tests drive M._read_key/M._stash_front directly).
+-- Event shapes are documented in ui/keys.lua header.
 M._byte_stash = {}
 -- Wall-clock age of a stashed lone ESC prefix (seconds): the pump and the
 -- idle retry drive the decoder once per quantum, so a split sequence's tail
 -- lands within one; older than this with no tail, the ESC arrived alone.
 M._esc_stash_s = nil
-local ESC_AGE_S = 0.15
-function M._read_nb()
-    if #M._byte_stash > 0 then return table.remove(M._byte_stash, 1) end
-    return tether.read_char_nb()
-end
+function M._read_nb() return M._keys.read_nb(M) end
 
 -- Push bytes back to the FRONT of the stash (order preserved) so a
 -- fragmented escape sequence is retried whole on the next tick instead of
 -- leaking its tail ("[<65;48;31M") into the input as text.
-function M._stash_front(list)
-    if not list or #list == 0 then return end
-    -- Consumed bytes (in list) were removed from the stash by M._read_nb()
-    -- calls inside nb_read(). The stash is therefore always empty here,
-    -- and we can safely replace it with the list.
-    M._byte_stash = list
-end
+function M._stash_front(list) return M._keys.stash_front(M, list) end
 
-function M._read_utf8_char(first)
-    local need
-    if first >= 0xC2 and first <= 0xDF then need = 1
-    elseif first >= 0xE0 and first <= 0xEF then need = 2
-    elseif first >= 0xF0 and first <= 0xF4 then need = 3
-    else return string.char(first) end
-    local parts = { string.char(first) }
-    for _ = 1, need do
-        local b = tether.read_char_nb()
-        if b == nil then break end -- truncated arrival: emit what we have
-        b = b & 0xFF
-        if b < 0x80 or b > 0xBF then
-            M._byte_stash[#M._byte_stash + 1] = b
-            break
-        end
-        parts[#parts + 1] = string.char(b)
-    end
-    return table.concat(parts)
-end
+function M._read_utf8_char(first) return M._keys.read_utf8_char(M, first) end
 
 -- Decode one already-read first byte; continuation bytes come from
 -- read_char_nb (and the paste body from read_char). Shared by read_key and
 -- read_key_nb so blocking and non-blocking paths stay identical.
--- nb (non-blocking caller, the busy pump): an escape sequence split across
--- reads must not decode as a lone esc plus a text tail. When the next byte
--- is not available yet, the consumed prefix goes back to the stash front
--- and decode yields nil — the next tick retries the sequence whole.
-local function decode_first_byte(c, nb)
-    if c == 27 then
-        local consumed = { c }
-        local function nb_read()
-            local b = M._read_nb()
-            if b == nil then
-                if nb then M._stash_front(consumed) end
-                return nil
-            end
-            consumed[#consumed + 1] = b & 0xFF
-            return b
-        end
-        local function incomplete()
-            if not nb then return { kind = "esc" } end
-            -- A split sequence's tail lands on the next tick (the pump and
-            -- the idle retry re-run the decoder every quantum). A lone ESC
-            -- that no tail follows past the age window is its own keypress:
-            -- stop re-stashing it and emit, instead of holding it until the
-            -- next key arrives.
-            if #consumed == 1 then
-                local now = M._paint_clock()
-                if M._esc_stash_s and now - M._esc_stash_s >= ESC_AGE_S then
-                    M._byte_stash = {}
-                    M._esc_stash_s = nil
-                    return { kind = "esc" }
-                end
-                M._esc_stash_s = M._esc_stash_s or now
-            end
-            return nil
-        end
-        local b2 = nb_read()
-        if b2 == nil then return incomplete() end
-        local c2 = b2 & 0xFF
-        if c2 ~= 91 and c2 ~= 79 then
-            return { kind = "alt", code = c2 }
-        end
-        local params = {}
-        while true do
-            local b3 = nb_read()
-            if b3 == nil then return incomplete() end
-            local c3 = b3 & 0xFF
-            -- digits, ';', ':', '<', '>': ':' carries kitty alternate-key
-            -- sub-fields, so it must not terminate the sequence
-            if (c3 >= 48 and c3 <= 57) or c3 == 58 or c3 == 59 or c3 == 60 or c3 == 62 then
-                params[#params + 1] = string.char(c3)
-            else
-                local p = table.concat(params)
-                if p == "200" and c3 == 126 then
-                    local buf = {}
-                    while true do
-                        local ch = tether.read_char()
-                        if ch == nil or ch == -1 then break end
-                        local cc = ch & 0xFF
-                        if cc == 27 then
-                            -- paste terminator is ESC [ 2 0 1 ~. Match it
-                            -- incrementally: a stray ESC (or split arrival)
-                            -- flushes as content and can never eat a real
-                            -- terminator that starts later.
-                            local target = "[201~"
-                            local cand = {}
-                            local b0 = M._read_nb()
-                            if b0 then cand[#cand + 1] = string.char(b0 & 0xFF) end
-                            while #cand > 0
-                                and target:sub(1, #cand) == table.concat(cand)
-                                and #cand < #target do
-                                local b = tether.read_char()
-                                if b == nil or b == -1 then break end
-                                cand[#cand + 1] = string.char(b & 0xFF)
-                            end
-                            if table.concat(cand) == target then
-                                return { kind = "paste", text = table.concat(buf) }
-                            end
-                            buf[#buf + 1] = string.char(cc)
-                            for _, s in ipairs(cand) do buf[#buf + 1] = s end
-                        elseif cc >= 32 or cc == 10 then
-                            buf[#buf + 1] = string.char(cc)
-                        end
-                    end
-                    return { kind = "paste", text = table.concat(buf) }
-                end
-                -- kitty CSI-u (we push flag 1) and xterm modifyOtherKeys
-                -- (we enable mode 2): both encode one key with modifiers.
-                if c3 == 117 and p ~= "" then
-                    local kitty = decode_csi_u(p)
-                    if kitty then return kitty end
-                    return { kind = "special", name = "unknown" }
-                end
-                -- T18: some terminals report Ctrl+Shift+C (copy) as a CSI
-                -- whose final byte is C with a non-arrow params blob. Normalize
-                -- to a typed ctrl event so handle_key never re-parses params.
-                if p == "4:53;96" and c3 == 67 then
-                    return { kind = "ctrl", code = 3, shift = true }
-                end
-                local names = {
-                    [65] = "up", [66] = "down", [67] = "right", [68] = "left",
-                    [72] = "home", [70] = "end",
-                }
-                if names[c3] then
-                    local mods = legacy_csi_mods(p)
-                    -- X11 fallback: Shift+Ctrl+C as `CSI 1;2 C` — same chord
-                    if c3 == 67 and p == "1;2" then
-                        return { kind = "ctrl", code = 3, shift = true }
-                    end
-                    return { kind = "special", name = names[c3],
-                             ctrl = mods and mods.ctrl, shift = mods and mods.shift }
-                end
-                if c3 == 126 then
-                    -- modifyOtherKeys: 27;<xterm mods>;<code>~
-                    local mok = decode_modify_other_keys(p)
-                    if mok then return mok end
-                    -- `~` keys carry modifiers as `<code>;<mods>`
-                    local base, mp = p:match("^(%d+);(%d+)$")
-                    base = base or p
-                    local mods = mp and decode_mods(tonumber(mp) - 1) or nil
-                    local m = ({ ["1"]="home", ["2"]="insert", ["3"]="delete",
-                                 ["4"]="end", ["5"]="pgup", ["6"]="pgdn",
-                                 ["7"]="home", ["8"]="end" })[base]
-                    if m then
-                        return { kind = "special", name = m,
-                                 ctrl = mods and mods.ctrl, shift = mods and mods.shift }
-                    end
-                end
-                -- M8/R6: F3 (CSI 1~ with modifier 1;3~ etc) — terminal sends
-                -- ESC[13~ / ESC[14~ for F3/Shift+F3 on xterm; match by params
-                if c3 == 126 and p == "13" then return { kind = "special", name = "f3" } end
-                if c3 == 126 and p == "14" then return { kind = "special", name = "sf3" } end
-                -- T17/TW1: mouse SGR (1006) — final byte M (press) / m
-                -- (release). Per xterm the params are code;col;row (button
-                -- code first: 0 press, 32 release, 64 wheel up, 65 wheel
-                -- down; the '<' SGR prefix lands in p and the pattern skips
-                -- it). The old col;row;code read the button code from the
-                -- last field: every wheel tick decoded as button 5 = unknown,
-                -- so the wheel never scrolled and the terminal's arrow
-                -- fallback fed history into the input.
-                if c3 == 77 or c3 == 109 then
-                    local code, col, row = p:match("(%d+);(%d+);(%d+)")
-                    code, col, row = tonumber(code), tonumber(col), tonumber(row)
-                    local name
-                    if code == 0 then name = "press"
-                    elseif code == 32 then name = "release"
-                    elseif code == 64 then name = "scroll_up"
-                    elseif code == 65 then name = "scroll_down"
-                    else name = "unknown" end
-                    return { kind = "mouse", name = name,
-                             col = col, row = row, button = code }
-                end
-                return { kind = "special", name = "unknown" }
-            end
-        end
-    elseif c == 13 then return { kind = "enter" }
-    elseif c == 10 then return { kind = "newline" }
-    elseif c == 127 or c == 8 then return { kind = "backspace" }
-    elseif c == 9 then return { kind = "tab" }
-    elseif c < 32 then return { kind = "ctrl", code = c }
-    elseif c >= 0x80 then
-        return { kind = "text", char = M._read_utf8_char(c) }
-    else
-        return { kind = "text", char = string.char(c) }
-    end
-end
-
-local function read_key()
-    -- Blocking: wait on read_char directly when the stash is empty, so no
-    -- poll timeout delays the keypress; a stashed lookahead byte goes first.
-    local b
-    if #M._byte_stash > 0 then b = table.remove(M._byte_stash, 1)
-    else b = tether.read_char() end
-    if b == nil or b == -1 then return nil end
-    return decode_first_byte(b & 0xFF)
-end
-
--- Non-blocking variant for the busy pump: first byte via read_char_nb so a
--- silent turn never stalls on input. Incomplete escape sequences surface as
--- esc (same as a short blocking read); the pump never blocks.
-local function read_key_nb()
-    local b = M._read_nb()
-    if b == nil or b == -1 then return nil end
-    return decode_first_byte(b & 0xFF, true)
-end
+-- (Bodies live in ui_keys; the forwarder below keeps call sites unchanged.)
+local function read_key_nb() return M._keys.read_key_nb(M) end
 
 -- ============================================================
 -- Command execution
@@ -4357,7 +3167,7 @@ local function begin_login(provider)
                 end
             else
                 -- device endpoint unreachable: degrade to the paste path
-                flow.device_request_error = tostring(err or "device request failed")
+                flow.device_request_error = tostring(err or M._copy.errors.device_request_failed)
             end
         end
     end
@@ -4391,7 +3201,7 @@ M._device_poll_tick = function()
         return nil
     end
     if os.time() >= (flow.poll_deadline or 0) then
-        S.error_banner = "device login expired — run /login again"
+        S.error_banner = M._copy.errors.device_expired
         cancel_login()
         return "failed"
     end
@@ -4436,7 +3246,7 @@ M._device_poll_tick = function()
         end
         return "pending"
     end
-    S.error_banner = "device login failed: " .. tostring(etype or perr or "unknown")
+    S.error_banner = M._copy.errors.device_failed_prefix .. tostring(etype or perr or "unknown")
     cancel_login()
     return "failed"
 end
@@ -4486,7 +3296,7 @@ local function submit_login_secret(raw)
             access_token = value,
         })
         if not okd then
-            S.error_banner = "login store failed"
+            S.error_banner = M._copy.errors.login_store_failed
             return false
         end
         if S.cfg and ((S.cfg.provider or "openai") == provider) then
@@ -4519,7 +3329,7 @@ local function submit_login_secret(raw)
             or (ccommon and ccommon.oauth_token_exchange)
         local entry = exchange and exchange(post, flow, code, os.time())
         if not entry then
-            S.error_banner = "oauth exchange failed"
+            S.error_banner = M._copy.errors.oauth_exchange_failed
             S.login_provider = provider
             S.login_flow = flow
             -- re-enter secret mode (palette-only)
@@ -4528,7 +3338,7 @@ local function submit_login_secret(raw)
         end
         local ok = auth_mod and auth_mod.set and auth_mod.set(nil, provider, entry)
         if not ok then
-            S.error_banner = "login store failed"
+            S.error_banner = M._copy.errors.login_store_failed
             return false
         end
         if S.cfg and ((S.cfg.provider or "openai") == provider) then
@@ -4549,7 +3359,7 @@ local function submit_login_secret(raw)
         access_token = value,
     })
     if not ok then
-        S.error_banner = "login store failed"
+        S.error_banner = M._copy.errors.login_store_failed
         return false
     end
     if S.cfg and ((S.cfg.provider or "openai") == provider) then
@@ -4587,7 +3397,7 @@ function pick.resume(id)
             transcript.reset(seeded)
         end
         transcript.append(
-            { role = "system", text = "↻ session " .. tostring(sid):sub(1, 8) .. " resumed" })
+            { role = "system", text = M._copy.session.resumed_prefix .. tostring(sid):sub(1, 8) .. M._copy.session.resumed_suffix })
         bump_transcript()
     end
 end
@@ -4675,7 +3485,7 @@ function pick.think(level)
             pcall(cfgmod.persist_keys, home, { reasoning = level })
         end
     end
-    transcript.append({ role = "system", text = "→ thinking: " .. level })
+        transcript.append({ role = "system", text = M._copy.session.thinking_prefix .. level })
     bump_transcript()
 end
 
@@ -4702,7 +3512,7 @@ local function execute_command(cmd, rest)
             if type(summary) == "string" and summary ~= "" then
                 transcript.append({ role = "system", text = summary })
             else
-                transcript.append({ role = "separator", text = "summary" })
+                transcript.append({ role = "separator", text = M._copy.session.compact_separator })
             end
         end
         if agent and agent.estimate_tokens then
@@ -4720,7 +3530,7 @@ local function execute_command(cmd, rest)
         local targets = M.copy_targets(transcript.entries())
         local items = {}
         for _, tg in ipairs(targets) do
-            items[#items + 1] = { label = tg.name, desc = tostring(tg.bytes) .. " bytes", copy = tg }
+            items[#items + 1] = { label = tg.name, desc = tostring(tg.bytes) .. M._copy.session.copy_bytes_suffix, copy = tg }
         end
         S.palette_mode = "copy"
         S.palette_active = true
@@ -4817,7 +3627,7 @@ local function execute_command(cmd, rest)
     if cmd == "login" then
         local provider = (type(rest) == "string" and rest:match("^%s*(.-)%s*$")) or ""
         if S.cfg and S.cfg.non_interactive then
-            S.error_banner = "login is interactive only"
+S.error_banner = M._copy.errors.login_interactive_only
             return
         end
         -- Bare /login → shared palette in login mode (same mechanism as
@@ -4842,7 +3652,7 @@ local function execute_command(cmd, rest)
             return
         end
         if not is_known_provider(provider) then
-            S.error_banner = "unknown provider: " .. provider
+            S.error_banner = M._copy.errors.unknown_provider_prefix .. provider
             return
         end
         provider = provider:lower()
@@ -4868,7 +3678,7 @@ local function execute_command(cmd, rest)
             if #names == 0 then
                 -- logout-confirm D5: an empty store is a state, not a failed
                 -- lookup — the picker still does not open.
-                S.error_banner = "no provider is logged in"
+                S.error_banner = M._copy.errors.no_provider_logged_in
                 return
             end
             local active = (S.cfg and S.cfg.provider) or nil
@@ -4894,7 +3704,7 @@ local function execute_command(cmd, rest)
             return
         end
         if not is_known_provider(provider) then
-            S.error_banner = "unknown provider: " .. provider
+            S.error_banner = M._copy.errors.unknown_provider_prefix .. provider
             return
         end
         provider = provider:lower()
@@ -4904,7 +3714,7 @@ local function execute_command(cmd, rest)
         local stored = auth_mod and auth_mod.load
             and auth_mod.load(nil) or {}
         if type(stored) ~= "table" or stored[provider] == nil then
-            S.error_banner = "no stored credential for " .. provider
+            S.error_banner = M._copy.errors.no_stored_credential_prefix .. provider
             return
         end
         M._logout_delete(provider)
@@ -4920,7 +3730,7 @@ local function execute_command(cmd, rest)
             local items = {}
             for _, lv in ipairs(ORDER) do
                 items[#items + 1] = { label = lv,
-                    desc = (lv == cur) and "current" or "" }
+                    desc = (lv == cur) and M._copy.session.think_current or "" }
             end
             S.error_banner = nil
             S.palette_mode = "think"
@@ -4933,7 +3743,7 @@ local function execute_command(cmd, rest)
         level = level:lower()
         local known = { off = true, low = true, medium = true, high = true }
         if not known[level] then
-            S.error_banner = "unknown thinking level: " .. level
+            S.error_banner = M._copy.errors.unknown_thinking_level_prefix .. level
             return
         end
         pick.think(level)
@@ -4962,10 +3772,10 @@ local function transcript_entries(messages)
 end
 M.transcript_entries = transcript_entries
 
--- Forward decls: handle_agent_event (above) calls pump_keys; pump_keys calls
--- handle_key. Both are assigned below — must be locals in scope first.
+-- Forward decls: handle_agent_event (above) calls the busy pump; the pump
+-- calls handle_key. handle_key is assigned below — must be local first.
+-- pump_keys itself lives in ui_busy (S + callbacks in, handled out).
 local handle_key
-local pump_keys
 
 local function handle_agent_event(ev)
     if not ev or not ev.type then return end
@@ -4973,7 +3783,7 @@ local function handle_agent_event(ev)
     -- Alt+Enter / Escape work while the agent is busy (no second turn).
     -- Returns whether it handled anything: a scroll drained here must repaint
     -- at once instead of waiting out the delta throttle below.
-    local pumped = pump_keys()
+    local pumped = M._busy.pump_keys(S, read_key_nb, handle_key)
     -- A: remember the tail-decoration state so a transition (waiting ->
     -- caret, or caret -> nothing) repaints at once instead of waiting out the
     -- delta throttle.
@@ -5048,12 +3858,10 @@ local function handle_agent_event(ev)
                 -- §6.10: warn on dangerous commands
                 -- M7/D1+D2: extracted to ui.is_dangerous() (crash: %f is a Lua
                 -- pattern boundary prefix, %frm%s was an invalid pattern).
-                body = "⚠ potentially dangerous command"
+                body = M._copy.confirm.danger_warning
             end
-            local options = {"[once]     allow once",
-                             "[session]  allow until the session ends",
-                             "[always]   save to auto_approve",
-                             "[deny]     decline"}
+            -- fresh table per event (values from ui_copy): the menu owns it.
+            local options = { table.unpack(M._copy.confirm.options) }
             S.confirmation = {
                 label = label,
                 body = body,
@@ -5113,24 +3921,8 @@ M._handle_agent_event = handle_agent_event
 
 -- Called from handle_agent_event while S.busy: drain non-blocking keys so
 -- Enter / Alt+Enter / Escape work mid-turn without a second concurrent turn.
--- Confirmation/ask/secret own the keyboard first — pump is a no-op then.
--- Drains everything available in one tick (not one key per event).
--- Returns whether any key was handled (callers repaint on true).
-pump_keys = function()
-    if not S or not S.busy then return false end
-    if S.confirmation or S.ask or S.login_secret then return false end
-    local handled = false
-    while true do
-        local k = read_key_nb()
-        if not k then break end
-        handled = true
-        handle_key(k)
-        if not S or not S.busy then break end
-        if S.confirmation or S.ask or S.login_secret then break end
-    end
-    return handled
-end
-M._pump_keys = function() if S then return pump_keys() end return false end
+-- Canonical implementation lives in ui_busy (S + read_key_nb/handle_key in).
+M._pump_keys = function() if S then return M._busy.pump_keys(S, read_key_nb, handle_key) end return false end
 
 -- Idle retry for a stashed escape prefix: the stdin drain fires only when
 -- fresh bytes arrive, so without a tick-driven retry (see run's on_tick) a
@@ -5138,75 +3930,38 @@ M._pump_keys = function() if S then return pump_keys() end return false end
 -- drain: decode everything currently readable, dispatch, count handled.
 M._drain_stash = function()
     if not S or S.busy then return 0 end
-    local n = 0
-    while true do
-        local k = read_key_nb()
-        if not k then break end
-        n = n + 1
-        handle_key(k)
-        if not S or S.quit then break end
-    end
-    return n
+    return M._busy.drain_stash(S, read_key_nb, handle_key)
 end
 
 -- Shared submit path for Enter / Alt+Enter while busy: user row now, queue
--- FIFO, clear input. Does not start a turn.
+-- FIFO, clear input. Canonical implementation lives in ui_busy.
 local function enqueue_busy(kind)
-    local text = S.input
-    if text:match("^%s*$") then return end
-    local q = kind == "followup" and S.followup_queue or S.steer_queue
-    if not queue_push(q, text) then
-        S.error_banner = "queue full (" .. QUEUE_CAP .. ")"
-        return
-    end
-    push_history(text)
-    transcript.append({ role = "user", text = text })
-    bump_transcript()
-    input_clear()
-    S.error_banner = nil
-    S.scroll = 0
-    S.user_scrolled = false
+    if not S then return end
+    M._busy.enqueue_busy(S, kind, queue_push, push_history,
+        function(text)
+            transcript.append({ role = "user", text = text })
+            bump_transcript()
+        end,
+        input_clear, QUEUE_CAP)
 end
 M._enqueue_busy = function(kind) if S then enqueue_busy(kind) end end
 
--- Escape while busy with a non-empty queue: steers first, then follow-ups,
--- one per line (submission order across both queues is not tracked — the
--- spec fixes steering-first order). Empty queues: leave the input alone
--- (handle_key's esc branch clears / no-ops as before).
+-- Escape while busy with a non-empty queue: steers first, then follow-ups.
+-- Canonical implementation lives in ui_busy.
 local function restore_queues()
     if not S then return end
-    local parts = {}
-    for _, t in ipairs(S.steer_queue or {}) do parts[#parts + 1] = t end
-    for _, t in ipairs(S.followup_queue or {}) do parts[#parts + 1] = t end
-    S.steer_queue = {}
-    S.followup_queue = {}
-    if #parts == 0 then
-        input_clear()
-        return
-    end
-    S.input = table.concat(parts, "\n")
-    S.cursor = #S.input
-    palette_sync()
+    M._busy.restore_queues(S, input_clear, palette_sync)
 end
 M._restore_queues = function() if S then restore_queues() end end
 
--- ! / !! parser: nil = not a bang; "empty" = bang with no command;
--- ("bang"|"double", cmd) = runnable.
-local function parse_bang(s)
-    if type(s) ~= "string" or s:sub(1, 1) ~= "!" then return nil end
-    local double = s:sub(2, 2) == "!"
-    local cmd = double and s:sub(3) or s:sub(2)
-    cmd = cmd:match("^%s*(.-)%s*$") or ""
-    if cmd == "" then return "empty" end
-    return double and "double" or "bang", cmd
-end
-M._parse_bang = parse_bang
+-- ! / !! parser: canonical implementation lives in ui_busy (pure).
+M._parse_bang = M._busy.parse_bang
 
 -- Run a bang line through the shared run-tool path (workspace, timeout, env).
 -- Renders a tool-style row; ! stores a bounded excerpt for the next message;
 -- !! never touches history or bang_context.
 local function run_bang(s)
-    local kind, cmd = parse_bang(s)
+    local kind, cmd = M._parse_bang(s)
     if not kind then return false end
     if kind == "empty" then
         S.error_banner = "missing command"
@@ -5369,7 +4124,7 @@ local function commit_input()
         end
     end
     -- add-steering-input: bang runs after slash resolution, never to the model
-    local bang = parse_bang(trimmed)
+    local bang = M._parse_bang(trimmed)
     if bang then
         run_bang(trimmed)
         return
@@ -6172,7 +4927,7 @@ handle_key = function(k)
                 -- 2.5: hit-test through the window offset; the indicator row
                 -- selects nothing; palette-hints: neither the blank nor the
                 -- hint row does (they occupy the region's last two rows).
-                local win, off = palette_window(L.h, #S.palette_items, S.palette_sel)
+                local win, off = M._palette.window(L.h, #S.palette_items, S.palette_sel)
                 local last = math.min(L.palette_row + win,
                     L.palette_row + L.palette_h - 2)
                 if k.row <= last then
@@ -6749,7 +5504,11 @@ end
 
 M._handle_key = function(k) if S then handle_key(k) end end
 -- Test seam: decode one key from tether.read_char/read_char_nb (no state needed).
-M._read_key = function() return read_key() end
+M._read_key = function() return M._keys.read_key(M) end
+-- Phase B 2.1 seams: routing table lives in ui_keys; the facade switch
+-- stays until 2.2. Tests drive route/dispatch directly for parity.
+M._key_route = function(k, ctx) return M._keys.route(k, ctx) end
+M._key_dispatch = M._keys.dispatch
 
 -- ============================================================
 -- Main

@@ -1,5 +1,26 @@
 -- tether / transcript.lua — the visible conversation model.
 --
+-- IN:  event | seed | clear in, viewport rows out. configure() injects
+--      render_entry + cache bound + utf8 cut so this module never reaches
+--      into ui state. render_viewport(slice, L, P) takes values only:
+--        slice: { content_width, gutter, scroll, user_scrolled, _last_total,
+--          _last_scroll, last_transcript_top, last_transcript_w, streaming,
+--          palette_active, confirmation (bool), ask (bool), login_secret
+--          (bool), alt_screen (bool) }
+--        L: layout rows { w, h, transcript_row, transcript_h }
+--        P: { trunc(text, n) -> text, caret() -> glyph,
+--          scroll_shift_seq(h, top, bottom, delta) -> esc seq }
+-- OUT: { rows (ordered rowmap {{row, text}} for the facade's set_row),
+--      scroll, last_total, last_scroll, last_top, last_w,
+--      last_transcript_h, total, top, bottom, visible_lo, visible_hi,
+--      top_changed (bool), shift_seq (string or nil) }.
+--      Terminal I/O (frame_put/set_row/screen) stays in the facade; the
+--      module owns the height index + visible window via ensure_index /
+--      set_visible. No S, no globals, no mutation of the slice.
+-- EXAMPLE:
+--      local res = transcript.render_viewport(slice, L, P)
+--      -- facade applies S.scroll/last_* + frame_put(shift_seq) + set_row
+--
 -- Data-in / rows-out: canonical agent events and session history are reduced
 -- to display rows (scroll, attempt tags, confirmation tails). Owns the row
 -- cache, prefix-sum height index and stale-attempt drop. Layout, key handling
@@ -596,6 +617,113 @@ function M.row_text(k, width)
     local prev = effective_prev_role(i)
     local rows = entry_rows(e, width, prev)
     return rows[k - (index_start[i] or 0) + 1] or ""
+end
+
+-- Viewport render (moved from ui.lua render_transcript, Phase A 1.1):
+-- scroll pin + clamp, top/bottom window, live-tail caret, gutter prefix.
+-- Pure over the slice except the owned index/visible state (ensure_index,
+-- set_visible, row lookups stay internal). The facade applies S.scroll /
+-- last_* bookkeeping, frame_put(shift_seq), screen invalidation and set_row.
+function M.render_viewport(slice, L, P)
+    slice = slice or {}
+    L = L or {}
+    P = P or {}
+    local cw = slice.content_width or 80
+    local gutter = slice.gutter or ""
+    local scroll = slice.scroll or 0
+    local total = M.ensure_index(cw)
+    -- viewport pin: while scrolled away from the tail, rows arriving (or
+    -- dropped by a retry) below the viewport must not move it — fold the
+    -- total drift back into the offset so the same rows stay visible. Only
+    -- when the offset itself sat still: a user scroll between paints takes
+    -- precedence, so preset offsets are never rewritten.
+    if slice.user_scrolled and slice._last_total ~= nil and total ~= slice._last_total
+        and scroll == (slice._last_scroll or scroll) then
+        scroll = scroll + (total - slice._last_total)
+    end
+    -- clamp scroll so the viewport can never move past the top of the
+    -- transcript. Over-scroll made top negative and the scroll indicator
+    -- report nonsense.
+    local max_scroll = total - 1
+    if max_scroll < 0 then max_scroll = 0 end
+    if scroll > max_scroll then scroll = max_scroll end
+    if scroll < 0 then scroll = 0 end
+    -- baseline AFTER the clamp: the pin compares against what is actually
+    -- painted, never a pre-clamp value.
+    local last_total, last_scroll = total, scroll
+    local bottom = total - scroll
+    if bottom > total then bottom = total end
+    if bottom < 1 then bottom = 1 end
+    local th = L.transcript_h or 1
+    local top = bottom - th + 1
+    if top < 1 then top = 1 end
+    -- hardware scroll-region shift descriptor for the facade: strict
+    -- subset/superset reuse guard + region-size guard live in P's
+    -- scroll_shift_seq (returns "" when unusable).
+    local top_changed = slice.last_transcript_top ~= top
+    local shift_seq = nil
+    if top_changed and slice.last_transcript_top
+        and slice.last_transcript_w == cw
+        and not slice.alt_screen then
+        local old_top = slice.last_transcript_top
+        local delta = old_top - top -- >0: content moved up (scroll down)
+        if delta ~= 0 and P.scroll_shift_seq then
+            local seq = P.scroll_shift_seq(L.h, L.transcript_row,
+                (L.transcript_row or 1) + th - 1, delta)
+            if seq ~= "" then shift_seq = seq end
+        end
+    end
+    -- live tail — the caret while deltas are still streaming. Applied at
+    -- paint time so the wrapped-line cache stays untouched. Never drawn
+    -- while the palette, confirmation, ask block or login secret mode owns
+    -- the keyboard.
+    local tail = ""
+    if not slice.user_scrolled and total > 0 then
+        if slice.streaming and not slice.palette_active
+            and not slice.confirmation and not slice.ask and not slice.login_secret then
+            if P.caret then tail = P.caret() end
+        end
+    end
+    local last_painted = math.min(total, bottom)
+    local lo = M.entry_of_row(top, cw) or 0
+    local hi = M.entry_of_row(last_painted, cw) or -1
+    M.set_visible(lo, hi)
+    local rows = {}
+    local trunc = P.trunc or function(s) return s end
+    for i = 1, th do
+        local idx = top + i - 1
+        local text = ""
+        if idx >= 1 and idx <= total then
+            text = M.row_text(idx, cw)
+        end
+        if idx == total and tail ~= "" then
+            local last_i = M.entry_of_row(total, cw)
+            local last_e = last_i and M.entry_at(last_i)
+            if not (last_e and last_e.role == "thinking") then
+                text = trunc(text, cw - 2) .. tail
+            end
+        end
+        -- the gutter prefixes every row but the splash block, which
+        -- carries its own leading space (blank rows stay blank).
+        local prefix = ""
+        if text ~= "" then
+            local ei = M.entry_of_row(idx, cw)
+            if not (ei and (M.entry_at(ei) or {}).role == "splash") then
+                prefix = gutter
+            end
+        end
+        rows[#rows + 1] = { (L.transcript_row or 1) + i - 1, prefix .. text }
+    end
+    return {
+        rows = rows,
+        scroll = scroll,
+        last_total = last_total, last_scroll = last_scroll,
+        last_top = top, last_w = cw,
+        last_transcript_h = th,
+        total = total, top = top, bottom = bottom,
+        visible_lo = lo, visible_hi = hi,
+        top_changed = top_changed, shift_seq = shift_seq,
+    }
 end
 
 -- Parity seam: the same rows the viewport path produces, for the whole
