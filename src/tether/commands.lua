@@ -6,6 +6,13 @@
 -- cfg._session_id at the call site; this module never touches cfg. Seeding
 -- the visible transcript stays with the caller (transcript.seed) so each
 -- surface owns its visible state.
+--
+-- IN:  workspace/cfg/api_key values in; dispatch[name](bag, cb, cmd, rest)
+--      routes exact slash names to the facade callbacks (bag is ui state).
+-- OUT: session ids, message lists, summaries, model rows; dispatch returns
+--      whatever the facade callback returns (unknown names no-op).
+-- EXAMPLE:
+--      commands.dispatch["clear"](S, cb, "clear", "") --> transcript reset
 local M = {}
 
 -- Resolve a session id (explicit, or latest for the workspace), rebuild the
