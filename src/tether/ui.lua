@@ -4859,58 +4859,78 @@ local function handle_confirmation_key(k)
     end
 end
 
+-- Phase B 2.2: handle_key routes through ui_keys.route/dispatch. These
+-- are the facade callbacks, (bag, k)-shaped like the busy pump handlers;
+-- bag is S (the facade's state upvalue does the work). Forward-declared:
+-- routing order differs from lexical order (ctrl falls through to
+-- palette/normal defined below).
+local on_login_secret, on_confirmation, on_ask, on_error_dismiss, on_mouse
+local on_ctrl_global, on_history, dispatch_palette, on_normal
+local on_palette_copy, on_palette_resume, on_palette_model, on_palette_think
+local on_palette_login, on_palette_logout, on_palette_logout_confirm
+local on_palette_mention, on_palette_path, on_palette_command
+local on_tab_complete, key_callbacks
+
 handle_key = function(k)
     if not k then return end
 
     -- 5.4: one-shot toast — cleared by any keypress, no timer
     if S.toast then S.toast = nil end
+    -- the switch is gone: route (order oracle in ui_keys) picks the key,
+    -- the dispatch table picks the facade callback.
+    local flags = { login_secret = S.login_secret, confirmation = S.confirmation,
+        ask = S.ask, error_banner = S.error_banner,
+        palette_active = S.palette_active, palette_mode = S.palette_mode,
+        busy = S.busy }
+    local key = M._keys.route(k, flags)
+    local h = M._keys.dispatch[key]
+    if h then h(S, key_callbacks, k) end
+end
 
-    -- palette-only R5: secret entry owns the keyboard while active
-    -- (before confirmation/palette — S.login_secret is the mode flag).
-    if S.login_secret then
-        if k.kind == "esc" then
-            cancel_login()
-            bump_transcript()
-            return
-        end
-        if k.kind == "enter" then
-            submit_login_secret(S.login_secret.buf or "")
-            bump_transcript()
-            return
-        end
-        if k.kind == "backspace" then
-            local s = S.login_secret.buf or ""
-            S.login_secret.buf = s:sub(1, math.max(0, #s - 1))
-            return
-        end
-        if k.kind == "text" then
-            S.login_secret.buf = (S.login_secret.buf or "") .. (k.char or "")
-            return
-        end
-        if k.kind == "paste" then
-            S.login_secret.buf = (S.login_secret.buf or "") .. (k.text or "")
-            return
-        end
-        return -- swallow everything else while secret mode is open
-    end
-
-    if S.confirmation then handle_confirmation_key(k); return end
-    -- add-ask-tool: the question block owns the keyboard while it is open
-    if S.ask then handle_ask_key(k); return end
-
-    -- palette-only R4: Enter/Esc dismiss the one-line error banner.
-    -- A later Enter submits normally; full text lives in the debug log.
-    if (k.kind == "enter" or k.kind == "esc") and S.error_banner then
-        S.error_banner = nil
+-- palette-only R5: secret entry owns the keyboard while active
+-- (before confirmation/palette — S.login_secret is the mode flag).
+on_login_secret = function(bag, k)
+    if k.kind == "esc" then
+        cancel_login()
+        bump_transcript()
         return
     end
+    if k.kind == "enter" then
+        submit_login_secret(S.login_secret.buf or "")
+        bump_transcript()
+        return
+    end
+    if k.kind == "backspace" then
+        local s = S.login_secret.buf or ""
+        S.login_secret.buf = s:sub(1, math.max(0, #s - 1))
+        return
+    end
+    if k.kind == "text" then
+        S.login_secret.buf = (S.login_secret.buf or "") .. (k.char or "")
+        return
+    end
+    if k.kind == "paste" then
+        S.login_secret.buf = (S.login_secret.buf or "") .. (k.text or "")
+        return
+    end
+    return -- swallow everything else while secret mode is open
+end
 
-    -- T17: mouse SGR — scroll transcript, click palette/confirmation items.
-    -- S.scroll counts rows hidden ABOVE the viewport: wheel up = older rows =
-    -- scroll grows; wheel down returns toward the bottom (follow at 0).
-    -- Wheel steps 3 rows (not a screen fraction): finer, calmer scrolling —
-    -- terminals have no pixels, so this is the smoothest honest step.
-    if k.kind == "mouse" then
+on_confirmation = function(bag, k)
+    handle_confirmation_key(k)
+end
+
+on_ask = function(bag, k)
+    handle_ask_key(k)
+end
+
+on_error_dismiss = function(bag, k)
+    -- palette-only R4: Enter/Esc dismiss the one-line error banner.
+    -- A later Enter submits normally; full text lives in the debug log.
+    S.error_banner = nil
+end
+
+on_mouse = function(bag, k)
         if k.name == "scroll_up" then
             S.scroll = S.scroll + 3
             S.user_scrolled = true
@@ -5010,10 +5030,9 @@ handle_key = function(k)
             end
         end
         return
-    end
+end
 
-    -- global ctrl
-    if k.kind == "ctrl" then
+on_ctrl_global = function(bag, k)
         -- Ctrl+Shift+C (kitty CSI-u / modifyOtherKeys) copies the last answer
         if k.code == 3 and k.shift then copy_last_assistant(); return end
         if k.code == 17 then S.quit = true; return end         -- Ctrl+Q
@@ -5035,18 +5054,19 @@ handle_key = function(k)
             end
             return
         end
-    end
+        -- an unmatched ctrl code fell through in the switch: history? no
+        -- (kind is ctrl, not special) — palette when open, else the normal
+        -- chain lands on handle_ctrl for this same key.
+        if S.palette_active then dispatch_palette(bag, k) else on_normal(bag, k) end
+end
 
-    -- Ctrl+Up / Ctrl+Down — history recall. Decoder always sets k.ctrl for
-    -- kitty `CSI 1;5A`, modifyOtherKeys, and the bare `5;A` form.
-    if k.kind == "special" and (k.name == "up" or k.name == "down") and k.ctrl then
+-- Ctrl+Up / Ctrl+Down — history recall. Decoder always sets k.ctrl for
+-- kitty `CSI 1;5A`, modifyOtherKeys, and the bare `5;A` form.
+on_history = function(bag, k)
         if k.name == "up" then history_prev() else history_next() end
-        return
-    end
+end
 
-    -- palette mode
-    if S.palette_active then
-        if S.palette_mode == "copy" then
+on_palette_copy = function(bag, k)
             -- 5.2/5.3: copy palette — Enter copies via OSC 52 (SGR-stripped),
             -- Esc closes, up/down navigate; no fall-through for text keys.
             if k.kind == "enter" then
@@ -5082,7 +5102,9 @@ handle_key = function(k)
                 return
             end
             return
-        elseif S.palette_mode == "resume" then
+end
+
+on_palette_resume = function(bag, k)
             -- palette-only R2: session list — Enter resumes, Esc closes;
             -- no fall-through for text (list is modal while active).
             local function close_resume_palette()
@@ -5112,7 +5134,9 @@ handle_key = function(k)
                 return
             end
             return
-        elseif S.palette_mode == "model" then
+end
+
+on_palette_model = function(bag, k)
             -- palette-only R2: model list — Enter applies, Esc closes;
             -- no fall-through for text (list is modal while active).
             local function close_model_palette()
@@ -5162,7 +5186,9 @@ handle_key = function(k)
                 return
             end
             return
-        elseif S.palette_mode == "think" then
+end
+
+on_palette_think = function(bag, k)
             -- add-reasoning-level: level picker — Enter applies, Esc closes;
             -- no fall-through for text (list is modal while active).
             local function close_think_palette()
@@ -5192,7 +5218,9 @@ handle_key = function(k)
                 return
             end
             return
-        elseif S.palette_mode == "login" then
+end
+
+on_palette_login = function(bag, k)
             -- add-provider-login: bare /login provider picker — same palette
             -- mechanism as the slash menu / /copy; Enter starts the dialog.
             local function close_login_palette()
@@ -5243,7 +5271,9 @@ handle_key = function(k)
                 return
             end
             return
-        elseif S.palette_mode == "logout" then
+end
+
+on_palette_logout = function(bag, k)
             -- logout-picker: stored-credentials picker — Enter opens the
             -- confirmation step (nothing is deleted from the list); Esc is
             -- two-stage and Enter dead on no match, like model/login.
@@ -5282,7 +5312,9 @@ handle_key = function(k)
                 return
             end
             return
-        elseif S.palette_mode == "logout-confirm" then
+end
+
+on_palette_logout_confirm = function(bag, k)
             -- logout-confirm D2: the deletion step. No filter buffer, so text
             -- keys are the two choices rather than query characters, and every
             -- key this mode does not use is swallowed instead of leaking into
@@ -5316,7 +5348,9 @@ handle_key = function(k)
                 return
             end
             return
-        elseif S.palette_mode == "mention" then
+end
+
+on_palette_mention = function(bag, k)
             -- at-file-picker: the "@" preview. Arrows move the highlight, the
             -- input only changes through the user's own keystrokes, and both
             -- Enter and Tab insert the highlighted path.
@@ -5364,7 +5398,9 @@ handle_key = function(k)
                 return
             end
             return
-        elseif S.palette_mode == "path" then
+end
+
+on_palette_path = function(bag, k)
             -- 4.2/4.3: path palette — Tab cycles, Esc restores the token as
             -- typed, Enter commits the selected path; text/backspace keep the
             -- applied text, clear the cycle state, and fall through below.
@@ -5405,8 +5441,9 @@ handle_key = function(k)
             -- stays closed. No fall-through (would double-fire input_insert).
             completion_commit()
             palette_sync()
-            return
-        else
+end
+
+on_palette_command = function(bag, k)
             -- command palette (existing behavior, 3.3/3.4/3.5)
             if k.kind == "enter" then
                 local it = S.palette_items[S.palette_sel]
@@ -5436,17 +5473,33 @@ handle_key = function(k)
                 input_clear()
                 return
             end
-            -- fall through for text/backspace so palette_sync runs
-        end
-    end
+            -- fall through for text/backspace so the normal chain runs
+            -- (input_insert + mention refilter), as the switch did.
+            on_normal(bag, k)
+end
 
-    -- 4.2: Tab outside an open palette runs path completion (4.3: gated)
-    if k.kind == "tab" and not S.palette_active then
-        path_complete_tab()
-        return
-    end
+-- Mode fan-out for the palette stages (called with palette_active set;
+-- unknown modes fall to the command palette, as the switch's else did).
+dispatch_palette = function(bag, k)
+    local mode = S.palette_mode or "command"
+    if mode == "copy" then on_palette_copy(bag, k)
+    elseif mode == "resume" then on_palette_resume(bag, k)
+    elseif mode == "model" then on_palette_model(bag, k)
+    elseif mode == "think" then on_palette_think(bag, k)
+    elseif mode == "login" then on_palette_login(bag, k)
+    elseif mode == "logout" then on_palette_logout(bag, k)
+    elseif mode == "logout-confirm" then on_palette_logout_confirm(bag, k)
+    elseif mode == "mention" then on_palette_mention(bag, k)
+    elseif mode == "path" then on_palette_path(bag, k)
+    else on_palette_command(bag, k) end
+end
 
-    -- normal mode
+-- 4.2: Tab outside an open palette runs path completion (4.3: gated)
+on_tab_complete = function(bag, k)
+    path_complete_tab()
+end
+
+on_normal = function(bag, k)
     if k.kind == "paste" then
         local text = k.text or ""
         -- T176: step by UTF-8 chars, not bytes — a byte loop split
@@ -5501,6 +5554,37 @@ handle_key = function(k)
     elseif k.kind == "special" then handle_special(k)
     end
 end
+
+-- The callback table ui_keys.dispatch forwards to (bag is S). Normal
+-- kinds share on_normal's internal chain; palette modes fan out by name.
+key_callbacks = {
+    login_secret = on_login_secret,
+    confirmation = on_confirmation,
+    ask = on_ask,
+    error_dismiss = on_error_dismiss,
+    mouse = on_mouse,
+    ctrl = on_ctrl_global,
+    history = on_history,
+    tab_complete = on_tab_complete,
+    palette = {
+        copy = on_palette_copy,
+        resume = on_palette_resume,
+        model = on_palette_model,
+        think = on_palette_think,
+        login = on_palette_login,
+        logout = on_palette_logout,
+        logout_confirm = on_palette_logout_confirm,
+        mention = on_palette_mention,
+        path = on_palette_path,
+        command = on_palette_command,
+    },
+    normal = {
+        paste = on_normal, text = on_normal, enter = on_normal,
+        newline = on_normal, backspace = on_normal, esc = on_normal,
+        ctrl = on_normal, special = on_normal, tab = on_normal,
+        alt = on_normal,
+    },
+}
 
 M._handle_key = function(k) if S then handle_key(k) end end
 -- Test seam: decode one key from tether.read_char/read_char_nb (no state needed).

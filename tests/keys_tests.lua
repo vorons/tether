@@ -78,6 +78,38 @@ do
   print("T2.1 dispatch routing: OK")
 end
 
+-- Phase B 2.2: call sites ride the table, the facade switch is deleted.
+do
+  local ui = dofile("src/tether/ui.lua")
+  -- every route key resolves to a facade callback (no unhandled branch)
+  local keys = { "login_secret", "confirmation", "ask", "error_dismiss",
+    "mouse", "ctrl", "history", "tab_complete",
+    "palette:copy", "palette:resume", "palette:model", "palette:think",
+    "palette:login", "palette:logout", "palette:logout-confirm",
+    "palette:mention", "palette:path", "palette:command",
+    "normal:paste", "normal:text", "normal:enter", "normal:newline",
+    "normal:backspace", "normal:esc", "normal:ctrl", "normal:special" }
+  for _, key in ipairs(keys) do
+    assert_eq(type(ui._key_dispatch[key]), "function", "T2.2 dispatch owns " .. key)
+  end
+  -- the switch is gone: handle_key is route + table call, with no
+  -- mode comparisons or direct handler calls left inside it.
+  local f = io.open("src/tether/ui.lua", "r")
+  local src = f:read("*a")
+  f:close()
+  local s = src:find("handle_key = function(k)", 1, true)
+  assert_notnil(s, "T2.2 handle_key found")
+  local e = src:find("\nend\n", s)
+  local chunk = src:sub(s, e)
+  assert_true(chunk:find("M._keys.dispatch", 1, true) ~= nil, "T2.2 handle_key drives the table")
+  assert_true(chunk:find("S.palette_mode ==", 1, true) == nil, "T2.2 no mode switch in handle_key")
+  assert_true(chunk:find("handle_confirmation_key", 1, true) == nil, "T2.2 no direct confirm call")
+  assert_true(chunk:find("handle_ask_key", 1, true) == nil, "T2.2 no direct ask call")
+  assert_true(chunk:find("S.login_secret", 1, true) == nil or chunk:find("login_secret = S.login_secret", 1, true) ~= nil,
+    "T2.2 secret only travels via flags")
+  print("T2.2 table-driven dispatch: OK")
+end
+
 if failed > 0 then
     os.exit(1)
 end
