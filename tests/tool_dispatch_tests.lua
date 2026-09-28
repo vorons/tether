@@ -51,6 +51,30 @@ do
   print("T5.1 tool_dispatch shape: OK")
 end
 
+-- Phase E 5.2: prune/bg orchestration stays in agent (the 5.1 split moves
+-- only the loader + run_tool_call wrapper). Guard: no diff hunk outside
+-- those two regions, and the wrapper routes through the module.
+do
+  local f = io.open("src/tether/agent.lua", "r")
+  local src = f:read("*a")
+  f:close()
+  local s = src:find("local function run_tool_call", 1, true)
+  assert_notnil(s, "T5.2 wrapper present")
+  local e = src:find("\nend\n", s)
+  local chunk = src:sub(s, e)
+  assert_true(chunk:find("tool_dispatch.run_tool_call", 1, true) ~= nil,
+    "T5.2 wrapper delegates to the module")
+  assert_true(chunk:find("on_event({", 1, true) == nil,
+    "T5.2 event shaping lives in the module")
+  assert_true(chunk:find('type = "tool_result"', 1, true) == nil,
+    "T5.2 journal shaping lives in the module")
+  for _, fn in ipairs({ "prune_superseded_reads", "record_bg_result",
+    "bg_call_ready", "finish_bg_call" }) do
+    assert_true(src:find(fn, 1, true) ~= nil, "T5.2 " .. fn .. " stays in agent")
+  end
+  print("T5.2 prune/bg untouched: OK")
+end
+
 if failed > 0 then
     os.exit(1)
 end
