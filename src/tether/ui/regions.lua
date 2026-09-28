@@ -123,9 +123,7 @@ local function tail_cols(s, maxw, P)
 end
 M.tail_cols = tail_cols
 
--- Display-column slicing of a row body: drop `n` columns from the start, and
--- keep at most `width` columns from the start. Both are SGR- and wide-char
--- aware (they walk cells(), not bytes).
+-- Drop `n` display columns from a row body's start (SGR/wide-char aware).
 local function drop_cols(s, n, P)
     if not s or s == "" or n <= 0 then return s or "" end
     local out, col = {}, 0
@@ -148,11 +146,8 @@ local function take_cols(s, width, P)
     return table.concat(out), col
 end
 M.take_cols = take_cols
--- The footer row composition: `left` at the start, `right` right-aligned and kept
--- at least two columns away. Both sides may carry SGR; widths are display
--- columns. When they cannot both fit, the right side loses its start (so its
--- tail survives) and is dropped only when nothing of it fits; the left side is
--- truncated only when it alone exceeds the row.
+-- Footer row: `left` first, `right` right-aligned two columns clear.
+-- Widths are display columns; over width the right side loses its head first.
 local function footer_stats(left, right, width, P)
     if width <= 0 then return "" end
     left, right = left or "", right or ""
@@ -168,7 +163,6 @@ local function footer_stats(left, right, width, P)
     return left .. string.rep(" ", width - lw - kw) .. kept
 end
 M.footer_stats = footer_stats
-
 
 local function input_lines(input)
     local out = {}
@@ -198,9 +192,7 @@ local function cursor_line_col(input, cursor)
 end
 M.cursor_line_col = cursor_line_col
 
--- Spinner frame from elapsed wall-clock time (TW2: time-based, not
--- paint-count-based). P.now_ms() is the wall clock, P.copy.spinner the
--- frames, P.ascii_none() selects the ASCII set.
+-- Spinner frame from wall-clock ms (TW2: time-based, not paint-count-based).
 local function spinner_glyph(slice, P)
     local frames = P.ascii_none() and P.copy.spinner.ascii or P.copy.spinner.frames
     local ms = 0
@@ -218,10 +210,8 @@ local function spinner_glyph_at(ms, P)
 end
 M.spinner_glyph_at = spinner_glyph_at
 
--- One input row's body: the line windowed to `width` display columns with the
--- caret inside the window, padded out so every input row and both rules share
--- one display width. `caret_off` is the cursor's byte offset inside `text`, or
--- nil on the rows the cursor is not on.
+-- One input row windowed to `width` with the caret inside, padded so rows
+-- and rules share one display width. `caret_off` is nil off the cursor row.
 local function input_row_text(text, caret_off, width, P)
     text = text or ""
     local before, caret, after
@@ -257,10 +247,8 @@ local function input_row_text(text, caret_off, width, P)
 end
 M.input_row_text = input_row_text
 
--- A rule row: the box's top and bottom rules. It can carry the turn's status at
--- the left (pi's "── status ────") and a centered "N more" label naming the
--- input rows the window hides. Always exactly `width` columns, muted in every
--- theme; the ASCII rules come from GLYPH_MAP through muted().
+-- Box rule, exactly `width` columns: turn status left, "N more" centered,
+-- muted in every theme.
 local function rule_row(width, status, label, P)
     if width <= 0 then return "" end
     local glyph = P.copy.rules.glyph
@@ -296,8 +284,7 @@ local function rule_row(width, status, label, P)
 end
 M.rule_row = rule_row
 
--- The turn's status for the box's top rule: the spinner with Working... while
--- busy. Leading space separates the indicator from the rule's left edge.
+-- Top-rule status: spinner + Working... while busy (leading space included).
 local function turn_status(slice, P)
     if slice.busy then
         return " " .. P.cyan(spinner_glyph(slice, P)) .. P.dim(" Working...")
@@ -306,8 +293,7 @@ local function turn_status(slice, P)
 end
 M.turn_status = turn_status
 
--- slim-footer-indicators: transient flags only (the one-shot toast);
--- mouse/keyboard mode icons are gone. Everything lives on the single footer row.
+-- slim-footer-indicators: transient flags only (the one-shot toast).
 local function static_flags(slice, P)
     local out = {}
     if slice.toast then out[#out + 1] = P.green(slice.toast) end
@@ -322,12 +308,9 @@ local function render_error_banner(slice, L, P)
 end
 M.render_error_banner = render_error_banner
 
--- slim-footer-indicators: one dim footer row below the box — path ($HOME → ~),
--- session token stats + context cell, transient flags (toast), and the
--- model right-aligned. Truncation when over width (spec tui Footer): path
--- right-truncate first, then toast dropped, then stats
--- right-truncate; model is handled separately by footer_stats. No reverse
--- video, no mode icons.
+-- slim-footer-indicators: one dim footer row (path · stats · flags, model
+-- right-aligned). Over width: path truncates first, then toast drops, then
+-- stats truncate. No reverse video, no mode icons.
 local function footer_join(path_s, s_str, f_str, P)
     local SEP = P.dim(" · ")
     local parts = {}
@@ -338,8 +321,7 @@ local function footer_join(path_s, s_str, f_str, P)
 end
 
 local function footer_fit_path(f_str, s_str, slice, P)
-    -- separators widen the row by 3 columns per join; reserve room for
-    -- them so the truncated path still fits alongside the other blocks
+    -- separators cost 3 columns per join; reserve them so the path still fits
     local rest = 0
     if s_str ~= "" then rest = rest + 3 + P.vlen(s_str) end
     if f_str ~= "" then rest = rest + 3 + P.vlen(f_str) end
@@ -368,10 +350,8 @@ local function render_footer(slice, L, P)
     local flags = static_flags(slice, P)
     local flags_str = #flags > 0 and P.to_ascii(table.concat(flags, " ")) or ""
 
-    -- Visual order: path, stats, flags — joined with ` · ` separators.
-    -- Truncation order (spec): path first (to_ascii so ASCII mode gets
-    -- "..." not "…"), then toast, then stats — each step
-    -- re-fits the path into the room that opened up.
+    -- Truncation order (spec Footer): path, toast, stats — refit the path
+    -- into whatever room each step opens up.
     local f_str, s_str = flags_str, stats_str
     local path_s = footer_fit_path(f_str, s_str, slice, P)
     local left = footer_join(path_s, s_str, f_str, P)

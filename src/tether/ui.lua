@@ -906,7 +906,6 @@ if type(tools) ~= "table" then
     local chunk = loadfile("src/tether/tools.lua")
     tools = (chunk and chunk()) or {}
 end
-M._tools = tools
 local function tools_mod()
     local g = rawget(_G, "tools")
     if type(g) == "table" then return g end
@@ -2019,7 +2018,6 @@ local function entry_expanded(e)
     if e.expand_state == "collapsed" then return false end
     return S and S.expand_all or false
 end
-M._entry_expanded = entry_expanded
 
 local function body_line_iter(body)
     return (body .. "\n"):gmatch("([^\n]*)\n")
@@ -3004,8 +3002,8 @@ end
 -- ============================================================
 -- Moved to ui_keys (src/tether/ui/keys.lua): pure decoders plus
 -- decode_first_byte/read_key/read_key_nb operating on the bag (M).
--- M-fields below are the state bag + thin forwarders; every pre-existing
--- M.* seam keeps working (tests drive M._read_key/M._stash_front directly).
+-- M-fields below are the state bag + thin forwarders (tests drive
+-- M._stash_front directly).
 -- Event shapes are documented in ui/keys.lua header.
 M._byte_stash = {}
 -- Wall-clock age of a stashed lone ESC prefix (seconds): the pump and the
@@ -3018,8 +3016,6 @@ function M._read_nb() return M._keys.read_nb(M) end
 -- fragmented escape sequence is retried whole on the next tick instead of
 -- leaking its tail ("[<65;48;31M") into the input as text.
 function M._stash_front(list) return M._keys.stash_front(M, list) end
-
-function M._read_utf8_char(first) return M._keys.read_utf8_char(M, first) end
 
 -- Decode one already-read first byte; continuation bytes come from
 -- read_char_nb (and the paste body from read_char). Shared by read_key and
@@ -3661,7 +3657,6 @@ local function enqueue_busy(kind)
         end,
         input_clear, QUEUE_CAP)
 end
-M._enqueue_busy = function(kind) if S then enqueue_busy(kind) end end
 
 -- Escape while busy with a non-empty queue: steers first, then follow-ups.
 -- Canonical implementation lives in ui_busy.
@@ -3752,7 +3747,6 @@ local function wire_steer_source()
         end)
     end
 end
-M._wire_steer_source = wire_steer_source
 
 -- After a turn fully settles: drain follow-ups in order as fresh turns.
 -- Stops on error banner, parked confirmation/ask, or pending steers.
@@ -4027,7 +4021,6 @@ local function toggle_all_entries()
     for _, e in ipairs(transcript.entries()) do e.expand_state = nil end
     invalidate_all()
 end
-M._toggle_all_entries = toggle_all_entries
 
 local function toggle_newest_visible_tool()
     local L = layout()
@@ -4055,7 +4048,6 @@ local function toggle_newest_visible_tool()
     chosen.expand_state = entry_expanded(chosen) and "collapsed" or "expanded"
     touch_entry(chosen)
 end
-M._toggle_newest_visible_tool = toggle_newest_visible_tool
 
 local function handle_ctrl(code, shift)
     if code == 1 then move_line_start()
@@ -5005,10 +4997,8 @@ key_callbacks = {
 }
 
 M._handle_key = function(k) if S then handle_key(k) end end
--- Test seam: decode one key from tether.read_char/read_char_nb (no state needed).
-M._read_key = function() return M._keys.read_key(M) end
--- Phase B 2.1 seams: routing table lives in ui_keys; the facade switch
--- stays until 2.2. Tests drive route/dispatch directly for parity.
+-- Phase B 2.1 seams: routing table lives in ui_keys; tests drive
+-- route/dispatch directly for parity.
 M._key_route = function(k, ctx) return M._keys.route(k, ctx) end
 M._key_dispatch = M._keys.dispatch
 

@@ -5,14 +5,11 @@
 -- splitting, deterministic truncation/anchor summaries and the summary
 -- request messages. No I/O and no event emission: the LLM summarize call,
 -- history swap and persistence stay in agent.lua (compact_history).
--- Same shape as confirm_policy: shared catalog/common instances resolve
--- through globals with loadfile fallbacks for dev/test runs.
+-- Same shape as confirm_policy: shared instances via globals with fallbacks.
 local M = {}
 
--- fix-audit-findings 3.9: JSON helpers live once, in providers/common.lua.
--- The C host exposes it as the `provider_common` global (loaded before
--- every core module); the loadfile fallback keeps development runs and
--- plain-lua tests working.
+-- JSON helpers live once in providers/common.lua (global in binary,
+-- loadfile fallback for dev/test runs).
 local common = _G.provider_common
     or (function()
         local chunk = loadfile("src/tether/providers/common.lua")
@@ -21,17 +18,14 @@ local common = _G.provider_common
 assert(common, "compression: cannot load provider_common")
 local json_parse = common.json_decode
 
--- dynamic-provider-catalog: catalog lookup for the compaction budget.
--- Shared instance in the binary, loadfile fallback for dev/test runs.
+-- dynamic-provider-catalog: shared catalog instance (loadfile fallback for dev).
 local catalog = _G.provider_catalog
     or (function()
         local chunk = loadfile("src/tether/providers/catalog.lua")
         return chunk and chunk()
     end)()
 
--- Per-model context limit: exact (provider, model) hit, else the
--- provider's default model, else nil (caller keeps 32768). A model name
--- matching nothing falls down the chain, never fails.
+-- Per-model context limit: exact hit, else provider default, else nil.
 local function catalog_max_tokens(cfg)
     if not (catalog and catalog.get and cfg) then return nil end
     local entry = catalog.get(cfg.provider)
@@ -89,9 +83,8 @@ local function compaction_thresholds(cfg)
 end
 M.compaction_thresholds = compaction_thresholds
 
+-- Fraction of budget, or the reply reserve (a large reserve firing first is intentional).
 local function over_threshold(est, max_tokens, fraction, reserve)
-    -- OR of two thresholds: fraction of the budget, or the reply reserve.
-    -- A large reserve can fire first; that is intentional (safety net).
     return est > fraction * max_tokens or est > max_tokens - reserve
 end
 M.over_threshold = over_threshold
@@ -102,8 +95,7 @@ local function should_summarize(history, cfg)
 end
 M.should_summarize = should_summarize
 
--- Preflight: project current estimate + incoming prompt cost against the same
--- thresholds, so a single large paste compacts before the turn goes out.
+-- Preflight: a single large paste compacts before the turn goes out.
 local function should_summarize_projected(history, prompt_text, cfg)
     local max_tokens, fraction, reserve = compaction_thresholds(cfg)
     local prompt_cost = 0
@@ -122,8 +114,7 @@ local function keep_recent_of(cfg)
 end
 M.keep_recent_of = keep_recent_of
 
--- Split history into system + old span + keep window (walks back over leading
--- tool messages so a tool result is not orphaned from its call).
+-- Split into system + old span + keep window (never orphans a tool result).
 local function split_span(history, N)
     if #history <= N + 1 then return history[1], {}, {} end
     local keep_from = math.max(2, #history - N + 1)
@@ -153,32 +144,28 @@ M.truncation_body = truncation_body
 M.SUMMARY_MARKER = "── summary ──"
 M.SUMMARY_SPAN_MAX = 2000
 
--- Deterministic summary anchors (adapted from pifydev/compact): facts worth
--- preserving, extracted by plain parsing with no model call. shapes handled:
--- user/assistant string content plus assistant {tool_calls, text} tables where
--- each call is {id, ["function"] = {name, arguments}} with arguments as a JSON
--- string (the history echo form) or a table.
-M.ANCHOR_TASK_WORDS = { "fix", "implement", "add", "create", "build",
-    "refactor", "remove", "update", "change", "make", "write", "support",
-    "migrate", "debug", "investigate", "improve", "optimize", "optimise",
-    "optimizing", "optimising", "rename", "delete", "integrate", "wire", "port" }
+-- Deterministic summary anchors: facts worth preserving, plain-parsed with
+-- no model call (user/assistant strings plus assistant tool_calls tables).
+M.ANCHOR_TASK_WORDS = { "fix", "implement", "add", "create", "build", "refactor",
+    "remove", "update", "change", "make", "write", "support", "migrate", "debug",
+    "investigate", "improve", "optimize", "optimise", "optimizing", "optimising",
+    "rename", "delete", "integrate", "wire", "port" }
 M.ANCHOR_SCOPE_HINTS = { "instead", "actually", "pivot", "scratch that",
     "on second thought", "change of plans", "let's not", "no, wait", "no wait" }
-M.ANCHOR_PREF_HINTS = { "prefer", "always", "never", "please use",
-    "please don't", "please dont", "make sure", "ensure", "don't use",
-    "dont use", "avoid using", "instead", "keep it", "style:" }
-M.ANCHOR_BLOCKER_HINTS = { "fail", "failed", "failing", "fails",
-    "error", "errored", "broken", "cannot", "can't", "cant", "blocked",
-    "crash", "crashed", "crashes", "not working", "unresolved", "still stuck",
-    "doesn't work", "doesnt work", "don't work", "dont work" }
-M.ANCHOR_NOISE_FIRST = { ok = true, okay = true, yes = true, no = true,
-    thanks = true, sure = true, go = true, continue = true, proceed = true,
-    next = true, yep = true, nope = true, k = true }
+M.ANCHOR_PREF_HINTS = { "prefer", "always", "never", "please use", "please don't",
+    "please dont", "make sure", "ensure", "don't use", "dont use", "avoid using",
+    "instead", "keep it", "style:" }
+M.ANCHOR_BLOCKER_HINTS = { "fail", "failed", "failing", "fails", "error", "errored",
+    "broken", "cannot", "can't", "cant", "blocked", "crash", "crashed", "crashes",
+    "not working", "unresolved", "still stuck", "doesn't work", "doesnt work",
+    "don't work", "dont work" }
+M.ANCHOR_NOISE_FIRST = { ok = true, okay = true, yes = true, no = true, thanks = true,
+    sure = true, go = true, continue = true, proceed = true, next = true,
+    yep = true, nope = true, k = true }
 M.ANCHOR_GOAL_MAX = 140
 M.ANCHOR_LINE_MAX = 120
 
--- Lua patterns have no alternation: single words match on word boundaries,
--- multi-word hints match as plain substrings.
+-- No pattern alternation in Lua: single words match on boundaries, phrases as substrings.
 local function anchor_any(lower, hints)
     for _, h in ipairs(hints) do
         if h:find("[^%w']") then
@@ -277,6 +264,19 @@ local function anchor_trim_prefix(paths)
     return out
 end
 
+-- First n entries, order-preserving; deduped when asked (commits/blockers).
+local function take_capped(list, n, dedup)
+    local out, seen = {}, {}
+    for _, v in ipairs(list) do
+        if not dedup or not seen[v] then
+            seen[v] = true
+            out[#out + 1] = v
+        end
+        if #out >= n then break end
+    end
+    return out
+end
+
 local function extract_anchors(history)
     local goal, scope_change = nil, nil
     local modified, modified_order = {}, {}
@@ -344,12 +344,7 @@ local function extract_anchors(history)
                 else
                     commits[#commits + 1] = pending_commit
                 end
-                if #commits >= 4 then
-                    -- keep scanning (pending cleared) but stop growing
-                    pending_commit = nil
-                else
-                    pending_commit = nil
-                end
+                pending_commit = nil -- cap reached: keep scanning, stop growing
             end
         end
     end
@@ -391,33 +386,11 @@ local function extract_anchors(history)
         goal = goal,
         scope_change = scope_change,
         files_modified = files_modified,
-        files_both = (function()
-            local b = {}
-            for i = 1, math.min(12, #both) do b[#b + 1] = both[i] end
-            return b
-        end)(),
-        files_read = (function()
-            local r = {}
-            for i = 1, math.min(8, #files_read) do r[#r + 1] = files_read[i] end
-            return r
-        end)(),
+        files_both = take_capped(both, 12),
+        files_read = take_capped(files_read, 8),
         preferences = prefs,
-        commits = (function()
-            local seen, c = {}, {}
-            for _, v in ipairs(commits) do
-                if not seen[v] then seen[v] = true c[#c + 1] = v end
-                if #c >= 4 then break end
-            end
-            return c
-        end)(),
-        blockers = (function()
-            local seen, b = {}, {}
-            for _, v in ipairs(blockers) do
-                if not seen[v] then seen[v] = true b[#b + 1] = v end
-                if #b >= 4 then break end
-            end
-            return b
-        end)(),
+        commits = take_capped(commits, 4, true),
+        blockers = take_capped(blockers, 4, true),
     }
 end
 M.extract_anchors = extract_anchors
@@ -434,9 +407,7 @@ local function format_anchors(a)
         "Preserve these exact facts in the summary — do not drop or generalize them:",
     }
     if a.goal then lines[#lines + 1] = "- Task: " .. a.goal end
-    if a.scope_change then
-        lines[#lines + 1] = "- Latest scope change: " .. a.scope_change
-    end
+    if a.scope_change then lines[#lines + 1] = "- Latest scope change: " .. a.scope_change end
     if #a.files_modified > 0 then
         local both = {}
         for _, f in ipairs(a.files_both) do both[f] = true end
@@ -446,18 +417,10 @@ local function format_anchors(a)
         end
         lines[#lines + 1] = "- Files modified: " .. table.concat(names, ", ")
     end
-    if #a.files_read > 0 then
-        lines[#lines + 1] = "- Files read: " .. table.concat(a.files_read, ", ")
-    end
-    if #a.preferences > 0 then
-        lines[#lines + 1] = "- Preferences: " .. table.concat(a.preferences, " | ")
-    end
-    if #a.commits > 0 then
-        lines[#lines + 1] = "- Commits: " .. table.concat(a.commits, " | ")
-    end
-    if #a.blockers > 0 then
-        lines[#lines + 1] = "- Open/unresolved: " .. table.concat(a.blockers, " | ")
-    end
+    if #a.files_read > 0 then lines[#lines + 1] = "- Files read: " .. table.concat(a.files_read, ", ") end
+    if #a.preferences > 0 then lines[#lines + 1] = "- Preferences: " .. table.concat(a.preferences, " | ") end
+    if #a.commits > 0 then lines[#lines + 1] = "- Commits: " .. table.concat(a.commits, " | ") end
+    if #a.blockers > 0 then lines[#lines + 1] = "- Open/unresolved: " .. table.concat(a.blockers, " | ") end
     return table.concat(lines, "\n")
 end
 M.format_anchors = format_anchors
@@ -470,8 +433,7 @@ local function anchor_block(history, cfg)
 end
 M.anchor_block = anchor_block
 
--- Role-prefixed span for the summary request; tool results / long bodies are
--- bounded so one file read cannot blow the compaction request.
+-- Role-prefixed span for the summary request; long bodies bounded.
 local function serialize_span(old)
     local parts = {}
     for _, m in ipairs(old) do
@@ -515,8 +477,7 @@ local function build_summary_messages(old, focus, anchors_text)
 end
 M.build_summary_messages = build_summary_messages
 
--- Compress old history: keep system + last N messages, summarize the rest.
--- Truncation-only entry kept for tests / callers that do not need the LLM path.
+-- Compress old history (truncation-only entry for tests / non-LLM callers).
 local function compress_history(history, cfg)
     local N = keep_recent_of(cfg)
     local system, old, keep = split_span(history, N)
