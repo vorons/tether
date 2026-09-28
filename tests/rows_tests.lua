@@ -1746,10 +1746,38 @@ do
   print("T288 user text keeps block markers literal: OK")
 end
 
-
-
-
-
+-- Phase D 4.2a: ui_confirm owns the menu rows + key kernel (values in,
+-- rows out). Two layers: module direct + facade proxy identity.
+do
+  local cf = assert(loadfile("src/tether/ui/confirm.lua"))()
+  local P = { yellow = function(s) return "Y" .. s end, rev = function(s) return "R" .. s end,
+    wrap = function(s) return { s } end, hint = function() return "HINT" end,
+    confirm_hint = {} }
+  assert_eq(#cf.menu_rows(nil, 1, 80, P), 0, "T4.2a no confirmation paints nothing")
+  local c = { label = "run this?", body = "diff here",
+    question = "Allow?", options = { "allow", "deny" } }
+  local rows = cf.menu_rows(c, 2, 80, P)
+  assert_true(#rows > 0, "T4.2a menu rows non-empty")
+  assert_true(rows[2]:find("run this?", 1, true) ~= nil, "T4.2a header carries the label")
+  local highlighted = false
+  for _, r in ipairs(rows) do
+    if r:find("R  deny", 1, true) then highlighted = true end
+  end
+  assert_true(highlighted, "T4.2a selection highlights the picked row")
+  local digits = { [1] = "allow", [2] = "session", [3] = "always", [4] = "deny", [5] = "cancel" }
+  assert_eq(cf.decide_key({ kind = "esc" }, 1, 5, digits).dismiss, true, "T4.2a esc dismisses")
+  assert_eq(cf.decide_key({ kind = "enter" }, 4, 5, digits).decision, "deny", "T4.2a enter takes the row")
+  assert_eq(cf.decide_key({ kind = "text", char = "y" }, 1, 5, digits).decision, "allow", "T4.2a y allows")
+  assert_eq(cf.decide_key({ kind = "text", char = "3" }, 1, 5, digits).decision, "always", "T4.2a digit maps")
+  assert_eq(cf.decide_key({ kind = "text", char = "q" }, 1, 5, digits), nil, "T4.2a other text ignored")
+  assert_eq(cf.decide_key({ kind = "special", name = "up" }, 2, 5, digits).move, -1, "T4.2a up moves")
+  assert_eq(cf.decide_key({ kind = "special", name = "left" }, 2, 5, digits), nil, "T4.2a other keys ignored")
+  assert_eq(cf.decide_key(nil, 1, 5, digits), nil, "T4.2a nil key ignored")
+  -- facade proxy: the tail renders through the module with identical rows
+  local ui = dofile("src/tether/ui.lua")
+  assert_eq(type(ui._confirm.menu_rows), "function", "T4.2a facade loads ui_confirm")
+  print("T4.2a ui_confirm rows+kernel: OK")
+end
 
 if failed > 0 then
     os.exit(1)

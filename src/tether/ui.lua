@@ -85,6 +85,15 @@ if type(M._auth_flow) ~= "table" then
     M._auth_flow = (chunk and chunk()) or {}
 end
 
+-- ui_confirm: one-shot confirmation menu — rows, key kernel, resolve +
+-- keyboard handler (embedded global `ui_confirm`, loadfile fallback for
+-- tests/dev). Same M-field pattern; the 2.2 key table keeps the keyboard.
+M._confirm = _G.ui_confirm
+if type(M._confirm) ~= "table" then
+    local chunk = loadfile("src/tether/ui/confirm.lua")
+    M._confirm = (chunk and chunk()) or {}
+end
+
 -- ============================================================
 -- ANSI
 -- ============================================================
@@ -2393,26 +2402,12 @@ local function render_entry(e, width, prev_role)
         -- stale tail reference.
         out = {}
     elseif e.virt == "confirm" then
-        local c = S.confirmation
-        if not c then return {} end
-        -- confirm-menu-redesign: header, optional payload body (patch diff /
-        -- danger warning) directly under it, question, options, muted hint.
-        local co = { "", yellow("⚠ " .. (c.label or "confirmation")) }
-        if c.body and c.body ~= "" then
-            for _, l in ipairs(wrap(c.body, width - 2)) do
-                co[#co + 1] = "  " .. l
-            end
-        end
-        co[#co + 1] = ""
-        co[#co + 1] = (c.question or "Allow this action?")
-        co[#co + 1] = ""
-        for i, opt in ipairs(c.options or {}) do
-            local t = "  " .. opt
-            co[#co + 1] = (i == S.confirmation_sel) and rev(t) or t
-        end
-        co[#co + 1] = ""
-        co[#co + 1] = "  " .. M.hint_paint(M.CONFIRM_HINT)
-        out = co
+        -- Phase D 4.2: menu rows live in ui_confirm (rows-out); painters in.
+        out = M._confirm.menu_rows(S.confirmation, S.confirmation_sel, width, {
+            yellow = yellow, rev = rev, wrap = wrap,
+            hint = function(pairs) return M.hint_paint(pairs) end,
+            confirm_hint = M.CONFIRM_HINT,
+        })
     else
         local role = e.role or "system"
         if role == "splash" then
