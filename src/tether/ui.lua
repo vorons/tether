@@ -75,6 +75,16 @@ if type(M._busy) ~= "table" then
     M._busy = (chunk and chunk()) or {}
 end
 
+-- ui_auth: login/logout flows — provider pickers, secret entry, device
+-- polling, credential submit, logout picker + confirm (embedded global
+-- `ui_auth`, loadfile fallback for tests/dev). Bag in, S-mutation out via
+-- the deps table; keyboard ownership and S stay here. Same M-field pattern.
+M._auth_flow = _G.ui_auth
+if type(M._auth_flow) ~= "table" then
+    local chunk = loadfile("src/tether/ui/auth.lua")
+    M._auth_flow = (chunk and chunk()) or {}
+end
+
 -- ============================================================
 -- ANSI
 -- ============================================================
@@ -1382,70 +1392,33 @@ function M._palette_apply_query()
     S.palette_sel = 1
 end
 
--- logout-picker: delete one stored credential and confirm with a
--- transcript/system line (provider name only — never token material).
--- Module field (not a file-local) so the chunk's local budget is untouched.
+-- Phase C 3.2 proxies: logout flows live in ui_auth (bag/deps); these
+-- keep the M.* names callers and tests drive.
+-- Module fields (not file-locals) so the chunk's local budget is untouched.
 function M._logout_delete(provider)
-    S.login_provider = nil
-    S.login_flow = nil
-    local auth_mod = _G.auth
-    if auth_mod and auth_mod.delete then
-        auth_mod.delete(nil, provider)
-    end
-    transcript.append({
-        role = "system",
-        text = "→ logout " .. provider .. ": stored credential removed",
-    })
-    bump_transcript()
+    return M._auth_flow.logout_delete(S, M._auth_deps(), provider)
 end
 
 -- logout-confirm: both steps of the picker are closed from one place, so no
 -- exit path can leave the confirmation state behind.
 function M._logout_close()
-    S.palette_active = false
-    S.palette_mode = "command"
-    S.palette_items = {}
-    S.palette_sel = 1
-    S._in_logout_palette = nil
-    S.palette_query = nil
-    S._palette_all = nil
-    S._logout_confirm = nil
-    S._logout_sel = nil
+    return M._auth_flow.logout_close(S)
 end
 
 -- logout-confirm D1: picking a provider switches the shared palette to the
--- deletion step instead of deleting. S._palette_all and S.palette_query stay
--- untouched — the step owns no filter buffer (D2), and backing out rebuilds
--- the list from that snapshot rather than re-reading the store (D3).
+-- deletion step instead of deleting (D2/D3 notes live in ui_auth).
 function M._logout_ask_confirm(provider)
-    if not provider then return end
-    S._logout_confirm = provider
-    S._logout_sel = S.palette_sel
-    S.palette_mode = "logout-confirm"
-    S.palette_items = {
-        { label = "yes", desc = "delete " .. provider .. "'s stored key", accept = true },
-        { label = "no", desc = "keep " .. provider .. " logged in" },
-    }
-    S.palette_sel = 1
+    return M._auth_flow.logout_ask_confirm(S, provider)
 end
 
 -- The accepted row: close, then delete through the single writer.
 function M._logout_confirm_accept()
-    local provider = S._logout_confirm
-    M._logout_close()
-    if provider then M._logout_delete(provider) end
+    return M._auth_flow.logout_confirm_accept(S, M._auth_deps())
 end
 
--- Keep row, `n` or Esc: back to the provider list with the query, the ranked
--- rows and the highlight exactly as the step found them.
+-- Keep row, `n` or Esc: back to the provider list as the step found it.
 function M._logout_confirm_back()
-    S.palette_mode = "logout"
-    S._logout_confirm = nil
-    local sel = S._logout_sel or 1
-    S._logout_sel = nil
-    M._palette_apply_query()
-    if sel < 1 or sel > #S.palette_items then sel = 1 end
-    S.palette_sel = sel
+    return M._auth_flow.logout_confirm_back(S, M._auth_deps())
 end
 
 -- ============================================================
@@ -3080,19 +3053,14 @@ if type(M._provider_catalog) ~= "table" then
     M._provider_catalog = (chunk and chunk()) or nil
 end
 
+-- Phase C 3.2 proxies: implementations live in ui_auth (bag/deps);
+-- these keep the local names the key/slash handlers call.
 local function known_providers()
-    if M._provider_catalog and M._provider_catalog.ids then
-        return M._provider_catalog.ids()
-    end
-    return { "openai", "anthropic", "gemini" }
+    return M._auth_flow.known_providers(M._provider_catalog)
 end
 
 local function is_known_provider(name)
-    if type(name) ~= "string" then return false end
-    if M._provider_catalog and M._provider_catalog.get then
-        return M._provider_catalog.get(name:lower()) ~= nil
-    end
-    return name == "openai" or name == "anthropic" or name == "gemini"
+    return M._auth_flow.is_known_provider(M._provider_catalog, name)
 end
 
 local function provider_mod(name)
@@ -3102,76 +3070,36 @@ local function provider_mod(name)
     return chunk and chunk() or nil
 end
 
+-- Impure edge for ui_auth, built per call (catalog/store/host handles +
+-- transcript callbacks; S itself travels as the bag). M-field, not a chunk
+-- local: the main chunk sits at Lua's 200-locals limit. Defined after
+-- provider_mod so the loader upvalue resolves.
+function M._auth_deps()
+    local auth_mod = rawget(_G, "auth")
+    if not auth_mod then
+        local chunk = loadfile("src/tether/auth.lua")
+        auth_mod = chunk and chunk() or nil
+    end
+    local ccommon = rawget(_G, "provider_common")
+    if not ccommon then
+        local chunk = loadfile("src/tether/providers/common.lua")
+        ccommon = chunk and chunk() or nil
+    end
+    return {
+        catalog = M._provider_catalog,
+        auth = auth_mod,
+        load_provider = provider_mod,
+        common = ccommon,
+        errors = M._copy.errors,
+        host = tether,
+        note = function(text) transcript.append({ role = "system", text = text }) end,
+        bump = bump_transcript,
+        apply_query = function() M._palette_apply_query() end,
+    }
+end
+
 local function begin_login(provider)
-    if S.cfg and S.cfg.non_interactive then
-        S.error_banner = "login is interactive only"
-        return false
-    end
-    local pmod = provider_mod(provider)
-    local flow = (pmod and pmod.login_flow and pmod.login_flow(S.cfg)) or nil
-    -- expand-provider-catalog: presets without their own adapter module get
-    -- the generic catalog flow (config-sourced OAuth/device, else nil →
-    -- API-key paste). Endpoints are never invented.
-    if not flow and M._provider_catalog and M._provider_catalog.login_flow then
-        flow = M._provider_catalog.login_flow(S.cfg, provider)
-    end
-    S.error_banner = nil
-    S.login_provider = provider
-    S.login_flow = flow
-    -- palette-only R5: secret entry is a masked input mode, never a dialog.
-    -- buf is a dedicated buffer — never S.input, never a transcript row.
-    S.login_secret = { buf = "" }
-    -- Best-effort browser open (never blocks login on failure). URL itself
-    S.palette_active = false
-    S.palette_mode = "command"
-    S.palette_items = {}
-    S.palette_sel = 1
-    S._in_login_palette = nil
-    -- Best-effort browser open (never blocks login on failure). URL itself
-    -- stays in the hints / dialog, not the transcript.
-    if flow and flow.authorize_url and tether and tether.exec then
-        local q = "'" .. flow.authorize_url:gsub("'", "'\\''") .. "'"
-        pcall(function()
-            local ok = tether.exec("xdg-open " .. q .. " >/dev/null 2>&1")
-            if not ok then
-                tether.exec("open " .. q .. " >/dev/null 2>&1")
-            end
-        end)
-    end
-    -- provider-auth: full device flow — request the device/user code pair up
-    -- front. The TUI then polls the token endpoint while the user authorizes;
-    -- no paste is needed (a paste still works as a manual fallback for flows
-    -- without a token endpoint). Polling state rides the flow table.
-    if flow and flow.device and flow.device_token_url then
-        local auth_mod = rawget(_G, "auth")
-        if not auth_mod then
-            local chunk = loadfile("src/tether/auth.lua")
-            auth_mod = chunk and chunk() or nil
-        end
-        if auth_mod and auth_mod.device_request and tether and tether.http_stream then
-            local ok, res, err = pcall(auth_mod.device_request,
-                flow.device_url, flow.client_id, flow.scope)
-            if ok and type(res) == "table" then
-                flow.device_code = res.device_code
-                flow.user_code = res.user_code
-                flow.verification_uri = res.verification_uri or flow.device_url
-                flow.poll_interval = tonumber(res.interval) or 5
-                flow.poll_deadline = os.time() + (tonumber(res.expires_in) or 900)
-                flow.poll_next_at = os.time() + flow.poll_interval
-                if tether.exec then
-                    local vq = "'" .. flow.verification_uri:gsub("'", "'\\''") .. "'"
-                    pcall(function()
-                        local okv = tether.exec("xdg-open " .. vq .. " >/dev/null 2>&1")
-                        if not okv then tether.exec("open " .. vq .. " >/dev/null 2>&1") end
-                    end)
-                end
-            else
-                -- device endpoint unreachable: degrade to the paste path
-                flow.device_request_error = tostring(err or M._copy.errors.device_request_failed)
-            end
-        end
-    end
-    return true
+    return M._auth_flow.begin(S, M._auth_deps(), provider)
 end
 
 -- One device-flow poll tick, called from the busy pump on each paint while
@@ -3181,198 +3109,19 @@ end
 -- (it closes over cancel_login).
 
 local function cancel_login()
-    S.login_provider = nil
-    S.login_flow = nil
-    S.login_secret = nil
-    -- leave secret-hint palette: back to command mode
-    S.palette_active = false
-    S.palette_mode = "command"
-    S.palette_items = {}
-    S.palette_sel = 1
-    S._in_login_palette = nil
+    return M._auth_flow.cancel(S)
 end
 
 -- provider-auth: one device-flow poll tick, called from the paint path while
 -- login secret mode with a device flow is active. Paces itself via
 -- flow.poll_next_at; returns "pending" | "granted" | "failed" | nil.
 M._device_poll_tick = function()
-    local flow = S and S.login_flow
-    if not (flow and flow.device and flow.device_code and flow.device_token_url) then
-        return nil
-    end
-    if os.time() >= (flow.poll_deadline or 0) then
-        S.error_banner = M._copy.errors.device_expired
-        cancel_login()
-        return "failed"
-    end
-    if os.time() < (flow.poll_next_at or 0) then return "pending" end
-    flow.poll_next_at = os.time() + (flow.poll_interval or 5)
-    local auth_mod = rawget(_G, "auth")
-    if not auth_mod then
-        local chunk = loadfile("src/tether/auth.lua")
-        auth_mod = chunk and chunk() or nil
-    end
-    if not (auth_mod and auth_mod.device_poll) then return nil end
-    local ok, res, perr = pcall(auth_mod.device_poll,
-        flow.device_token_url, flow.client_id, flow.device_code)
-    if not ok or res == nil then
-        -- transport hiccup: keep polling until the deadline
-        return "pending"
-    end
-    if type(res) == "table" and type(res.access_token) == "string"
-        and res.access_token ~= "" then
-        local entry = auth_mod.device_entry and auth_mod.device_entry(res, S.login_provider)
-        if entry and auth_mod.set then
-            auth_mod.set(nil, S.login_provider, entry)
-        end
-        if S.cfg and ((S.cfg.provider or "openai") == S.login_provider) then
-            S.api_key = res.access_token
-            S.cfg.api_key = res.access_token
-        end
-        transcript.append({
-            role = "system",
-            text = "→ login " .. tostring(S.login_provider)
-                .. ": device flow authorized",
-        })
-        bump_transcript()
-        S.error_banner = nil
-        cancel_login()
-        return "granted"
-    end
-    local etype = type(res) == "table" and res.error or nil
-    if etype == "authorization_pending" or etype == "slow_down" then
-        if etype == "slow_down" then
-            flow.poll_interval = (flow.poll_interval or 5) + 5
-        end
-        return "pending"
-    end
-    S.error_banner = M._copy.errors.device_failed_prefix .. tostring(etype or perr or "unknown")
-    cancel_login()
-    return "failed"
+    return M._auth_flow.poll_tick(S, M._auth_deps())
 end
 
 -- Shared store path for secret-mode Enter: OAuth code/redirect vs bare API key.
 local function submit_login_secret(raw)
-    local value = (type(raw) == "string" and raw:match("^%s*(.-)%s*$")) or ""
-    if value == "" then return false end
-    local provider = S.login_provider
-    local flow = S.login_flow
-    if not provider then return false end
-    S.login_provider = nil
-    S.login_flow = nil
-    S.login_secret = nil
-    S.palette_active = false
-    S.palette_mode = "command"
-    S.palette_items = {}
-    S.palette_sel = 1
-    S._in_login_palette = nil
-
-    local auth_mod = rawget(_G, "auth")
-    if not auth_mod then
-        local chunk = loadfile("src/tether/auth.lua")
-        auth_mod = chunk and chunk() or nil
-    end
-
-    local code = nil
-    if flow and not flow.device then
-        code = value:match("[?&]code=([^&%s]+)")
-        if not code and not value:match("^https?://") then
-            local looks_key = value:match("^sk[%-%_]")
-                or value:match("^AIza")
-                or value:match("^xai")
-                or value:match("^gsk_")
-            if not looks_key and #value >= 4 and #value <= 512
-                and not value:find("%s") then
-                code = value
-            end
-        end
-    end
-
-    -- expand-provider-catalog: device flow — the pasted value IS the access
-    -- token (authorized out-of-band at flow.device_url); no exchange.
-    if flow and flow.device then
-        local okd = auth_mod and auth_mod.set and auth_mod.set(nil, provider, {
-            kind = "oauth",
-            access_token = value,
-        })
-        if not okd then
-            S.error_banner = M._copy.errors.login_store_failed
-            return false
-        end
-        if S.cfg and ((S.cfg.provider or "openai") == provider) then
-            S.api_key = value
-            S.cfg.api_key = value
-        end
-        transcript.append({
-            role = "system",
-            text = "→ login " .. provider .. ": oauth token stored",
-        })
-        bump_transcript()
-        S.error_banner = nil
-        return true
-    end
-
-    if code and flow then
-        local ccommon = rawget(_G, "provider_common")
-        if not ccommon then
-            local chunk = loadfile("src/tether/providers/common.lua")
-            ccommon = chunk and chunk() or nil
-        end
-        if ccommon and ccommon.url_decode then
-            code = ccommon.url_decode(code)
-        end
-        local pmod = provider_mod(provider)
-        local post = auth_mod and auth_mod._post_json
-        -- expand-provider-catalog: presets without their own module share
-        -- the generic OAuth exchange.
-        local exchange = (pmod and pmod.token_exchange)
-            or (ccommon and ccommon.oauth_token_exchange)
-        local entry = exchange and exchange(post, flow, code, os.time())
-        if not entry then
-            S.error_banner = M._copy.errors.oauth_exchange_failed
-            S.login_provider = provider
-            S.login_flow = flow
-            -- re-enter secret mode (palette-only)
-            S.login_secret = { buf = "" }
-            return false
-        end
-        local ok = auth_mod and auth_mod.set and auth_mod.set(nil, provider, entry)
-        if not ok then
-            S.error_banner = M._copy.errors.login_store_failed
-            return false
-        end
-        if S.cfg and ((S.cfg.provider or "openai") == provider) then
-            S.api_key = entry.access_token
-            S.cfg.api_key = entry.access_token
-        end
-        transcript.append({
-            role = "system",
-            text = "→ login " .. provider .. ": oauth token stored",
-        })
-        bump_transcript()
-        S.error_banner = nil
-        return true
-    end
-
-    local ok = auth_mod and auth_mod.set and auth_mod.set(nil, provider, {
-        kind = "api_key",
-        access_token = value,
-    })
-    if not ok then
-        S.error_banner = M._copy.errors.login_store_failed
-        return false
-    end
-    if S.cfg and ((S.cfg.provider or "openai") == provider) then
-        S.api_key = value
-        S.cfg.api_key = value
-    end
-    transcript.append({
-        role = "system",
-        text = "→ login " .. provider .. ": credential stored",
-    })
-    bump_transcript()
-    S.error_banner = nil
-    return true
+    return M._auth_flow.submit(S, M._auth_deps(), raw)
 end
 
 -- palette-only R2: Enter/mouse actions for picked resume/model rows.

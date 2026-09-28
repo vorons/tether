@@ -24,6 +24,7 @@ ui_palette src/tether/ui/palette.lua
 ui_regions src/tether/ui/regions.lua
 ui_ask_view src/tether/ui/ask_view.lua
 ui_busy src/tether/ui/busy.lua
+ui_auth src/tether/ui/auth.lua
 transcript src/tether/transcript.lua
 commands src/tether/commands.lua
 turn src/tether/turn.lua
@@ -103,6 +104,8 @@ ui_regions
 ui_ask_view
 ## ui_busy: busy pump and queue affordances (src/tether/ui/busy.lua)
 ui_busy
+## ui_auth: login/logout flows, secret entry, device polling (src/tether/ui/auth.lua)
+ui_auth
 ui
 ## config_schema: defaults, merge, config-file writers (src/tether/config_schema.lua)
 config_schema
