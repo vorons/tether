@@ -208,7 +208,11 @@ function M.build(o)
     local function cyan(s) return role("accent", s) end
     local function rev(s) return role("reverse", s) end
     local function italic(s) return role("italic", s) end
-    local P = {
+    -- Pre-declared: a local's scope starts AFTER its declaration statement,
+    -- so a self-reference inside the constructor would capture nil —
+    -- assign after declaring.
+    local P
+    P = {
         dim = dim, muted = muted, red = red, green = green, yellow = yellow,
         cyan = cyan, accent = cyan, rev = rev, italic = italic,
         role = role,

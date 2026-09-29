@@ -847,6 +847,11 @@ local function tools_mod()
     return tools
 end
 
+-- Forward declaration (lexical order differs from paint order):
+-- ui_regions call sites above invoke painters(); the body lives next to
+-- M._painters below, after caret_glyph/md_render are declared.
+local painters
+
 -- ============================================================
 -- State
 -- ============================================================
@@ -1024,13 +1029,13 @@ M._invalidate_all = invalidate_all
 -- seams: callers may run before run() created S.
 local SPINNER_INTERVAL_MS = 80
 local function spinner_glyph()
-    return M._regions.spinner_glyph({ busy_started_at_ms = S and S.busy_started_at_ms }, M._painters)
+    return M._regions.spinner_glyph({ busy_started_at_ms = S and S.busy_started_at_ms }, painters())
 end
 M.spinner_glyph = spinner_glyph
 M._spinner_interval_ms = SPINNER_INTERVAL_MS
 -- TW2 test seam: glyph for a given elapsed-ms (pure, no S dependency)
 M._spinner_glyph_at = function(ms)
-    return M._regions.spinner_glyph_at(ms, M._painters)
+    return M._regions.spinner_glyph_at(ms, painters())
 end
 
 -- A: caret marking the tail of text that is still arriving.
@@ -2133,16 +2138,19 @@ local function render_entry(e, width, prev_role)
     -- the leading block gap (see transcript-visual-refresh).
     local out
     if e.virt == "ask" then
-        out = M._ask_view.render(S.ask, width, M._painters)    elseif e.virt == "placeholder" then
+        out = M._ask_view.render(S.ask, width, painters())    elseif e.virt == "placeholder" then
         -- turn-feedback-restyling: no waiting row in the transcript (the
         -- input box carries the Working indicator); kept as a no-op for any
         -- stale tail reference.
         out = {}
     elseif e.virt == "confirm" then
         -- Phase D 4.2: menu rows live in ui_confirm (rows-out); painters in.
+        -- Values come from the ui_themes-built table (2.1); confirm_hint
+        -- stays facade-owned.
+        local P = painters()
         out = M._confirm.menu_rows(S.confirmation, S.confirmation_sel, width, {
-            yellow = yellow, rev = rev, wrap = wrap,
-            hint = function(pairs) return M.hint_paint(pairs) end,
+            yellow = P.yellow, rev = P.rev, wrap = P.wrap,
+            hint = P.hint,
             confirm_hint = M.CONFIRM_HINT,
         })
     else
@@ -2463,14 +2471,14 @@ local function render_transcript(L)
 end
 
 local function render_error_banner(L)
-    apply_rows(M._regions.render_error_banner(M._dock_slice(L), L, M._painters))
+    apply_rows(M._regions.render_error_banner(M._dock_slice(L), L, painters()))
 end
 
 -- pi-style-input-and-footer: caret visibility (ASCII/mono themes) lives in
 -- M._painters.caret_reverse for ui_regions; column slicing below moved there.
 
 local function render_input(L)
-    apply_rows(M._regions.render_input(M._dock_slice(L), L, M._painters))
+    apply_rows(M._regions.render_input(M._dock_slice(L), L, painters()))
 end
 
 -- Phase A 1.2: palette region painting lives in ui_palette.render
@@ -2494,7 +2502,7 @@ local function render_palette(L)
         vlen = vlen,
         dim = dim,
         accent = function(t) return sgr_role("accent", t) end,
-        rule = function(w) return M._regions.rule_row(w, nil, nil, M._painters) end,
+        rule = function(w) return M._regions.rule_row(w, nil, nil, painters()) end,
         hint = function(pairs, w) return M.hint_paint(pairs, w) end,
     })
     apply_rows(rows)
@@ -2626,6 +2634,24 @@ local function paint(force)
     redraw()
 end
 M._paint = paint
+
+-- Per-paint painter table built by ui_themes (2.1): ui_regions,
+-- ui_ask_view and ui_confirm consume this instead of the once-built
+-- M._painters proxy (which stays until 2.2). Values resolve live per
+-- paint from the same seams the proxy closures read, so bytes match
+-- exactly within a paint. Chunk local: 1.1 freed a dozen theme locals.
+painters = function()
+    return M._themes.build({
+        theme = _theme_name, depth = M.color_depth(),
+        ascii = M._ascii_mode or M._env_ascii or _ascii,
+        light_bg = M.is_light_bg(), copy = M._copy,
+        vlen = vlen, clip = clip, trunc = trunc, cells = cells, wrap = wrap,
+        now_ms = M._paint_clock, caret = caret_glyph,
+        freeform = ask.FREEFORM_LABEL,
+        ascii_none = function() return M.color_depth() == "none" end,
+        spinner_interval_ms = SPINNER_INTERVAL_MS, md_render = md_render,
+    })
+end
 
 -- Painter/capability table for ui_regions (built once; the module never
 -- touches ui locals, S, or globals). Theme-bound painters stay here until
