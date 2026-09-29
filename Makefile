@@ -1,5 +1,12 @@
 CC      ?= cc
-CFLAGS  ?= -std=c11 -Wall -Wextra -Werror -O2 -D_POSIX_C_SOURCE=200809L
+# OPT is the optimization level shared by every compile rule (own code and
+# vendored deps). Default stays portable -O2; `make release` overrides it
+# with the full set (-O3 -march=native -flto -DNDEBUG).
+OPT     ?= -O2
+# -Werror stays on for dev builds; `make release` clears it because LTO
+# surfaces vendor warnings at link time that would otherwise fail the link.
+WERROR  ?= -Werror
+CFLAGS  ?= -std=c11 -Wall -Wextra $(WERROR) $(OPT) -D_POSIX_C_SOURCE=200809L
 
 # Vendored archive rules sit above `tether`, so GNU make would pick the first
 # one as the default goal; name the binary explicitly instead.
@@ -46,7 +53,7 @@ ZLIB_OBJS = $(patsubst $(ZLIB_DIR)/%.c,build/zlib/%.o,$(ZLIB_SRCS))
 # -Werror from turning upstream warnings into build failures.
 build/mbedtls/%.o: $(MBEDTLS_DIR)/library/%.c
 	@mkdir -p build/mbedtls
-	$(CC) -std=c11 -O2 -w -I$(MBEDTLS_DIR)/include -c $< -o $@
+	$(CC) -std=c11 $(OPT) -w -I$(MBEDTLS_DIR)/include -c $< -o $@
 
 build/libmbedtls_vend.a: $(MBEDTLS_OBJS)
 	@mkdir -p build
@@ -57,7 +64,7 @@ build/libmbedtls_vend.a: $(MBEDTLS_OBJS)
 # glibc declarations visible on modern GCC.
 build/zlib/%.o: $(ZLIB_DIR)/%.c
 	@mkdir -p build/zlib
-	$(CC) -std=gnu11 -O2 -w -DHAVE_UNISTD_H=1 -I$(ZLIB_DIR) -c $< -o $@
+	$(CC) -std=gnu11 $(OPT) -w -DHAVE_UNISTD_H=1 -I$(ZLIB_DIR) -c $< -o $@
 
 build/libz_vend.a: $(ZLIB_OBJS)
 	@mkdir -p build
@@ -163,4 +170,15 @@ clean:
 	rm -f $(EMBED_OUT)
 	rm -rf build
 
-.PHONY: test smoke clean
+# release: maximum-optimization build for distribution. Non-portable
+# (-march=native), asserts off (-DNDEBUG), link-time optimization, stripped
+# and UPX-packed. Separate from the default build so dev iteration stays
+# fast and portable.
+release:
+	@$(MAKE) clean >/dev/null
+	@$(MAKE) tether OPT="-O3 -march=native -flto=auto -DNDEBUG" WERROR=
+	@strip --strip-all tether
+	@upx --best --lzma tether
+	@ls -la tether
+
+.PHONY: test smoke clean release

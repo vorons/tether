@@ -11,6 +11,8 @@ OBJDIR    := $(VEND)/curl_build/obj
 ARCHIVE   := $(VEND)/curl_build/libcurl_vend.a
 
 CC        ?= gcc
+# Optimization level; the top-level Makefile overrides it (`make release`).
+OPT       ?= -O2
 
 INC       := -I$(CURDIR)/include \
              -I$(CURDIR)/lib \
@@ -40,7 +42,7 @@ DEFINES   := -DUSE_MBEDTLS=1 \
 # and curl's own sources stop compiling.
 # _GNU_SOURCE is what curl's own ./configure adds: curl_config.h declares
 # HAVE_GLIBC_STRERROR_R, which only exists in glibc's GNU strerror_r variant.
-CFLAGS    := -std=gnu11 -O2 -fPIC -w -D_GNU_SOURCE -DHAVE_CONFIG_H=1 $(INC) $(DEFINES)
+CFLAGS    := -std=gnu11 $(OPT) -fPIC -w -D_GNU_SOURCE -DHAVE_CONFIG_H=1 $(INC) $(DEFINES)
 
 # --- Core source files (lib/) --------------------------------------------
 SRCS := \
