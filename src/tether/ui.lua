@@ -104,6 +104,16 @@ if type(M._ask) ~= "table" then
     M._ask = (chunk and chunk()) or {}
 end
 
+-- ui_complete: path completion engine — token/candidates/cycle/restore +
+-- @ mention open/refilter/accept/close (embedded global `ui_complete`,
+-- loadfile fallback for tests/dev). Same M-field pattern; S-derived deps
+-- come from M._complete_deps per call.
+M._complete = _G.ui_complete
+if type(M._complete) ~= "table" then
+    local chunk = loadfile("src/tether/ui/complete.lua")
+    M._complete = (chunk and chunk()) or {}
+end
+
 -- ============================================================
 -- ANSI
 -- ============================================================
@@ -1446,211 +1456,40 @@ end
 -- with the first applied and later Tabs cycle (wrapping); Esc restores
 -- the token as typed; any other key keeps the applied text.
 -- ============================================================
--- Token = text from the cursor back to the previous whitespace or line
--- start; a leading @ is a mention prefix, kept verbatim in the input.
-local function completion_token()
-    local lines = input_lines()
-    for _, ln in ipairs(lines) do
-        if S.cursor >= ln.from and S.cursor <= ln.from + #ln.text then
-            local upto = ln.text:sub(1, S.cursor - ln.from)
-            local token = upto:match("([^%s]*)$") or ""
-            local pos = ln.from + 1 + #upto - #token
-            return token, pos
-        end
-    end
-    return nil
-end
-
-local function completion_apply(label)
-    local comp = S.completion
-    if not comp then return end
-    local at = comp.original:match("^(@)")
-    local replace = at and ("@" .. label) or label
-    local head = S.input:sub(1, comp.start - 1)
-    S.input = head .. replace .. (comp.tail or "")
-    -- comp.start is one-based and S.cursor is a zero-based offset, so the
-    -- cursor lands directly after the applied text: before the tail, and never
-    -- past the end of the input (spec tui: Path completion)
-    S.cursor = comp.start - 1 + #replace
-end
--- 4.3: gated on ui.path_completion; Tab inside an open palette keeps its
--- command-completion meaning (handled by the palette branch of handle_key).
+-- Path completion engine (token/candidates/cycle/restore) lives in
+-- ui_complete (bag/deps); the M.* seams below forward to it.
 -- Resolves the tools module lazily: tests can override M._tools_stub to
 -- stub path_complete without touching the real filesystem.
 M._tools_stub = nil
 -- 6.1: seam for tests to stub skill discovery (mirrors M._tools_stub).
 M._skills_stub = nil
-local function path_complete_tab()
-    if S.palette_active then return end
-    if S.cfg and S.cfg.ui and S.cfg.ui.path_completion == false then return end
-    -- The host loads every module and exposes it as a global (load_module in
-    -- main.c calls lua_setglobal and never package.preload), so the production
-    -- lookup has to read the global; require() only resolves in the plain-Lua
-    -- harness, which is why it stays as a fallback.
-    local tools_mod = M._tools_stub
-        or tools_mod()
-        or (pcall(require, "tools") and package.loaded.tools)
-        or nil
-    if tools_mod == nil or tools_mod.path_complete == nil then return end
-    local token, token_pos = completion_token()
-    if not token or token == "" then return end
-    -- A `@` preview can survive its palette emptying; Tab is a fresh, forcing
-    -- completion, so that session (and its cached walk) is handed over here.
-    local cache = nil
-    if S.completion and S.completion.mention then
-        cache = S.completion.cache
-        S.completion = nil
-    end
-    local r = tools_mod.path_complete(token, { workspace = S.workspace }, cache)
-    local cands = (r and r.candidates) or {}
-    if #cands == 0 then return end -- no candidates -> input unchanged, no palette
-    if #cands == 1 then
-        -- one-shot apply; no cycle state to restore, but the text after the
-        -- token still has to survive: a unique candidate completes the token
-        -- in place (spec tui: Path completion), so completing `ag` inside
-        -- `ag.bak` must not lose `.bak`. The palette branch carries the same tail.
-        local one_comp = { start = token_pos, stop = token_pos + #token,
-            original = token, tail = S.input:sub(token_pos + #token) }
-        S.completion = one_comp
-        completion_apply(cands[1])
-        S.completion = nil
-        return
-    end
-    local comp = S.completion or {}
-    comp.start = comp.start or token_pos
-    if not comp.original then
-        comp.original = S.input:sub(comp.start, comp.start + #token - 1)
-        comp.tail = S.input:sub(comp.start + #token)
-    end
-    comp.items = cands
-    comp.cache = r.cache
-    comp.truncated = r.truncated == true
-    if not S.palette_active then
-        S.palette_mode = "path"
-        S.palette_active = true
-        S.palette_items = {}
-        for _, c in ipairs(cands) do
-            S.palette_items[#S.palette_items + 1] = { label = c, desc = "" }
-        end
-        S.palette_sel = 1
-    else
-        S.palette_sel = (S.palette_sel % #comp.items) + 1
-    end
-    S.completion = comp
-    completion_apply(comp.items[S.palette_sel])
-end
-
--- 4.2: Esc while the completion palette is open restores the token exactly
--- as typed before the first Tab.
-local function completion_cancel()
-    local comp = S.completion
-    if not comp then return end
-    S.completion = nil
-    S.input = S.input:sub(1, comp.start - 1) .. comp.original .. (comp.tail or "")
-    S.cursor = comp.start - 1 + #comp.original
-    S.palette_active = false
-    S.palette_mode = "command"
-    S.palette_items = {}
-    S.palette_sel = 1
-    palette_sync()
-end
-
--- 4.2: any non-tab/non-esc key during active completion keeps the applied
--- text and clears the cycle state (input is not touched).
-local function completion_commit()
-    if S.completion then
-        S.completion = nil
-        S.palette_active = false
-        S.palette_mode = "command"
-        S.palette_items = {}
-        S.palette_sel = 1
-        palette_sync()
-    end
-end
-
 -- ============================================================
 -- at-file-picker: the `@` trigger (spec tui: Path completion)
 -- ============================================================
 -- Typing "@" at the start of a token previews the workspace in the palette
 -- without touching the input: nothing is applied until Enter, and every later
--- keystroke re-filters the snapshot the first one took. Module fields, not
--- chunk locals (ui.lua sits at Lua's 200-locals limit).
+-- keystroke re-filters the snapshot the first one took. Logic lives in
+-- ui_complete; these M.* names stay as the seams the key table and tests
+-- drive (ui-facade-thinning 1.1).
 
--- True when the cursor is at a token start: nothing typed yet, or the byte
--- before it is whitespace. An "@" anywhere else is ordinary text.
 function M._at_token_start()
-    if S.cursor == 0 then return true end
-    return S.input:sub(S.cursor, S.cursor):find("%s") ~= nil
+    return M._complete.at_token_start(S)
 end
 
 function M._picker_close()
-    S.completion = nil
-    S.palette_active = false
-    S.palette_mode = "command"
-    S.palette_items = {}
-    S.palette_sel = 1
+    return M._complete.picker_close(S)
 end
 
--- Re-rank the token against the walk the session already did. The cache key
--- (scoped directory + hidden rule) is what tools.path_complete compares, so a
--- keystroke that only extends the fuzzy remainder costs no filesystem work.
 function M._mention_refilter()
-    local comp = S.completion
-    if not comp or not comp.mention then return end
-    local token, token_pos = completion_token()
-    if not token or token:sub(1, 1) ~= "@" then
-        M._picker_close()
-        return
-    end
-    local tools_mod = M._tools_stub or tools_mod()
-    if not tools_mod or tools_mod.path_complete == nil then
-        M._picker_close()
-        return
-    end
-    comp.start = token_pos
-    local r = tools_mod.path_complete(token, { workspace = S.workspace }, comp.cache)
-    local cands = (r and r.candidates) or {}
-    comp.items = cands
-    comp.cache = (r and r.cache) or comp.cache
-    comp.truncated = (r and r.truncated) == true
-    S.completion = comp
-    S.palette_items = {}
-    for _, c in ipairs(cands) do
-        S.palette_items[#S.palette_items + 1] = { label = c, desc = "" }
-    end
-    S.palette_sel = 1
-    if #cands == 0 then
-        -- Nothing matches yet: hide the palette but keep the session, so the
-        -- next character can reopen it without typing "@" again.
-        S.palette_active = false
-        S.palette_mode = "command"
-        return
-    end
-    S.palette_active = true
-    S.palette_mode = "mention"
+    return M._complete.mention_refilter(S, M._complete_deps())
 end
 
 function M._mention_open()
-    if S.cfg and S.cfg.ui and S.cfg.ui.path_completion == false then return end
-    local token, token_pos = completion_token()
-    if not token or token:sub(1, 1) ~= "@" then return end
-    S.completion = { start = token_pos, mention = true }
-    M._mention_refilter()
+    return M._complete.mention_open(S, M._complete_deps())
 end
 
--- Enter/Tab: swap the typed token for "@<candidate>", leave the text after it
--- alone, and put the cursor directly behind the inserted path.
 function M._mention_accept()
-    local comp = S.completion
-    local it = comp and S.palette_items[S.palette_sel]
-    if not it then return end
-    local token, token_pos = completion_token()
-    if not token then M._picker_close() return end
-    local replace = "@" .. it.label
-    S.input = S.input:sub(1, token_pos - 1) .. replace
-        .. S.input:sub(token_pos + #token)
-    S.cursor = token_pos - 1 + #replace
-    M._picker_close()
+    return M._complete.mention_accept(S, M._complete_deps())
 end
 
 -- ============================================================
@@ -1659,7 +1498,7 @@ end
 -- Test seams: drive path_complete_tab / handle_key from a test harness
 -- after run() has set up S. Placed here (after all local functions are
 -- declared) so the closures capture the locals correctly.
-M._path_complete_tab = function() if S then path_complete_tab() end end
+M._path_complete_tab = function() if S then M._complete.tab(S, M._complete_deps()) end end
 local function input_insert(s)
     -- input_max_lines is the viewport window (design §7); the buffer may
     -- grow past it and the rule row scrolls with ↑/↓ labels.
@@ -3844,6 +3683,17 @@ function M._ask_deps()
     }
 end
 
+-- Impure edge for ui_complete, built per call. M-field (200-locals limit).
+function M._complete_deps()
+    return {
+        tools = M._tools_stub or tools_mod()
+            or (pcall(require, "tools") and package.loaded.tools)
+            or nil,
+        sync = palette_sync,
+        lines = function() return input_lines() end,
+    }
+end
+
 local function commit_input()
     local text = S.input
     if text:match("^%s*$") then
@@ -4778,18 +4628,18 @@ on_palette_path = function(bag, k)
                     S.palette_sel = (S.palette_sel % n) + 1
                     comp.sel = S.palette_sel
                     S.completion = comp
-                    completion_apply(S.palette_items[S.palette_sel].label)
+                    M._complete.apply(S, S.palette_items[S.palette_sel].label)
                 end
                 return
             elseif k.kind == "esc" then
-                completion_cancel()
+                M._complete.cancel(S, M._complete_deps())
                 return
             elseif k.kind == "enter" then
                 local it = S.palette_items[S.palette_sel]
                 if it then
                     S.input = it.label .. " "
                     S.cursor = #S.input
-                    completion_commit()
+                    M._complete.commit(S, M._complete_deps())
                 end
                 return
             elseif k.kind == "special" then
@@ -4806,7 +4656,7 @@ on_palette_path = function(bag, k)
             -- clear the cycle state; re-run palette_sync() so the command
             -- palette reopens if the user typed /, otherwise the palette
             -- stays closed. No fall-through (would double-fire input_insert).
-            completion_commit()
+            M._complete.commit(S, M._complete_deps())
             palette_sync()
 end
 
@@ -4863,7 +4713,7 @@ end
 
 -- 4.2: Tab outside an open palette runs path completion (4.3: gated)
 on_tab_complete = function(bag, k)
-    path_complete_tab()
+    M._complete.tab(S, M._complete_deps())
 end
 
 on_normal = function(bag, k)
