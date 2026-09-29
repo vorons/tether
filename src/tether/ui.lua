@@ -848,8 +848,8 @@ local function tools_mod()
 end
 
 -- Forward declaration (lexical order differs from paint order):
--- ui_regions call sites above invoke painters(); the body lives next to
--- M._painters below, after caret_glyph/md_render are declared.
+-- ui_regions call sites above invoke painters(); the body lives below,
+-- after caret_glyph/md_render are declared.
 local painters
 
 -- ============================================================
@@ -2078,7 +2078,7 @@ function M.hint_plain(pairs)
 end
 
 function M.hint_paint(pairs, inner)
-    return M._themes.hint_paint(M._painters, pairs, inner)
+    return M._themes.hint_paint({ dim = dim, muted = muted, vlen = vlen, clip = clip }, pairs, inner)
 end
 
 -- ask-block-b: the hint row's pairs for the current phase and mode. Short
@@ -2475,7 +2475,7 @@ local function render_error_banner(L)
 end
 
 -- pi-style-input-and-footer: caret visibility (ASCII/mono themes) lives in
--- M._painters.caret_reverse for ui_regions; column slicing below moved there.
+-- the built painters' caret_reverse for ui_regions; column slicing below moved there.
 
 local function render_input(L)
     apply_rows(M._regions.render_input(M._dock_slice(L), L, painters()))
@@ -2535,12 +2535,12 @@ end
 -- ui_regions; theme-bound entry points stay here (painters live in ui
 -- until the themes cut) so tests and callers keep the M.* names.
 function M.token_pct(pct, summarize_at)
-    return M._regions.token_pct(pct, summarize_at, M._painters)
+    return M._regions.token_pct(pct, summarize_at, painters())
 end
 
 -- T47: "4.1k/32k (13%)" — see ui_regions.token_usage.
 function M.token_usage(used, max_tokens, summarize_at)
-    return M._regions.token_usage(used, max_tokens, summarize_at, M._painters)
+    return M._regions.token_usage(used, max_tokens, summarize_at, painters())
 end
 
 -- pi-style-input-and-footer: compact token counts for the footer, mirrored
@@ -2554,7 +2554,7 @@ end
 
 -- The footer row composition (see ui_regions.footer_stats).
 function M.footer_stats(left, right, width)
-    return M._regions.footer_stats(left, right, width, M._painters)
+    return M._regions.footer_stats(left, right, width, painters())
 end
 
 -- slim-footer-indicators: one dim footer row below the box — path ($HOME → ~),
@@ -2564,7 +2564,7 @@ end
 -- right-truncate; model is handled separately by footer_stats. No reverse
 -- video, no mode icons.
 local function render_footer(L)
-    apply_rows(M._regions.render_footer(M._dock_slice(L), L, M._painters))
+    apply_rows(M._regions.render_footer(M._dock_slice(L), L, painters()))
 end
 
 -- ============================================================
@@ -2635,11 +2635,10 @@ local function paint(force)
 end
 M._paint = paint
 
--- Per-paint painter table built by ui_themes (2.1): ui_regions,
--- ui_ask_view and ui_confirm consume this instead of the once-built
--- M._painters proxy (which stays until 2.2). Values resolve live per
--- paint from the same seams the proxy closures read, so bytes match
--- exactly within a paint. Chunk local: 1.1 freed a dozen theme locals.
+-- Per-paint painter table built by ui_themes (2.1/2.2): every region
+-- renderer consumes this; the once-built M._painters proxy is deleted.
+-- Values resolve live per paint from the same seams the proxy closures
+-- read, so bytes match exactly within a paint.
 painters = function()
     return M._themes.build({
         theme = _theme_name, depth = M.color_depth(),
@@ -2652,28 +2651,6 @@ painters = function()
         spinner_interval_ms = SPINNER_INTERVAL_MS, md_render = md_render,
     })
 end
-
--- Painter/capability table for ui_regions (built once; the module never
--- touches ui locals, S, or globals). Theme-bound painters stay here until
--- the themes cut — the module receives them as values.
-M._painters = {
-    dim = dim, muted = muted, red = red, green = green, yellow = yellow,
-    cyan = cyan, accent = cyan, rev = rev, italic = italic,
-    trunc = trunc, vlen = vlen, to_ascii = to_ascii, cells = cells,
-    clip = clip, wrap = wrap,
-    copy = M._copy,
-    now_ms = M._paint_clock,
-    role = function(kind, text) return sgr_role(kind, text) end,
-    md = function(text, inner) return md_render(text, inner, M.md_ansi) end,
-    hint = function(pairs, inner) return M.hint_paint(pairs, inner) end,
-    caret = function() return caret_glyph() end,
-    freeform = ask.FREEFORM_LABEL,
-    ascii_none = function() return M.color_depth() == "none" end,
-    caret_reverse = function()
-        return M._themes.caret_reverse(M._themes.THEMES, _theme_name, M.color_depth())
-    end,
-    spinner_interval_ms = SPINNER_INTERVAL_MS,
-}
 
 -- State slice for ui_regions, built per paint (geometry + read fields only;
 -- screen application stays in apply_rows near set_row above).
