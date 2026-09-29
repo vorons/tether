@@ -1753,10 +1753,10 @@ do
   assert_eq(cbag.ask, nil, "T4.2b esc clears the block")
   assert_eq(finished, 1, "T4.2b cancel finishes the turn")
   assert_true(answered.cancelled, "T4.2b cancellation reaches the agent")
-  -- facade parity: proxies route into the modules, keyboard stays put
-  local ui = dofile("src/tether/ui.lua")
-  assert_eq(type(ui._ask.handle_ask_key), "function", "T4.2b facade loads ui_ask")
-  assert_eq(type(ui._confirm.handle_confirmation_key), "function", "T4.2b facade loads ui_confirm")
+  -- module entry points: controller functions live in ui_ask / ui_confirm.
+  local cfm = assert(loadfile("src/tether/ui/confirm.lua"))()
+  assert_eq(type(askm.handle_ask_key), "function", "T4.2b ui_ask entry point")
+  assert_eq(type(cfm.handle_confirmation_key), "function", "T4.2b ui_confirm entry point")
   print("T4.2b ui_ask controller: OK")
 end
 
