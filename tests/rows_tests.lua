@@ -1778,6 +1778,68 @@ do
   print("T4.2a ui_confirm rows+kernel: OK")
 end
 
+-- streaming-repaint-budget 3.1: wall-clock budgets for streaming repaints.
+-- Realistic multi-line model output (NOT single-line floods — those defeat
+-- line-based incrementality by construction, see ui.lua md_cached).
+-- Unfixed code takes ~5s/30s here (10-12x over budget); the differential
+-- fuzz corpus (35k cases, 3 seeds, clean) lives in scratch, not the suite.
+do
+  -- equivalence sample: incremental must equal full render exactly
+  local ui = dofile("src/tether/ui.lua")
+  ui.md_incr_min = 0
+  local cases = {
+    { "# h\n\npara one.\n\npara two.", 80, false },
+    { "a\n\n```lua\nlocal x = 1\n```\n\nb", 40, false },
+    { "| a | b |\n|---|---|\n| c | d |", 80, false },
+    { "- i1\n- i2\n\n1. o1\n2. o2", 20, false },
+    { "user **bold** text", 80, true },
+  }
+  for i, c in ipairs(cases) do
+    local e, t, w, lite = {}, c[1], c[2], c[3]
+    local full = ui.md_render(t, w, ui.md_ansi, lite)
+    assert_eq(#ui.md_cached(e, t, w, ui.md_ansi, lite), #full,
+      "T3.1b equivalence row count case " .. i)
+    local grown = t .. "\nmore text."
+    local got, want = ui.md_cached(e, grown, w, ui.md_ansi, lite),
+      ui.md_render(grown, w, ui.md_ansi, lite)
+    assert_eq(#got, #want, "T3.1b grown row count case " .. i)
+    for j = 1, #want do
+      assert_eq(got[j], want[j], "T3.1b grown row " .. j .. " case " .. i)
+    end
+  end
+  print("T3.1b incremental equivalence: OK")
+
+  local block = "# Analysis\n\nHere is what I found. The entry point wires it all.\n\n```lua\nlocal x = function(a) return a + 1 end\nprint(x(41))\n```\n\n- item one\n- item two\n\nFinal words with **bold** and *italic* and `code`.\n\n"
+  -- steady: 200KB md-heavy streaming state (~251B block x800), warm repaint <= 500ms
+  local uimod, S = run_ui_with({ 17 }, {
+    agent = { turn = function() return true end, get_history = function() return {} end },
+  })
+  S.streaming = true
+  S.waiting = false
+  local big = string.rep(block, 800) -- ~200KB
+  for i = 1, 10 do
+    uimod._handle_agent_event({ type = "text_delta", text = big:sub((i - 1) * 20480 + 1, i * 20480) })
+  end
+  uimod._handle_agent_event({ type = "text_delta", text = "tail. " })
+  local t1 = os.clock()
+  uimod._paint(true)
+  local repaint_ms = (os.clock() - t1) * 1000
+  assert_true(repaint_ms <= 500, "T3.1b warm 200KB repaint within budget (" .. math.floor(repaint_ms) .. "ms)")
+  -- flood: 50 small realistic deltas through the real event path
+  local u2, S2 = run_ui_with({ 17 }, {
+    agent = { turn = function() return true end, get_history = function() return {} end },
+  })
+  S2.streaming = true
+  S2.waiting = false
+  local unit = string.rep("Here is what I found in the codebase. The entry point wires it all together nicely. ", 16)
+  collectgarbage("collect")
+  local t0 = os.clock()
+  for i = 1, 50 do u2._handle_agent_event({ type = "text_delta", text = unit }) end
+  local flood_ms = (os.clock() - t0) * 1000
+  assert_true(flood_ms <= 5000, "T3.1b 50-delta flood within budget (" .. math.floor(flood_ms) .. "ms)")
+  print("T3.1b streaming repaint budgets: OK")
+end
+
 if failed > 0 then
     os.exit(1)
 end
