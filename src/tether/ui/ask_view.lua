@@ -28,13 +28,24 @@ local function ask_hint(a, q, copy)
         return H.other
     end
     local multi_set = #a.questions > 1
+    local hint = H.single
     if q.multi then
-        return H.multi
+        hint = H.multi
+    elseif multi_set then
+        hint = H.multiset
     end
-    if multi_set then
-        return H.multiset
+    -- ask-block-redesign: past the first question the hint names the back
+    -- key (← returns with the answer intact); on the first one there is
+    -- nothing to go back to. Spliced after the navigation pairs.
+    if multi_set and (a.qidx or 1) > 1 and (hint == H.multi or hint == H.multiset) then
+        local pairs = {}
+        for i, p in ipairs(hint) do
+            pairs[#pairs + 1] = p
+            if i == 2 then pairs[#pairs + 1] = H.back end
+        end
+        return pairs
     end
-    return H.single
+    return hint
 end
 M.ask_hint = ask_hint
 

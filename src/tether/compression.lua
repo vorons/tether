@@ -234,6 +234,12 @@ M.ANCHOR_WRITE_TOOLS = { write = true, patch = true, edit = true,
     apply_patch = true, multiedit = true }
 M.ANCHOR_READ_TOOLS = { read = true, cat = true }
 
+-- Display-only prefix trim: strip segments shared by ALL paths, but always
+-- keep the trailing (file-name) segment so identical paths still render
+-- their file name instead of an empty string. The `- 1` in the guard below
+-- is load-bearing: with the naive `#split[i] <= common` check, identical
+-- inputs would walk `common` past the final segment and render as `""`.
+-- Pinned by tests/compression_tests.lua (anchor_trim_prefix cases).
 local function anchor_trim_prefix(paths)
     if #paths < 2 then return paths end
     local split = {}
@@ -263,6 +269,7 @@ local function anchor_trim_prefix(paths)
     end
     return out
 end
+M.anchor_trim_prefix = anchor_trim_prefix
 
 -- First n entries, order-preserving; deduped when asked (commits/blockers).
 local function take_capped(list, n, dedup)

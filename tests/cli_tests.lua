@@ -1037,6 +1037,61 @@ with_modules(base_env, function(mods)
     ui._color_depth = "none"
 end)
 
+-- splash-colors 2.2: light-background probe for the default theme's light
+-- variant (muted tier switch, dark fallback). Seams: M._light_bg override,
+-- M._colorfgbg override for the COLORFGBG parse.
+with_modules(base_env, function(mods)
+    local ui = mods.ui
+    ui.set_theme("default")
+    ui._color_depth = "truecolor"
+    -- explicit override wins over the probe
+    ui._light_bg = true
+    assert_true(ui.is_light_bg(), "light override true")
+    local lm = ui.sgr_role("muted", "x")
+    assert_true(lm:find("30", 1, true) ~= nil, "light muted uses the dark-gray tier")
+    ui._light_bg = false
+    assert_true(not ui.is_light_bg(), "light override false")
+    local dm = ui.sgr_role("muted", "x")
+    assert_true(dm:find("90", 1, true) ~= nil, "dark muted stays light gray")
+    -- probe parses COLORFGBG bg: 7/15 mean light, anything else dark
+    ui._light_bg = nil
+    ui._colorfgbg = "0;15"
+    assert_true(ui.is_light_bg(), "COLORFGBG bg 15 is light")
+    ui._colorfgbg = "0;0"
+    assert_true(not ui.is_light_bg(), "COLORFGBG bg 0 is dark")
+    ui._colorfgbg = "nonsense"
+    assert_true(not ui.is_light_bg(), "unparseable COLORFGBG falls back to dark")
+    ui._colorfgbg = ""
+    assert_true(not ui.is_light_bg(), "missing COLORFGBG falls back to dark")
+    ui._colorfgbg = nil
+    ui._light_bg = nil
+    ui._color_depth = "none"
+end)
+
+-- splash-colors 1.3: AGENTS.md ancestor chain (repo root down to ws,
+-- outermost first). Temp dirs with a .git marker for the repo root.
+with_modules(base_env, function(mods)
+    local ui = mods.ui
+    local root = os.tmpname()
+    os.remove(root)
+    os.execute("mkdir -p " .. root .. "/sub/deep")
+    local git = io.open(root .. "/.git", "w")
+    git:write("gitdir: elsewhere")
+    git:close()
+    local chain = ui._agents_chain(root .. "/sub/deep")
+    assert_eq(#chain, 3, "chain holds repo root plus descendants")
+    assert_eq(chain[1], root, "chain starts at the repo root (outermost first)")
+    assert_eq(chain[3], root .. "/sub/deep", "chain ends at ws")
+    -- no .git above ws: only ws itself
+    local lone = os.tmpname()
+    os.remove(lone)
+    os.execute("mkdir -p " .. lone)
+    local single = ui._agents_chain(lone)
+    assert_eq(#single, 1, "no repository above ws means ws only")
+    assert_eq(single[1], lone, "ws itself is the only entry")
+    os.execute("rm -rf " .. root .. " " .. lone)
+end)
+
 -- M8/T32: markdown-lite md.render_entry (R4)
 with_modules(base_env, function(mods)
     local ui = mods.ui

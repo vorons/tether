@@ -1040,10 +1040,11 @@ do
   assert_true(oj:find("↑↓", 1, true) == nil, "T228 freeform hint names no list navigation")
   m._handle_key(esc)
 
-  -- 3.2: the multi-set hint is identical on every question (no back/fwd keys)
+  -- 3.2: no back hint on the first question; past it the hint names ← back
   assert_true(qj:find("back", 1, true) == nil, "T228 no back hint on the first question")
   m3q._handle_key(enter)
   local qj2 = plain(m3q)
+  assert_true(qj2:find("← back", 1, true) ~= nil, "T228 later questions name the back key")
   assert_true(qj2:find("esc dismiss", 1, true) ~= nil, "T228 dismiss hint stays on later questions")
   assert_eq(qj2:find("⇆ tab", 1, true), qj:find("⇆ tab", 1, true) and qj2:find("⇆ tab", 1, true),
     "T228 the tab hint is present on later questions too")

@@ -45,6 +45,26 @@ do
   print("TCMP compression direct: OK")
 end
 
+do
+  -- anchor-prune-fix 1.1: pinning tests for anchor_trim_prefix.
+  -- Verified against the current guard before any edit: identical paths
+  -- render their file name (guard is load-bearing, see compression.lua).
+  local comp = assert(loadfile("src/tether/compression.lua"))()
+  local trim = assert(comp.anchor_trim_prefix, "TCMP trim exposed for pinning")
+  local function joined(t) return table.concat(t, ",") end
+  assert_eq(joined(trim({ "src/tether/agent.lua", "src/tether/tools.lua" })),
+    "agent.lua,tools.lua", "TCMP trim shared prefix")
+  assert_eq(joined(trim({ "src/tether/agent.lua", "src/tether/agent.lua" })),
+    "agent.lua,agent.lua", "TCMP trim identical keeps filename")
+  assert_eq(joined(trim({ "src/a.lua", "docs/b.lua" })),
+    "src/a.lua,docs/b.lua", "TCMP trim no common prefix unchanged")
+  assert_eq(joined(trim({ "src/only.lua" })),
+    "src/only.lua", "TCMP trim single path unchanged")
+  assert_eq(joined(trim({ "a/b/c.lua", "a/b/d.lua" })),
+    "c.lua,d.lua", "TCMP trim keeps trailing segment")
+  print("TCMP anchor_trim_prefix pinning: OK")
+end
+
 if failed > 0 then
     os.exit(1)
 end

@@ -156,6 +156,9 @@ M.ask = {
                   { key = "Esc", act = "cancel" } },
         multiset = { { key = "⇆", act = "tab" }, { key = "↑↓", act = "select" },
                      { key = "enter", act = "confirm" }, { key = "esc", act = "dismiss" } },
+        -- ask-block-redesign: named only past the first question (qidx > 1);
+        -- ask_hint splices it after the navigation pairs of the list hints.
+        back = { key = "←", act = "back" },
         single = { { key = "↑↓", act = "select" }, { key = "enter", act = "submit" },
                    { key = "esc", act = "dismiss" } },
     },

@@ -1249,10 +1249,6 @@ do
   print("TW2 time-based spinner frames: OK")
 end
 
-if failed > 0 then
-    os.exit(1)
-end
-
 -- T71: 3.4 — palette row rendering: description present, accent on selected,
 -- truncation on narrow terminal.
 do
@@ -1297,10 +1293,6 @@ do
   assert_eq(S2.palette_active, false, "T72 space closed the palette")
   assert_eq(S2.input, "/model ", "T72 input retains the typed text after space")
   print("T72 3.5 Enter no-match + space closes palette: OK")
-end
-
-if failed > 0 then
-    os.exit(1)
 end
 
 -- T73: 4.1 — tools.path_complete: relative token, @-prefix, dir suffix,

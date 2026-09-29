@@ -908,6 +908,23 @@ do
   print("T161 print rejects /login /logout: OK")
 end
 
+-- global-agents-file 1.1: splash [Context] names both home AGENTS.md files
+-- (.tether first, .agents second), tildified.
+do
+  local ui = assert((function() return loadfile("src/tether/ui.lua")() end)())
+  local rows = ui._splash_rows({ version = "v9.9-test",
+    agents = { "~/.tether/AGENTS.md", "~/.agents/AGENTS.md" }, skills = {} }, 80, 1)
+  local plain = table.concat(rows, "\n"):gsub("\27%[[0-9;]*m", "")
+  assert_true(plain:find("[Context]", 1, true) ~= nil, "T1c splash shows the Context section")
+  local tether_at = plain:find("~/.tether/AGENTS.md", 1, true)
+  local agents_at = plain:find("~/.agents/AGENTS.md", 1, true)
+  assert_true(tether_at ~= nil, "T1c splash names the .tether home file")
+  assert_true(agents_at ~= nil, "T1c splash names the .agents home file")
+  assert_true(tether_at < agents_at, "T1c .tether sorts before .agents")
+  assert_true(plain:find("[Skills]", 1, true) == nil, "T1c empty Skills section hidden")
+  print("T1c splash Context names both home files: OK")
+end
+
 
 if failed > 0 then
     os.exit(1)
