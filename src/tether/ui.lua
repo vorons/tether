@@ -1111,9 +1111,9 @@ local function input_lines()
     return M._regions.input_lines(S.input)
 end
 
--- unified-slash-palette 2.1: palette window geometry. Wiring seam over
--- ui_palette.window (pure); integration tests drive it with S-derived args.
-M._palette_window = M._palette.window
+-- unified-slash-palette 2.1: palette window geometry lives in
+-- ui_palette.window (pure); tests drive it with S-derived args.
+-- (facade-proxy-removal 2.1: M._palette_window alias deleted.)
 
 -- pi-style-input-and-footer: horizontal padding inside the box's rules: whole
 -- columns, 0..3 (pi's editorPaddingX), further clamped so the content keeps at

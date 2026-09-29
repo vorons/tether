@@ -1102,7 +1102,7 @@ do
   local S = uimod._get_state()
   local L = uimod._layout()
   assert_eq(#S.palette_items, 22, "T83 twelve skills join the ten commands")
-  local win, off = uimod._palette_window(S.h, #S.palette_items, S.palette_sel)
+  local win, off = uimod._palette.window(S.h, #S.palette_items, S.palette_sel)
   assert_eq(win, 8, "T83 eight window rows")
   assert_eq(off, 1, "T83 the first entry starts the window")
   local painted = 0
@@ -1118,7 +1118,7 @@ do
   for _ = 1, 10 do uimod._handle_key({ kind = "special", name = "down" }) end
   uimod._paint(true)
   S = uimod._get_state()
-  local win2 = uimod._palette_window(S.h, #S.palette_items, S.palette_sel)
+  local win2 = uimod._palette.window(S.h, #S.palette_items, S.palette_sel)
   assert_eq(S.palette_sel, 11, "T83 the selection moved to the 11th entry")
   assert_eq(#rows_with(uimod, S, "/clear"), 0, "T83 the first entry is no longer painted")
   assert_true(#rows_with(uimod, S, S.palette_items[S.palette_sel].label) > 0,
@@ -1171,7 +1171,7 @@ do
     return lw
   end
   local lwcmd = widest_label(SCmd.palette_items)
-  local _, offcmd = cmdui._palette_window(SCmd.h, #SCmd.palette_items, SCmd.palette_sel)
+  local _, offcmd = cmdui._palette.window(SCmd.h, #SCmd.palette_items, SCmd.palette_sel)
   for i = 1, 8 do
     local it = SCmd.palette_items[offcmd + i - 1]
     if it and it.desc and it.desc ~= "" then
@@ -1189,7 +1189,7 @@ do
     gutter_ski + lwski + 3,
     "T83 the skill description column aligns with the command rows")
   -- 10 > 8: an indicator is expected on the scrolling window
-  local _, off0 = cmdui._palette_window(SCmd.h, #SCmd.palette_items, SCmd.palette_sel)
+  local _, off0 = cmdui._palette.window(SCmd.h, #SCmd.palette_items, SCmd.palette_sel)
   assert_true(off0 == 1 and #SCmd.palette_items > 8,
     "T83 the window scrolls and needs an indicator")
   assert_true(strip(cmdui._row(LCmd.palette_row + 8 + 1)):match("%d+/%d+") ~= nil,
@@ -1202,7 +1202,7 @@ do
   for _ = 1, 12 do m._handle_key({ kind = "special", name = "down" }) end
   local Sm = m._get_state()
   local Lm = m._layout()
-  local _, offm = m._palette_window(Sm.h, #Sm.palette_items, Sm.palette_sel)
+  local _, offm = m._palette.window(Sm.h, #Sm.palette_items, Sm.palette_sel)
   local target = Sm.palette_items[offm + 2] -- the third painted row
   assert_notnil(target, "T83 the third painted row has an entry")
   assert_true(target.skill, "T83 the third painted row is a skill")
@@ -1216,7 +1216,7 @@ do
   for _ = 1, 10 do m2._handle_key({ kind = "special", name = "down" }) end
   local S2 = m2._get_state()
   local L2 = m2._layout()
-  local w2 = m2._palette_window(S2.h, #S2.palette_items, S2.palette_sel)
+  local w2 = m2._palette.window(S2.h, #S2.palette_items, S2.palette_sel)
   local sel_before, input_before = S2.palette_sel, S2.input
   m2._handle_key({ kind = "mouse", name = "press", row = L2.palette_row + w2 + 1, col = 5, button = 0 })
   S2 = m2._get_state()
@@ -1232,7 +1232,7 @@ do
   t12._paint(true)
   local S12 = t12._get_state()
   local L12 = t12._layout()
-  local w12 = t12._palette_window(S12.h, #S12.palette_items, S12.palette_sel)
+  local w12 = t12._palette.window(S12.h, #S12.palette_items, S12.palette_sel)
   assert_eq(w12, 6, "T83 a 12-row terminal shrinks the window to half")
   -- The dock budget may shrink the reserved region below the ideal window+2
   -- (the transcript minimum takes priority); what must
@@ -1264,7 +1264,7 @@ do
   t8._paint(true)
   local S8 = t8._get_state()
   local L8 = t8._layout()
-  local w8 = t8._palette_window(S8.h, #S8.palette_items, S8.palette_sel)
+  local w8 = t8._palette.window(S8.h, #S8.palette_items, S8.palette_sel)
   assert_true(L8.palette_row + w8 + 1 > L8.footer_row - 1, "T83 the indicator row is outside the region")
   for r = L8.palette_row + 1, L8.footer_row - 1 do
     assert_true(strip(t8._row(r)):match("%d+/%d+") == nil,
