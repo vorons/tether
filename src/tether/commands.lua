@@ -631,8 +631,133 @@ function M.list_sessions(workspace)
     return session.session_files(workspace) or {}
 end
 
--- Phase C 3.1: slash-dispatch table (name -> handler, bag/callback shape).
--- Routing is an exact-name match (no order sensitivity, unlike key
+-- ui-facade-thinning 2.1: palette pick appliers live next to the data
+-- they apply (resume/model rows come from commands surfaces).
+-- Moved verbatim from ui.lua with S -> bag; visible side effects
+-- (transcript seed/reset/append, tail bump, splash row, UI strings)
+-- come through deps so this module never touches the facade.
+-- IN:  pick_resume(bag, deps, id), pick_model(bag, deps, item, provider),
+--      pick_think(bag, deps, level); bag is the ui state, deps is
+--      { resume, seed, reset, append, bump, splash, copy } from the facade
+--      (resume routes through the facade's commands table so test/dev
+--      stubs of the commands global keep working).
+-- OUT: applied session/model/level + echo rows; whatever the applier returns.
+-- EXAMPLE:
+--      commands.pick_think(S, deps, "high") --> reasoning set + echo row
+function M.pick_resume(bag, deps, id)
+    if not id then return end
+    -- §6.8 /resume: actually load the picked session
+    local sid, messages = deps.resume(id)
+    if sid then
+        bag.session_id = sid
+        if bag.cfg then bag.cfg._session_id = sid end
+        -- pi-style-input-and-footer: a resumed session starts its
+        -- counters over; the old session's totals are not this one's
+        bag.tokens_in, bag.tokens_out = 0, 0
+        -- the picked session replaces the visible transcript;
+        -- appending would mix two conversations on one screen. The splash
+        -- stays first, like the -r startup path above.
+        local seeded = deps.seed(messages or {})
+        if #seeded > 0 then
+            table.insert(seeded, 1, deps.splash())
+            deps.reset(seeded)
+        end
+        deps.append(
+            { role = "system", text = deps.copy.session.resumed_prefix .. tostring(sid):sub(1, 8) .. deps.copy.session.resumed_suffix })
+        deps.bump()
+    end
+end
+
+function M.pick_model(bag, deps, item, provider)
+    local label = (type(item) == "table" and item.label) or item
+    if not label then return end
+    local model_id = label:match("^model_set:(.*)$") or label
+    local prov = provider
+    if prov == nil and type(item) == "table" then prov = item.provider end
+    if type(prov) == "string" and prov ~= "" and bag.cfg
+        and bag.cfg.provider ~= prov then
+        -- picking another provider's model switches provider and
+        -- re-resolves everything provider-scoped (endpoint, key env, key),
+        -- so the next turn hits the new endpoint at once. Resolving only
+        -- the key left base_url baked for the old provider: the turn then
+        -- reached the old endpoint with the new model name and failed
+        -- until a restart re-baked the URL.
+        bag.cfg.provider = prov
+        bag.cfg._auth_style = nil
+        local cfgmod = rawget(_G, "config")
+        -- endpoint re-resolution must not clobber the active config module:
+        -- a test/dev stub may carry api_key without for_provider.
+        local for_provider = (type(cfgmod) == "table" and cfgmod.for_provider)
+            or nil
+        if type(for_provider) ~= "function" then
+            local chunk = loadfile("src/tether/config.lua")
+            local real = chunk and chunk() or nil
+            if type(real) == "table" then for_provider = real.for_provider end
+        end
+        if type(for_provider) == "function" then
+            local ok, c2 = pcall(for_provider, bag.cfg, prov)
+            if ok and type(c2) == "table" then
+                -- model is assigned below from the pick (for_provider would
+                -- fall back to the catalog default), never from c2.
+                bag.cfg.base_url = c2.base_url
+                bag.cfg.api_key_env = c2.api_key_env
+                bag.cfg.provider_env = c2.provider_env
+            end
+        end
+        if type(cfgmod) == "table" and cfgmod.api_key then
+            local ok, key = pcall(cfgmod.api_key, bag.cfg)
+            bag.api_key = (ok and type(key) == "string" and key) or ""
+            bag.cfg.api_key = bag.api_key
+        else
+            bag.api_key = ""
+        end
+    end
+    bag.model_name = model_id
+    if bag.cfg then bag.cfg.model = model_id end
+    -- T177: persist the pick to the machine-managed side file so a restart
+    -- reloads it via config.load. Best-effort (pcall): the in-memory state
+    -- above already applies for this session.
+    do
+        local cfgmod = rawget(_G, "config")
+        if type(cfgmod) ~= "table" or type(cfgmod.persist_keys) ~= "function" then
+            local chunk = loadfile("src/tether/config.lua")
+            cfgmod = (chunk and chunk()) or nil
+        end
+        if cfgmod and cfgmod.persist_keys then
+            local home = (bag.cfg and bag.cfg._auth_home) or os.getenv("HOME") or ""
+            -- dynamic-provider-catalog: a providerless pick keeps the
+            -- current provider — persist skips nil keys, so never bake a
+            -- hardcoded fallback into the file (it used to write "openai").
+            local prov = (bag.cfg and bag.cfg.provider) or nil
+            pcall(cfgmod.persist_keys, home, { provider = prov, model = model_id })
+        end
+    end
+    local where = (type(prov) == "string" and prov ~= "") and (prov .. "/") or ""
+    deps.append({ role = "system", text = "→ model: " .. where .. model_id })
+    deps.bump()
+end
+
+-- add-reasoning-level: apply a level from /think or its picker — in-memory
+-- first, then best-effort persistence (a failed write keeps the session on
+-- the picked level), then the echo row, exactly like pick_model.
+function M.pick_think(bag, deps, level)
+    if bag.cfg then bag.cfg.reasoning = level end
+    do
+        local cfgmod = rawget(_G, "config")
+        if type(cfgmod) ~= "table" or type(cfgmod.persist_keys) ~= "function" then
+            local chunk = loadfile("src/tether/config.lua")
+            cfgmod = (chunk and chunk()) or nil
+        end
+        if cfgmod and cfgmod.persist_keys then
+            local home = (bag.cfg and bag.cfg._auth_home) or os.getenv("HOME") or ""
+            pcall(cfgmod.persist_keys, home, { reasoning = level })
+        end
+    end
+    deps.append({ role = "system", text = deps.copy.session.thinking_prefix .. level })
+    deps.bump()
+end
+
+-- Phase C 3.1: slash-dispatch table (name -> handler, bag/callback shape).-- Routing is an exact-name match (no order sensitivity, unlike key
 -- dispatch), so no route() oracle is needed. Each entry forwards to the
 -- facade callback of the same name: bag is the ui state, cb carries the
 -- S-mutating command bodies the facade owns until Phase C completes.

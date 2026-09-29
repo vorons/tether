@@ -2956,118 +2956,51 @@ local function submit_login_secret(raw)
     return M._auth_flow.submit(S, M._auth_deps(), raw)
 end
 
+-- Impure edge for commands.pick_* appliers, built per call.
+-- M-field (200-locals limit).
+function M._pick_deps()
+    return {
+        resume = function(id) return commands.resume(id, nil, S.cfg) end,
+        seed = function(msgs) return transcript.seed(msgs) end,
+        reset = function(rows) return transcript.reset(rows) end,
+        append = function(row) return transcript.append(row) end,
+        bump = bump_transcript,
+        splash = function() return M._splash_entry() end,
+        copy = M._copy,
+    }
+end
+
 -- palette-only R2: Enter/mouse actions for picked resume/model rows.
--- One local (file is at the 200-local limit).
+-- Appliers live in commands (ui-facade-thinning 2.1); the facade keeps
+-- these one-line proxies. One local (file is at the 200-local limit).
 local pick = {}
+-- Test/dev stubs of the commands global predate pick_* (3.1 pattern):
+-- fall back to the file when the captured table has no entry point.
+-- Locals live inside the proxies (the chunk sits at the 200-local limit).
 function pick.resume(id)
-    if not id then return end
-    -- §6.8 /resume: actually load the picked session
-    local sid, messages = commands.resume(id, nil, S.cfg)
-    if sid then
-        S.session_id = sid
-        if S.cfg then S.cfg._session_id = sid end
-        -- pi-style-input-and-footer: a resumed session starts its
-        -- counters over; the old session's totals are not this one's
-        S.tokens_in, S.tokens_out = 0, 0
-        -- the picked session replaces the visible transcript;
-        -- appending would mix two conversations on one screen. The splash
-        -- stays first, like the -r startup path above.
-        local seeded = transcript.seed(messages or {})
-        if #seeded > 0 then
-            table.insert(seeded, 1, M._splash_entry())
-            transcript.reset(seeded)
-        end
-        transcript.append(
-            { role = "system", text = M._copy.session.resumed_prefix .. tostring(sid):sub(1, 8) .. M._copy.session.resumed_suffix })
-        bump_transcript()
+    local cmdmod = commands
+    if type(cmdmod.pick_resume) ~= "function" then
+        local chunk = loadfile("src/tether/commands.lua")
+        cmdmod = (chunk and chunk()) or cmdmod
     end
+    return cmdmod.pick_resume(S, M._pick_deps(), id)
 end
 function pick.model(item, provider)
-    local label = (type(item) == "table" and item.label) or item
-    if not label then return end
-    local model_id = label:match("^model_set:(.*)$") or label
-    local prov = provider
-    if prov == nil and type(item) == "table" then prov = item.provider end
-    if type(prov) == "string" and prov ~= "" and S.cfg
-        and S.cfg.provider ~= prov then
-        -- picking another provider's model switches provider and
-        -- re-resolves everything provider-scoped (endpoint, key env, key),
-        -- so the next turn hits the new endpoint at once. Resolving only
-        -- the key left base_url baked for the old provider: the turn then
-        -- reached the old endpoint with the new model name and failed
-        -- until a restart re-baked the URL.
-        S.cfg.provider = prov
-        S.cfg._auth_style = nil
-        local cfgmod = rawget(_G, "config")
-        -- endpoint re-resolution must not clobber the active config module:
-        -- a test/dev stub may carry api_key without for_provider.
-        local for_provider = (type(cfgmod) == "table" and cfgmod.for_provider)
-            or nil
-        if type(for_provider) ~= "function" then
-            local chunk = loadfile("src/tether/config.lua")
-            local real = chunk and chunk() or nil
-            if type(real) == "table" then for_provider = real.for_provider end
-        end
-        if type(for_provider) == "function" then
-            local ok, c2 = pcall(for_provider, S.cfg, prov)
-            if ok and type(c2) == "table" then
-                -- model is assigned below from the pick (for_provider would
-                -- fall back to the catalog default), never from c2.
-                S.cfg.base_url = c2.base_url
-                S.cfg.api_key_env = c2.api_key_env
-                S.cfg.provider_env = c2.provider_env
-            end
-        end
-        if type(cfgmod) == "table" and cfgmod.api_key then
-            local ok, key = pcall(cfgmod.api_key, S.cfg)
-            S.api_key = (ok and type(key) == "string" and key) or ""
-            S.cfg.api_key = S.api_key
-        else
-            S.api_key = ""
-        end
+    local cmdmod = commands
+    if type(cmdmod.pick_model) ~= "function" then
+        local chunk = loadfile("src/tether/commands.lua")
+        cmdmod = (chunk and chunk()) or cmdmod
     end
-    S.model_name = model_id
-    if S.cfg then S.cfg.model = model_id end
-    -- T177: persist the pick to the machine-managed side file so a restart
-    -- reloads it via config.load. Best-effort (pcall): the in-memory state
-    -- above already applies for this session.
-    do
-        local cfgmod = rawget(_G, "config")
-        if type(cfgmod) ~= "table" or type(cfgmod.persist_keys) ~= "function" then
-            local chunk = loadfile("src/tether/config.lua")
-            cfgmod = (chunk and chunk()) or nil
-        end
-        if cfgmod and cfgmod.persist_keys then
-            local home = (S.cfg and S.cfg._auth_home) or os.getenv("HOME") or ""
-            -- dynamic-provider-catalog: a providerless pick keeps the
-            -- current provider — persist skips nil keys, so never bake a
-            -- hardcoded fallback into the file (it used to write "openai").
-            local prov = (S.cfg and S.cfg.provider) or nil
-            pcall(cfgmod.persist_keys, home, { provider = prov, model = model_id })
-        end
-    end
-    local where = (type(prov) == "string" and prov ~= "") and (prov .. "/") or ""
-    transcript.append({ role = "system", text = "→ model: " .. where .. model_id })
-    bump_transcript()
+    return cmdmod.pick_model(S, M._pick_deps(), item, provider)
 end
--- add-reasoning-level: apply a level from /think or its picker — in-memory
--- first, then best-effort persistence (a failed write keeps the session on
--- the picked level), then the echo row, exactly like pick.model.
+-- add-reasoning-level: apply a level from /think or its picker.
 function pick.think(level)
-    if S.cfg then S.cfg.reasoning = level end
-    do
-        local cfgmod = rawget(_G, "config")
-        if type(cfgmod) ~= "table" or type(cfgmod.persist_keys) ~= "function" then
-            local chunk = loadfile("src/tether/config.lua")
-            cfgmod = (chunk and chunk()) or nil
-        end
-        if cfgmod and cfgmod.persist_keys then
-            local home = (S.cfg and S.cfg._auth_home) or os.getenv("HOME") or ""
-            pcall(cfgmod.persist_keys, home, { reasoning = level })
-        end
+    local cmdmod = commands
+    if type(cmdmod.pick_think) ~= "function" then
+        local chunk = loadfile("src/tether/commands.lua")
+        cmdmod = (chunk and chunk()) or cmdmod
     end
-        transcript.append({ role = "system", text = M._copy.session.thinking_prefix .. level })
-    bump_transcript()
+    return cmdmod.pick_think(S, M._pick_deps(), level)
 end
 
 -- add-llm-compaction: `rest` is the free text after the command word
