@@ -1178,7 +1178,7 @@ do
   for r = L.palette_row + 1, L.palette_row + L.palette_h - 2 do
     if uim._strip_sgr(uim._row(r) or ""):find("/clear", 1, true) then entries = entries + 1 end
   end
-  local w12 = uim._palette_window(S.h, #S.palette_items, S.palette_sel)
+  local w12 = uim._palette.window(S.h, #S.palette_items, S.palette_sel)
   assert_true(entries < w12, "T274 the entry window shrank before the hint dropped")
   -- ASCII mode: no non-ASCII glyph on the hint row
   local uia = run_ui_with({ 17 }, {
