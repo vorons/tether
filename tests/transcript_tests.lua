@@ -1386,6 +1386,47 @@ do
   print("T1.1 render_viewport module: OK")
 end
 
+-- scroll-render-budget 2.1: page-step scroll budget with the REAL
+-- render_entry (close-without-code verdict — this test pins the measured
+-- 1.8ms/step against the 8ms budget so future renderer changes cannot
+-- silently 4x it).
+do
+  local uimod, S = run_ui_with({ 17 }, {
+    agent = { turn = function() return true end, get_history = function() return {} end },
+  })
+  local tr = uimod._transcript
+  tr.clear()
+  local prose = "Here is what I found in the codebase. "
+  local fence = "```lua\nlocal x = 1\n```\n"
+  for i = 1, 1000 do
+    local text
+    if i % 2 == 0 then text = string.rep(prose, 4)
+    else text = fence .. string.rep(prose, 2) end
+    tr.append({ role = (i % 2 == 0) and "user" or "assistant", text = text })
+  end
+  local L = { w = 80, h = 24, transcript_row = 1, transcript_h = 10 }
+  local P = { trunc = function(s) return s end, caret = function() return "|" end,
+    scroll_shift_seq = function() return "" end }
+  local total = tr.ensure_index(78)
+  local slice = { content_width = 78, gutter = " ", scroll = 0,
+    user_scrolled = true, streaming = false }
+  local t0 = os.clock()
+  local steps = 0
+  local lo = 1
+  while lo <= total - 10 do
+    tr.set_visible(lo, lo + 9)
+    slice.scroll = total - (lo + 9)
+    tr.render_viewport(slice, L, P)
+    steps = steps + 1
+    lo = lo + 10
+  end
+  local avg = (os.clock() - t0) * 1000 / math.max(steps, 1)
+  assert_true(steps > 50, "T1.1b scroll covers pages")
+  assert_true(avg <= 8, "T1.1b page step within 8ms budget (" ..
+    string.format("%.2f", avg) .. "ms)")
+  print("T1.1b scroll budget: OK")
+end
+
 if failed > 0 then
     os.exit(1)
 end
