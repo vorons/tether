@@ -1408,7 +1408,6 @@ function M.cancel_background(cfg, reason, on_event)
 end
 
 M.estimate_tokens = compression.estimate_tokens
-M._projection_for = projection.projection_for
 M.compress_history = compression.compress_history
 M.compact_history = compact_history
 M.should_summarize = compression.should_summarize
@@ -1417,7 +1416,5 @@ M.extract_anchors = compression.extract_anchors
 M.format_anchors = compression.format_anchors
 M.prune_superseded_reads = prune_superseded_reads
 M.parse_args = parse_args
-M.json_parse = json_parse
-M.SUMMARY_MARKER = compression.SUMMARY_MARKER
 
 return M
