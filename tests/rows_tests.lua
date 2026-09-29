@@ -1773,9 +1773,8 @@ do
   assert_eq(cf.decide_key({ kind = "special", name = "up" }, 2, 5, digits).move, -1, "T4.2a up moves")
   assert_eq(cf.decide_key({ kind = "special", name = "left" }, 2, 5, digits), nil, "T4.2a other keys ignored")
   assert_eq(cf.decide_key(nil, 1, 5, digits), nil, "T4.2a nil key ignored")
-  -- facade proxy: the tail renders through the module with identical rows
-  local ui = dofile("src/tether/ui.lua")
-  assert_eq(type(ui._confirm.menu_rows), "function", "T4.2a facade loads ui_confirm")
+  -- module entry point: the tail renders through ui_confirm directly.
+  assert_eq(type(cf.menu_rows), "function", "T4.2a ui_confirm entry point")
   print("T4.2a ui_confirm rows+kernel: OK")
 end
 
