@@ -18,6 +18,9 @@
 #include <strings.h>
 #include <poll.h>
 #include <time.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 #include <lua.h>
 #include <lauxlib.h>
 #include <lualib.h>
@@ -1786,7 +1789,7 @@ static int l_fetch_bg(lua_State *L)
 
 /* --- background process spawn for the subagent orchestrator ----------------
  *
- * tether.exec_bg_start(cmd) -> handle | nil, err
+ * tether.exec_bg_argv(argv, opts) -> handle | nil, err
  * tether.exec_bg_poll(handle, timeout_ms) -> "running"
  *    | "done", exit_code | "failed", err
  * tether.exec_bg_kill(handle) -> true (idempotent; reaps)
@@ -1795,15 +1798,19 @@ static int l_fetch_bg(lua_State *L)
  * Unlike tether.exec (blocking, spinner quanta, Ctrl+C wired in), the bg
  * family never blocks the loop and never touches stdin: the Lua side polls
  * between reactor ticks and polls tether.abort_requested() itself, killing
- * on abort. Children get their own process group so kill(-pid) ends the
+ * on abort. The start step takes an argv table plus spawn options and
+ * launches the child directly (fork + chdir + setenv + dup2 + execv, no
+ * intermediate shell), so byte-exact arguments never pass through shell
+ * quoting. Children get their own process group so kill(-pid) ends the
  * whole tree, mirroring l_exec; the parent repeats the setpgid best-effort
  * to narrow the fork/exec race (either side targets the same group id).
  * Handles reap exactly once (poll/kill/free/__gc share the helpers); a
  * live child handed to free (or dropped for __gc) is killed first so no
  * zombie or orphan accumulates. Stdout/stderr routing is the caller's job
- * (the orchestrator appends shell redirection like tools.run does) — the
- * host stays dumb. A killed child reports "done", 127; the Lua layer owns
- * cancellation semantics (it knows it killed). */
+ * (the orchestrator reserves the outfile beforehand, like tools.run does)
+ * — the host stays dumb. A killed child reports "done", 127; the Lua layer
+ * owns cancellation semantics (it knows it killed). Pre-exec failures
+ * travel back through a CLOEXEC error pipe naming the stage. */
 
 struct exec_proc {
     pid_t pid;
@@ -1881,39 +1888,601 @@ static void exec_proc_kill(struct exec_proc *p)
     }
 }
 
-static int l_exec_bg_start(lua_State *L)
+/* --- background direct-spawn for the subagent orchestrator -----------------
+ *
+ * tether.exec_bg_argv(argv, opts) -> handle | nil, err
+ *
+ * argv is 1..n strings (n >= 1, no NUL bytes): the child image plus its
+ * arguments, launched with execv and no intermediate shell — the task text
+ * and paths reach the child byte-exact instead of folded through shell
+ * quoting. opts is an optional table:
+ *   cwd     string | nil   working directory (no chdir when absent)
+ *   env     table | nil    string->string additions via setenv
+ *   outfile string | nil   stdout+stderr redirect target, opened
+ *                          O_WRONLY|O_CREAT|O_TRUNC 0600 (inherited fds
+ *                          when absent)
+ *   stdin   "null" | nil   stdin from /dev/null (default; detaches the
+ *                          child from the terminal so init_termios never
+ *                          draws SIGTTOU), or
+ *           {pipe = bytes} stdin from a host-owned pipe carrying exactly
+ *                          those bytes (leading-dash tasks parse_args
+ *                          would eat as flags on argv).
+ *
+ * The piped-input writer runs in a reparented grandchild (pipe + two
+ * forks), so the spawner — the UI event loop — never blocks in write().
+ * A failure before exec (chdir, setenv, outfile open, dup2, execv)
+ * travels back through a CLOEXEC error pipe naming the stage, instead of
+ * collapsing into a bare 127 with an empty outfile. Handles, group-kill,
+ * and reap-once semantics are the shared exec_proc family above. */
+
+struct argv_spawn_env {
+    char *name;
+    char *value;
+};
+
+/* Pre-exec failure stages reported through the error pipe. */
+#define ARGVE_CHDIR  'c'
+#define ARGVE_SETENV 's'
+#define ARGVE_OUTFILE 'o'
+#define ARGVE_DUP2   'd'
+#define ARGVE_DEVNULL 'n'
+#define ARGVE_EXECV  'e'
+
+struct argv_spawn_err {
+    char stage;
+    int errnum;
+};
+
+/* Best-effort child-side report, then out. A single small write is atomic
+ * under PIPE_BUF, so the parent either sees the whole report or EOF. */
+static void argv_spawn_fail(int errfd, char stage, int errnum)
 {
-    const char *cmd = luaL_checkstring(L, 1);
-    pid_t pid = fork();
-    if (pid < 0) {
+    struct argv_spawn_err rep;
+    rep.stage = stage;
+    rep.errnum = errnum;
+    (void)write(errfd, &rep, sizeof(rep));
+    _exit(127);
+}
+
+static void argv_spawn_free_argv(char **argv, size_t n)
+{
+    if (argv != NULL) {
+        size_t i;
+        for (i = 0; i < n; i++)
+            free(argv[i]);
+        free(argv);
+    }
+}
+
+static void argv_spawn_free_env(struct argv_spawn_env *env, size_t n)
+{
+    if (env != NULL) {
+        size_t i;
+        for (i = 0; i < n; i++) {
+            free(env[i].name);
+            free(env[i].value);
+        }
+        free(env);
+    }
+}
+
+static int l_exec_bg_argv(lua_State *L)
+{
+    char **argv = NULL;
+    size_t argc = 0;
+    char *cwd = NULL;
+    struct argv_spawn_env *env = NULL;
+    size_t envn = 0;
+    char *outfile = NULL;
+    const char *pipe_bytes = NULL;
+    size_t pipe_len = 0;
+    int want_pipe = 0;
+    char *pipe_copy = NULL;
+    int have_stdin_pipe = 0;
+    int stdin_pipe[2] = { -1, -1 };
+    int err_pipe[2] = { -1, -1 };
+    pid_t pid = -1;
+    int push_nil_err = 0;
+    char errbuf[256];
+    size_t i;
+
+    errbuf[0] = '\0';
+
+    /* --- argv table: 1..n non-empty C-compatible strings --- */
+    luaL_checktype(L, 1, LUA_TTABLE);
+    argc = lua_rawlen(L, 1);
+    if (argc < 1) {
         lua_pushnil(L);
-        lua_pushstring(L, strerror(errno));
+        lua_pushstring(L, "exec_bg_argv: argv must hold at least the program");
         return 2;
     }
-    if (pid == 0) {
-        setpgid(0, 0);
-        execl("/bin/sh", "sh", "-c", cmd, (char *)NULL);
-        _exit(127);
-    }
-    setpgid(pid, pid); /* best effort: narrows the fork/exec race, see above */
-    struct exec_proc *p = calloc(1, sizeof(*p));
-    if (p == NULL) {
-        /* leak-free failure: the child is already running; kill + reap it */
-        kill(-pid, SIGKILL);
-        {
-            int st = 0;
-            while (waitpid(pid, &st, 0) < 0 && errno == EINTR) { }
-        }
+    argv = calloc(argc + 1, sizeof(*argv));
+    if (argv == NULL) {
         lua_pushnil(L);
         lua_pushstring(L, "out of memory");
         return 2;
     }
-    p->pid = pid;
-    struct exec_proc **pp = lua_newuserdatauv(L, sizeof(*pp), 0);
-    *pp = p;
-    luaL_getmetatable(L, "tether.exec_proc");
-    lua_setmetatable(L, -2);
-    return 1;
+    for (i = 0; i < argc; i++) {
+        const char *s;
+        size_t len;
+        lua_geti(L, 1, (lua_Integer)(i + 1));
+        if (lua_type(L, -1) != LUA_TSTRING) {
+            lua_pop(L, 1);
+            snprintf(errbuf, sizeof(errbuf),
+                     "exec_bg_argv: argv[%d] is not a string", (int)(i + 1));
+            push_nil_err = 1;
+            break;
+        }
+        s = lua_tolstring(L, -1, &len);
+        if (len == 0 || memchr(s, '\0', len) != NULL) {
+            lua_pop(L, 1);
+            snprintf(errbuf, sizeof(errbuf),
+                     "exec_bg_argv: argv[%d] is empty or holds a NUL byte",
+                     (int)(i + 1));
+            push_nil_err = 1;
+            break;
+        }
+        argv[i] = malloc(len + 1);
+        if (argv[i] == NULL) {
+            lua_pop(L, 1);
+            snprintf(errbuf, sizeof(errbuf), "out of memory");
+            push_nil_err = 1;
+            break;
+        }
+        memcpy(argv[i], s, len);
+        argv[i][len] = '\0';
+        lua_pop(L, 1);
+    }
+    argv[argc] = NULL;
+    if (push_nil_err) {
+        argv_spawn_free_argv(argv, argc);
+        lua_pushnil(L);
+        lua_pushstring(L, errbuf);
+        return 2;
+    }
+
+    /* --- opts table (optional) --- */
+    if (!lua_isnoneornil(L, 2)) {
+        luaL_checktype(L, 2, LUA_TTABLE);
+        if (lua_getfield(L, 2, "cwd") != LUA_TNIL) {
+            const char *s;
+            size_t len;
+            if (lua_type(L, -1) != LUA_TSTRING) {
+                lua_pushnil(L);
+                lua_pushstring(L, "exec_bg_argv: opts.cwd is not a string");
+                argv_spawn_free_argv(argv, argc);
+                return 2;
+            }
+            s = lua_tolstring(L, -1, &len);
+            if (len == 0 || memchr(s, '\0', len) != NULL) {
+                lua_pushnil(L);
+                lua_pushstring(L, "exec_bg_argv: opts.cwd is empty or holds a NUL byte");
+                argv_spawn_free_argv(argv, argc);
+                return 2;
+            }
+            cwd = malloc(len + 1);
+            if (cwd == NULL) {
+                lua_pushnil(L);
+                lua_pushstring(L, "out of memory");
+                argv_spawn_free_argv(argv, argc);
+                return 2;
+            }
+            memcpy(cwd, s, len);
+            cwd[len] = '\0';
+        }
+        lua_pop(L, 1);
+        if (lua_getfield(L, 2, "outfile") != LUA_TNIL) {
+            const char *s;
+            size_t len;
+            if (lua_type(L, -1) != LUA_TSTRING) {
+                lua_pushnil(L);
+                lua_pushstring(L, "exec_bg_argv: opts.outfile is not a string");
+                free(cwd);
+                argv_spawn_free_argv(argv, argc);
+                return 2;
+            }
+            s = lua_tolstring(L, -1, &len);
+            if (len == 0 || memchr(s, '\0', len) != NULL) {
+                lua_pushnil(L);
+                lua_pushstring(L, "exec_bg_argv: opts.outfile is empty or holds a NUL byte");
+                free(cwd);
+                argv_spawn_free_argv(argv, argc);
+                return 2;
+            }
+            outfile = malloc(len + 1);
+            if (outfile == NULL) {
+                lua_pushnil(L);
+                lua_pushstring(L, "out of memory");
+                free(cwd);
+                argv_spawn_free_argv(argv, argc);
+                return 2;
+            }
+            memcpy(outfile, s, len);
+            outfile[len] = '\0';
+        }
+        lua_pop(L, 1);
+        if (lua_getfield(L, 2, "env") != LUA_TNIL) {
+            size_t cap = 0;
+            if (lua_type(L, -1) != LUA_TTABLE) {
+                lua_pushnil(L);
+                lua_pushstring(L, "exec_bg_argv: opts.env is not a table");
+                free(outfile);
+                free(cwd);
+                argv_spawn_free_argv(argv, argc);
+                return 2;
+            }
+            lua_pushnil(L);
+            while (lua_next(L, -2) != 0) {
+                const char *k, *v;
+                size_t klen, vlen;
+                if (lua_type(L, -2) != LUA_TSTRING || lua_type(L, -1) != LUA_TSTRING) {
+                    lua_pop(L, 2);
+                    snprintf(errbuf, sizeof(errbuf),
+                             "exec_bg_argv: opts.env keys and values must be strings");
+                    push_nil_err = 1;
+                    break;
+                }
+                k = lua_tolstring(L, -2, &klen);
+                v = lua_tolstring(L, -1, &vlen);
+                if (klen == 0 || memchr(k, '=', klen) != NULL || memchr(k, '\0', klen) != NULL
+                        || memchr(v, '\0', vlen) != NULL) {
+                    lua_pop(L, 2);
+                    snprintf(errbuf, sizeof(errbuf),
+                             "exec_bg_argv: opts.env holds a bad name or NUL byte");
+                    push_nil_err = 1;
+                    break;
+                }
+                if (envn == cap) {
+                    size_t ncap = cap == 0 ? 8 : cap * 2;
+                    struct argv_spawn_env *nenv = realloc(env, ncap * sizeof(*nenv));
+                    if (nenv == NULL) {
+                        lua_pop(L, 2);
+                        snprintf(errbuf, sizeof(errbuf), "out of memory");
+                        push_nil_err = 1;
+                        break;
+                    }
+                    env = nenv;
+                    cap = ncap;
+                }
+                env[envn].name = malloc(klen + 1);
+                env[envn].value = malloc(vlen + 1);
+                if (env[envn].name == NULL || env[envn].value == NULL) {
+                    free(env[envn].name);
+                    free(env[envn].value);
+                    lua_pop(L, 2);
+                    snprintf(errbuf, sizeof(errbuf), "out of memory");
+                    push_nil_err = 1;
+                    break;
+                }
+                memcpy(env[envn].name, k, klen);
+                env[envn].name[klen] = '\0';
+                memcpy(env[envn].value, v, vlen);
+                env[envn].value[vlen] = '\0';
+                envn++;
+                lua_pop(L, 1);
+            }
+            if (push_nil_err) {
+                lua_pop(L, 1);
+                argv_spawn_free_env(env, envn);
+                free(outfile);
+                free(cwd);
+                argv_spawn_free_argv(argv, argc);
+                lua_pushnil(L);
+                lua_pushstring(L, errbuf);
+                return 2;
+            }
+        }
+        lua_pop(L, 1);
+        if (lua_getfield(L, 2, "stdin") != LUA_TNIL) {
+            if (lua_type(L, -1) == LUA_TSTRING) {
+                const char *mode = lua_tostring(L, -1);
+                if (mode == NULL || strcmp(mode, "null") != 0) {
+                    lua_pushnil(L);
+                    lua_pushstring(L, "exec_bg_argv: opts.stdin must be \"null\" or {pipe = bytes}");
+                    argv_spawn_free_env(env, envn);
+                    free(outfile);
+                    free(cwd);
+                    argv_spawn_free_argv(argv, argc);
+                    return 2;
+                }
+            } else if (lua_type(L, -1) == LUA_TTABLE) {
+                if (lua_getfield(L, -1, "pipe") != LUA_TSTRING) {
+                    lua_pushnil(L);
+                    lua_pushstring(L, "exec_bg_argv: opts.stdin table needs pipe = bytes");
+                    argv_spawn_free_env(env, envn);
+                    free(outfile);
+                    free(cwd);
+                    argv_spawn_free_argv(argv, argc);
+                    return 2;
+                }
+                pipe_bytes = lua_tolstring(L, -1, &pipe_len);
+                want_pipe = 1;
+                lua_pop(L, 1);
+            } else {
+                lua_pushnil(L);
+                lua_pushstring(L, "exec_bg_argv: opts.stdin must be \"null\" or {pipe = bytes}");
+                argv_spawn_free_env(env, envn);
+                free(outfile);
+                free(cwd);
+                argv_spawn_free_argv(argv, argc);
+                return 2;
+            }
+        }
+        lua_pop(L, 1);
+    }
+    /* The pipe payload must survive the forks below: the stack slot above
+     * stays valid (no Lua allocation happens before the forks), but copy
+     * it anyway so later edits cannot break that invariant. */
+    if (want_pipe) {
+        pipe_copy = malloc(pipe_len > 0 ? pipe_len : 1);
+        if (pipe_copy == NULL) {
+            argv_spawn_free_env(env, envn);
+            free(outfile);
+            free(cwd);
+            argv_spawn_free_argv(argv, argc);
+            lua_pushnil(L);
+            lua_pushstring(L, "out of memory");
+            return 2;
+        }
+        if (pipe_len > 0)
+            memcpy(pipe_copy, pipe_bytes, pipe_len);
+    }
+
+    /* --- pipes (before any fork) --- */
+    if (want_pipe && pipe(stdin_pipe) != 0) {
+        snprintf(errbuf, sizeof(errbuf), "pipe: %s", strerror(errno));
+        goto parent_fail;
+    }
+    have_stdin_pipe = want_pipe;
+    if (pipe(err_pipe) != 0) {
+        snprintf(errbuf, sizeof(errbuf), "pipe: %s", strerror(errno));
+        goto parent_fail;
+    }
+    /* The error pipe must not leak into the exec'd image: EOF on the read
+     * end is the parent's "launched" signal. fcntl, not O_CLOEXEC — the
+     * pipe() flag needs newer feature-test macros than this TU sets. */
+    if (fcntl(err_pipe[0], F_SETFD, FD_CLOEXEC) != 0
+            || fcntl(err_pipe[1], F_SETFD, FD_CLOEXEC) != 0) {
+        snprintf(errbuf, sizeof(errbuf), "fcntl: %s", strerror(errno));
+        goto parent_fail;
+    }
+
+    pid = fork();
+    if (pid < 0) {
+        snprintf(errbuf, sizeof(errbuf), "%s", strerror(errno));
+        goto parent_fail;
+    }
+    if (pid == 0) {
+        /* --- exec child: only async-signal-safe calls until execv --- */
+        size_t k;
+        int outfd = -1;
+        close(err_pipe[0]);
+        setpgid(0, 0);
+        if (cwd != NULL && chdir(cwd) != 0)
+            argv_spawn_fail(err_pipe[1], ARGVE_CHDIR, errno);
+        for (k = 0; k < envn; k++) {
+            if (setenv(env[k].name, env[k].value, 1) != 0)
+                argv_spawn_fail(err_pipe[1], ARGVE_SETENV, errno);
+        }
+        if (outfile != NULL) {
+            outfd = open(outfile, O_WRONLY | O_CREAT | O_TRUNC, 0600);
+            if (outfd < 0)
+                argv_spawn_fail(err_pipe[1], ARGVE_OUTFILE, errno);
+            if (dup2(outfd, STDOUT_FILENO) < 0 || dup2(outfd, STDERR_FILENO) < 0)
+                argv_spawn_fail(err_pipe[1], ARGVE_DUP2, errno);
+            if (outfd > STDERR_FILENO)
+                close(outfd);
+        }
+        if (have_stdin_pipe) {
+            if (dup2(stdin_pipe[0], STDIN_FILENO) < 0)
+                argv_spawn_fail(err_pipe[1], ARGVE_DUP2, errno);
+            close(stdin_pipe[0]);
+            close(stdin_pipe[1]);
+        } else {
+            int dn = open("/dev/null", O_RDONLY);
+            if (dn < 0)
+                argv_spawn_fail(err_pipe[1], ARGVE_DEVNULL, errno);
+            if (dup2(dn, STDIN_FILENO) < 0)
+                argv_spawn_fail(err_pipe[1], ARGVE_DUP2, errno);
+            if (dn > STDIN_FILENO)
+                close(dn);
+        }
+        execv(argv[0], argv);
+        argv_spawn_fail(err_pipe[1], ARGVE_EXECV, errno);
+    }
+    setpgid(pid, pid); /* best effort: narrows the fork/exec race, see above */
+
+    if (want_pipe) {
+        /* The writer must not block the spawner (the UI event loop), so it
+         * runs in a reparented grandchild: the intermediate exits at once
+         * (the parent reaps it below) and init inherits the writer. */
+        pid_t mid = fork();
+        if (mid < 0) {
+            struct exec_proc tmp;
+            snprintf(errbuf, sizeof(errbuf), "%s", strerror(errno));
+            close(stdin_pipe[0]);
+            close(stdin_pipe[1]);
+            have_stdin_pipe = 0;
+            close(err_pipe[0]);
+            close(err_pipe[1]);
+            err_pipe[0] = err_pipe[1] = -1;
+            tmp.pid = pid;
+            tmp.done = 0;
+            tmp.exit_code = 0;
+            tmp.err[0] = '\0';
+            exec_proc_kill(&tmp);
+            {
+                int st = 0;
+                while (waitpid(pid, &st, 0) < 0 && errno == EINTR) { }
+            }
+            pid = -1;
+            goto parent_fail_free_only;
+        }
+        if (mid == 0) {
+            pid_t w = fork();
+            if (w < 0)
+                _exit(127);
+            if (w == 0) {
+                /* writer grandchild: push every byte, then out. A reader
+                 * that already exited ends the write early (EPIPE under
+                 * ignored SIGPIPE) — that is shutdown, not an error. */
+                size_t off = 0;
+                signal(SIGPIPE, SIG_IGN);
+                close(err_pipe[0]);
+                close(err_pipe[1]);
+                close(stdin_pipe[0]);
+                while (off < pipe_len) {
+                    ssize_t wrc = write(stdin_pipe[1], pipe_copy + off, pipe_len - off);
+                    if (wrc < 0) {
+                        if (errno == EINTR)
+                            continue;
+                        break;
+                    }
+                    if (wrc == 0)
+                        break;
+                    off += (size_t)wrc;
+                }
+                close(stdin_pipe[1]);
+                _exit(0);
+            }
+            close(err_pipe[0]);
+            close(err_pipe[1]);
+            close(stdin_pipe[0]);
+            close(stdin_pipe[1]);
+            _exit(0);
+        }
+        {
+            int st = 0;
+            while (waitpid(mid, &st, 0) < 0 && errno == EINTR) { }
+        }
+    }
+
+    /* The parent holds no pipe end past this point: the stdin write end
+     * must close here so the reader observes EOF, and the error write end
+     * must close so a successful exec reads as EOF ("launched"). */
+    if (have_stdin_pipe) {
+        close(stdin_pipe[0]);
+        close(stdin_pipe[1]);
+        have_stdin_pipe = 0;
+    }
+    close(err_pipe[1]);
+    err_pipe[1] = -1;
+    {
+        struct argv_spawn_err rep;
+        size_t got = 0;
+        char *dst = (char *)&rep;
+        size_t need = sizeof(rep);
+        int pre_failed = 0;
+        while (got < need) {
+            ssize_t r = read(err_pipe[0], dst + got, need - got);
+            if (r < 0) {
+                if (errno == EINTR)
+                    continue;
+                pre_failed = 1;
+                snprintf(errbuf, sizeof(errbuf), "read: %s", strerror(errno));
+                break;
+            }
+            if (r == 0)
+                break; /* EOF: exec closed the write end — launched */
+            got += (size_t)r;
+        }
+        close(err_pipe[0]);
+        err_pipe[0] = -1;
+        if (!pre_failed && got == need) {
+            const char *stage = "spawn";
+            int st = 0;
+            if (rep.stage == ARGVE_CHDIR)
+                stage = "chdir";
+            else if (rep.stage == ARGVE_SETENV)
+                stage = "setenv";
+            else if (rep.stage == ARGVE_OUTFILE)
+                stage = "open outfile";
+            else if (rep.stage == ARGVE_DUP2)
+                stage = "dup2";
+            else if (rep.stage == ARGVE_DEVNULL)
+                stage = "open /dev/null";
+            else if (rep.stage == ARGVE_EXECV)
+                stage = "execv";
+            /* Reap the failed child: it already exited, so no zombie. */
+            while (waitpid(pid, &st, 0) < 0 && errno == EINTR) { }
+            pid = -1;
+            snprintf(errbuf, sizeof(errbuf), "%s: %s", stage, strerror(rep.errnum));
+            goto parent_fail_free_only;
+        }
+        if (pre_failed)
+            goto parent_fail_reap;
+    }
+
+    {
+        struct exec_proc *p = calloc(1, sizeof(*p));
+        if (p == NULL) {
+            snprintf(errbuf, sizeof(errbuf), "out of memory");
+            goto parent_fail_reap;
+        }
+        p->pid = pid;
+        free(pipe_copy);
+        argv_spawn_free_env(env, envn);
+        free(outfile);
+        free(cwd);
+        argv_spawn_free_argv(argv, argc);
+        {
+            struct exec_proc **pp = lua_newuserdatauv(L, sizeof(*pp), 0);
+            *pp = p;
+            luaL_getmetatable(L, "tether.exec_proc");
+            lua_setmetatable(L, -2);
+        }
+        return 1;
+    }
+
+parent_fail_reap:
+    if (pid >= 0) {
+        struct exec_proc tmp;
+        tmp.pid = pid;
+        tmp.done = 0;
+        tmp.exit_code = 0;
+        tmp.err[0] = '\0';
+        exec_proc_kill(&tmp);
+        {
+            int st = 0;
+            while (waitpid(pid, &st, 0) < 0 && errno == EINTR) { }
+        }
+        pid = -1;
+    }
+parent_fail_free_only:
+    free(pipe_copy);
+    argv_spawn_free_env(env, envn);
+    free(outfile);
+    free(cwd);
+    argv_spawn_free_argv(argv, argc);
+    if (have_stdin_pipe) {
+        close(stdin_pipe[0]);
+        close(stdin_pipe[1]);
+    }
+    if (err_pipe[0] >= 0)
+        close(err_pipe[0]);
+    if (err_pipe[1] >= 0)
+        close(err_pipe[1]);
+    lua_pushnil(L);
+    lua_pushstring(L, errbuf[0] != '\0' ? errbuf : "spawn failed");
+    return 2;
+
+parent_fail:
+    free(pipe_copy);
+    argv_spawn_free_env(env, envn);
+    free(outfile);
+    free(cwd);
+    argv_spawn_free_argv(argv, argc);
+    if (have_stdin_pipe) {
+        close(stdin_pipe[0]);
+        close(stdin_pipe[1]);
+    }
+    if (err_pipe[0] >= 0)
+        close(err_pipe[0]);
+    if (err_pipe[1] >= 0)
+        close(err_pipe[1]);
+    lua_pushnil(L);
+    lua_pushstring(L, errbuf[0] != '\0' ? errbuf : "spawn failed");
+    return 2;
 }
 
 static int l_exec_bg_poll(lua_State *L)
@@ -1973,6 +2542,396 @@ static int l_exec_proc_gc(lua_State *L)
     struct exec_proc **pp = luaL_checkudata(L, 1, "tether.exec_proc");
     if (pp != NULL && *pp != NULL) {
         exec_proc_kill(*pp);
+        free(*pp);
+        *pp = NULL;
+    }
+    return 0;
+}
+
+/* --- loopback OAuth callback listener --------------------------------------
+ *
+ * tether.oauth_wait_start() -> handle | nil, err
+ * tether.oauth_wait_info(handle) -> port, state
+ * tether.oauth_wait_step(handle) -> "waiting"
+ *    | "code", code, state | "failed", err
+ * tether.oauth_wait_free(handle) -> true
+ *
+ * One-shot callback catcher for authorization-code logins: binds
+ * 127.0.0.1 on an ephemeral port (never `localhost` — it may resolve to
+ * ::1 while we hold IPv4), serves exactly one GET request carrying
+ * ?code=..&state=.., answers a fixed 200 page, then closes. The `state`
+ * is minted from the OS CSPRNG at start; the caller embeds it in the
+ * authorize URL and compares the callback's value itself. stepping never
+ * blocks: accept/read run non-blocking and the Lua side drives steps from
+ * its tick (device-poll precedent), owning timeout and abort policy.
+ * code/state travel back still percent-encoded — Lua decodes with the
+ * existing url_decode, the same helper the paste path uses. */
+
+#define OAUTH_WAIT_MAX_HEAD 8192
+#define OAUTH_WAIT_STATE_BYTES 16
+
+struct oauth_wait {
+    int listen_fd;
+    int conn_fd;
+    char buf[OAUTH_WAIT_MAX_HEAD + 1];
+    size_t len;
+    int done;
+    char err[128];
+    int port;
+    char state[OAUTH_WAIT_STATE_BYTES * 2 + 1];
+};
+
+static struct oauth_wait *check_oauth_wait(lua_State *L, int idx)
+{
+    struct oauth_wait **pp = luaL_checkudata(L, idx, "tether.oauth_wait");
+    if (pp == NULL || *pp == NULL)
+        luaL_argerror(L, idx, "freed oauth wait handle");
+    return *pp;
+}
+
+static int oauth_wait_nonblock(int fd)
+{
+    int fl = fcntl(fd, F_GETFL, 0);
+    if (fl < 0)
+        return -1;
+    return fcntl(fd, F_SETFL, fl | O_NONBLOCK);
+}
+
+static void oauth_wait_close(struct oauth_wait *w)
+{
+    if (w->listen_fd >= 0) {
+        close(w->listen_fd);
+        w->listen_fd = -1;
+    }
+    if (w->conn_fd >= 0) {
+        close(w->conn_fd);
+        w->conn_fd = -1;
+    }
+}
+
+/* 16 CSPRNG bytes as 32 hex chars. /dev/urandom needs no feature-test
+ * macros beyond what this TU already sets (unlike getrandom). */
+static int oauth_wait_mint_state(char out[OAUTH_WAIT_STATE_BYTES * 2 + 1])
+{
+    static const char hexd[] = "0123456789abcdef";
+    unsigned char raw[OAUTH_WAIT_STATE_BYTES];
+    int fd = open("/dev/urandom", O_RDONLY);
+    size_t got = 0, i;
+    if (fd < 0)
+        return -1;
+    while (got < sizeof(raw)) {
+        ssize_t r = read(fd, raw + got, sizeof(raw) - got);
+        if (r < 0) {
+            if (errno == EINTR)
+                continue;
+            close(fd);
+            return -1;
+        }
+        if (r == 0) {
+            close(fd);
+            return -1;
+        }
+        got += (size_t)r;
+    }
+    close(fd);
+    for (i = 0; i < sizeof(raw); i++) {
+        out[i * 2] = hexd[(raw[i] >> 4) & 0xF];
+        out[i * 2 + 1] = hexd[raw[i] & 0xF];
+    }
+    out[sizeof(raw) * 2] = '\0';
+    return 0;
+}
+
+static int l_oauth_wait_start(lua_State *L)
+{
+    struct oauth_wait *w;
+    struct sockaddr_in addr;
+    socklen_t alen = sizeof(addr);
+    int one = 1;
+    int fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (fd < 0) {
+        lua_pushnil(L);
+        lua_pushstring(L, strerror(errno));
+        return 2;
+    }
+    if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one)) != 0
+            || oauth_wait_nonblock(fd) != 0) {
+        int e = errno;
+        close(fd);
+        lua_pushnil(L);
+        lua_pushstring(L, strerror(e));
+        return 2;
+    }
+    memset(&addr, 0, sizeof(addr));
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    addr.sin_port = 0; /* ephemeral: no fixed-port collisions, no TOCTOU */
+    if (bind(fd, (struct sockaddr *)&addr, sizeof(addr)) != 0
+            || listen(fd, 1) != 0
+            || getsockname(fd, (struct sockaddr *)&addr, &alen) != 0) {
+        int e = errno;
+        close(fd);
+        lua_pushnil(L);
+        lua_pushstring(L, strerror(e));
+        return 2;
+    }
+    w = calloc(1, sizeof(*w));
+    if (w == NULL) {
+        close(fd);
+        lua_pushnil(L);
+        lua_pushstring(L, "out of memory");
+        return 2;
+    }
+    if (oauth_wait_mint_state(w->state) != 0) {
+        close(fd);
+        free(w);
+        lua_pushnil(L);
+        lua_pushstring(L, "no entropy source");
+        return 2;
+    }
+    w->listen_fd = fd;
+    w->conn_fd = -1;
+    w->port = (int)ntohs(addr.sin_port);
+    {
+        struct oauth_wait **pp = lua_newuserdatauv(L, sizeof(*pp), 0);
+        *pp = w;
+        luaL_getmetatable(L, "tether.oauth_wait");
+        lua_setmetatable(L, -2);
+    }
+    return 1;
+}
+
+static int l_oauth_wait_info(lua_State *L)
+{
+    struct oauth_wait *w = check_oauth_wait(L, 1);
+    lua_pushinteger(L, w->port);
+    lua_pushstring(L, w->state);
+    return 2;
+}
+
+/* Copy the raw (still percent-encoded) value of query key `key` out of the
+ * request target: returns a malloc'd string or NULL when absent. */
+static char *oauth_wait_query_val(const char *target, size_t tlen, const char *key)
+{
+    size_t klen = strlen(key);
+    const char *q = target;
+    const char *tend = target + tlen;
+    const char *qm = NULL;
+    size_t i;
+    for (i = 0; i < tlen; i++) {
+        if (target[i] == '?') {
+            qm = target + i + 1;
+            break;
+        }
+    }
+    if (qm == NULL)
+        return NULL;
+    for (q = qm; q + klen + 1 <= tend; q++) {
+        if ((q == qm || q[-1] == '&') && memcmp(q, key, klen) == 0 && q[klen] == '=') {
+            const char *v = q + klen + 1;
+            const char *e = v;
+            while (e < tend && *e != '&' && *e != ' ' && *e != '\r' && *e != '\n')
+                e++;
+            {
+                char *out = malloc((size_t)(e - v) + 1);
+                if (out == NULL)
+                    return NULL;
+                memcpy(out, v, (size_t)(e - v));
+                out[e - v] = '\0';
+                return out;
+            }
+        }
+    }
+    return NULL;
+}
+
+static const char oauth_wait_page_body[] =
+    "tether: login received - return to the terminal\n";
+
+/* Best-effort fixed 200 page, then the single-shot closes both sockets.
+ * SIGPIPE is ignored around the write: a browser that already went away
+ * must end the wait, never kill the process. */
+static void oauth_wait_answer(struct oauth_wait *w)
+{
+    char head[256];
+    void (*oldpipe)(int) = signal(SIGPIPE, SIG_IGN);
+    int hlen = snprintf(head, sizeof(head),
+        "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n"
+        "Content-Length: %u\r\nConnection: close\r\n\r\n",
+        (unsigned)(sizeof(oauth_wait_page_body) - 1));
+    if (hlen > 0 && (size_t)hlen < sizeof(head)) {
+        size_t off = 0;
+        int tries = 0;
+        while (off < (size_t)hlen && tries < 50) {
+            ssize_t n = write(w->conn_fd, head + off, (size_t)hlen - off);
+            if (n < 0) {
+                if (errno == EINTR)
+                    continue;
+                if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                    struct timespec ts;
+                    ts.tv_sec = 0;
+                    ts.tv_nsec = 1000000L;
+                    nanosleep(&ts, NULL);
+                    tries++;
+                    continue;
+                }
+                break;
+            }
+            if (n == 0)
+                break;
+            off += (size_t)n;
+        }
+        (void)write(w->conn_fd, oauth_wait_page_body, sizeof(oauth_wait_page_body) - 1);
+    }
+    signal(SIGPIPE, oldpipe);
+    oauth_wait_close(w);
+    w->done = 1;
+}
+
+static int l_oauth_wait_step(lua_State *L)
+{
+    struct oauth_wait *w = check_oauth_wait(L, 1);
+    if (w->done) {
+        lua_pushstring(L, "failed");
+        lua_pushstring(L, "wait already consumed");
+        return 2;
+    }
+    if (w->conn_fd < 0) {
+        int c = accept(w->listen_fd, NULL, NULL);
+        if (c < 0) {
+            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                lua_pushstring(L, "waiting");
+                return 1;
+            }
+            snprintf(w->err, sizeof(w->err), "accept: %s", strerror(errno));
+            oauth_wait_close(w);
+            w->done = 1;
+            lua_pushstring(L, "failed");
+            lua_pushstring(L, w->err);
+            return 2;
+        }
+        if (oauth_wait_nonblock(c) != 0) {
+            int e = errno;
+            close(c);
+            snprintf(w->err, sizeof(w->err), "fcntl: %s", strerror(e));
+            oauth_wait_close(w);
+            w->done = 1;
+            lua_pushstring(L, "failed");
+            lua_pushstring(L, w->err);
+            return 2;
+        }
+        w->conn_fd = c;
+    }
+    for (;;) {
+        ssize_t n;
+        char *eoh;
+        if (w->len >= OAUTH_WAIT_MAX_HEAD) {
+            snprintf(w->err, sizeof(w->err), "request too large");
+            oauth_wait_close(w);
+            w->done = 1;
+            lua_pushstring(L, "failed");
+            lua_pushstring(L, w->err);
+            return 2;
+        }
+        n = recv(w->conn_fd, w->buf + w->len, OAUTH_WAIT_MAX_HEAD - w->len, 0);
+        if (n < 0) {
+            if (errno == EINTR)
+                continue;
+            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                lua_pushstring(L, "waiting");
+                return 1;
+            }
+            snprintf(w->err, sizeof(w->err), "read: %s", strerror(errno));
+            oauth_wait_close(w);
+            w->done = 1;
+            lua_pushstring(L, "failed");
+            lua_pushstring(L, w->err);
+            return 2;
+        }
+        if (n == 0) {
+            snprintf(w->err, sizeof(w->err), "connection closed before headers");
+            oauth_wait_close(w);
+            w->done = 1;
+            lua_pushstring(L, "failed");
+            lua_pushstring(L, w->err);
+            return 2;
+        }
+        w->len += (size_t)n;
+        w->buf[w->len] = '\0';
+        eoh = strstr(w->buf, "\r\n\r\n");
+        if (eoh == NULL) {
+            if (w->len < OAUTH_WAIT_MAX_HEAD) {
+                lua_pushstring(L, "waiting");
+                return 1;
+            }
+            continue; /* full cap with no headers: the top check fails it */
+        }
+        {
+            char *sp1, *sp2, *target;
+            char *code = NULL, *state = NULL;
+            /* request line only: METHOD SP TARGET SP VERSION */
+            if (memcmp(w->buf, "GET ", 4) != 0) {
+                snprintf(w->err, sizeof(w->err), "not a GET request");
+                oauth_wait_close(w);
+                w->done = 1;
+                lua_pushstring(L, "failed");
+                lua_pushstring(L, w->err);
+                return 2;
+            }
+            sp1 = w->buf + 4;
+            sp2 = strchr(sp1, ' ');
+            if (sp2 == NULL || sp2 >= eoh) {
+                snprintf(w->err, sizeof(w->err), "malformed request line");
+                oauth_wait_close(w);
+                w->done = 1;
+                lua_pushstring(L, "failed");
+                lua_pushstring(L, w->err);
+                return 2;
+            }
+            target = sp1;
+            code = oauth_wait_query_val(target, (size_t)(sp2 - sp1), "code");
+            state = oauth_wait_query_val(target, (size_t)(sp2 - sp1), "state");
+            if (code == NULL || code[0] == '\0') {
+                free(code);
+                free(state);
+                snprintf(w->err, sizeof(w->err), "no code in callback request");
+                oauth_wait_close(w);
+                w->done = 1;
+                lua_pushstring(L, "failed");
+                lua_pushstring(L, w->err);
+                return 2;
+            }
+            oauth_wait_answer(w);
+            lua_pushstring(L, "code");
+            lua_pushstring(L, code);
+            if (state != NULL)
+                lua_pushstring(L, state);
+            else
+                lua_pushstring(L, "");
+            free(code);
+            free(state);
+            return 3;
+        }
+    }
+}
+
+static int l_oauth_wait_free(lua_State *L)
+{
+    struct oauth_wait **pp = luaL_checkudata(L, 1, "tether.oauth_wait");
+    if (pp != NULL && *pp != NULL) {
+        oauth_wait_close(*pp);
+        free(*pp);
+        *pp = NULL;
+    }
+    lua_pushboolean(L, 1);
+    return 1;
+}
+
+static int l_oauth_wait_gc(lua_State *L)
+{
+    struct oauth_wait **pp = luaL_checkudata(L, 1, "tether.oauth_wait");
+    if (pp != NULL && *pp != NULL) {
+        oauth_wait_close(*pp);
         free(*pp);
         *pp = NULL;
     }
@@ -2203,10 +3162,14 @@ static luaL_Reg tether_api[] = {
     {"poll",        l_poll},
     {"set_tick_hook", l_set_tick_hook},
     {"fetch_bg",    l_fetch_bg},
-    {"exec_bg_start", l_exec_bg_start},
+    {"exec_bg_argv",  l_exec_bg_argv},
     {"exec_bg_poll",  l_exec_bg_poll},
     {"exec_bg_kill",  l_exec_bg_kill},
     {"exec_bg_free",  l_exec_bg_free},
+    {"oauth_wait_start", l_oauth_wait_start},
+    {"oauth_wait_info",  l_oauth_wait_info},
+    {"oauth_wait_step",  l_oauth_wait_step},
+    {"oauth_wait_free",  l_oauth_wait_free},
     {"resize_requested", l_resize_requested},
     {"sleep",         l_sleep},
     {"abort_requested", l_abort_requested},
@@ -2229,6 +3192,10 @@ static void open_tether_api(lua_State *L)
     lua_pop(L, 1);
     luaL_newmetatable(L, "tether.exec_proc");
     lua_pushcfunction(L, l_exec_proc_gc);
+    lua_setfield(L, -2, "__gc");
+    lua_pop(L, 1);
+    luaL_newmetatable(L, "tether.oauth_wait");
+    lua_pushcfunction(L, l_oauth_wait_gc);
     lua_setfield(L, -2, "__gc");
     lua_pop(L, 1);
 }

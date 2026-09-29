@@ -1380,9 +1380,33 @@ end
 
 -- Command names own their token: comparison ignores case in the palette and on
 -- the submit path alike, so a colliding skill gets neither a row nor a dispatch.
+-- extension-system: extension command rows (from commands.ext_palette_rows,
+-- populated at startup) join the set so resolve_slash routes them as
+-- commands. A stub overrides for tests, mirroring M._skills_stub.
+local function discover_palette_ext_commands()
+    local ok, res
+    if M._ext_commands_stub then
+        ok, res = pcall(M._ext_commands_stub)
+    else
+        ok, res = pcall(function()
+            local cmds = commands
+            if type(cmds) == "table" and type(cmds.ext_palette_rows) == "function" then
+                return cmds.ext_palette_rows()
+            end
+            return {}
+        end)
+    end
+    if not ok or type(res) ~= "table" then return {} end
+    return res
+end
+
 local function command_set()
     local set = {}
     for _, c in ipairs(SLASH_COMMANDS) do set[c.cmd:lower()] = c end
+    for _, c in ipairs(discover_palette_ext_commands()) do
+        local cmd = tostring(c.cmd or "")
+        if cmd ~= "" and not set[cmd:lower()] then set[cmd:lower()] = c end
+    end
     return set
 end
 
@@ -1443,10 +1467,12 @@ palette_sync = function()
     if not was_active then S.palette_skills = palette_skill_rows() end
 
     -- 3.2: fuzzy ranking; declaration-order tie-breaks, empty filter lists all.
-    -- unified-slash-palette 1.4: one list — commands in declared order, then the
-    -- discovered skills, ranked together so a prefix match wins in either group.
+    -- unified-slash-palette 1.4: one list — commands in declared order, then
+    -- extension commands, then the discovered skills, ranked together so a
+    -- prefix match wins in any group.
     local entries = {}
     for _, c in ipairs(SLASH_COMMANDS) do entries[#entries + 1] = c end
+    for _, c in ipairs(discover_palette_ext_commands()) do entries[#entries + 1] = c end
     for _, r in ipairs(S.palette_skills or {}) do entries[#entries + 1] = r end
     local labels = {}
     for _, e in ipairs(entries) do labels[#labels + 1] = e.label end
@@ -2782,7 +2808,7 @@ painters = function()
         ascii = M._ascii_mode or M._env_ascii or _ascii,
         light_bg = M.is_light_bg(), copy = M._copy,
         vlen = vlen, clip = clip, trunc = trunc, cells = cells, wrap = wrap,
-        now_ms = M._paint_clock, caret = caret_glyph,
+        now_ms = function() return M._paint_clock() * 1000 end, caret = caret_glyph,
         freeform = ask.FREEFORM_LABEL,
         ascii_none = function() return M.color_depth() == "none" end,
         spinner_interval_ms = SPINNER_INTERVAL_MS, md_render = md_render,
@@ -3061,6 +3087,13 @@ end
 
 slash_callbacks.quit = function(bag, cmd, rest)
     S.quit = true
+end
+
+-- Extension commands report their return value through note(); called as
+-- note(text), unlike the (bag, cmd, rest) handler shape above.
+slash_callbacks.note = function(text)
+    transcript.append({ role = "system", text = tostring(text) })
+    bump_transcript()
 end
 
 slash_callbacks.clear = function(bag, cmd, rest)
@@ -3569,7 +3602,15 @@ function M._ensure_session()
         local ok, sid = pcall(commands.new, S.workspace, S.model_name)
         if ok and sid then
             S.session_id = sid
-            if S.cfg then S.cfg._session_id = sid end
+            if S.cfg then
+                S.cfg._session_id = sid
+                -- extension-system: a session that starts at the first turn
+                -- (no -r) announces itself through app's callback; once-per-
+                -- process dedupe lives in extensions.fire_start.
+                if type(S.cfg._on_session_start) == "function" then
+                    pcall(S.cfg._on_session_start)
+                end
+            end
         end
     end
 end

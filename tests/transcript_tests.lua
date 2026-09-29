@@ -1249,6 +1249,25 @@ do
   print("TW2 time-based spinner frames: OK")
 end
 
+-- TW5: prod wiring regression — painters().now_ms must tick in the same
+-- units (ms) as the busy_started_at_ms anchor from turn.begin
+-- (tether.monotonic_ms). Passing the seconds _paint_clock straight through
+-- froze the glyph to one frame per 80 s instead of 80 ms.
+do
+  local uimod, S = run_ui_with({ 17 },
+    { agent = { turn = function() return true end, get_history = function() return {} end } })
+  S.busy = true
+  S.busy_started_at_ms = 1759140000000
+  local t = 0
+  -- seconds, exactly like the real M._paint_clock (ms / 1000)
+  uimod._paint_clock = function() return 1759140000 + t end
+  local g0 = uimod.spinner_glyph()
+  t = 0.24 -- 240 ms later: 3 frames ahead at an 80 ms cadence
+  local g1 = uimod.spinner_glyph()
+  assert_true(g0 ~= g1, "TW5 spinner advances with wall time (prod wiring)")
+  print("TW5 spinner wiring is millisecond-based: OK")
+end
+
 -- T71: 3.4 — palette row rendering: description present, accent on selected,
 -- truncation on narrow terminal.
 do

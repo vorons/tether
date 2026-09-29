@@ -10,6 +10,42 @@ if type(commands) ~= "table" then
     commands = (chunk and chunk()) or {}
 end
 
+-- extension-system: same idiom as context.lua — the embedded global is read
+-- at call time (loadfile fallback for dev/test runs).
+local function ext_mod()
+    if type(_G.extensions) == "table" then return _G.extensions end
+    local chunk = loadfile("src/tether/extensions.lua")
+    return chunk and chunk() or nil
+end
+
+-- extension-system: discover + register once at startup, after cfg is final
+-- (the disabled list comes from cfg, design §1). Returns the registry; a
+-- missing extensions module or dir yields an empty one, so extension-less
+-- runs behave exactly as before.
+function M.boot_extensions(cfg, home)
+    local ext = ext_mod()
+    if not ext or type(ext.load) ~= "function" then return nil end
+    local h = home or os.getenv("HOME")
+    if type(h) ~= "string" or h == "" then return nil end
+    local ok, reg = pcall(ext.load, h, cfg)
+    if not ok or type(reg) ~= "table" then return nil end
+    if type(commands.register_extension_commands) == "function" then
+        pcall(commands.register_extension_commands, reg)
+    end
+    return reg
+end
+
+-- extension-system: fire on_session_start once per session start, new or
+-- resumed (task 3.3). The once-per-process guard lives in
+-- extensions.fire_start; app only routes the two call points (resume here,
+-- lazy mint via cfg._on_session_start from ui). Never blocks the session:
+-- handler errors are the module's own stderr warnings.
+function M.fire_session_start(cfg)
+    local ext = ext_mod()
+    if not ext or type(ext.fire_start) ~= "function" then return end
+    pcall(ext.fire_start, cfg, type(cfg) == "table" and cfg.workspace or nil)
+end
+
 local function parse_args()
     local args = arg or {}
     local opts = {
@@ -97,7 +133,66 @@ function M._parse_args(argv)
     return nil
 end
 
+-- extension-system: top-level management verbs (design §7, flat per user
+-- decision). Returns the process exit code so tests drive the handler
+-- without os.exit; the caller exits only when a verb was matched.
+function M._run_ext_cli(argv, home)
+    local verb = argv[1]
+    local ext = ext_mod()
+    local function die(msg)
+        io.stderr:write("tether: " .. tostring(msg) .. "\n")
+        return 1
+    end
+    local function yes(...)
+        for _, a in ipairs({ ... }) do
+            if a == "--yes" or a == "-y" then return true end
+        end
+        return false
+    end
+    if not ext then return die("extensions module unavailable") end
+    local h = home or os.getenv("HOME")
+    if type(h) ~= "string" or h == "" then return die("cannot resolve the home directory") end
+    if verb == "install" then
+        local source = argv[2]
+        if type(source) ~= "string" or source == "" then
+            return die("tether install needs a source path or URL")
+        end
+        local name, err = ext.install(source, h)
+        if not name then return die(err) end
+        print("installed " .. name)
+        return 0
+    elseif verb == "list" then
+        for _, n in ipairs(ext.list_names(h)) do print(n) end
+        return 0
+    elseif verb == "remove" then
+        local name = argv[2]
+        if type(name) ~= "string" or name == "" then
+            return die("tether remove needs an extension name")
+        end
+        if not yes(argv[3], argv[4]) then
+            io.stderr:write("remove " .. name .. "? [y/N] ")
+            local line = io.read and io.read("*l")
+            if not (type(line) == "string"
+                and (line == "y" or line == "Y" or line:lower() == "yes")) then
+                print("cancelled")
+                return 0
+            end
+        end
+        local ok, err = ext.remove(name, h)
+        if not ok then return die(err) end
+        print("removed " .. name)
+        return 0
+    end
+    return nil
+end
+
 local function run_inner()
+    -- extension-system: management verbs run before the flag parser, which
+    -- would otherwise ignore them and open a session.
+    local argv = arg or {}
+    if argv[1] == "install" or argv[1] == "list" or argv[1] == "remove" then
+        os.exit(M._run_ext_cli(argv) or 0)
+    end
     local opts = parse_args()
     if version then print("tether 0.1.0"); os.exit(0) end
 
@@ -185,6 +280,9 @@ local function run_inner()
         if not cfg.workspace then cfg.workspace = tether.getcwd() end
         local rp = tether.realpath(cfg.workspace)
         if rp then cfg.workspace = rp end
+        -- extension-system: tools/commands/prompt/hooks must be registered
+        -- before the turn composes its prompt and dispatches tool calls.
+        M.boot_extensions(cfg)
 
         local api_key = config.api_key(cfg) or ""
         local prompt = opts.print_prompt
@@ -223,6 +321,9 @@ local function run_inner()
         end
         if not sid then sid = commands.new(cfg.workspace, cfg.model) end
         cfg._session_id = sid
+        -- extension-system: session start fires once the session exists
+        -- (new or resumed), before the first turn.
+        M.fire_session_start(cfg)
         dlog("print: session " .. tostring(sid))
 
         -- 1.5: agent.turn adds (and journals) the user message; adding it here
@@ -292,6 +393,9 @@ local function run_inner()
     if not cfg.workspace then cfg.workspace = tether.getcwd() end
     local rp = tether.realpath(cfg.workspace)
     if rp then cfg.workspace = rp end
+    -- extension-system: registry (tools/prompt/hooks) + slash commands,
+    -- composed before the resume seed and the first turn.
+    M.boot_extensions(cfg)
 
     -- Resume logic (design §10): only with -r
     local resume_id = nil
@@ -316,7 +420,14 @@ local function run_inner()
     -- by the first turn (ui.ensure_session) — opening tether just to look
     -- must not leave empty session files behind.
     local id = resume_id
-    if id then cfg._session_id = id end
+    if id then
+        cfg._session_id = id
+        -- extension-system: a resumed session starts now, not at first turn
+        -- (fire_start is once-per-process, so the lazy path can't double up).
+        M.fire_session_start(cfg)
+    end
+    -- extension-system: a lazily minted session fires from ui._ensure_session.
+    cfg._on_session_start = function() M.fire_session_start(cfg) end
 
     -- Run TUI with this same cfg: ui.run used to load a second copy, so it
     -- never saw _session_id and minted its own session every launch (two

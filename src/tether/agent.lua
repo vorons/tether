@@ -98,6 +98,16 @@ local tool_dispatch = _G.tool_dispatch
     end)()
 assert(tool_dispatch, "agent: cannot load tool_dispatch")
 
+-- extension-system: single-file Lua extensions — a global in the built
+-- binary and a loadfile fallback for development/plain-lua runs. No
+-- assert: every use is nil-guarded so extension-less runs behave exactly
+-- as before the module existed.
+local extensions = _G.extensions
+    or (function()
+        local chunk = loadfile("src/tether/extensions.lua")
+        return chunk and chunk()
+    end)()
+
 M.history = {}
 M.pending = nil            -- confirmation queue for the current tool-call step
 M.bg_calls = nil           -- background subagent calls awaiting pickup: survives
@@ -202,6 +212,11 @@ local function tool_summary(name, result)
         return "+" .. tostring(result.bytes or 0) .. " B"
     elseif name == "patch" then
         return "+" .. tostring(result.add or 0) .. " −" .. tostring(result.del or 0)
+    elseif extensions and extensions.has_tool and extensions.has_tool(name) then
+        -- extension-system: generic meter over the stringified body.
+        local body = result.content
+        if type(body) ~= "string" then body = "" end
+        return tostring(#body) .. " bytes"
     end
     return ""
 end
@@ -255,6 +270,14 @@ local function tool_body(name, result)
         end
         return #parts > 0 and table.concat(parts, "\n") or nil
     end
+    if extensions and extensions.has_tool and extensions.has_tool(name) then
+        -- extension-system: the string content is the body; structured
+        -- tables serialize so the model still sees a non-empty body.
+        if type(result.content) == "string" then return result.content end
+        local ok, js = pcall(common.json_encode, result.content)
+        if ok and type(js) == "string" and js ~= "" then return js end
+        return nil
+    end
     return nil
 end
 
@@ -292,7 +315,25 @@ local function execute_tool(name, args, cfg)
         local sm = rawget(_G, "subagent")
         if not sm or not sm.run_call then return nil, "unknown tool: subagent" end
         return sm.run_call(args, cfg)
-    else return nil, "unknown tool: " .. name
+    else
+        -- extension-system: model-callable extension tools run through the
+        -- same report path below (summary/body/truncate/history/journal).
+        -- A raising or non-table result degrades to a tool error the model
+        -- can react to, never a turn crash.
+        local fn = extensions and extensions.tool_fn and extensions.tool_fn(name)
+        if fn then
+            local ctx = extensions.ctx_for(cfg)
+            local ok, res = pcall(fn, args, ctx)
+            if not ok then
+                return nil, "extension '" .. name .. "' failed: " .. tostring(res)
+            end
+            if type(res) ~= "table" then
+                return nil, "extension '" .. name .. "' returned non-table"
+            end
+            if res.error then return nil, tostring(res.error) end
+            return res
+        end
+        return nil, "unknown tool: " .. name
     end
 end
 
@@ -485,6 +526,22 @@ local function run_tool_call(cfg, on_event, id, name, args, projection)
         truncate = truncate_body,
         add_history = function(call_id, res) M.add_tool_result(call_id, res) end,
         journal = function(entry) slog(cfg, entry) end,
+        -- extension-system: after-hooks compose over the shaped body (the
+        -- exact text history/journal/event will carry), so a patch lands
+        -- everywhere at once. Summary is untouched by patches.
+        post = function(n, a, shaped)
+            if extensions and extensions.run_after then
+                local view = { content = shaped.body,
+                    details = shaped.details, is_error = shaped.is_error }
+                local ok, patched = pcall(extensions.run_after, n, a, view, cfg)
+                if ok and type(patched) == "table" then
+                    shaped.body = patched.content
+                    shaped.details = patched.details
+                    shaped.is_error = patched.is_error
+                end
+            end
+            return shaped
+        end,
     })
 end
 
@@ -531,12 +588,58 @@ end
 -- M7/D3: emission is idempotent — a call's confirmation is emitted at most
 -- once (call.confirm_emitted), so repeated drive_pending (ui calls continue
 -- freely) never re-shows the same menu.
+--
+-- extension-system: before-hooks run once per queued call (call.hooks_ran),
+-- ahead of every branch below. The tool_call journal entry is written here,
+-- after the chain: plain calls carry their args; a deny carries the args it
+-- vetoed (the error entry below carries the reason); a rewrite carries the
+-- FINAL args plus original_args, so resume replays and the transcript label
+-- show what actually ran — with zero extension code (3.4, design §5).
+local function journal_tool_call(cfg, call, original_args)
+    local entry = { ts = os.date(), type = "tool_call",
+                    tool_call_id = call.id, name = call.name, args = call.args }
+    if original_args then entry.original_args = original_args end
+    slog(cfg, entry)
+end
+
+local function run_ext_before(call, cfg, on_event)
+    if call.hooks_ran then return false end
+    call.hooks_ran = true
+    if not (extensions and extensions.run_before) then
+        journal_tool_call(cfg, call)
+        return false
+    end
+    local ok, verdict, payload = pcall(extensions.run_before, call.name, call.args, cfg)
+    if not ok then
+        io.stderr:write("tether: extension hooks failed: " .. tostring(verdict) .. "\n")
+        journal_tool_call(cfg, call)
+        return false
+    end
+    if verdict == "deny" then
+        journal_tool_call(cfg, call)
+        record_tool_error(cfg, on_event, call.id, call.name, payload)
+        call.done = true
+        return true
+    elseif verdict == "allow_rewrite" then
+        local original = call.args
+        call.args = payload
+        call.projection = projection.projection_for(call.name, payload, cfg)
+        journal_tool_call(cfg, call, original)
+        return false
+    end
+    journal_tool_call(cfg, call)
+    return false
+end
+
 local function drive_pending(cfg, on_event)
     local p = M.pending
     if not p then return true end
     while p.idx <= #p.calls do
         local call = p.calls[p.idx]
         if call.done then
+            p.idx = p.idx + 1
+        elseif run_ext_before(call, cfg, on_event) then
+            -- denied by an extension hook: error recorded, advance.
             p.idx = p.idx + 1
         elseif call.name == "ask" then
             -- add-ask-tool: the question tool never executes locally. It parks
@@ -1080,8 +1183,8 @@ local function main_loop(cfg, api_key, on_event)
                 on_event({ type = "tool_call_start", id = tc.id, name = tc.name,
                            args = args, projection = projection })
             end
-            slog(cfg, { ts = os.date(), type = "tool_call",
-                        tool_call_id = tc.id, name = tc.name, args = args })
+            -- extension-system: no tool_call journal entry here — drive_pending
+            -- writes it after the before-hooks, so a rewrite journals final args.
         end
 
         M.pending = { calls = calls, idx = 1 }

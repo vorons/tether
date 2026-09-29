@@ -796,4 +796,64 @@ end
 M.dispatch = dispatch
 M.slash_names = slash_names
 
+-- extension-system: commands contributed by extensions. Filled once at
+-- startup by register_extension_commands (app calls it after
+-- extensions.load); execute_command needs no changes since entries land
+-- in the same dispatch table. Re-registering is idempotent: keys already
+-- taken (built-in or earlier call) are skipped with a stderr warning.
+M._ext_commands = {}
+M._ext_registered = {}
+
+local function ext_ctx(bag)
+    local ctx = {
+        workspace = bag and bag.workspace or nil,
+        config = bag and bag.cfg or nil,
+    }
+    function ctx.log(msg)
+        io.stderr:write("tether: extension: " .. tostring(msg) .. "\n")
+    end
+    return ctx
+end
+
+function M.register_extension_commands(reg)
+    if type(reg) ~= "table" or type(reg.commands) ~= "table" then return end
+    for _, key in ipairs(reg.command_order or {}) do
+        local entry = reg.commands[key]
+        if type(entry) == "table" and type(entry.def) == "table" then
+            if dispatch[key] or M._ext_registered[key] then
+                io.stderr:write("tether: extension " .. tostring(entry.ext)
+                    .. ": command '" .. tostring(key)
+                    .. "' already registered, skipped\n")
+            else
+                M._ext_registered[key] = true
+                local def, ename = entry.def, entry.ext
+                dispatch[key] = function(bag, cb, cmd, rest)
+                    local ok, out = pcall(def.fn, rest or "", ext_ctx(bag))
+                    local note = cb and cb.note
+                    if not ok then
+                        if note then note("extension '" .. tostring(ename)
+                            .. "' command failed: " .. tostring(out)) end
+                    elseif type(out) == "string" and out ~= "" then
+                        if note then note(out) end
+                    end
+                end
+                slash_names[#slash_names + 1] = key
+                M._ext_commands[#M._ext_commands + 1] = {
+                    label = "/" .. key,
+                    desc = type(def.description) == "string" and def.description or "",
+                    cmd = key,
+                }
+            end
+        end
+    end
+end
+
+-- Palette rows for extension commands (ui merges these between built-ins
+-- and skill rows, and into its command_set for resolve_slash routing).
+function M.ext_palette_rows()
+    local out = {}
+    for _, r in ipairs(M._ext_commands) do out[#out + 1] = r end
+    return out
+end
+
 return M

@@ -126,6 +126,9 @@ local function default_config()
         system_prompt = nil,
         skills_dirs = nil, -- nil = default discovery set (see context.lua)
         agents_files = {}, -- explicit agents-instruction files, merged before CLI --agents-file
+        -- extension-system: disabled extension names (default {} = load all
+        -- discovered under ~/.tether/extensions/).
+        extensions = { disabled = {} },
         log_level = "info",
     }
 end
@@ -288,7 +291,7 @@ M.BOOTSTRAP_ORDER = {
     "provider", "api_key_env", "base_url", "model", "reasoning",
     "workspace", "allow_outside_workspace", "auto_approve",
     "context", "retry", "ui", "tools",
-    "system_prompt", "skills_dirs", "agents_files", "log_level",
+    "system_prompt", "skills_dirs", "agents_files", "extensions", "log_level",
     "providers", "providers_url",
 }
 M.BOOTSTRAP_COMMENTS = {
@@ -309,6 +312,7 @@ M.BOOTSTRAP_COMMENTS = {
     system_prompt = "nil = built-in prompt (inline text or /path/to/file)",
     skills_dirs = "nil = default discovery set",
     agents_files = "explicit agents-instruction files",
+    extensions = "disabled extension names, e.g. { disabled = { \"jira\" } } (default loads all)",
     log_level = "info or debug",
     providers = "per-provider overrides (empty = catalog-driven); whole custom providers live in ~/.tether/models.lua",
 }

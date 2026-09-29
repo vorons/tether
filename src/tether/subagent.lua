@@ -1,8 +1,9 @@
 -- tether subagent — child agent runs for the `subagent` tool (config-less v1).
 --
--- A task forks `tether --print` as a background child (exec_bg, same shape
--- as tools.run's blocking spawn but overlappable and killable); the call
--- blocks in the orchestrator's poll loop until every task completes.
+-- A task forks `tether --print` as a background child (direct argv spawn
+-- via exec_bg_argv — no intermediate shell, so the task text reaches the
+-- child byte-exact); the call blocks in the orchestrator's poll loop until
+-- every task completes.
 -- Globals resolve late (embedded runtime / test stubs): bare `tools` and
 -- `tether` at call time, like agent.lua does.
 local M = {}
@@ -17,11 +18,6 @@ M.KNOWN_TOOLS = {
 
 local function is_nonempty_str(v)
     return type(v) == "string" and v ~= ""
-end
-
--- shell single-quote (mirrors tools.sq).
-local function sq(s)
-    return "'" .. tostring(s):gsub("'", "'\\''") .. "'"
 end
 
 local function host()
@@ -41,9 +37,9 @@ local function toolset()
     return rawget(_G, "tools")
 end
 
--- prompt-cache: " TETHER_CACHE_KEY=.. [TETHER_CACHE_SYS=..]" for the
--- child env, or "" when there is no key (or no cache module) to inherit.
--- Values are slug/hex charset, safe unquoted in the shell command.
+-- prompt-cache: inherited entries for the child env table
+-- ({TETHER_CACHE_KEY=.., [TETHER_CACHE_SYS]=..} or {} when there is no
+-- key to inherit). Values are slug/hex charset.
 local function cache_inherit_env(ctx)
     local cfg = (type(ctx) == "table") and ctx.cfg or nil
     local common = _G.provider_common
@@ -52,18 +48,18 @@ local function cache_inherit_env(ctx)
             return chunk and chunk()
         end)()
     local mod = common and common.require_cache and common.require_cache()
-    if not mod then return "" end
+    if not mod then return {} end
     local sys_hash = nil
     if type(cfg) == "table" and type(cfg._system_blocks) == "table" then
         local okh, h = pcall(mod.blocks_hash, cfg._system_blocks)
         if okh and type(h) == "string" and h ~= "" then sys_hash = h end
     end
     local okk, key = pcall(mod.resolve_key, cfg, sys_hash)
-    if not okk or type(key) ~= "string" or key == "" then return "" end
+    if not okk or type(key) ~= "string" or key == "" then return {} end
     if sys_hash then
-        return " TETHER_CACHE_KEY=" .. key .. " TETHER_CACHE_SYS=" .. sys_hash
+        return { TETHER_CACHE_KEY = key, TETHER_CACHE_SYS = sys_hash }
     end
-    return " TETHER_CACHE_KEY=" .. key
+    return { TETHER_CACHE_KEY = key }
 end
 
 -- Validate one task item. Defaults resolve per field item -> call -> run.
@@ -144,16 +140,22 @@ function M.normalize_call(args)
     return args.tasks
 end
 
--- Build the shell command for one validated item. Returns cmd, outfile.
--- The task rides argv (print_prompt) unless it starts with `-`, when it
--- goes through a printf pipe instead (parse_args would eat a leading dash
--- as a flag). Stdout+stderr land in a unique outfile, like tools.run.
+-- Build the spawn spec for one validated item. Returns argv, opts.
+-- argv is the child command line element-wise: flags first,
+-- `--print <task>` last (parse_args takes the prompt from the slot right
+-- after --print, so anything between them would swallow the slot and drop
+-- the task onto a dead positional). A task starting with `-` rides piped
+-- stdin instead (parse_args would eat a leading dash as a flag). opts is
+-- {cwd, env, outfile, stdin} for exec_bg_argv: stdin is "null" on the argv
+-- branch (off the terminal — a bg-group child sharing the parent's tty
+-- stops at SIGTTOU in init_termios, so isatty must stay false) or
+-- {pipe = task bytes} on the leading-dash branch (keeps its stdin pipe
+-- by design). No shell quoting anywhere on this path: every element
+-- travels as its own argv entry.
+-- The outfile is reserved before spawn: os.tmpname() with LUA_USE_POSIX
+-- is mkstemp — created exclusively, 0600, unguessable.
 function M.build_command(item, ctx)
     ctx = (type(ctx) == "table") and ctx or {}
-    -- Reserve the outfile before the shell redirects into it: `>` follows a
-    -- symlink, so a pre-guessed name in world-writable /tmp would let another
-    -- process own (and read) the child's output. os.tmpname() with
-    -- LUA_USE_POSIX is mkstemp — created exclusively, 0600, unguessable.
     local outfile = os.tmpname()
     local binary = ctx.binary
     if not is_nonempty_str(binary) then
@@ -169,17 +171,14 @@ function M.build_command(item, ctx)
         end
         if not is_nonempty_str(binary) then binary = "tether" end
     end
-    -- flags first, `--print <task>` last: parse_args takes the prompt
-    -- from the slot right after --print, so anything between them (like
-    -- -w) would swallow the slot and drop the task onto a dead positional.
-    local argv = { sq(binary), "-w", sq(item.cwd) }
+    local argv = { binary, "-w", item.cwd }
     if is_nonempty_str(item.model) then
         argv[#argv + 1] = "--model"
-        argv[#argv + 1] = sq(item.model)
+        argv[#argv + 1] = item.model
     end
     if item.tools ~= nil then
         argv[#argv + 1] = "--tools"
-        argv[#argv + 1] = sq(table.concat(item.tools, ","))
+        argv[#argv + 1] = table.concat(item.tools, ",")
     end
     if ctx.cfg and ctx.cfg.debug then
         -- parent runs --debug: child stages join the shared debug log.
@@ -188,38 +187,36 @@ function M.build_command(item, ctx)
     argv[#argv + 1] = "--print"
     local depth = tonumber(ctx.depth) or 0
     if depth < 0 then depth = 0 end
-    local env = string.format("TETHER_SUBAGENT_DEPTH=%d TETHER_WORKSPACE=%s",
-        depth + 1, sq(item.cwd))
+    local env = {
+        TETHER_SUBAGENT_DEPTH = tostring(depth + 1),
+        TETHER_WORKSPACE = item.cwd,
+    }
     -- prompt-cache: the child joins the parent's cache pool. The key and
     -- the parent system-blocks hash ride the same env channel; the child
     -- (cache.resolve_key) reuses the key when its prompt matches and
     -- derives one when it diverged. Absent key = nothing to inherit.
-    env = env .. cache_inherit_env(ctx)
+    for k, v in pairs(cache_inherit_env(ctx)) do env[k] = v end
     -- the child continues this journal (fresh or sequel): the flag rides
     -- after the prompt slot so parse_args keeps --print glued to the task.
     local function with_resume()
         if is_nonempty_str(item.sid) then
             argv[#argv + 1] = "--resume"
-            argv[#argv + 1] = sq(item.sid)
+            argv[#argv + 1] = item.sid
         end
     end
-    local cmd
+    local stdin
     if item.task:match("^%-") then
         with_resume()
-        cmd = string.format("cd %s && %s printf '%%s' %s | %s > %s 2>&1",
-            sq(item.cwd), env, sq(item.task),
-            table.concat(argv, " "), sq(outfile))
+        stdin = { pipe = item.task }
     else
-        argv[#argv + 1] = sq(item.task)
+        argv[#argv + 1] = item.task
         with_resume()
         -- stdin off the terminal: a bg-group child sharing the parent's
         -- tty stops at SIGTTOU in init_termios (State T, zero output).
-        -- With /dev/null isatty is false and no read can block. The pipe
-        -- branch above keeps its stdin pipe by design.
-        cmd = string.format("cd %s && %s %s > %s 2>&1 < /dev/null",
-            sq(item.cwd), env, table.concat(argv, " "), sq(outfile))
+        -- With /dev/null isatty is false and no read can block.
+        stdin = "null"
     end
-    return cmd, outfile
+    return argv, { cwd = item.cwd, env = env, outfile = outfile, stdin = stdin }
 end
 
 -- Spawn one validated item. Returns a pending task record or nil, err.
@@ -228,7 +225,7 @@ end
 -- never surfaces in latest-session listings, so orphan mints are cheap.
 function M.spawn_task(item, ctx)
     local th = host()
-    if not th or not th.exec_bg_start then
+    if not th or not th.exec_bg_argv then
         return nil, "no background spawn support"
     end
     if not is_nonempty_str(item.sid) then
@@ -242,12 +239,12 @@ function M.spawn_task(item, ctx)
             end
         end
     end
-    local cmd, outfile = M.build_command(item, ctx)
-    local h, err = th.exec_bg_start(cmd)
+    local argv, opts = M.build_command(item, ctx)
+    local h, err = th.exec_bg_argv(argv, opts)
     if not h then
         return nil, err or "spawn failed"
     end
-    return { handle = h, outfile = outfile, item = item, sid = item.sid,
+    return { handle = h, outfile = opts.outfile, item = item, sid = item.sid,
              started_ms = now_ms(), done = false }, nil
 end
 

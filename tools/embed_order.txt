@@ -63,6 +63,7 @@ tools src/tether/tools.lua
 subagent src/tether/subagent.lua
 diff src/tether/diff.lua
 cache src/tether/cache.lua
+extensions src/tether/extensions.lua
 
 [load]
 ## provider_common first: session/agent resolve their JSON helpers to it
@@ -146,5 +147,7 @@ api
 context
 ## tool_dispatch: one synchronous tool call for the turn loop
 tool_dispatch
+## extensions: single-file Lua extensions (src/tether/extensions.lua)
+extensions
 agent
 app

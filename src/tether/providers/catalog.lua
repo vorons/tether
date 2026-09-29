@@ -327,16 +327,34 @@ function M.login_flow(cfg, id)
             return chunk and chunk()
         end)()
     if not common then return nil end
+    -- loopback-callback: the redirect comes from the live listener (cfg
+    -- channel set by the login flow), a fixed registered override, or
+    -- nothing — never a placeholder. Without a URI there is no link to
+    -- show; the flow still returns so the paste path keeps working.
+    local redirect_uri = p.oauth_redirect_uri
+    local oauth_state = nil
+    if type(redirect_uri) ~= "string" or redirect_uri == "" then
+        redirect_uri = nil
+        local lb = (type(cfg) == "table") and cfg._oauth_loopback or nil
+        if type(lb) == "table" and type(lb.uri) == "string" and lb.uri ~= "" then
+            redirect_uri = lb.uri
+            if type(lb.state) == "string" and lb.state ~= "" then
+                oauth_state = lb.state
+            end
+        end
+    end
     local flow = {
         provider = id,
         client_id = cid,
         client_secret = p.oauth_client_secret,
-        redirect_uri = p.oauth_redirect_uri or "http://localhost:7/",
+        redirect_uri = redirect_uri,
+        state = oauth_state,
         scope = p.oauth_scope,
         token_url = p.oauth_token_url,
     }
-    flow.authorize_url = common.oauth_authorize_url(p.oauth_authorize_url, flow)
-    if not flow.authorize_url then return nil end
+    if redirect_uri then
+        flow.authorize_url = common.oauth_authorize_url(p.oauth_authorize_url, flow)
+    end
     return flow
 end
 

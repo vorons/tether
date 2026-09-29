@@ -30,6 +30,10 @@
 --      auth.poll_tick(S, deps)       --> "pending" | "granted" | ...
 local M = {}
 
+-- loopback-callback: how long a code-flow login waits for the browser
+-- callback before falling back to paste-only (abort via Esc is instant).
+local OAUTH_WAIT_TIMEOUT_S = 300
+
 local function known_providers(catalog)
     if catalog and catalog.ids then
         return catalog.ids()
@@ -47,6 +51,20 @@ local function is_known_provider(catalog, name)
 end
 M.is_known_provider = is_known_provider
 
+-- loopback-callback: free the open wait (if any) via the given or the
+-- stashed host, and drop the transient cfg channel. Idempotent.
+local function close_wait(bag, host)
+    host = host or bag.login_host
+    local wait = bag.login_wait
+    bag.login_wait = nil
+    bag.login_host = nil
+    bag.login_wait_deadline = nil
+    if bag.cfg then bag.cfg._oauth_loopback = nil end
+    if wait ~= nil and host ~= nil and host.oauth_wait_free then
+        pcall(host.oauth_wait_free, wait)
+    end
+end
+
 local function begin(bag, deps, provider)
     deps = deps or {}
     if bag.cfg and bag.cfg.non_interactive then
@@ -54,6 +72,31 @@ local function begin(bag, deps, provider)
         return false
     end
     local load_provider = deps.load_provider
+    local host = deps.host
+    -- loopback-callback: a previous wait never survives a new login, and
+    -- the listener starts before the flow resolves — login_flow prefers a
+    -- fixed registered override when configured and falls back to this
+    -- channel otherwise. A failed start simply means paste-only.
+    close_wait(bag, host)
+    if host ~= nil and host.oauth_wait_start ~= nil and host.oauth_wait_info ~= nil then
+        local ok, handle = pcall(host.oauth_wait_start)
+        if ok and handle ~= nil then
+            local ok2, port, state = pcall(host.oauth_wait_info, handle)
+            if ok2 and type(port) == "number" and port > 0
+                and type(state) == "string" and state ~= "" then
+                if type(bag.cfg) ~= "table" then bag.cfg = {} end
+                bag.cfg._oauth_loopback = {
+                    uri = string.format("http://127.0.0.1:%d/", port),
+                    state = state,
+                }
+                bag.login_wait = handle
+                bag.login_host = host
+                bag.login_wait_deadline = os.time() + OAUTH_WAIT_TIMEOUT_S
+            else
+                pcall(host.oauth_wait_free, handle)
+            end
+        end
+    end
     local pmod = load_provider and load_provider(provider) or nil
     local flow = (pmod and pmod.login_flow and pmod.login_flow(bag.cfg)) or nil
     -- expand-provider-catalog: presets without their own adapter module get
@@ -62,6 +105,13 @@ local function begin(bag, deps, provider)
     local catalog = deps.catalog
     if not flow and catalog and catalog.login_flow then
         flow = catalog.login_flow(bag.cfg, provider)
+    end
+    -- keep the listener only when the flow actually authorizes against it
+    -- (override, device, and paste-only flows free it again here).
+    local ch = (type(bag.cfg) == "table") and bag.cfg._oauth_loopback or nil
+    if bag.login_wait ~= nil and not (flow ~= nil and flow.device == nil
+        and type(ch) == "table" and flow.redirect_uri == ch.uri) then
+        close_wait(bag, host)
     end
     bag.error_banner = nil
     bag.login_provider = provider
@@ -77,7 +127,6 @@ local function begin(bag, deps, provider)
     bag._in_login_palette = nil
     -- Best-effort browser open (never blocks login on failure). URL itself
     -- stays in the hints / dialog, not the transcript.
-    local host = deps.host
     if flow and flow.authorize_url and host and host.exec then
         local q = "'" .. flow.authorize_url:gsub("'", "'\\''") .. "'"
         pcall(function()
@@ -122,6 +171,7 @@ end
 M.begin = begin
 
 local function cancel(bag)
+    close_wait(bag, nil)
     bag.login_provider = nil
     bag.login_flow = nil
     bag.login_secret = nil
@@ -134,14 +184,72 @@ local function cancel(bag)
 end
 M.cancel = cancel
 
+local submit -- forward: defined below submit's callers (callback_tick)
+
+-- loopback-callback: step the listener while a code-flow login waits.
+-- Timeout, abort, and host failures end the wait but keep the secret
+-- prompt for a manual paste; a state mismatch banners and does the same;
+-- a matching callback auto-submits through the exchange path in submit().
+local function callback_tick(bag, deps, errors)
+    local wait = bag and bag.login_wait
+    if wait == nil then return nil end
+    local whost = deps.host
+    local provider = bag.login_provider
+    local function drop_wait(note)
+        close_wait(bag, whost)
+        if note ~= nil and note ~= "" and deps.note then
+            deps.note("→ login " .. tostring(provider) .. ": " .. note)
+        end
+    end
+    if whost ~= nil and whost.abort_requested ~= nil then
+        local ok, ab = pcall(whost.abort_requested)
+        if ok and ab then
+            drop_wait("callback wait aborted — paste the code to finish")
+            return "pending"
+        end
+    end
+    if bag.login_wait_deadline ~= nil and os.time() >= bag.login_wait_deadline then
+        drop_wait("callback timed out — paste the code to finish")
+        return "pending"
+    end
+    if whost == nil or whost.oauth_wait_step == nil then return "pending" end
+    local ok, st, code, state = pcall(whost.oauth_wait_step, wait)
+    if not ok then
+        drop_wait("callback listener failed — paste the code to finish")
+        return "pending"
+    end
+    if st == "waiting" then return "pending" end
+    if st ~= "code" then
+        drop_wait("callback listener failed (" .. tostring(code or st)
+            .. ") — paste the code to finish")
+        return "pending"
+    end
+    local flow = bag.login_flow
+    if type(code) ~= "string" or code == ""
+        or flow == nil
+        or (type(flow.state) == "string" and flow.state ~= ""
+            and state ~= flow.state) then
+        bag.error_banner = errors.oauth_state_mismatch
+        drop_wait(nil)
+        return "pending"
+    end
+    -- verified: consume through the shared exchange path (it url-decodes,
+    -- exchanges, stores, and re-arms secret mode on failure). The "?code="
+    -- bridge is safe: the C parser stops the raw value at &/space, so the
+    -- match below sees exactly one encoded token.
+    close_wait(bag, whost)
+    return submit(bag, deps, "?code=" .. code) and "granted" or "failed"
+end
+
 -- provider-auth: one device-flow poll tick, called from the paint path while
 -- login secret mode with a device flow is active. Paces itself via
--- flow.poll_next_at; returns "pending" | "granted" | "failed" | nil.
+-- flow.poll_next_at; returns "pending" | "granted" | nil. Also steps the
+-- loopback-callback wait for code-flow logins (same return contract).
 local function poll_tick(bag, deps)
     deps = deps or {}
     local flow = bag and bag.login_flow
     if not (flow and flow.device and flow.device_code and flow.device_token_url) then
-        return nil
+        return callback_tick(bag, deps, deps.errors or {})
     end
     local errors = deps.errors or {}
     if os.time() >= (flow.poll_deadline or 0) then
@@ -192,13 +300,16 @@ end
 M.poll_tick = poll_tick
 
 -- Shared store path for secret-mode Enter: OAuth code/redirect vs bare API key.
-local function submit(bag, deps, raw)
+submit = function(bag, deps, raw)
     deps = deps or {}
     local errors = deps.errors or {}
     local value = (type(raw) == "string" and raw:match("^%s*(.-)%s*$")) or ""
     if value == "" then return false end
     local provider = bag.login_provider
     local flow = bag.login_flow
+    -- loopback-callback: a manual paste wins over the open wait — the
+    -- listener served its purpose (or never will); free it deterministically.
+    close_wait(bag, deps.host)
     if not provider then return false end
     bag.login_provider = nil
     bag.login_flow = nil

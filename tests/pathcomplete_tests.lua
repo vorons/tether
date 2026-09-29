@@ -676,8 +676,21 @@ do
     oauth_authorize_url = "https://example.com/auth",
   } } }, "xai")
   assert_notnil(cflow, "T165 code flow built")
-  assert_true(cflow.authorize_url:find("client_id=c", 1, true) ~= nil,
-    "T165 authorize url carries client id")
+  assert_true(cflow.authorize_url == nil,
+    "T165 no listener means no authorize link, flow kept for paste")
+  assert_true(cflow.token_url == "https://example.com/token",
+    "T165 paste flow keeps token_url for the exchange")
+  local lbflow = catalog.login_flow({
+    providers = { xai = {
+      oauth_client_id = "c", oauth_token_url = "https://example.com/token",
+      oauth_authorize_url = "https://example.com/auth",
+    } },
+    _oauth_loopback = { uri = "http://127.0.0.1:9/", state = "s9" },
+  }, "xai")
+  assert_true((lbflow.authorize_url or ""):find("client_id=c", 1, true) ~= nil,
+    "T165 listener authorize url carries client id")
+  assert_true((lbflow.authorize_url or ""):find("state=s9", 1, true) ~= nil,
+    "T165 listener authorize url carries state")
 
   -- ui: device paste stores an oauth entry, masked, no transcript leak
   local auth = assert(loadfile("src/tether/auth.lua"))()

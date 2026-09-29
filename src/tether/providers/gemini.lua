@@ -310,18 +310,35 @@ function M.login_flow(cfg)
         and type(cfg.providers.gemini) == "table") and cfg.providers.gemini or {}
     local cid = p.oauth_client_id
     if type(cid) ~= "string" or cid == "" then return nil end
+    -- loopback-callback: redirect from the live listener (cfg channel),
+    -- a fixed registered override, or nothing (paste-only) — never a
+    -- placeholder.
+    local redirect_uri = p.oauth_redirect_uri
+    local oauth_state = nil
+    if type(redirect_uri) ~= "string" or redirect_uri == "" then
+        redirect_uri = nil
+        local lb = (type(cfg) == "table") and cfg._oauth_loopback or nil
+        if type(lb) == "table" and type(lb.uri) == "string" and lb.uri ~= "" then
+            redirect_uri = lb.uri
+            if type(lb.state) == "string" and lb.state ~= "" then
+                oauth_state = lb.state
+            end
+        end
+    end
     local flow = {
         provider = "gemini",
         client_id = cid,
         client_secret = p.oauth_client_secret,
-        redirect_uri = p.oauth_redirect_uri or "http://localhost:1/",
+        redirect_uri = redirect_uri,
+        state = oauth_state,
         scope = p.oauth_scope or "https://www.googleapis.com/auth/generativeai",
         token_url = p.oauth_token_url or "https://oauth2.googleapis.com/token",
     }
     local authorize = p.oauth_authorize_url
         or "https://accounts.google.com/o/oauth2/v2/auth"
-    flow.authorize_url = common.oauth_authorize_url(authorize, flow)
-    if not flow.authorize_url then return nil end
+    if redirect_uri then
+        flow.authorize_url = common.oauth_authorize_url(authorize, flow)
+    end
     return flow
 end
 

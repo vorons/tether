@@ -494,9 +494,12 @@ do
     minted[#minted + 1] = { ws = ws, model = model }
     return "childsid" .. #minted
   end }
-  local cmds = {}
+  local spawns = {}
   _G.tether = {
-    exec_bg_start = function(cmd) cmds[#cmds + 1] = cmd return {} end,
+    exec_bg_argv = function(argv, opts)
+      spawns[#spawns + 1] = { argv = argv, opts = opts }
+      return {}
+    end,
     exec_bg_poll = function(h, ms) return "done", 0 end,
     exec_bg_free = function(h) return true end,
     exec_bg_kill = function(h) return true end,
@@ -512,16 +515,27 @@ do
   local rec = assert(sub.run_call_bg({ task = "go" }, cfg))
   assert_eq(#minted, 1, "T241 spawn mints one journal")
   assert_eq(minted[1].ws, "/tmp/ws", "T241 journal minted in task cwd")
-  assert_true(cmds[1]:find("--print 'go' --resume 'childsid1'", 1, true) ~= nil,
-    "T241 child command resumes the minted journal after the prompt")
+  local a1 = spawns[1].argv
+  local pi1 = nil
+  for i, v in ipairs(a1) do if v == "--print" then pi1 = i end end
+  assert_notnil(pi1, "T241 child argv has --print")
+  assert_eq(a1[pi1 + 1], "go", "T241 prompt glued to --print")
+  assert_eq(a1[pi1 + 2], "--resume", "T241 resume flag after the prompt")
+  assert_eq(a1[pi1 + 3], "childsid1", "T241 child resumes the minted journal")
+  assert_eq(spawns[1].opts.env.TETHER_WORKSPACE, "/tmp/ws", "T241 workspace in child env")
   local jid = rec.jobs[1].id
   assert_eq(sub._running[jid].item.sid, "childsid1", "T241 item carries sid")
   sub.cancel_all("over")
   -- sequel reuses the given journal, mints nothing
   local rec2 = assert(sub.run_call_bg({ task = "again", resume = "abc" }, cfg))
   assert_eq(#minted, 1, "T241 sequel mints nothing")
-  assert_true(cmds[2]:find("--print 'again' --resume 'abc'", 1, true) ~= nil,
-    "T241 sequel command resumes the given journal")
+  local a2 = spawns[2].argv
+  local pi2 = nil
+  for i, v in ipairs(a2) do if v == "--print" then pi2 = i end end
+  assert_notnil(pi2, "T241 sequel argv has --print")
+  assert_eq(a2[pi2 + 1], "again", "T241 sequel prompt glued to --print")
+  assert_eq(a2[pi2 + 2], "--resume", "T241 sequel resume flag after the prompt")
+  assert_eq(a2[pi2 + 3], "abc", "T241 sequel resumes the given journal")
   sub.cancel_all("over")
   -- results report the session
   local fuller = { status = "ok", exit_code = 0, output = "hi",
@@ -538,11 +552,15 @@ end
 do
   local sub = assert(loadfile("src/tether/subagent.lua"))()
   local item = { task = "go", cwd = "/ws", timeout = 5, sid = "s1" }
+  local function has_flag(a, flag)
+    for _, v in ipairs(a) do if v == flag then return true end end
+    return false
+  end
   local plain = sub.build_command(item, {})
   local dbg = sub.build_command(item, { cfg = { debug = true } })
-  assert_true(dbg:find("--debug", 1, true) ~= nil,
-    "T242 debug reaches the child command")
-  assert_true(plain:find("--debug", 1, true) == nil,
+  assert_true(has_flag(dbg, "--debug"),
+    "T242 debug reaches the child argv")
+  assert_true(not has_flag(plain, "--debug"),
     "T242 no debug flag without debug")
   print("T242 debug propagates to child: OK")
 end
@@ -553,16 +571,20 @@ end
 -- dash) must keep its stdin pipe: no redirect there.
 do
   local sub = assert(loadfile("src/tether/subagent.lua"))()
-  local cmd = sub.build_command(
+  local _, opts = sub.build_command(
     { task = "go", cwd = "/ws", timeout = 5, sid = "s1" }, {})
-  assert_true(cmd:find("< /dev/null", 1, true) ~= nil,
+  assert_eq(opts.stdin, "null",
     "T243 argv child detaches stdin")
-  local piped = sub.build_command(
+  local pargv, popts = sub.build_command(
     { task = "- go", cwd = "/ws", timeout = 5, sid = "s1" }, {})
-  assert_true(piped:find("printf", 1, true) ~= nil,
+  assert_eq(type(popts.stdin), "table",
     "T243 leading-dash task still goes through the pipe")
-  assert_true(piped:find("< /dev/null", 1, true) == nil,
-    "T243 pipe child keeps its stdin pipe")
+  assert_eq(popts.stdin.pipe, "- go",
+    "T243 pipe carries the exact task bytes")
+  assert_eq(pargv[#pargv - 1], "--resume",
+    "T243 pipe branch argv ends at the resume flag, task rides stdin")
+  assert_eq(pargv[#pargv], "s1",
+    "T243 pipe branch keeps the resume session")
   print("T243 bg child detaches stdin: OK")
 end
 

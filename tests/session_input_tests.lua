@@ -364,20 +364,30 @@ do
   assert_eq(it2.model, "m2", "T224 item model wins")
   assert_true(sub.validate_item({ task = "go", tools = { "teleport" } }, {}, ctx) == nil, "T224 unknown allowlist tool fails")
   assert_true(sub.validate_item({ task = "go", cwd = "/etc" }, {}, ctx) == nil, "T224 outside cwd fails before spawn")
-  -- build_command shape
-  local cmd, outfile = sub.build_command(
+  -- build_command shape: argv table + opts, no shell string anywhere
+  local argv, opts = sub.build_command(
     { task = "fix it", model = "m", cwd = "/ws", timeout = 5 }, ctx)
-  assert_true(cmd:find("tether", 1, true) ~= nil, "T224 cmd names the binary")
-  assert_true(cmd:find("--print", 1, true) ~= nil, "T224 cmd print mode")
-  assert_true(cmd:find("TETHER_SUBAGENT_DEPTH=1", 1, true) ~= nil,
-    "T224 cmd carries depth+1")
-  assert_true(cmd:find("--model", 1, true) ~= nil, "T224 cmd carries model")
-  assert_true(cmd:find("fix it", 1, true) ~= nil, "T224 cmd carries the task")
-  assert_true(cmd:find(outfile, 1, true) ~= nil, "T224 cmd captures to outfile")
-  local cmd2 = (sub.build_command(
-    { task = "- review the diff", cwd = "/ws", timeout = 5 }, ctx))
-  assert_true(cmd2:find("printf", 1, true) ~= nil,
+  assert_eq(type(argv), "table", "T224 argv is a table")
+  local pi = nil
+  for i, a in ipairs(argv) do if a == "--print" then pi = i end end
+  assert_notnil(pi, "T224 argv print mode")
+  assert_eq(argv[pi + 1], "fix it", "T224 task glued to --print")
+  assert_eq(opts.env.TETHER_SUBAGENT_DEPTH, "1", "T224 opts carries depth+1")
+  local mi = nil
+  for i, a in ipairs(argv) do if a == "--model" then mi = i end end
+  assert_notnil(mi, "T224 argv carries model flag")
+  assert_eq(argv[mi + 1], "m", "T224 argv carries model value")
+  assert_eq(opts.cwd, "/ws", "T224 opts carries cwd")
+  assert_true(opts.outfile ~= nil and opts.outfile ~= "", "T224 opts reserves an outfile")
+  assert_eq(opts.stdin, "null", "T224 argv child detaches stdin")
+  local argv2, opts2 = sub.build_command(
+    { task = "- review the diff", cwd = "/ws", timeout = 5 }, ctx)
+  assert_eq(type(opts2.stdin), "table",
     "T224 leading-dash task goes through a pipe")
+  assert_eq(opts2.stdin.pipe, "- review the diff",
+    "T224 pipe carries the exact task bytes")
+  assert_eq(argv2[#argv2], "--print",
+    "T224 pipe branch keeps nothing after --print")
   -- wait_task: done path with a mocked host
   local polls = 0
   _G.tether = {
@@ -464,25 +474,25 @@ do
   -- own binary wins over PATH lookup
   _G.tether = { exepath = function() return "/opt/own/tether" end }
   if env_empty then
-    local cmd = sub.build_command(item, {})
-    assert_true(cmd:find("'/opt/own/tether' -w", 1, true) ~= nil,
+    local argv = sub.build_command(item, {})
+    assert_eq(argv[1], "/opt/own/tether",
       "T230 child uses the running binary, not PATH")
   end
   -- explicit overrides still win: ctx.binary first ...
-  local cmd_custom = sub.build_command(item, { binary = "/custom/tether" })
-  assert_true(cmd_custom:find("'/custom/tether' -w", 1, true) ~= nil,
+  local argv_custom = sub.build_command(item, { binary = "/custom/tether" })
+  assert_eq(argv_custom[1], "/custom/tether",
     "T230 ctx.binary wins")
   -- ... then TETHER_BIN over exepath
   if not env_empty then
-    local cmd_env = sub.build_command(item, {})
-    assert_true(cmd_env:find(env_bin, 1, true) ~= nil,
+    local argv_env = sub.build_command(item, {})
+    assert_true(argv_env[1]:find(env_bin, 1, true) ~= nil,
       "T230 TETHER_BIN wins over exepath")
   end
   -- no exepath primitive (plain-lua) keeps the old PATH fallback
   _G.tether = {}
   if env_empty then
-    local cmd_fb = sub.build_command(item, {})
-    assert_true(cmd_fb:find("'tether' -w", 1, true) ~= nil,
+    local argv_fb = sub.build_command(item, {})
+    assert_eq(argv_fb[1], "tether",
       "T230 PATH fallback without exepath")
   end
   _G.tether = orig_tether
@@ -498,16 +508,23 @@ do
   local orig_tether = _G.tether
   _G.tether = {}
   local sub = assert(loadfile("src/tether/subagent.lua"))()
-  local cmd = sub.build_command(
+  local argv = sub.build_command(
     { task = "fix it", model = "m", cwd = "/ws", timeout = 5 }, {})
-  assert_true(cmd:find("--print 'fix it'", 1, true) ~= nil,
+  local pi, wi = nil, nil
+  for i, a in ipairs(argv) do
+    if a == "--print" then pi = i end
+    if a == "-w" then wi = i end
+  end
+  assert_notnil(pi, "T231 argv has --print")
+  assert_eq(argv[pi + 1], "fix it",
     "T231 task immediately follows --print")
-  local pw, pp = cmd:find("-w ", 1, true), cmd:find("--print", 1, true)
-  assert_true(pw ~= nil and pp ~= nil and pw < pp,
+  assert_true(wi ~= nil and pi ~= nil and wi < pi,
     "T231 flags precede --print")
-  local cmd2 = sub.build_command(
+  local argv2 = sub.build_command(
     { task = "fix it", cwd = "/ws", timeout = 5 }, {})
-  assert_true(cmd2:find("--print 'fix it'", 1, true) ~= nil,
+  local pi2 = nil
+  for i, a in ipairs(argv2) do if a == "--print" then pi2 = i end end
+  assert_eq(argv2[pi2 + 1], "fix it",
     "T231 task glued without optional flags too")
   _G.tether = orig_tether
   print("T231 subagent task rides with --print: OK")
@@ -525,7 +542,7 @@ do
   }
   local spawned, polls, kills, freed = 0, 0, 0, 0
   _G.tether = {
-    exec_bg_start = function(cmd) spawned = spawned + 1 return {} end,
+    exec_bg_argv = function(argv, opts) spawned = spawned + 1 return {} end,
     exec_bg_poll = function(h, ms)
       polls = polls + 1
       assert_true((ms or 0) == 0, "T232 bg path never blocks in poll")
@@ -572,7 +589,7 @@ do
   local spawned, freed = 0, 0
   local phase = "running"
   _G.tether = {
-    exec_bg_start = function(cmd) spawned = spawned + 1 return {} end,
+    exec_bg_argv = function(argv, opts) spawned = spawned + 1 return {} end,
     exec_bg_poll = function(h, ms) return phase, 0 end,
     exec_bg_kill = function(h) return true end,
     exec_bg_free = function(h) freed = freed + 1 return true end,
@@ -637,7 +654,7 @@ do
   local states = {} -- handle n -> "running" | "done"
   local outtext = {}
   _G.tether = {
-    exec_bg_start = function(cmd)
+    exec_bg_argv = function(argv, opts)
       spawned = spawned + 1
       live = live + 1
       max_live = math.max(max_live, live)
@@ -726,7 +743,7 @@ do
   end }
   local orig_tether = _G.tether
   _G.tether = {
-    exec_bg_start = function(cmd) return {} end,
+    exec_bg_argv = function(argv, opts) return {} end,
     exec_bg_poll = function(h, ms)
       polls = polls + 1
       if polls > 50 then return "done", 0 end -- failsafe: no test hang
@@ -1396,7 +1413,7 @@ do
     local kills = 0
     local orig_tether = _G.tether
     _G.tether = {
-      exec_bg_start = function(cmd) return {} end,
+      exec_bg_argv = function(argv, opts) return {} end,
       exec_bg_poll = function(h, ms) return "running", 0 end,
       exec_bg_kill = function(h) kills = kills + 1 return true end,
       exec_bg_free = function(h) return true end,

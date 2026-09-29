@@ -192,6 +192,7 @@ M.errors = {
     device_request_failed = "device request failed",
     login_store_failed = "login store failed",
     oauth_exchange_failed = "oauth exchange failed",
+    oauth_state_mismatch = "oauth callback state mismatch — paste the code manually",
     unknown_provider_prefix = "unknown provider: ",
     no_provider_logged_in = "no provider is logged in",
     no_stored_credential_prefix = "no stored credential for ",

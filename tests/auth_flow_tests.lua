@@ -111,6 +111,156 @@ do
   print("T3.3 login/logout command bodies: OK")
 end
 
+-- T3.4: loopback-callback login — begin opens the listener, the tick
+-- consumes a matching callback into the exchange path, mismatch/timeout/
+-- abort/paste keep the secret prompt with the listener freed.
+do
+  local auth = assert(loadfile("src/tether/ui/auth.lua"))()
+  local copy = assert(loadfile("src/tether/ui/copy.lua"))()
+  local catalog = assert(loadfile("src/tether/providers/catalog.lua"))()
+  local freed = {}
+  local step_ret = { "waiting" }
+  local aborted = false
+  local host = {
+    oauth_wait_start = function() return { id = "w" } end,
+    oauth_wait_info = function(h) return 4567, "state-abc" end,
+    oauth_wait_step = function(h) return step_ret[1], step_ret[2], step_ret[3] end,
+    oauth_wait_free = function(h) freed[#freed + 1] = h return true end,
+    abort_requested = function() return aborted end,
+  }
+  local noted = {}
+  local stored, exchanged = nil, nil
+  local deps = {
+    errors = copy.errors,
+    catalog = catalog,
+    load_provider = function(name) return nil end, -- force the generic flow
+    auth = { set = function(_, p, entry) stored = entry return true end },
+    common = {
+      url_decode = function(s) return s end,
+      oauth_token_exchange = function(post, flow, code, now)
+        exchanged = { flow = flow, code = code }
+        return { kind = "oauth", access_token = "at-cb" }
+      end,
+    },
+    host = host,
+    note = function(t) noted[#noted + 1] = t end,
+    bump = function() end,
+  }
+  local function oauth_cfg(extra)
+    local cfg = { providers = { radius = {
+      oauth_client_id = "cid-a",
+      oauth_token_url = "https://example.com/token",
+      oauth_authorize_url = "https://example.com/auth",
+    } } }
+    if extra then for k, v in pairs(extra) do cfg[k] = v end end
+    return cfg
+  end
+  -- begin opens the listener and authorizes against its URI
+  local bag = { cfg = oauth_cfg() }
+  assert_true(auth.begin(bag, deps, "radius"), "T3.4 begin arms secret mode")
+  assert_notnil(bag.login_wait, "T3.4 listener opened")
+  assert_eq(bag.cfg._oauth_loopback.uri, "http://127.0.0.1:4567/",
+    "T3.4 channel carries the listener URI")
+  assert_notnil(bag.login_flow, "T3.4 flow built")
+  assert_true((bag.login_flow.authorize_url or ""):find("127.0.0.1", 1, true) ~= nil,
+    "T3.4 authorize URL points at the listener")
+  assert_true((bag.login_flow.authorize_url or ""):find("state=state%-abc", 1) ~= nil,
+    "T3.4 authorize URL carries state")
+  -- matching callback auto-exchanges, stores, and frees the wait
+  step_ret = { "code", "authcode-9", "state-abc" }
+  assert_eq(auth.poll_tick(bag, deps), "granted", "T3.4 matching callback granted")
+  assert_eq(stored and stored.access_token, "at-cb", "T3.4 callback token stored")
+  assert_eq(exchanged and exchanged.code, "authcode-9", "T3.4 exchanged code")
+  assert_eq(exchanged and exchanged.flow.redirect_uri, "http://127.0.0.1:4567/",
+    "T3.4 exchange posts the authorizing URI")
+  assert_eq(bag.login_wait, nil, "T3.4 wait freed after consume")
+  assert_eq(bag.cfg._oauth_loopback, nil, "T3.4 channel cleared after consume")
+  assert_eq(#freed, 1, "T3.4 listener freed once")
+  -- mismatch banners, keeps the prompt, frees the single-shot wait
+  freed = {}
+  bag = { cfg = oauth_cfg() }
+  auth.begin(bag, deps, "radius")
+  step_ret = { "code", "evil", "wrong-state" }
+  assert_eq(auth.poll_tick(bag, deps), "pending", "T3.4 mismatch pends")
+  assert_eq(bag.error_banner, copy.errors.oauth_state_mismatch,
+    "T3.4 mismatch bannered")
+  assert_notnil(bag.login_secret, "T3.4 prompt stays open for paste")
+  assert_eq(stored.access_token, "at-cb", "T3.4 mismatch exchanges nothing")
+  assert_eq(bag.login_wait, nil, "T3.4 single-shot wait freed on mismatch")
+  -- timeout falls back to paste with a note, prompt stays
+  freed = {}
+  noted = {}
+  bag = { cfg = oauth_cfg() }
+  auth.begin(bag, deps, "radius")
+  bag.login_wait_deadline = os.time() - 1
+  assert_eq(auth.poll_tick(bag, deps), "pending", "T3.4 timeout pends")
+  assert_notnil(bag.login_secret, "T3.4 prompt stays open after timeout")
+  assert_eq(bag.login_wait, nil, "T3.4 wait freed on timeout")
+  assert_true(#noted == 1 and noted[1]:find("timed out", 1, true) ~= nil,
+    "T3.4 timeout noted")
+  -- abort ends the wait the same way
+  freed = {}
+  noted = {}
+  aborted = true
+  bag = { cfg = oauth_cfg() }
+  auth.begin(bag, deps, "radius")
+  assert_eq(auth.poll_tick(bag, deps), "pending", "T3.4 abort pends")
+  assert_eq(bag.login_wait, nil, "T3.4 wait freed on abort")
+  assert_true(#noted == 1 and noted[1]:find("aborted", 1, true) ~= nil,
+    "T3.4 abort noted")
+  aborted = false
+  -- pasting while the wait is open wins and frees the listener
+  freed = {}
+  stored = nil
+  bag = { cfg = oauth_cfg() }
+  auth.begin(bag, deps, "radius")
+  local w = bag.login_wait
+  assert_notnil(w, "T3.4 wait open before paste")
+  assert_true(auth.submit(bag, deps, "pasted-code-1"), "T3.4 paste submits")
+  assert_eq(freed[#freed], w, "T3.4 paste frees the open wait")
+  assert_eq(exchanged.code, "pasted-code-1", "T3.4 pasted code exchanged")
+  -- fixed override bypasses the listener entirely
+  freed = {}
+  bag = { cfg = oauth_cfg({ providers = { radius = {
+    oauth_client_id = "cid-a",
+    oauth_token_url = "https://example.com/token",
+    oauth_authorize_url = "https://example.com/auth",
+    oauth_redirect_uri = "http://localhost:7777/",
+  } } }) }
+  auth.begin(bag, deps, "radius")
+  assert_eq(bag.login_wait, nil, "T3.4 override keeps no listener")
+  assert_eq(#freed, 1, "T3.4 unused listener freed again")
+  assert_true((bag.login_flow.authorize_url or ""):find("localhost%3A7777", 1, true) ~= nil,
+    "T3.4 override URI in the authorize link")
+  -- no host support degrades to paste-only with no channel
+  freed = {}
+  bag = { cfg = oauth_cfg() }
+  auth.begin(bag, { errors = copy.errors, catalog = catalog,
+    load_provider = function(name) return nil end,
+    auth = deps.auth, common = deps.common, host = {},
+    note = deps.note, bump = deps.bump }, "radius")
+  assert_notnil(bag.login_flow, "T3.4 flow kept for paste without host support")
+  assert_true(bag.login_flow.authorize_url == nil,
+    "T3.4 no dead link without a listener")
+  assert_eq(bag.cfg._oauth_loopback, nil, "T3.4 no channel without a listener")
+  assert_eq(#freed, 0, "T3.4 nothing to free without a listener")
+  -- second begin closes the first listener; cancel frees too
+  freed = {}
+  bag = { cfg = oauth_cfg() }
+  auth.begin(bag, deps, "radius")
+  local w1 = bag.login_wait
+  auth.begin(bag, deps, "radius")
+  assert_eq(freed[1], w1, "T3.4 second begin frees the first wait")
+  assert_true(bag.login_wait ~= nil and bag.login_wait ~= w1,
+    "T3.4 second begin opens a fresh wait")
+  local w2 = bag.login_wait
+  auth.cancel(bag)
+  assert_eq(bag.login_wait, nil, "T3.4 cancel drops the wait")
+  assert_eq(bag.cfg._oauth_loopback, nil, "T3.4 cancel clears the channel")
+  assert_eq(freed[#freed], w2, "T3.4 cancel frees through the stashed host")
+  print("T3.4 loopback-callback login: OK")
+end
+
 if failed > 0 then
     os.exit(1)
 end

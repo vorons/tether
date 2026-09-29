@@ -94,15 +94,16 @@ end
 -- on a matching prompt and derives on a divergent one.
 do
     local sub = assert(loadfile("src/tether/subagent.lua"))()
-    local plain = sub.build_command({ task = "fix", cwd = "/ws", timeout = 5 }, {})
-    assert_true(not plain:find("TETHER_CACHE_KEY", 1, true),
+    local _, opts = sub.build_command({ task = "fix", cwd = "/ws", timeout = 5 }, {})
+    assert_true(opts.env.TETHER_CACHE_KEY == nil,
         "TC4 no key without a session")
-    local with_parent = sub.build_command({ task = "fix", cwd = "/ws", timeout = 5 },
+    local _, opts_parent = sub.build_command({ task = "fix", cwd = "/ws", timeout = 5 },
         { cfg = { _session_id = "Parent_S1",
             _system_blocks = { { name = "identity", text = "ID" } } } })
-    assert_true(with_parent:find("TETHER_CACHE_KEY=parent-s1", 1, true) ~= nil,
+    assert_eq(opts_parent.env.TETHER_CACHE_KEY, "parent-s1",
         "TC4 parent key in child env")
-    assert_true(with_parent:find("TETHER_CACHE_SYS=%x+", 1) ~= nil,
+    assert_true(opts_parent.env.TETHER_CACHE_SYS ~= nil
+        and opts_parent.env.TETHER_CACHE_SYS:find("^%x+$") ~= nil,
         "TC4 parent sys hash in child env")
     -- child-side decision is pure (no subprocess): matching prompt reuses
     -- the parent key, a divergent prompt derives, no env falls back to

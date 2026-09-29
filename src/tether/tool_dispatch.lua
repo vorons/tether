@@ -9,6 +9,7 @@
 --          summarize(name, res) -> summary text,
 --          body(name, res) -> body text or nil,
 --          truncate(text) -> bounded text or nil,
+--          post(name, args, shaped) -> shaped (optional after-hooks),
 --          add_history(id, res) (agent history write),
 --          journal(entry) (session journal write).
 --      Moved verbatim from agent.lua (Phase E 5.1); agent keeps a thin
@@ -49,6 +50,27 @@ local function run_tool_call(cfg, on_event, id, name, args, projection, deps)
     else
         summary = deps.summarize(name, res)
         body = deps.body(name, res)
+    end
+    -- extension-system: optional post-shaping hook (after-hooks). It sees
+    -- the exact shaped payload history/journal/event will carry and may
+    -- replace the body, attach details, or flip the error flag. A failing
+    -- post degrades to the unpatched payload. Absent post: no-op below.
+    local is_error = res.error ~= nil
+    if deps.post then
+        local ok, shaped = pcall(deps.post, name, args,
+            { body = body, summary = summary, details = res.details,
+              is_error = is_error })
+        if ok and type(shaped) == "table" then
+            body = shaped.body
+            summary = shaped.summary
+            if shaped.details ~= nil then res.details = shaped.details end
+            is_error = shaped.is_error and true or false
+        end
+    end
+    if is_error then
+        if body ~= nil then res.error = tostring(body) end
+    else
+        res.error = nil
     end
     -- fix-audit-findings 1.2: the model must see the tool's output body, not
     -- just whatever happened to live under `content` (only `read` had one).

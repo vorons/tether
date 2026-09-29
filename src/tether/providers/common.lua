@@ -328,6 +328,27 @@ function M.tools_schema()
               model = str, cwd = str, tools = { type = "array" },
               timeout = num, resume = str } } },
     }
+    -- extension-system: model-callable extension tools ride the same schema
+    -- list (Anthropic/Gemini adapters convert from this shape). Entries are
+    -- appended after the built-ins so declaration order is stable; the
+    -- allowlist filter below applies to them like any other tool.
+    do
+        local extmod = rawget(_G, "extensions")
+        if extmod == nil then
+            local chunk = loadfile("src/tether/extensions.lua")
+            extmod = chunk and chunk() or nil
+        end
+        if extmod and extmod.schema_entries then
+            local ok, entries = pcall(extmod.schema_entries)
+            if ok and type(entries) == "table" then
+                for _, e in ipairs(entries) do
+                    if type(e) == "table" and type(e.name) == "string" then
+                        out[#out + 1] = e
+                    end
+                end
+            end
+        end
+    end
     if tools_filter == nil then return out end
     local kept = {}
     for _, t in ipairs(out) do
@@ -454,8 +475,11 @@ function M.oauth_token_exchange(post_json, flow, code, now)
 end
 
 -- Build the authorize URL from a flow table (query-safe encoding).
+-- flow.state is optional: present only for loopback-callback logins, where
+-- the callback's state is compared against it before any token exchange.
 function M.oauth_authorize_url(base, flow)
     if type(base) ~= "string" or base == "" then return nil end
+    flow = (type(flow) == "table") and flow or {}
     local sep = base:find("?", 1, true) and "&" or "?"
     local url = base .. sep
         .. "client_id=" .. M.url_encode(flow.client_id or "")
@@ -463,6 +487,9 @@ function M.oauth_authorize_url(base, flow)
         .. "&response_type=code"
     if type(flow.scope) == "string" and flow.scope ~= "" then
         url = url .. "&scope=" .. M.url_encode(flow.scope)
+    end
+    if type(flow.state) == "string" and flow.state ~= "" then
+        url = url .. "&state=" .. M.url_encode(flow.state)
     end
     return url
 end

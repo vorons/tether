@@ -284,6 +284,22 @@ function M.blocks(cfg, opts)
         out[#out + 1] = { name = "skills", text = index }
     end
 
+    -- extension-system: tools listing + prompt notes ride one block after
+    -- skills (same idiom as the other globals: embedded in the binary,
+    -- loadfile fallback for dev/test runs). Absent/empty stays absent so
+    -- extension-less runs compose byte-identically to before.
+    local extmod = _G.extensions
+        or (function()
+            local chunk = loadfile("src/tether/extensions.lua")
+            return chunk and chunk()
+        end)()
+    if extmod and extmod.prompt_block then
+        local ok, blk = pcall(extmod.prompt_block)
+        if ok and type(blk) == "string" and blk ~= "" then
+            out[#out + 1] = { name = "extensions", text = blk }
+        end
+    end
+
     return out
 end
 

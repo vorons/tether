@@ -1016,18 +1016,34 @@ do
   assert_true(openai_p.login_flow({}) == nil,
     "T154 openai without client_id has no oauth flow")
 
-  -- gemini: built-in Google endpoints + configured client_id
+  -- gemini: built-in Google endpoints + configured client_id.
+  -- No listener and no override → paste-only: flow for the exchange,
+  -- but no authorize link (never a placeholder).
   local gflow = gemini_p.login_flow({
     providers = { gemini = { oauth_client_id = "cid-g-123" } },
   })
   assert_notnil(gflow, "T154 gemini login_flow with client_id")
-  assert_true((gflow.authorize_url or ""):find("cid-g-123", 1, true) ~= nil,
-    "T154 authorize URL carries client_id")
-  assert_true((gflow.authorize_url or ""):find("accounts.google.com", 1, true) ~= nil,
-    "T154 gemini authorize host")
+  assert_true(gflow.authorize_url == nil, "T154 no listener means no authorize link")
+  assert_true(gflow.redirect_uri == nil, "T154 no listener means no redirect URI")
   assert_notnil(gflow.token_url, "T154 token_url present")
-  assert_notnil(gflow.redirect_uri, "T154 redirect_uri present")
   assert_eq(gflow.client_id, "cid-g-123", "T154 flow keeps client_id")
+
+  -- live listener via the cfg channel: listener URI + state in the link.
+  local lflow = gemini_p.login_flow({
+    providers = { gemini = { oauth_client_id = "cid-g-123" } },
+    _oauth_loopback = { uri = "http://127.0.0.1:54321/", state = "st-1" },
+  })
+  assert_notnil(lflow, "T154 listener flow built")
+  assert_true((lflow.authorize_url or ""):find("cid-g-123", 1, true) ~= nil,
+    "T154 listener authorize URL carries client_id")
+  assert_true((lflow.authorize_url or ""):find("accounts.google.com", 1, true) ~= nil,
+    "T154 listener authorize host")
+  assert_true((lflow.authorize_url or ""):find("127.0.0.1%3A54321", 1, true) ~= nil,
+    "T154 listener authorize URL carries the listener URI encoded")
+  assert_true((lflow.authorize_url or ""):find("state=st%-1", 1) ~= nil,
+    "T154 listener authorize URL carries state")
+  assert_eq(lflow.redirect_uri, "http://127.0.0.1:54321/", "T154 flow keeps listener URI")
+  assert_eq(lflow.state, "st-1", "T154 flow keeps state for the callback compare")
 
   -- openai/anthropic: endpoints come from config (no invented defaults)
   local oflow = openai_p.login_flow({
@@ -1062,7 +1078,7 @@ do
   assert_eq(captured_body.grant_type, "authorization_code", "T154 grant_type")
   assert_eq(captured_body.code, "authcode-xyz", "T154 authorization code")
   assert_eq(captured_body.client_id, "cid-g-123", "T154 client_id in exchange")
-  assert_eq(captured_body.redirect_uri, gflow.redirect_uri, "T154 redirect_uri echoed")
+  assert_eq(captured_body.redirect_uri, "", "T154 paste-only flow posts empty redirect_uri")
   assert_eq(entry.kind, "oauth", "T154 entry kind oauth")
   assert_eq(entry.access_token, "at-1", "T154 access_token stored")
   assert_eq(entry.refresh_token, "rt-1", "T154 refresh_token stored")
@@ -1087,6 +1103,7 @@ do
 
   -- /login opens a credential dialog carrying the authorize URL and best-effort-
   -- opens a browser when a flow is available; S.login_flow is set for the code path.
+  -- (The stub host offers a listener, so begin() opens one like the real host.)
   local home7 = tmp .. "_h7"
   os.execute("rm -rf '" .. home7 .. "' && mkdir -p '" .. home7 .. "/.tether'")
   local orig_path7 = auth.path
@@ -1112,6 +1129,10 @@ do
   _G.tether = host_mock{
     exec = function(cmd) opens7[#opens7 + 1] = cmd; return true, 0 end,
     getcwd = function() return "/tmp" end,
+    oauth_wait_start = function() return { id = "w7" } end,
+    oauth_wait_info = function(h) return 18080, "ui-state-9" end,
+    oauth_wait_step = function(h) return "waiting" end,
+    oauth_wait_free = function(h) return true end,
   }
   uim7._execute_command("login", "gemini")
   assert_notnil(S7.login_secret, "T154 /login enters secret mode")
@@ -1188,6 +1209,27 @@ do
   _G.provider_catalog = orig_catalog
 
   print("T146-T156 provider login: OK")
+end
+
+-- T160: authorize URL carries state only when the flow has one
+-- (loopback-callback logins); existing callers without state are unaffected.
+do
+  local common = assert(loadfile("src/tether/providers/common.lua"))()
+  local base = "https://example.test/o/authorize"
+  local plain = common.oauth_authorize_url(base,
+    { client_id = "c", redirect_uri = "http://127.0.0.1:9/" })
+  assert_true(plain:find("state=", 1, true) == nil,
+    "T161 no state param without flow.state")
+  local with_state = common.oauth_authorize_url(base,
+    { client_id = "c", redirect_uri = "http://127.0.0.1:9/",
+      state = "s3cr3t&/=?", scope = "api" })
+  assert_true(with_state:find("state=s3cr3t%26%2F%3D%3F", 1, true) ~= nil,
+    "T161 state query-safe encoded")
+  assert_true(with_state:find("scope=api", 1, true) ~= nil,
+    "T161 scope still present with state")
+  assert_true(common.oauth_authorize_url(base, nil):find("client_id=", 1, true) ~= nil,
+    "T161 nil flow degrades to empty fields, no throw")
+  print("T161 authorize URL state: OK")
 end
 
 -- T157: palette-only R4 — error is banner + debug-log only, no overlay.

@@ -266,6 +266,25 @@ function M.load(path, home)
         end
     end
 
+    -- extension-system: disabled list; a missing table behaves as
+    -- all-defaults, a malformed disabled value falls back to empty
+    -- without failing the session.
+    local def_ext = config_schema.default_config().extensions
+    if type(cfg.extensions) ~= "table" then
+        cfg.extensions = def_ext
+    else
+        local dis = cfg.extensions.disabled
+        if type(dis) ~= "table" then
+            cfg.extensions.disabled = {}
+        else
+            local clean = {}
+            for _, n in ipairs(dis) do
+                if type(n) == "string" and n ~= "" then clean[#clean + 1] = n end
+            end
+            cfg.extensions.disabled = clean
+        end
+    end
+
     -- add-reasoning-level: only the four levels are valid; a missing,
     -- unknown or non-string value behaves as `off` without failing the
     -- session (spec config: Defaults).

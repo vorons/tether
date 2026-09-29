@@ -1487,154 +1487,798 @@ static void test_read_char_nb_never_waits(lua_State *L)
     }
 }
 
-static void test_exec_bg(lua_State *L)
+static void push_str_array(lua_State *L, const char *const *items, int n)
 {
-    /* start("true") -> poll to done, exit 0, free */
+    int i;
+    lua_newtable(L);
+    for (i = 0; i < n; i++) {
+        lua_pushstring(L, items[i]);
+        lua_seti(L, -2, (lua_Integer)(i + 1));
+    }
+}
+
+/* opts = {cwd?, outfile?, stdin?}: stdin_mode "null"/NULL selects /dev/null,
+ * pipe_bytes != NULL selects {pipe = pipe_bytes}. */
+static void push_argv_opts(lua_State *L, const char *cwd, const char *outfile,
+                           const char *stdin_mode, const char *pipe_bytes)
+{
+    lua_newtable(L);
+    if (cwd != NULL) {
+        lua_pushstring(L, cwd);
+        lua_setfield(L, -2, "cwd");
+    }
+    if (outfile != NULL) {
+        lua_pushstring(L, outfile);
+        lua_setfield(L, -2, "outfile");
+    }
+    if (pipe_bytes != NULL) {
+        lua_newtable(L);
+        lua_pushstring(L, pipe_bytes);
+        lua_setfield(L, -2, "pipe");
+        lua_setfield(L, -2, "stdin");
+    } else if (stdin_mode != NULL) {
+        lua_pushstring(L, stdin_mode);
+        lua_setfield(L, -2, "stdin");
+    }
+}
+
+/* Polls the handle at stack index hidx until done (bounded): returns 1 with
+ * *code_out set, or 0 while still running. Stack-balanced. */
+static int argv_poll_done(lua_State *L, int hidx, int *code_out)
+{
+    int i;
+    for (i = 0; i < 400; i++) {
+        const char *status;
+        lua_getglobal(L, "tether");
+        lua_getfield(L, -1, "exec_bg_poll");
+        lua_remove(L, -2);
+        lua_pushvalue(L, hidx);
+        lua_pushinteger(L, 25);
+        if (lua_pcall(L, 2, 2, 0) != LUA_OK) {
+            report_lua_error(L, "exec_bg_poll");
+            return 0;
+        }
+        status = lua_tostring(L, -2);
+        if (status != NULL && strcmp(status, "done") == 0) {
+            *code_out = (int)lua_tointeger(L, -1);
+            lua_pop(L, 2);
+            return 1;
+        }
+        lua_pop(L, 2);
+    }
+    return 0;
+}
+
+static char *read_file_bytes(const char *path, size_t *len_out)
+{
+    FILE *f = fopen(path, "rb");
+    long n;
+    char *buf;
+    size_t got;
+    if (f == NULL)
+        return NULL;
+    if (fseek(f, 0, SEEK_END) != 0) {
+        fclose(f);
+        return NULL;
+    }
+    n = ftell(f);
+    if (n < 0) {
+        fclose(f);
+        return NULL;
+    }
+    rewind(f);
+    buf = malloc((size_t)n + 1);
+    if (buf == NULL) {
+        fclose(f);
+        return NULL;
+    }
+    got = fread(buf, 1, (size_t)n, f);
+    fclose(f);
+    buf[got] = '\0';
+    if (len_out != NULL)
+        *len_out = got;
+    return buf;
+}
+
+/* Frees the handle at hidx (reports through check) and pops it. */
+static void argv_free_handle(lua_State *L, int hidx, const char *what)
+{
+    char msg[128];
     lua_getglobal(L, "tether");
-    lua_getfield(L, -1, "exec_bg_start");
+    lua_getfield(L, -1, "exec_bg_free");
     lua_remove(L, -2);
-    lua_pushstring(L, "true");
-    if (lua_pcall(L, 1, 2, 0) != LUA_OK) {
-        report_lua_error(L, "exec_bg_start");
-        return;
+    lua_pushvalue(L, hidx);
+    if (lua_pcall(L, 1, 1, 0) != LUA_OK) {
+        report_lua_error(L, "exec_bg_free");
+    } else {
+        snprintf(msg, sizeof(msg), "%s", what);
+        check(lua_toboolean(L, -1) == 1, msg);
+        lua_pop(L, 1);
+    }
+    lua_pop(L, 1);
+}
+
+/* Spawns exec_bg_argv(argv, opts): on success returns the stack index of
+ * the handle, else 0 (failure already reported via check). */
+static int argv_spawn(lua_State *L, const char *const *args, int nargs,
+                      const char *cwd, const char *outfile,
+                      const char *stdin_mode, const char *pipe_bytes,
+                      const char *what)
+{
+    char msg[160];
+    lua_getglobal(L, "tether");
+    lua_getfield(L, -1, "exec_bg_argv");
+    lua_remove(L, -2);
+    push_str_array(L, args, nargs);
+    push_argv_opts(L, cwd, outfile, stdin_mode, pipe_bytes);
+    if (lua_pcall(L, 2, 2, 0) != LUA_OK) {
+        report_lua_error(L, "exec_bg_argv");
+        return 0;
     }
     if (lua_isnil(L, -2)) {
-        check(0, "exec_bg_start(true) spawns");
+        snprintf(msg, sizeof(msg), "%s", what);
+        check(0, msg);
         lua_pop(L, 2);
-        return;
+        return 0;
     }
     lua_pop(L, 1); /* drop nil error slot */
-    check(luaL_testudata(L, -1, "tether.exec_proc") != NULL,
-          "exec_bg_start returns a proc handle");
-    int hidx = lua_gettop(L);
-    const char *status = "running";
-    int code = -1, i;
-    for (i = 0; i < 200 && strcmp(status, "running") == 0; i++) {
-        lua_getglobal(L, "tether");
-        lua_getfield(L, -1, "exec_bg_poll");
-        lua_remove(L, -2);
-        lua_pushvalue(L, hidx);
-        lua_pushinteger(L, 50);
-        if (lua_pcall(L, 2, 2, 0) != LUA_OK) {
-            report_lua_error(L, "exec_bg_poll");
-            break;
-        }
-        status = lua_tostring(L, -2);
-        if (status != NULL && strcmp(status, "done") == 0)
-            code = (int)lua_tointeger(L, -1);
-        lua_pop(L, 2);
-    }
-    check(status != NULL && strcmp(status, "done") == 0,
-          "exec_bg short command completes");
-    check(code == 0, "exec_bg true exits 0");
-    lua_getglobal(L, "tether");
-    lua_getfield(L, -1, "exec_bg_free");
-    lua_remove(L, -2);
-    lua_pushvalue(L, hidx);
-    if (lua_pcall(L, 1, 1, 0) != LUA_OK) {
-        report_lua_error(L, "exec_bg_free");
-    } else {
-        check(lua_toboolean(L, -1) == 1, "exec_bg_free reports success");
+    if (luaL_testudata(L, -1, "tether.exec_proc") == NULL) {
+        check(0, what);
         lua_pop(L, 1);
+        return 0;
     }
-    lua_pop(L, 1); /* drop the freed handle */
+    return lua_gettop(L);
+}
 
-    /* start("sleep 30") -> poll(0) running -> kill -> done; free */
+static void test_exec_bg_argv(lua_State *L)
+{
+    char out1[512], out2[512], out3[512];
+    snprintf(out1, sizeof(out1), "/tmp/tether_argv_test_%d_1.out", (int)getpid());
+    snprintf(out2, sizeof(out2), "/tmp/tether_argv_test_%d_2.out", (int)getpid());
+    snprintf(out3, sizeof(out3), "/tmp/tether_argv_test_%d_3.out", (int)getpid());
+
+    /* argv with shell metacharacters arrives byte-exact, no shell involved */
+    {
+        const char *args[] = { "/bin/echo", "it's", "a b", "$(x)", "l1\nl2" };
+        int hidx = argv_spawn(L, args, 5, NULL, out1, "null", NULL,
+                              "exec_bg_argv(echo ...) spawns");
+        if (hidx != 0) {
+            int code = -1;
+            check(argv_poll_done(L, hidx, &code), "exec_bg_argv echo completes");
+            check(code == 0, "exec_bg_argv echo exits 0");
+            {
+                char *body = read_file_bytes(out1, NULL);
+                check(body != NULL && strcmp(body, "it's a b $(x) l1\nl2\n") == 0,
+                      "exec_bg_argv argv is byte-exact (no shell quoting)");
+                free(body);
+            }
+            /* reap-once: a second poll still reports the same done state */
+            check(argv_poll_done(L, hidx, &code) && code == 0,
+                  "exec_bg_argv handle reaps exactly once");
+            argv_free_handle(L, hidx, "exec_bg_argv free reports success");
+        }
+    }
+
+    /* default stdin is /dev/null: cat reads EOF and exits 0 with no output */
+    {
+        const char *args[] = { "/bin/cat" };
+        int hidx = argv_spawn(L, args, 1, NULL, out2, NULL, NULL,
+                              "exec_bg_argv(cat) spawns");
+        if (hidx != 0) {
+            int code = -1;
+            size_t len = 1;
+            char *body;
+            check(argv_poll_done(L, hidx, &code), "exec_bg_argv cat completes");
+            check(code == 0, "exec_bg_argv cat exits 0 on /dev/null stdin");
+            body = read_file_bytes(out2, &len);
+            check(body != NULL && len == 0, "exec_bg_argv /dev/null stdin yields empty output");
+            free(body);
+            argv_free_handle(L, hidx, "exec_bg_argv cat free reports success");
+        }
+    }
+
+    /* piped stdin round-trips byte-exact, incl. a leading-dash payload */
+    {
+        const char *args[] = { "/bin/cat" };
+        const char *payload = "--weird -flag 'quoted' $(x)\nsecond line";
+        int hidx = argv_spawn(L, args, 1, NULL, out3, NULL, payload,
+                              "exec_bg_argv(cat, pipe) spawns");
+        if (hidx != 0) {
+            int code = -1;
+            check(argv_poll_done(L, hidx, &code), "exec_bg_argv piped cat completes");
+            check(code == 0, "exec_bg_argv piped cat exits 0");
+            {
+                char *body = read_file_bytes(out3, NULL);
+                check(body != NULL && strcmp(body, payload) == 0,
+                      "exec_bg_argv pipe payload is byte-exact (leading dash safe)");
+                free(body);
+            }
+            argv_free_handle(L, hidx, "exec_bg_argv piped free reports success");
+        }
+    }
+
+    /* large piped payload (past the 64 KiB pipe buffer): the spawner never
+     * blocks — the writer grandchild owns the write side on its own */
+    {
+        const char *args[] = { "/bin/cat" };
+        size_t big_len = 256 * 1024;
+        char *big = malloc(big_len);
+        int hidx = 0;
+        size_t k;
+        check(big != NULL, "exec_bg_argv big payload fixture allocated");
+        if (big != NULL) {
+            for (k = 0; k < big_len; k++)
+                big[k] = (char)('A' + (k % 26));
+            lua_getglobal(L, "tether");
+            lua_getfield(L, -1, "exec_bg_argv");
+            lua_remove(L, -2);
+            push_str_array(L, args, 1);
+            lua_newtable(L);
+            lua_pushstring(L, out3);
+            lua_setfield(L, -2, "outfile");
+            lua_newtable(L);
+            lua_pushlstring(L, big, big_len);
+            lua_setfield(L, -2, "pipe");
+            lua_setfield(L, -2, "stdin");
+            if (lua_pcall(L, 2, 2, 0) != LUA_OK) {
+                report_lua_error(L, "exec_bg_argv");
+            } else if (lua_isnil(L, -2)) {
+                check(0, "exec_bg_argv(cat, big pipe) spawns");
+                lua_pop(L, 2);
+            } else {
+                lua_pop(L, 1);
+                hidx = lua_gettop(L);
+            }
+        }
+        if (hidx != 0) {
+            int code = -1;
+            check(argv_poll_done(L, hidx, &code), "exec_bg_argv big pipe completes");
+            check(code == 0, "exec_bg_argv big pipe exits 0");
+            {
+                size_t got = 0;
+                char *body = read_file_bytes(out3, &got);
+                check(body != NULL && got == big_len && memcmp(body, big, big_len) == 0,
+                      "exec_bg_argv big pipe payload is byte-exact (spawner never blocks)");
+                free(body);
+            }
+            argv_free_handle(L, hidx, "exec_bg_argv big pipe free reports success");
+        }
+        free(big);
+    }
+
+    /* cwd reaches the child: /bin/pwd reports the requested directory */
+    {
+        const char *args[] = { "/bin/pwd" };
+        int hidx = argv_spawn(L, args, 1, "/tmp", out1, "null", NULL,
+                              "exec_bg_argv(pwd) spawns");
+        if (hidx != 0) {
+            int code = -1;
+            check(argv_poll_done(L, hidx, &code), "exec_bg_argv pwd completes");
+            check(code == 0, "exec_bg_argv pwd exits 0");
+            {
+                char *body = read_file_bytes(out1, NULL);
+                check(body != NULL && strcmp(body, "/tmp\n") == 0,
+                      "exec_bg_argv cwd reaches the child");
+                free(body);
+            }
+            argv_free_handle(L, hidx, "exec_bg_argv pwd free reports success");
+        }
+    }
+
+    /* env table: TETHER_ARGV_PROBE arrives in the child environment */
+    {
+        const char *args[] = { "/usr/bin/printenv", "TETHER_ARGV_PROBE" };
+        int hidx;
+        lua_getglobal(L, "tether");
+        lua_getfield(L, -1, "exec_bg_argv");
+        lua_remove(L, -2);
+        push_str_array(L, args, 2);
+        lua_newtable(L);
+        lua_pushstring(L, out1);
+        lua_setfield(L, -2, "outfile");
+        lua_newtable(L);
+        lua_pushstring(L, "argv-ok");
+        lua_setfield(L, -2, "TETHER_ARGV_PROBE");
+        lua_setfield(L, -2, "env");
+        if (lua_pcall(L, 2, 2, 0) != LUA_OK) {
+            report_lua_error(L, "exec_bg_argv");
+            hidx = 0;
+        } else if (lua_isnil(L, -2)) {
+            check(0, "exec_bg_argv(env) spawns");
+            lua_pop(L, 2);
+            hidx = 0;
+        } else {
+            lua_pop(L, 1);
+            hidx = lua_gettop(L);
+        }
+        if (hidx != 0) {
+            int code = -1;
+            check(argv_poll_done(L, hidx, &code), "exec_bg_argv env spawn completes");
+            check(code == 0, "exec_bg_argv env probe exits 0");
+            {
+                char *body = read_file_bytes(out1, NULL);
+                check(body != NULL && strcmp(body, "argv-ok\n") == 0,
+                      "exec_bg_argv env reaches the child");
+                free(body);
+            }
+            argv_free_handle(L, hidx, "exec_bg_argv env free reports success");
+        }
+    }
+
+    /* missing cwd names chdir instead of a bare 127 */
+    {
+        const char *args[] = { "/bin/true" };
+        lua_getglobal(L, "tether");
+        lua_getfield(L, -1, "exec_bg_argv");
+        lua_remove(L, -2);
+        push_str_array(L, args, 1);
+        push_argv_opts(L, "/no/such/dir/for-tether-argv-test", out1, "null", NULL);
+        if (lua_pcall(L, 2, 2, 0) != LUA_OK) {
+            report_lua_error(L, "exec_bg_argv");
+        } else {
+            const char *err = NULL;
+            check(lua_isnil(L, -2), "exec_bg_argv missing cwd returns nil");
+            if (!lua_isnil(L, -2))
+                lua_pop(L, 2);
+            else {
+                err = lua_tostring(L, -1);
+                check(err != NULL && strstr(err, "chdir") != NULL,
+                      "exec_bg_argv missing cwd names chdir");
+                lua_pop(L, 2);
+            }
+        }
+    }
+
+    /* unopenable outfile names the open instead of a bare 127 */
+    {
+        const char *args[] = { "/bin/true" };
+        lua_getglobal(L, "tether");
+        lua_getfield(L, -1, "exec_bg_argv");
+        lua_remove(L, -2);
+        push_str_array(L, args, 1);
+        push_argv_opts(L, NULL, "/no/such/dir/for-tether-argv-test/out", "null", NULL);
+        if (lua_pcall(L, 2, 2, 0) != LUA_OK) {
+            report_lua_error(L, "exec_bg_argv");
+        } else {
+            const char *err = NULL;
+            check(lua_isnil(L, -2), "exec_bg_argv bad outfile returns nil");
+            if (!lua_isnil(L, -2))
+                lua_pop(L, 2);
+            else {
+                err = lua_tostring(L, -1);
+                check(err != NULL && strstr(err, "open outfile") != NULL,
+                      "exec_bg_argv bad outfile names the open");
+                lua_pop(L, 2);
+            }
+        }
+    }
+
+    /* missing image names execv */
+    {
+        const char *args[] = { "/no/such/bin/for-tether-argv-test" };
+        lua_getglobal(L, "tether");
+        lua_getfield(L, -1, "exec_bg_argv");
+        lua_remove(L, -2);
+        push_str_array(L, args, 1);
+        push_argv_opts(L, NULL, out1, "null", NULL);
+        if (lua_pcall(L, 2, 2, 0) != LUA_OK) {
+            report_lua_error(L, "exec_bg_argv");
+        } else {
+            const char *err = NULL;
+            check(lua_isnil(L, -2), "exec_bg_argv missing image returns nil");
+            if (!lua_isnil(L, -2))
+                lua_pop(L, 2);
+            else {
+                err = lua_tostring(L, -1);
+                check(err != NULL && strstr(err, "execv") != NULL,
+                      "exec_bg_argv missing image names execv");
+                lua_pop(L, 2);
+            }
+        }
+    }
+
+    /* tree-kill: kill ends the grandchild too (sh + sleep), code maps to 127 */
+    {
+        const char *args[] = { "/bin/sh", "-c", "sleep 30 & wait" };
+        int hidx = argv_spawn(L, args, 3, NULL, out1, "null", NULL,
+                              "exec_bg_argv(sh+sleep) spawns");
+        if (hidx != 0) {
+            int code = -1;
+            lua_getglobal(L, "tether");
+            lua_getfield(L, -1, "exec_bg_poll");
+            lua_remove(L, -2);
+            lua_pushvalue(L, hidx);
+            lua_pushinteger(L, 0);
+            if (lua_pcall(L, 2, 1, 0) != LUA_OK) {
+                report_lua_error(L, "exec_bg_poll");
+            } else {
+                check(lua_tostring(L, -1) != NULL
+                          && strcmp(lua_tostring(L, -1), "running") == 0,
+                      "exec_bg_argv group still running on zero-timeout poll");
+                lua_pop(L, 1);
+            }
+            lua_getglobal(L, "tether");
+            lua_getfield(L, -1, "exec_bg_kill");
+            lua_remove(L, -2);
+            lua_pushvalue(L, hidx);
+            if (lua_pcall(L, 1, 1, 0) != LUA_OK) {
+                report_lua_error(L, "exec_bg_kill");
+            } else {
+                check(lua_toboolean(L, -1) == 1, "exec_bg_argv kill reports success");
+                lua_pop(L, 1);
+            }
+            check(argv_poll_done(L, hidx, &code), "exec_bg_argv killed group reports done");
+            check(code == 127, "exec_bg_argv signal death maps to 127");
+            argv_free_handle(L, hidx, "exec_bg_argv kill free reports success");
+        }
+    }
+
+    /* validation: empty argv and NUL bytes fail with a named error */
+    {
+        lua_getglobal(L, "tether");
+        lua_getfield(L, -1, "exec_bg_argv");
+        lua_remove(L, -2);
+        lua_newtable(L);
+        lua_newtable(L);
+        if (lua_pcall(L, 2, 2, 0) != LUA_OK) {
+            report_lua_error(L, "exec_bg_argv");
+        } else {
+            check(lua_isnil(L, -2), "exec_bg_argv empty argv returns nil");
+            lua_pop(L, 2);
+        }
+    }
+    {
+        lua_getglobal(L, "tether");
+        lua_getfield(L, -1, "exec_bg_argv");
+        lua_remove(L, -2);
+        lua_newtable(L);
+        lua_pushlstring(L, "a\0b", 3);
+        lua_seti(L, -2, 1);
+        lua_newtable(L);
+        if (lua_pcall(L, 2, 2, 0) != LUA_OK) {
+            report_lua_error(L, "exec_bg_argv");
+        } else {
+            const char *err = NULL;
+            check(lua_isnil(L, -2), "exec_bg_argv NUL argv returns nil");
+            if (!lua_isnil(L, -2))
+                lua_pop(L, 2);
+            else {
+                err = lua_tostring(L, -1);
+                check(err != NULL && strstr(err, "NUL") != NULL,
+                      "exec_bg_argv NUL argv names the problem");
+                lua_pop(L, 2);
+            }
+        }
+    }
+
+    remove(out1);
+    remove(out2);
+    remove(out3);
+}
+
+/* Raw TCP client for the oauth_wait tests: connects to 127.0.0.1:port,
+ * sends the request bytes, returns the connected fd (or -1). */
+static int oauth_test_connect(int port)
+{
+    int fd = socket(AF_INET, SOCK_STREAM, 0);
+    struct sockaddr_in addr;
+    if (fd < 0)
+        return -1;
+    memset(&addr, 0, sizeof(addr));
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    addr.sin_port = htons((unsigned short)port);
+    if (connect(fd, (struct sockaddr *)&addr, sizeof(addr)) != 0) {
+        close(fd);
+        return -1;
+    }
+    return fd;
+}
+
+static int oauth_test_send(int fd, const char *req)
+{
+    size_t len = strlen(req), off = 0;
+    while (off < len) {
+        ssize_t n = write(fd, req + off, len - off);
+        if (n < 0) {
+            if (errno == EINTR)
+                continue;
+            return -1;
+        }
+        if (n == 0)
+            return -1;
+        off += (size_t)n;
+    }
+    return 0;
+}
+
+/* Starts a wait: returns 1 with the handle on top of the stack. */
+static int oauth_test_start(lua_State *L, const char *what)
+{
     lua_getglobal(L, "tether");
-    lua_getfield(L, -1, "exec_bg_start");
+    lua_getfield(L, -1, "oauth_wait_start");
     lua_remove(L, -2);
-    lua_pushstring(L, "sleep 30");
-    if (lua_pcall(L, 1, 2, 0) != LUA_OK) {
-        report_lua_error(L, "exec_bg_start");
-        return;
+    if (lua_pcall(L, 0, 2, 0) != LUA_OK) {
+        report_lua_error(L, "oauth_wait_start");
+        return 0;
     }
     if (lua_isnil(L, -2)) {
-        check(0, "exec_bg_start(sleep) spawns");
+        check(0, what);
         lua_pop(L, 2);
-        return;
+        return 0;
     }
     lua_pop(L, 1);
-    hidx = lua_gettop(L);
-    lua_getglobal(L, "tether");
-    lua_getfield(L, -1, "exec_bg_poll");
-    lua_remove(L, -2);
-    lua_pushvalue(L, hidx);
-    lua_pushinteger(L, 0);
-    if (lua_pcall(L, 2, 1, 0) != LUA_OK) {
-        report_lua_error(L, "exec_bg_poll");
-    } else {
-        check(lua_tostring(L, -1) != NULL && strcmp(lua_tostring(L, -1), "running") == 0,
-              "exec_bg long command still running on zero-timeout poll");
+    if (luaL_testudata(L, -1, "tether.oauth_wait") == NULL) {
+        check(0, what);
         lua_pop(L, 1);
+        return 0;
     }
-    lua_getglobal(L, "tether");
-    lua_getfield(L, -1, "exec_bg_kill");
-    lua_remove(L, -2);
-    lua_pushvalue(L, hidx);
-    if (lua_pcall(L, 1, 1, 0) != LUA_OK) {
-        report_lua_error(L, "exec_bg_kill");
-    } else {
-        check(lua_toboolean(L, -1) == 1, "exec_bg_kill reports success");
-        lua_pop(L, 1);
-    }
-    status = "running";
-    code = -1;
-    for (i = 0; i < 40 && strcmp(status, "running") == 0; i++) {
+    return 1;
+}
+
+/* Steps the handle at hidx until it leaves "waiting" (bounded): returns
+ * the final status string (static buffer not needed — points into Lua). */
+static const char *oauth_test_step(lua_State *L, int hidx)
+{
+    int i;
+    for (i = 0; i < 400; i++) {
+        const char *st;
         lua_getglobal(L, "tether");
-        lua_getfield(L, -1, "exec_bg_poll");
+        lua_getfield(L, -1, "oauth_wait_step");
         lua_remove(L, -2);
         lua_pushvalue(L, hidx);
-        lua_pushinteger(L, 100);
-        if (lua_pcall(L, 2, 2, 0) != LUA_OK) {
-            report_lua_error(L, "exec_bg_poll");
-            break;
+        if (lua_pcall(L, 1, 3, 0) != LUA_OK) {
+            report_lua_error(L, "oauth_wait_step");
+            return "error";
         }
-        status = lua_tostring(L, -2);
-        if (status != NULL && strcmp(status, "done") == 0)
-            code = (int)lua_tointeger(L, -1);
-        lua_pop(L, 2);
+        st = lua_tostring(L, -3);
+        if (st == NULL || strcmp(st, "waiting") != 0) {
+            /* leave results on the stack for the caller to inspect */
+            return st;
+        }
+        lua_pop(L, 3);
     }
-    check(status != NULL && strcmp(status, "done") == 0,
-          "exec_bg killed child reports done");
-    check(code == 127, "exec_bg signal death maps to 127");
-    lua_getglobal(L, "tether");
-    lua_getfield(L, -1, "exec_bg_free");
-    lua_remove(L, -2);
-    lua_pushvalue(L, hidx);
-    if (lua_pcall(L, 1, 1, 0) != LUA_OK) {
-        report_lua_error(L, "exec_bg_free");
-    } else {
-        lua_pop(L, 1);
-    }
-    lua_pop(L, 1);
+    return "waiting";
+}
 
-    /* free on a live child kills + reaps without hanging the caller */
+static void oauth_test_free(lua_State *L, int hidx, const char *what)
+{
     lua_getglobal(L, "tether");
-    lua_getfield(L, -1, "exec_bg_start");
-    lua_remove(L, -2);
-    lua_pushstring(L, "sleep 30");
-    if (lua_pcall(L, 1, 2, 0) != LUA_OK) {
-        report_lua_error(L, "exec_bg_start");
-        return;
-    }
-    if (lua_isnil(L, -2)) {
-        check(0, "exec_bg_start(sleep) spawns");
-        lua_pop(L, 2);
-        return;
-    }
-    lua_pop(L, 1);
-    hidx = lua_gettop(L);
-    lua_getglobal(L, "tether");
-    lua_getfield(L, -1, "exec_bg_free");
+    lua_getfield(L, -1, "oauth_wait_free");
     lua_remove(L, -2);
     lua_pushvalue(L, hidx);
     if (lua_pcall(L, 1, 1, 0) != LUA_OK) {
-        report_lua_error(L, "exec_bg_free");
+        report_lua_error(L, "oauth_wait_free");
     } else {
-        check(lua_toboolean(L, -1) == 1, "exec_bg_free on a live child succeeds");
+        check(lua_toboolean(L, -1) == 1, what);
         lua_pop(L, 1);
     }
     lua_pop(L, 1);
+}
+
+static int oauth_test_is_hex(const char *s, size_t n)
+{
+    size_t i;
+    if (strlen(s) != n)
+        return 0;
+    for (i = 0; i < n; i++) {
+        char c = s[i];
+        if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')))
+            return 0;
+    }
+    return 1;
+}
+
+static void test_oauth_wait(lua_State *L)
+{
+    /* start/info: ephemeral port + 32-hex state, unique per start */
+    if (oauth_test_start(L, "oauth_wait_start returns a handle")) {
+        int hidx = lua_gettop(L);
+        int port1 = 0, port2 = 0;
+        char state1[64] = {0};
+        lua_getglobal(L, "tether");
+        lua_getfield(L, -1, "oauth_wait_info");
+        lua_remove(L, -2);
+        lua_pushvalue(L, hidx);
+        if (lua_pcall(L, 1, 2, 0) != LUA_OK) {
+            report_lua_error(L, "oauth_wait_info");
+        } else {
+            port1 = (int)lua_tointeger(L, -2);
+            const char *s = lua_tostring(L, -1);
+            if (s != NULL)
+                snprintf(state1, sizeof(state1), "%s", s);
+            check(port1 > 0, "oauth_wait binds an ephemeral port");
+            check(oauth_test_is_hex(state1, 32), "oauth_wait mints a 32-hex state");
+            lua_pop(L, 2);
+        }
+        /* idle step never blocks: still waiting with no client */
+        lua_getglobal(L, "tether");
+        lua_getfield(L, -1, "oauth_wait_step");
+        lua_remove(L, -2);
+        lua_pushvalue(L, hidx);
+        if (lua_pcall(L, 1, 1, 0) != LUA_OK) {
+            report_lua_error(L, "oauth_wait_step");
+        } else {
+            check(lua_tostring(L, -1) != NULL
+                      && strcmp(lua_tostring(L, -1), "waiting") == 0,
+                  "oauth_wait idle step stays waiting");
+            lua_pop(L, 1);
+        }
+        oauth_test_free(L, hidx, "oauth_wait_free reports success");
+        /* a second start mints a different state */
+        if (oauth_test_start(L, "oauth_wait second start works")) {
+            int h2 = lua_gettop(L);
+            lua_getglobal(L, "tether");
+            lua_getfield(L, -1, "oauth_wait_info");
+            lua_remove(L, -2);
+            lua_pushvalue(L, h2);
+            if (lua_pcall(L, 1, 2, 0) == LUA_OK) {
+                port2 = (int)lua_tointeger(L, -2);
+                check(port2 > 0, "oauth_wait second bind gets a port");
+                {
+                    const char *s2 = lua_tostring(L, -1);
+                    check(s2 != NULL && strcmp(s2, state1) != 0,
+                          "oauth_wait state is unique per start");
+                }
+                lua_pop(L, 2);
+            } else {
+                report_lua_error(L, "oauth_wait_info");
+            }
+            oauth_test_free(L, h2, "oauth_wait second free reports success");
+        }
+    }
+
+    /* full round-trip: client GET -> step returns code+state, 200 page out */
+    if (oauth_test_start(L, "oauth_wait round-trip start works")) {
+        int hidx = lua_gettop(L);
+        int port = 0;
+        char state[64] = {0}, req[256], page[512];
+        const char *st;
+        int cfd;
+        lua_getglobal(L, "tether");
+        lua_getfield(L, -1, "oauth_wait_info");
+        lua_remove(L, -2);
+        lua_pushvalue(L, hidx);
+        if (lua_pcall(L, 1, 2, 0) != LUA_OK) {
+            report_lua_error(L, "oauth_wait_info");
+            lua_pop(L, 1);
+            return;
+        }
+        port = (int)lua_tointeger(L, -2);
+        {
+            const char *s = lua_tostring(L, -1);
+            if (s != NULL)
+                snprintf(state, sizeof(state), "%s", s);
+        }
+        lua_pop(L, 2);
+        cfd = oauth_test_connect(port);
+        check(cfd >= 0, "oauth_wait accepts a loopback client");
+        if (cfd >= 0) {
+            snprintf(req, sizeof(req),
+                     "GET /?code=abc%%2B123&state=%s HTTP/1.1\r\n"
+                     "Host: 127.0.0.1\r\n\r\n",
+                     state);
+            check(oauth_test_send(cfd, req) == 0, "oauth_wait client request sent");
+            st = oauth_test_step(L, hidx);
+            check(st != NULL && strcmp(st, "code") == 0,
+                  "oauth_wait step returns the code");
+            if (st != NULL && strcmp(st, "code") == 0) {
+                /* stack: "code", code, state (raw, still percent-encoded) */
+                check(strcmp(lua_tostring(L, -2), "abc%2B123") == 0,
+                      "oauth_wait code arrives raw for Lua url_decode");
+                check(strcmp(lua_tostring(L, -1), state) == 0,
+                      "oauth_wait echoes the exact state for Lua compare");
+                lua_pop(L, 3);
+            } else {
+                lua_pop(L, 3);
+            }
+            /* fixed 200 page on the wire */
+            {
+                ssize_t n = read(cfd, page, sizeof(page) - 1);
+                if (n < 0)
+                    n = 0;
+                page[n] = '\0';
+                check(n > 0 && strstr(page, "200 OK") != NULL,
+                      "oauth_wait answers a fixed 200 page");
+            }
+            close(cfd);
+            /* single-shot: a second connection is refused */
+            check(oauth_test_connect(port) < 0,
+                  "oauth_wait closes after the first request");
+            /* consumed handle reports, never re-fires */
+            lua_getglobal(L, "tether");
+            lua_getfield(L, -1, "oauth_wait_step");
+            lua_remove(L, -2);
+            lua_pushvalue(L, hidx);
+            if (lua_pcall(L, 1, 2, 0) == LUA_OK) {
+                check(strcmp(lua_tostring(L, -2), "failed") == 0,
+                      "oauth_wait consumed handle never re-fires");
+                lua_pop(L, 2);
+            } else {
+                report_lua_error(L, "oauth_wait_step");
+            }
+        }
+        oauth_test_free(L, hidx, "oauth_wait round-trip free reports success");
+    }
+
+    /* wrong state is reported verbatim (Lua rejects the exchange) */
+    if (oauth_test_start(L, "oauth_wait mismatch start works")) {
+        int hidx = lua_gettop(L);
+        int port = 0;
+        const char *st;
+        int cfd;
+        char req[256];
+        lua_getglobal(L, "tether");
+        lua_getfield(L, -1, "oauth_wait_info");
+        lua_remove(L, -2);
+        lua_pushvalue(L, hidx);
+        if (lua_pcall(L, 1, 2, 0) != LUA_OK) {
+            report_lua_error(L, "oauth_wait_info");
+            lua_pop(L, 1);
+            return;
+        }
+        port = (int)lua_tointeger(L, -2);
+        lua_pop(L, 2);
+        cfd = oauth_test_connect(port);
+        if (cfd >= 0) {
+            snprintf(req, sizeof(req),
+                     "GET /?code=evil&state=wrong-state HTTP/1.1\r\n"
+                     "Host: x\r\n\r\n");
+            oauth_test_send(cfd, req);
+            st = oauth_test_step(L, hidx);
+            check(st != NULL && strcmp(st, "code") == 0,
+                  "oauth_wait reports the callback as-is");
+            if (st != NULL && strcmp(st, "code") == 0) {
+                check(strcmp(lua_tostring(L, -2), "evil") == 0,
+                      "oauth_wait mismatch code carried for Lua to reject");
+                check(strcmp(lua_tostring(L, -1), "wrong-state") == 0,
+                      "oauth_wait wrong state visible for Lua compare");
+                lua_pop(L, 3);
+            } else {
+                lua_pop(L, 3);
+            }
+            close(cfd);
+        } else {
+            check(0, "oauth_wait mismatch client connects");
+        }
+        oauth_test_free(L, hidx, "oauth_wait mismatch free reports success");
+    }
+
+    /* codeless request fails the wait instead of hanging it */
+    if (oauth_test_start(L, "oauth_wait ncode start works")) {
+        int hidx = lua_gettop(L);
+        int port = 0;
+        const char *st;
+        int cfd;
+        lua_getglobal(L, "tether");
+        lua_getfield(L, -1, "oauth_wait_info");
+        lua_remove(L, -2);
+        lua_pushvalue(L, hidx);
+        if (lua_pcall(L, 1, 2, 0) != LUA_OK) {
+            report_lua_error(L, "oauth_wait_info");
+            lua_pop(L, 1);
+            return;
+        }
+        port = (int)lua_tointeger(L, -2);
+        lua_pop(L, 2);
+        cfd = oauth_test_connect(port);
+        if (cfd >= 0) {
+            oauth_test_send(cfd,
+                            "GET /favicon.ico HTTP/1.1\r\nHost: x\r\n\r\n");
+            st = oauth_test_step(L, hidx);
+            check(st != NULL && strcmp(st, "failed") == 0,
+                  "oauth_wait codeless request fails the wait");
+            if (st != NULL) {
+                check(strstr(lua_tostring(L, -2), "no code") != NULL,
+                      "oauth_wait codeless failure names the cause");
+                lua_pop(L, 3);
+            }
+            close(cfd);
+        } else {
+            check(0, "oauth_wait ncode client connects");
+        }
+        oauth_test_free(L, hidx, "oauth_wait ncode free reports success");
+    }
 }
 
 int main(void)
@@ -1781,7 +2425,8 @@ int main(void)
     test_tls_verification(L);
     test_interrupt_watch(L);
     test_interrupt_aborts_transfer(L);
-    test_exec_bg(L);
+    test_exec_bg_argv(L);
+    test_oauth_wait(L);
 
     lua_close(L);
 
