@@ -716,6 +716,143 @@ local function md_render(text, width, ansi_fn, lite)
 end
 M.md_render = md_render
 
+-- streaming-repaint-budget 2.1: incremental markdown for append-only
+-- growth. Re-rendering a whole streaming entry per repaint costs O(bytes)
+-- (~25ms/KB); appends only extend the text, so a warm cache re-renders
+-- just the new tail. Correctness argument (mirrors md_render exactly):
+-- a tail rendered standalone equals its in-context rows when the cached
+-- text ends fence-closed and outside tables (parser state is fresh on
+-- both sides) and blank runs spanning the splice are re-inserted as
+-- exactly one row (mirroring md_render's global collapse). Anything else
+-- — edits, width/lite/theme/depth/ascii change, unclean boundary —
+-- falls back to a full render. Cache lives on the entry (e._mdc);
+-- texts below INCR_MIN_BYTES always take the plain path, so goldens and
+-- small renders never touch this code.
+local INCR_MIN_BYTES = 32768
+-- Test seam: lower to 0 to exercise the incremental path on small texts
+-- (differential fuzzing); production always uses INCR_MIN_BYTES.
+M.md_incr_min = INCR_MIN_BYTES
+
+-- Fence/table parser state at end of text, using md_render's own rules:
+-- any ```-line opens a fence but only a bare ```-line closes it; table
+-- runs only exist outside fences (a blank line ends one).
+local function md_end_state(text)
+    local fence, intable = false, false
+    for line in (text .. "\n"):gmatch("([^\n]*)\n") do
+        if fence then
+            if line:match("^%s*%`%`%`%s*$") then fence = false end
+        elseif line:match("^%s*%`%`%`%s*(.*)$") then
+            fence = true
+        elseif line:match("%S") then
+            intable = line:match("^%s*|") ~= nil
+        else
+            intable = false
+        end
+    end
+    return fence, intable
+end
+
+-- A line md_render handles in its final else branch (no fence/table/
+-- heading/list structure of its own). lite disables all but fences.
+local function md_plain_line(line, lite)
+    if line:match("^%s*%`%`%`%s*(.*)$") then return false end
+    if not lite then
+        if line:match("^%s*|") then return false end
+        if line:match("^(#+)%s+") then return false end
+        if line:match("^%s*%d+%.%s+") then return false end
+        if line:match("^%s*[%-%*]%s+") then return false end
+    end
+    return true
+end
+
+-- Trailing blank-line count of text (md_render's own line split).
+local function md_trailing_blanks(text)
+    local n, total = 0, 0
+    for line in (text .. "\n"):gmatch("([^\n]*)\n") do
+        total = total + 1
+        if line:match("%S") then n = 0 else n = n + 1 end
+    end
+    -- the split appends a terminator newline: a text already ending in
+    -- "\n" gains one phantom blank line that joined text does not have.
+    if text:sub(-1) == "\n" then n = n - 1 end
+    if n < 0 then n = 0 end
+    return n
+end
+
+local function md_cached(e, text, width, ansi_fn, lite)
+    text = text or ""
+    if #text < (M.md_incr_min or INCR_MIN_BYTES) then
+        e._mdc = nil
+        return md_render(text, width, ansi_fn, lite)
+    end
+    local theme = _theme_name
+    local depth = M.color_depth()
+    local ascii = M._ascii_mode or M._env_ascii or _ascii
+    local c = e._mdc
+    if type(c) == "table" and c.width == width and c.lite == lite
+        and c.fn == ansi_fn and c.theme == theme and c.depth == depth
+        and c.ascii == ascii and type(c.text) == "string"
+        and #text >= #c.text and text:sub(1, #c.text) == c.text then
+        if #text == #c.text then return c.rows end
+        local A = text:sub(#c.text + 1)
+        local fence, intable = md_end_state(c.text)
+        if not fence and (lite or not intable) then
+            -- mid-line appends (the hot streaming case): the cached text's
+            -- last line is partial; re-render from its start instead of
+            -- splicing after it.
+            local last = c.text:match("([^\n]*)$")
+            if last ~= "" and last:match("%S") and md_plain_line(last, lite) then
+                local krows = md_render(last, width, ansi_fn, lite)
+                local all_plain = true
+                for _, r in ipairs(krows) do
+                    if not r:match("%S") then all_plain = false break end
+                end
+                if all_plain and #krows <= #c.rows then
+                    local rows = {}
+                    for i = 1, #c.rows - #krows do rows[#rows + 1] = c.rows[i] end
+                    local frag = md_render(last .. A, width, ansi_fn, lite)
+                    for _, r in ipairs(frag) do rows[#rows + 1] = r end
+                    e._mdc = { text = text, width = width, lite = lite,
+                        fn = ansi_fn, theme = theme, depth = depth,
+                        ascii = ascii, rows = rows }
+                    return rows
+                end
+            end
+            -- line-boundary appends (cached text ends with a newline, so
+            -- the tail starts a fresh line; otherwise its leading newline
+            -- is the previous line's terminator, not a blank line).
+            -- Anything else falls back to a full render below.
+            if c.text:sub(-1) == "\n" then
+                local n, stripped = 0, A
+                while true do
+                    local ln = stripped:match("^([^\n]*)\n?")
+                    if ln == nil or ln:match("%S") or stripped == "" then break end
+                    n = n + 1
+                    stripped = stripped:sub(#ln + 2)
+                end
+                local Rtail = md_render(stripped, width, ansi_fn, lite)
+                local m = md_trailing_blanks(c.text)
+                local rows = {}
+                for i, r in ipairs(c.rows) do rows[#rows + 1] = r end
+                if (m > 0 or n > 0) and #c.rows > 0 and #Rtail > 0 then
+                    rows[#rows + 1] = ""
+                end
+                for _, r in ipairs(Rtail) do rows[#rows + 1] = r end
+                e._mdc = { text = text, width = width, lite = lite,
+                    fn = ansi_fn, theme = theme, depth = depth,
+                    ascii = ascii, rows = rows }
+                return rows
+            end
+        end
+    end
+    local rows = md_render(text, width, ansi_fn, lite)
+    e._mdc = { text = text, width = width, lite = lite,
+        fn = ansi_fn, theme = theme, depth = depth,
+        ascii = ascii, rows = rows }
+    return rows
+end
+M.md_cached = md_cached
+
 local function trunc(s, maxw)
     if maxw < 1 then return "" end
     if vlen(s) <= maxw then return s end
@@ -2171,10 +2308,10 @@ local function render_entry(e, width, prev_role)
             -- fenced blocks render, block markers (#, -, 1., |) stay literal so
             -- the echo matches what was typed.
             out = with_prefix(cyan("›") .. " ", 2,
-                md_render(e.text or "", math.max(width - 2, 1), M.md_ansi, true))
+                md_cached(e, e.text or "", math.max(width - 2, 1), M.md_ansi, true))
         elseif role == "assistant" then
             -- M8/R4: markdown-lite render; md_render handles wrap/width itself
-            local body = md_render(e.text or "", math.max(width - 2, 1), M.md_ansi)
+            local body = md_cached(e, e.text or "", math.max(width - 2, 1), M.md_ansi)
             -- No visible content → no row and no block gap: a whitespace- or
             -- control-only text_delta (a lone newline/space right before a
             -- tool call) must not paint a bare marker line — with_prefix
