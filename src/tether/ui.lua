@@ -4220,55 +4220,9 @@ end
 -- the freeform answer and an option's note — and they only ever commit on
 -- Enter; Esc closes the editor without cancelling the question set.
 
--- Phase D 4.2b proxies: the ask controller lives in ui_ask (bag/deps)
--- with identical names, so the 4.1 OWN block is untouched; the 2.2 key
--- table keeps owning the keyboard.
--- Drop the last UTF-8 codepoint from an editor buffer.
-local function editor_backspace(text)
-    return M._ask.editor_backspace(text)
-end
-
-local function ask_question()
-    return M._ask.ask_question(S)
-end
-
-local function ask_answer()
-    return M._ask.ask_answer(S)
-end
-
--- Toggle one option of a multi question, keeping toggle order.
-local function ask_toggle(answer, option)
-    return M._ask.ask_toggle(answer, option)
-end
-
--- Close the block and hand the answer (or the cancellation) to the agent, then
--- resume the turn exactly the way resolve_confirmation does. A cancellation is
--- an answer the model can act on — the turn continues either way.
-local function resolve_ask(cancelled)
-    return M._ask.resolve_ask(S, M._ask_deps(), cancelled)
-end
-
--- The current question is answered: move to the next one, or — on the last
--- question of a multi-question set — open the Confirm phase. Single-question
--- sets submit immediately (no confirm phase).
-local function ask_advance()
-    return M._ask.ask_advance(S, M._ask_deps())
-end
-
-local function handle_ask_key(k)
-    return M._ask.handle_ask_key(S, M._ask_deps(), k)
-end
-
--- Phase D 4.2b proxy: the controller lives in ui_confirm (bag/deps);
--- the 2.2 key table keeps owning the keyboard.
-local function resolve_confirmation(decision)
-    return M._confirm.resolve_confirmation(S, M._confirm_deps(), decision)
-end
-
-local function handle_confirmation_key(k)
-    return M._confirm.handle_confirmation_key(S, M._confirm_deps(), k)
-end
-
+-- Ask/confirm key handling lives in ui_ask / ui_confirm (bag/deps); the
+-- 2.2 key table owns the keyboard and calls through on_ask/on_confirmation
+-- below. M._confirm_deps/M._ask_deps build the impure edge per call.
 -- Phase B 2.2: handle_key routes through ui_keys.route/dispatch. These
 -- are the facade callbacks, (bag, k)-shaped like the busy pump handlers;
 -- bag is S (the facade's state upvalue does the work). Forward-declared:
@@ -4327,11 +4281,11 @@ on_login_secret = function(bag, k)
 end
 
 on_confirmation = function(bag, k)
-    handle_confirmation_key(k)
+    M._confirm.handle_confirmation_key(S, M._confirm_deps(), k)
 end
 
 on_ask = function(bag, k)
-    handle_ask_key(k)
+    M._ask.handle_ask_key(S, M._ask_deps(), k)
 end
 
 on_error_dismiss = function(bag, k)
@@ -4997,10 +4951,8 @@ key_callbacks = {
 }
 
 M._handle_key = function(k) if S then handle_key(k) end end
--- Phase B 2.1 seams: routing table lives in ui_keys; tests drive
--- route/dispatch directly for parity.
-M._key_route = function(k, ctx) return M._keys.route(k, ctx) end
-M._key_dispatch = M._keys.dispatch
+-- handle_key routes through ui_keys.route/dispatch (M._keys loader above);
+-- tests drive the ui_keys module directly.
 
 -- ============================================================
 -- Main

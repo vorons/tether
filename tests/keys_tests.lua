@@ -27,9 +27,8 @@ do
   assert_eq(ev.kind, "enter", "TKEY decode_first_byte enter via stub bag")
   ev = keys.decode_first_byte(bag, 9)
   assert_eq(ev.kind, "tab", "TKEY decode_first_byte tab via stub bag")
-  -- facade parity: the same bytes through ui give the same events.
-  local ui = dofile("src/tether/ui.lua")
-  assert_eq(ui._keys.ESC_AGE_S, 0.15, "TKEY facade module constant")
+  -- module entry point: the constant lives in ui_keys directly.
+  assert_eq(keys.ESC_AGE_S, 0.15, "TKEY module constant")
   print("TKEY ui_keys direct: OK")
 end
 
@@ -71,26 +70,25 @@ do
   keys.dispatch["palette:model"]({}, cb, { kind = "enter" })
   keys.dispatch["normal:enter"]({}, cb, { kind = "enter" })
   assert_eq(table.concat(called, ","), "secret,confirm,model,enter", "T2.1 dispatch forwards bag/callback")
-  -- facade exposes the same table (proxy until 2.2)
-  local ui = dofile("src/tether/ui.lua")
-  assert_eq(ui._key_route({ kind = "enter" }, {}), "normal:enter", "T2.1 facade route proxy")
-  assert_true(ui._key_dispatch["mouse"] ~= nil, "T2.1 facade dispatch proxy")
+  -- module entry points: route/dispatch live in ui_keys directly.
+  assert_eq(keys.route({ kind = "enter" }, {}), "normal:enter", "T2.1 module route")
+  assert_true(keys.dispatch["mouse"] ~= nil, "T2.1 module dispatch")
   print("T2.1 dispatch routing: OK")
 end
 
 -- Phase B 2.2: call sites ride the table, the facade switch is deleted.
 do
-  local ui = dofile("src/tether/ui.lua")
   -- every route key resolves to a facade callback (no unhandled branch)
-  local keys = { "login_secret", "confirmation", "ask", "error_dismiss",
+  local keys = assert(loadfile("src/tether/ui/keys.lua"))()
+  local names = { "login_secret", "confirmation", "ask", "error_dismiss",
     "mouse", "ctrl", "history", "tab_complete",
     "palette:copy", "palette:resume", "palette:model", "palette:think",
     "palette:login", "palette:logout", "palette:logout-confirm",
     "palette:mention", "palette:path", "palette:command",
     "normal:paste", "normal:text", "normal:enter", "normal:newline",
     "normal:backspace", "normal:esc", "normal:ctrl", "normal:special" }
-  for _, key in ipairs(keys) do
-    assert_eq(type(ui._key_dispatch[key]), "function", "T2.2 dispatch owns " .. key)
+  for _, key in ipairs(names) do
+    assert_eq(type(keys.dispatch[key]), "function", "T2.2 dispatch owns " .. key)
   end
   -- the switch is gone: handle_key is route + table call, with no
   -- mode comparisons or direct handler calls left inside it.
