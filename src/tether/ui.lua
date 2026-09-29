@@ -3632,8 +3632,16 @@ local function commit_input()
         if word then
             -- unified-slash-palette 4.2: names compare without regard to case.
             -- Routing lives in commands.resolve_slash; a skill name falls
-            -- through to the ordinary submit path below.
-            local route = commands.resolve_slash(word, command_set(), palette_skill_rows())
+            -- through to the ordinary submit path below. Test/dev stubs of
+            -- the commands global predate resolve_slash (3.1 pattern).
+            local resolve = commands.resolve_slash
+            if type(resolve) ~= "function" then
+                local chunk = loadfile("src/tether/commands.lua")
+                local real = chunk and chunk() or nil
+                resolve = real and real.resolve_slash
+            end
+            local route = (type(resolve) == "function")
+                and resolve(word, command_set(), palette_skill_rows()) or "unknown"
             if route == "command" then
                 execute_command(word:lower(), rest)
                 return
