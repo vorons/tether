@@ -1337,14 +1337,6 @@ local function palette_skill_rows()
     return rows
 end
 
--- 4.2: submit-time lookup over the discovered skills, case-insensitive.
-local function palette_skill_named(name)
-    for _, row in ipairs(palette_skill_rows()) do
-        if (row.name or ""):lower() == name then return row end
-    end
-    return nil
-end
-
 -- forward declaration: palette_pick_skill closes the palette through it
 local palette_sync
 
@@ -3639,16 +3631,13 @@ local function commit_input()
         local word, rest = trimmed:match("^/(%w+)%s*(.*)$")
         if word then
             -- unified-slash-palette 4.2: names compare without regard to case.
-            -- A built-in command runs (so /CLEAR behaves like /clear); a name
-            -- that resolves to a discovered skill falls through to the ordinary
-            -- submit path below, so the agent receives it as a user message;
-            -- anything else keeps the old command path.
-            local name = word:lower()
-            if command_set()[name] then
-                execute_command(name, rest)
+            -- Routing lives in commands.resolve_slash; a skill name falls
+            -- through to the ordinary submit path below.
+            local route = commands.resolve_slash(word, command_set(), palette_skill_rows())
+            if route == "command" then
+                execute_command(word:lower(), rest)
                 return
-            end
-            if not palette_skill_named(name) then
+            elseif route == "unknown" then
                 execute_command(word, rest)
                 return
             end

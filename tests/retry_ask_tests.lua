@@ -1178,6 +1178,20 @@ do
   print("T128 commands module: OK")
 end
 
+-- ui-facade-thinning 3.1: commands.resolve_slash routes submit-path names.
+do
+  local commands = assert(loadfile("src/tether/commands.lua"))()
+  local cmds = { clear = true, login = true }
+  local skills = { { name = "review" }, { name = "Deploy" } }
+  assert_eq(commands.resolve_slash("clear", cmds, skills), "command", "T3.1b exact command")
+  assert_eq(commands.resolve_slash("CLEAR", cmds, skills), "command", "T3.1b command case-insensitive")
+  assert_eq(commands.resolve_slash("review", cmds, skills), "skill", "T3.1b skill falls to submit")
+  assert_eq(commands.resolve_slash("deploy", cmds, skills), "skill", "T3.1b skill case-insensitive")
+  assert_eq(commands.resolve_slash("nope", cmds, skills), "unknown", "T3.1b unknown keeps command path")
+  assert_eq(commands.resolve_slash("nope", cmds, nil), "unknown", "T3.1b nil skills")
+  print("T3.1b resolve_slash routing: OK")
+end
+
 -- T129 (5.1/5.3): turn facade — abort seam, busy begin/finish, agent wrappers.
 do
   local names = {"agent", "tether"}

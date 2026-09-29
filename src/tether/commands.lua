@@ -757,6 +757,26 @@ function M.pick_think(bag, deps, level)
     deps.bump()
 end
 
+-- ui-facade-thinning 3.1: slash-name routing for the submit path.
+-- A built-in command runs (so /CLEAR behaves like /clear); a name that
+-- resolves to a discovered skill falls through to the ordinary submit
+-- path (the agent receives it as a user message); anything else keeps
+-- the legacy command path. Pure: cmds is a lower-name set (facade
+-- command_set), skills is a row list with .name (facade skill rows).
+-- Returns "command" | "skill" | "unknown".
+-- EXAMPLE:
+--      commands.resolve_slash("CLEAR", { clear = true }, {}) --> "command"
+function M.resolve_slash(word, cmds, skills)
+    local name = tostring(word or ""):lower()
+    if cmds and cmds[name] then return "command" end
+    for _, sk in ipairs(skills or {}) do
+        if tostring((type(sk) == "table" and sk.name) or ""):lower() == name then
+            return "skill"
+        end
+    end
+    return "unknown"
+end
+
 -- Phase C 3.1: slash-dispatch table (name -> handler, bag/callback shape).-- Routing is an exact-name match (no order sensitivity, unlike key
 -- dispatch), so no route() oracle is needed. Each entry forwards to the
 -- facade callback of the same name: bag is the ui state, cb carries the
