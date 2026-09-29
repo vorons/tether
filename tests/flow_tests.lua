@@ -1573,7 +1573,7 @@ do
   -- query row paint in the indicator slot
   uim._paint(true)
   local L = uim._layout()
-  local win = uim._palette_window(S.h, #S.palette_items, S.palette_sel)
+  local win = uim._palette.window(S.h, #S.palette_items, S.palette_sel)
   assert_true(strip(uim._row(L.palette_row + win + 1)):find("> cld", 1, true) ~= nil,
     "T218 query row shows the typed filter")
   -- backspace edits the query and restores rows
@@ -1610,7 +1610,7 @@ do
   assert_eq(#Sn.palette_items, 0, "T218 fresh harness no match, no rows")
   uim_n._paint(true)
   local Ln = uim_n._layout()
-  local winn = uim_n._palette_window(Sn.h, #Sn.palette_items, Sn.palette_sel)
+  local winn = uim_n._palette.window(Sn.h, #Sn.palette_items, Sn.palette_sel)
   assert_true(strip(uim_n._row(Ln.palette_row + winn + 1)):find("> zzz (no matches)", 1, true) ~= nil,
     "T218 no-match notice names the query")
   _G.commands = orig_commands
