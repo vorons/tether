@@ -101,6 +101,28 @@ $(EMBED_OUT): $(LUA_MODS) tools/embed.lua build/embed_list.mk src/host/embed_mod
 NPROC ?= $(shell nproc 2>/dev/null || echo 8)
 TEST_FILES = $(filter-out tests/context_tests.lua,$(wildcard tests/*_tests.lua))
 
+# test-speed: fast red-green path. `make smoke` runs luac over all
+# modules plus an explicit list of core unit files (<1s) — use it while
+# iterating on a change. `make test` (parallel units + context + e2e +
+# host) stays the merge gate — run it green before commit/merge.
+# The smoke list is explicit by design (no last-commit heuristic, which
+# goes wrong on rebases); override per change on the command line:
+#   make smoke SMOKE_FILES="tests/rows_tests.lua tests/flow_tests.lua"
+SMOKE_FILES ?= tests/keys_tests.lua tests/compression_tests.lua \
+	tests/copy_tests.lua tests/markdown_tests.lua tests/highlight_tests.lua \
+	tests/palette_tests.lua tests/tool_dispatch_tests.lua tests/busy_tests.lua \
+	tests/auth_flow_tests.lua tests/ask_view_tests.lua
+
+smoke:
+	@for m in $(LUA_MODS); do luac -p $$m || exit $$?; done
+	@echo "=== luac ok ==="
+	@for t in $(SMOKE_FILES); do \
+		H=$$(mktemp -d); rm -rf "$$H"; mkdir -p "$$H"; \
+		HOME="$$H" TETHER_HOME="$$H" lua $$t || exit $$?; \
+		rm -rf "$$H"; \
+	done
+	@echo "=== smoke ok ==="
+
 test: tether
 	# 6.1: the syntax check covers every embedded module with no manual
 	# list — LUA_MODS is generated from tools/embed_order.txt (the same
@@ -141,4 +163,4 @@ clean:
 	rm -f $(EMBED_OUT)
 	rm -rf build
 
-.PHONY: test clean
+.PHONY: test smoke clean
