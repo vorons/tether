@@ -320,9 +320,9 @@ local function execute_tool(name, args, cfg)
         -- same report path below (summary/body/truncate/history/journal).
         -- A raising or non-table result degrades to a tool error the model
         -- can react to, never a turn crash.
-        local fn = extensions and extensions.tool_fn and extensions.tool_fn(name)
+        local fn, owner = extensions and extensions.tool_fn and extensions.tool_fn(name)
         if fn then
-            local ctx = extensions.ctx_for(cfg)
+            local ctx = extensions.ctx_for(cfg, { ext = owner, surface = "tool" })
             local ok, res = pcall(fn, args, ctx)
             if not ok then
                 return nil, "extension '" .. name .. "' failed: " .. tostring(res)

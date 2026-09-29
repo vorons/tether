@@ -868,6 +868,246 @@ do
     print("4.3 tether remove: OK")
 end
 
+-- 6.x extension-command-execution: one ctx shape for commands, tool fns and
+-- hooks; every ctx.run is journaled as an extension_execution pair; the path
+-- is contained and never confirmed. Fake tools/session keep these units about
+-- the wrapper instead of a real shell.
+do
+    local saved = { tools = rawget(_G, "tools"), session = rawget(_G, "session"),
+        extensions = rawget(_G, "extensions"), provider_common = rawget(_G, "provider_common") }
+    _G.tether = host_mock({})
+    _G.provider_common = { utf8_prefix = function(t, n) return t:sub(1, n) end }
+
+    local sink, written_sid, ran, read_calls
+    local function reset_sink()
+        sink, written_sid, ran, read_calls = {}, nil, 0, {}
+        _G.session = { append = function(sid, ev)
+            written_sid = sid
+            sink[#sink + 1] = ev
+        end }
+    end
+    local function fake_tools(run_fn)
+        _G.tools = {
+            _workspace = function(cfg) return cfg and cfg.workspace or "/ws" end,
+            _resolve = function(p) return p end,
+            read = function(req, cfg)
+                read_calls[#read_calls + 1] = { req = req, cfg = cfg }
+                return { content = "1\tfile", line_count = 1 }
+            end,
+            run = function(args)
+                ran = ran + 1
+                return run_fn(args)
+            end,
+        }
+    end
+    local ok_ext = function() return { output = "out", exit_code = 3, elapsed_ms = 5 } end
+
+    local ext = fresh_ext()
+
+    -- 6.1 the pair: fields, order, and the session it lands in
+    reset_sink()
+    fake_tools(ok_ext)
+    local cfg = { workspace = "/ws", _session_id = "s1" }
+    local ctx = ext.ctx_for(cfg, { ext = "jx", surface = "tool" })
+    local res = ctx.run("ls -la", { timeout = 7 })
+    assert_eq(res and res.exit_code, 3, "6.1 ctx.run still returns the tool result")
+    assert_eq(#sink, 2, "6.1 two events per execution")
+    assert_eq(sink[1].type, "extension_execution", "6.1 call event written first")
+    assert_eq(sink[2].type, "extension_execution_result", "6.1 result event written after")
+    assert_eq(sink[1].exec_id, sink[2].exec_id, "6.1 the pair shares exec_id")
+    assert_eq(sink[1].ext, "jx", "6.1 event names the extension")
+    assert_eq(sink[1].surface, "tool", "6.1 event names the surface")
+    assert_eq(sink[1].tool, "run", "6.1 event names the tool")
+    assert_eq(sink[1].command, "ls -la", "6.1 command line recorded")
+    assert_eq(sink[1].cwd, "/ws", "6.1 effective cwd recorded")
+    assert_eq(sink[1].timeout, 7, "6.1 effective timeout recorded")
+    assert_eq(sink[2].exit_code, 3, "6.1 exit code recorded")
+    assert_eq(sink[2].elapsed_ms, 5, "6.1 elapsed recorded")
+    assert_eq(written_sid, "s1", "6.1 written to the session journal")
+
+    -- 6.2 a huge command line stays one bounded journal line
+    reset_sink()
+    ctx = ext.ctx_for(cfg, { ext = "jx", surface = "tool" })
+    ctx.run(string.rep("a", ext.EXEC_CMD_MAX + 3000))
+    assert_eq(#sink, 2, "6.2 oversized command still one pair")
+    assert_true(#sink[1].command <= ext.EXEC_CMD_MAX + 20,
+        "6.2 command truncated to the cap plus marker")
+    assert_eq(sink[1].command:sub(1, 8), "aaaaaaaa", "6.2 prefix preserved")
+    assert_true(sink[1].command:find("truncated", 1, true) ~= nil, "6.2 truncation marked")
+    -- 6.2b no explicit timeout: the tools.run default is what gets recorded
+    assert_eq(sink[1].timeout, 120, "6.2 default timeout recorded")
+
+    -- 6.3 a containment refusal is recorded and stops promising a menu
+    reset_sink()
+    fake_tools(function() return nil, "run outside workspace requires confirmation" end)
+    ctx = ext.ctx_for(cfg, { ext = "jx", surface = "command" })
+    local out, err = ctx.run("ls", { cwd = "/etc" })
+    assert_eq(out, nil, "6.3 refused run returns nil")
+    assert_true(err:find("requires confirmation", 1, true) == nil,
+        "6.3 ctx error no longer promises a confirmation")
+    assert_eq(err:sub(1, 22), "run outside workspace ", "6.3 leading phrase kept")
+    assert_true(err:find("no confirmation prompt", 1, true) ~= nil, "6.3 refusal is explicit")
+    assert_eq(#sink, 2, "6.3 refused run still recorded")
+    assert_eq(sink[2].error, err, "6.3 the refusal text is the recorded one")
+
+    -- 6.4 no journal, no run: an unaccountable execution is refused
+    reset_sink()
+    fake_tools(ok_ext)
+    local nosess = ext.ctx_for({ workspace = "/ws" }, { ext = "jx", surface = "command" })
+    local o4, e4 = nosess.run("ls")
+    assert_eq(o4, nil, "6.4 without a session the run is refused")
+    assert_true(e4:find("no session journal", 1, true) ~= nil, "6.4 refusal names the reason")
+    assert_eq(ran, 0, "6.4 nothing was executed")
+    assert_eq(#sink, 0, "6.4 nothing was written")
+
+    -- 6.5 the lazy session is minted on demand, then the run is accountable
+    reset_sink()
+    local lazy = { workspace = "/ws" }
+    function lazy._ensure_session() lazy._session_id = "minted" end
+    local o5 = ext.ctx_for(lazy, { ext = "jx", surface = "command" }).run("ls")
+    assert_eq(o5 and o5.exit_code, 3, "6.5 run proceeds once a session exists")
+    assert_eq(written_sid, "minted", "6.5 recorded in the minted session")
+    assert_eq(#sink, 2, "6.5 pair written to the minted session")
+
+    -- 6.6 hooks carry their own surface and extension name
+    reset_sink()
+    fake_tools(ok_ext)
+    ext.registry = ext.empty_registry()
+    ext.registry.before = { { ext = "hk", fn = function(tool, args, c)
+        c.run("ls")
+        return nil
+    end } }
+    local kind = ext.run_before("read", { path = "x" }, cfg)
+    assert_eq(kind, "allow", "6.6 hook still degrades to allow")
+    assert_eq(ran, 1, "6.6 the hook's command executed")
+    assert_eq(#sink, 2, "6.6 a hook's ctx.run is recorded")
+    assert_eq(sink[1].surface, "hook", "6.6 surface recorded as hook")
+    assert_eq(sink[1].ext, "hk", "6.6 hook's extension named")
+
+    -- 6.7 commands get read/run, and nothing else
+    reset_sink()
+    fake_tools(function() return { output = "hello", exit_code = 0, elapsed_ms = 1 } end)
+    local home = tmp_home()
+    write_file(home .. "/.tether/extensions/cx/cx.lua", [[
+return { name = "cx", api_version = 1,
+  commands = {
+    { name = "cxrun", description = "run something",
+      fn = function(rest, ctx)
+        local r, err = ctx.run("echo hi", { timeout = 3 })
+        if not r then return "failed: " .. tostring(err) end
+        local f, ferr = ctx.read("src/x.lua")
+        return ("ran %s read %s extra %s")
+            :format(tostring(r.exit_code), tostring(f and f.line_count),
+                    type(ctx.write))
+      end },
+  } }]])
+    local cext = fresh_ext()
+    local creg = cext.load(home, {})
+    _G.extensions = cext
+    local cmds = assert(loadfile("src/tether/commands.lua"))()
+    cmds.register_extension_commands(creg)
+    local notes = {}
+    -- allow_outside_workspace is deliberately on this cfg: the ctx wrapper owns
+    -- no containment logic, so proof of the documented bypass is that the live
+    -- cfg reaches the tool implementation unchanged.
+    local cmd_cfg = { workspace = "/ws", _session_id = "s2",
+        allow_outside_workspace = true }
+    cmds.dispatch["cxrun"]({ workspace = "/ws", cfg = cmd_cfg },
+        { note = function(t) notes[#notes + 1] = t end }, "cxrun", "")
+    assert_eq(notes[1], "ran 0 read 1 extra nil",
+        "6.7 command handler can run and read, and has no write")
+    assert_eq(#sink, 2, "6.7 the command's execution is journaled")
+    assert_eq(sink[1].surface, "command", "6.7 surface recorded as command")
+    assert_eq(sink[1].ext, "cx", "6.7 command's extension named")
+    assert_eq(sink[1].command, "echo hi", "6.7 command line recorded")
+    assert_eq(written_sid, "s2", "6.7 written to the live session")
+    assert_eq(read_calls[1] and read_calls[1].cfg, cmd_cfg,
+        "6.7 ctx.read passes the live cfg, so allow_outside_workspace applies to it")
+    assert_eq(read_calls[1] and read_calls[1].req.path, "src/x.lua",
+        "6.7 ctx.read passes the path through unchanged")
+
+    -- 6.8 a raising handler still reports through the note channel
+    reset_sink()
+    local home2 = tmp_home()
+    write_file(home2 .. "/.tether/extensions/cb/cb.lua", [[
+return { name = "cb", api_version = 1,
+  commands = { { name = "cbbad", description = "d",
+                 fn = function(rest, ctx) return ctx.execute("ls") end } } }]])
+    local bext = fresh_ext()
+    local breg = bext.load(home2, {})
+    _G.extensions = bext
+    local cmds2 = assert(loadfile("src/tether/commands.lua"))()
+    cmds2.register_extension_commands(breg)
+    local notes2 = {}
+    cmds2.dispatch["cbbad"]({ workspace = "/ws", cfg = { workspace = "/ws", _session_id = "s3" } },
+        { note = function(t) notes2[#notes2 + 1] = t end }, "cbbad", "")
+    assert_true(notes2[1] ~= nil and notes2[1]:find("command failed", 1, true) ~= nil,
+        "6.8 unknown ctx field fails as an ordinary command error")
+    assert_eq(#sink, 0, "6.8 nothing executed, nothing recorded")
+
+    -- 6.9 the new events are an audit trail, not history: a journal carrying
+    -- them rebuilds the same message list as one without them
+    do
+        -- the real encoder: session journals are JSONL, the utf8 stub above
+        -- only served the ctx truncation.
+        _G.provider_common = assert(loadfile("src/tether/providers/common.lua"))()
+        local sess = assert(loadfile("src/tether/session.lua"))()
+        local dir = tmp_home()
+        sess._session_dir = dir
+        local function write_journal(with_exec)
+            local id = sess.new_session("/ws", "m")
+            sess.append(id, { ts = "t", type = "message", role = "user", content = "hi" })
+            sess.append(id, { ts = "t", type = "tool_call", tool_call_id = "c1",
+                              name = "run", args = { command = "ls" } })
+            if with_exec then
+                sess.append(id, { ts = "t", type = "extension_execution", exec_id = 1,
+                                  ext = "cx", surface = "command", tool = "run",
+                                  command = "git status", cwd = "/ws", timeout = 15 })
+                sess.append(id, { ts = "t", type = "extension_execution_result",
+                                  exec_id = 1, exit_code = 0, elapsed_ms = 2 })
+            end
+            sess.append(id, { ts = "t", type = "tool_result", tool_call_id = "c1",
+                              name = "run", result = { summary = "exit 0" } })
+            return id
+        end
+        local with_id, without_id = write_journal(true), write_journal(false)
+        assert_eq(#sess.read(with_id), 6, "6.9 execution events stay in the journal")
+        assert_eq(#sess.read(without_id), 4, "6.9 the same journal without them is shorter")
+        local a, b = sess.resume(with_id), sess.resume(without_id)
+        assert_eq(#a, #b, "6.9 execution events add no history entries")
+        local same = #a == #b
+        for i = 1, #a do
+            if a[i].role ~= b[i].role or a[i].content ~= b[i].content
+                or a[i].name ~= b[i].name or a[i].tool_call_id ~= b[i].tool_call_id then
+                same = false
+            end
+        end
+        assert_true(same, "6.9 resumed history is identical with and without them")
+
+        -- 6.10 the picker still finds the session when an execution event is
+        -- the last line: no meta.workspace to override, message probe intact
+        local last_exec = sess.new_session("/ws", "m")
+        sess.append(last_exec, { ts = "t", type = "message", role = "user", content = "ping" })
+        sess.append(last_exec, { ts = "t", type = "extension_execution", exec_id = 1,
+                                  ext = "cx", surface = "command", tool = "run",
+                                  command = "ls", cwd = "/ws", timeout = 120 })
+        local files = sess.session_files("/ws")
+        local found, first_line = nil, nil
+        for _, f in ipairs(files) do
+            if f.id == last_exec then found = f.id first_line = f.first_line end
+        end
+        assert_eq(found, last_exec, "6.10 session ending on an execution event is listed")
+        assert_eq(first_line, "ping", "6.10 its picker line is the first user message")
+        assert_notnil(sess.latest("/ws"), "6.10 latest() resolves with execution events")
+        os.execute("rm -rf '" .. dir .. "'")
+    end
+
+    os.execute("rm -rf '" .. home .. "'")
+    os.execute("rm -rf '" .. home2 .. "'")
+    for k, v in pairs(saved) do _G[k] = v end
+    print("6.x extension execution ctx + journal: OK")
+end
+
 if failed > 0 then
     print("FAILURES: " .. tostring(failed))
     os.exit(1)

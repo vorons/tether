@@ -804,11 +804,21 @@ M.slash_names = slash_names
 M._ext_commands = {}
 M._ext_registered = {}
 
-local function ext_ctx(bag)
-    local ctx = {
-        workspace = bag and bag.workspace or nil,
-        config = bag and bag.cfg or nil,
-    }
+-- The same ctx tool fns and hooks get, so a command can do work. Outside
+-- paths are refused rather than confirmed (a slash handler runs inside the
+-- input path, there is no menu to park it in), and each ctx.run it performs
+-- is journaled by the extensions module.
+local function ext_ctx(bag, ename)
+    local cfg = bag and bag.cfg or nil
+    local ext = rawget(_G, "extensions")
+    if not (ext and ext.ctx_for) then
+        local chunk = loadfile("src/tether/extensions.lua")
+        ext = chunk and chunk() or nil
+    end
+    if ext and ext.ctx_for then
+        return ext.ctx_for(cfg, { ext = ename, surface = "command" })
+    end
+    local ctx = { workspace = bag and bag.workspace or nil, config = cfg }
     function ctx.log(msg)
         io.stderr:write("tether: extension: " .. tostring(msg) .. "\n")
     end
@@ -828,7 +838,7 @@ function M.register_extension_commands(reg)
                 M._ext_registered[key] = true
                 local def, ename = entry.def, entry.ext
                 dispatch[key] = function(bag, cb, cmd, rest)
-                    local ok, out = pcall(def.fn, rest or "", ext_ctx(bag))
+                    local ok, out = pcall(def.fn, rest or "", ext_ctx(bag, ename))
                     local note = cb and cb.note
                     if not ok then
                         if note then note("extension '" .. tostring(ename)

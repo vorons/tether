@@ -428,6 +428,15 @@ local function run_inner()
     end
     -- extension-system: a lazily minted session fires from ui._ensure_session.
     cfg._on_session_start = function() M.fire_session_start(cfg) end
+    -- extension-command-execution: extension code that runs a command is
+    -- journaled, and a journal needs a session. The TUI mints one at the first
+    -- turn, so hand the ctx path the same entry point: a slash command typed
+    -- before any prompt still gets its execution recorded.
+    cfg._ensure_session = function()
+        if type(ui) == "table" and type(ui._ensure_session) == "function" then
+            pcall(ui._ensure_session)
+        end
+    end
 
     -- Run TUI with this same cfg: ui.run used to load a second copy, so it
     -- never saw _session_id and minted its own session every launch (two

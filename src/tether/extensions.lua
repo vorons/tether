@@ -11,12 +11,14 @@
 -- Trust model: only ~/.tether/extensions/ is scanned (never the workspace),
 -- so everything loaded was placed there by the machine owner. Extension code
 -- runs with a restricted env (no io, no tether host table, no loaders, no
--- os.execute/remove/rename) and reaches the outside world only through ctx
--- ({ workspace, config, log, read, run }), where read/run call the same
--- tools.* implementations the model's calls land in. That path keeps tools-level
--- containment (an outside-workspace cwd or write target is refused) but is
--- never confirmed by the user and writes no history/journal — so ctx grants
--- less than a model-issued `run`, never more.
+-- os.execute/remove/rename) and reaches the outside world only through one
+-- ctx shape ({ workspace, config, log, read, run }) handed to tool fns, hooks
+-- and slash commands alike. read/run call the same tools.* implementations the
+-- model's calls land in, so tools-level containment applies (an
+-- outside-workspace cwd or path is refused) and no confirmation prompt is
+-- raised: on this path a refusal is final. What a model-issued call gets from
+-- the prompt, this path gets from the journal: every ctx.run appends an
+-- extension_execution pair, so no side effect ever happens unrecorded.
 --
 -- IN:  load(home, cfg) once at startup; get() for the registry anywhere.
 -- OUT: registry { exts, tools, tool_order, commands, command_order,
@@ -264,10 +266,84 @@ function M.schema_entries()
     return out
 end
 
--- The outside path handed to tool fns and hooks. read/run call tools.* with
--- the live cfg: workspace containment applies (an outside target is refused),
--- but nothing is confirmed by the user and nothing is journaled.
-function M.ctx_for(cfg)
+-- The one outside path, shared by tool fns, hooks and slash commands.
+-- read/run call tools.* with the live cfg: workspace containment applies (an
+-- outside target is refused, finally — nothing here can raise a confirmation
+-- menu), and every run is journaled as an extension_execution pair so no side
+-- effect is invisible. ident = { ext, surface } names the requester for the
+-- record; callers always know it, the default only covers out-of-tree callers.
+
+-- One line's worth of command text: the journal stays a tail-able file even
+-- if an extension builds a huge shell string.
+M.EXEC_CMD_MAX = 2048
+
+local exec_seq = 0
+
+local function session_mod()
+    local s = rawget(_G, "session")
+    if s and s.append then return s end
+    local chunk = loadfile("src/tether/session.lua")
+    s = chunk and chunk() or nil
+    return (s and s.append) and s or nil
+end
+
+-- A run needs a journal to be accountable for. The TUI mints its session
+-- lazily (first turn), so ask the host for one before giving up; without a
+-- session id there is nothing to write to and the run is refused. An append
+-- that errors is not a reason to refuse — the session file is already broken
+-- and the tool layer's own journal writes are best-effort too.
+local function journal(cfg, event)
+    local sid = cfg and cfg._session_id
+    if not (type(sid) == "string" and sid ~= "") then
+        if type(cfg) == "table" and type(cfg._ensure_session) == "function" then
+            pcall(cfg._ensure_session)
+            sid = cfg._session_id
+        end
+    end
+    if not (type(sid) == "string" and sid ~= "") then return false end
+    local s = session_mod()
+    if not s then return false end
+    return (pcall(s.append, sid, event)) and true or false
+end
+
+local function clip(text, max)
+    if type(text) ~= "string" then return "" end
+    if #text <= max then return text end
+    local common = _G.provider_common
+    if not (common and common.utf8_prefix) then
+        local chunk = loadfile("src/tether/providers/common.lua")
+        common = chunk and chunk() or nil
+    end
+    if common and common.utf8_prefix then
+        return common.utf8_prefix(text, max) .. "…(truncated)"
+    end
+    return text:sub(1, max) .. "…(truncated)"
+end
+
+-- tools.run resolves its own default, mirrored here so the record states the
+-- number that actually guarded the process.
+local function eff_timeout(cfg, requested)
+    local v = tonumber(requested)
+        or (cfg and cfg.tools and cfg.tools.run_shell
+            and tonumber(cfg.tools.run_shell.timeout))
+        or 120
+    if v < 1 then v = 1 end
+    return math.floor(v)
+end
+
+-- The tool layer refuses outside-workspace calls with text promising a
+-- confirmation the agent would show. On this path nothing consumes that
+-- message, so extension authors get an accurate one (leading phrase kept —
+-- callers and tests pattern-match it).
+local function ctx_error(err)
+    local raw = tostring(err)
+    local s, n = raw:gsub(" requires confirmation$", "")
+    if n > 0 then s = s .. " (extension ctx: no confirmation prompt)" end
+    return s
+end
+
+function M.ctx_for(cfg, ident)
+    ident = ident or {}
     local tools = _G.tools
     if not tools then
         local chunk = loadfile("src/tether/tools.lua")
@@ -289,7 +365,36 @@ function M.ctx_for(cfg)
     function ctx.run(command, opts)
         if not tools then return nil, "tools unavailable" end
         opts = opts or {}
-        return tools.run({ command = command, cwd = opts.cwd, timeout = opts.timeout }, cfg)
+        exec_seq = exec_seq + 1
+        local id = exec_seq
+        local cwd = ws
+        if opts.cwd and tools._resolve then
+            local ok, r = pcall(tools._resolve, tostring(opts.cwd), cfg)
+            if ok and type(r) == "string" then cwd = r end
+        end
+        if not journal(cfg, {
+            ts = os.date(), type = "extension_execution", exec_id = id,
+            ext = tostring(ident.ext or "unknown"),
+            surface = tostring(ident.surface or "tool"),
+            tool = "run",
+            command = clip(tostring(command), M.EXEC_CMD_MAX),
+            cwd = cwd,
+            timeout = eff_timeout(cfg, opts.timeout),
+        }) then
+            return nil, "no session journal — extension execution refused"
+        end
+        local res, err = tools.run(
+            { command = command, cwd = opts.cwd, timeout = opts.timeout }, cfg)
+        local out = { ts = os.date(), type = "extension_execution_result", exec_id = id }
+        if res then
+            out.exit_code = res.exit_code
+            out.elapsed_ms = res.elapsed_ms
+        else
+            out.error = ctx_error(err)
+        end
+        journal(cfg, out)
+        if not res then return nil, out.error end
+        return res
     end
     return ctx
 end
@@ -354,9 +459,10 @@ end
 function M.run_before(tool, args, cfg)
     local reg = M.get()
     if #reg.before == 0 then return "allow", args end
-    local ctx = M.ctx_for(cfg)
     local current, rewritten = args, false
     for _, h in ipairs(reg.before) do
+        -- per-handler ctx so a ctx.run from this hook is recorded against it
+        local ctx = M.ctx_for(cfg, { ext = h.ext, surface = "hook" })
         local t0 = now_ms()
         local ok, verdict = pcall(h.fn, tool, current, ctx)
         local t1 = now_ms()
@@ -392,8 +498,8 @@ end
 function M.run_after(tool, args, result, cfg)
     local reg = M.get()
     if #reg.after == 0 then return result end
-    local ctx = M.ctx_for(cfg)
     for _, h in ipairs(reg.after) do
+        local ctx = M.ctx_for(cfg, { ext = h.ext, surface = "hook" })
         local t0 = now_ms()
         local ok, patch = pcall(h.fn, tool, args, result, ctx)
         local t1 = now_ms()
@@ -422,9 +528,9 @@ function M.fire_start(cfg, workspace)
     if reg.start_fired then return end
     reg.start_fired = true
     if #reg.start == 0 then return end
-    local ctx = M.ctx_for(cfg)
-    if workspace ~= nil then ctx.workspace = workspace end
     for _, h in ipairs(reg.start) do
+        local ctx = M.ctx_for(cfg, { ext = h.ext, surface = "hook" })
+        if workspace ~= nil then ctx.workspace = workspace end
         local ok, err = pcall(h.fn, ctx)
         if not ok then warn(h.ext, "on_session_start failed: " .. tostring(err)) end
     end
