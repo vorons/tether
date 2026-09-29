@@ -348,6 +348,17 @@ function M.sorted_tools()
     return out
 end
 
+-- prompt-cache: shared loader for the pure cache planner (global in the
+-- built binary, loadfile fallback for dev/test runs). Nil-safe: callers
+-- guard, so an old build without the module behaves as cache-disabled.
+function M.require_cache()
+    return _G.cache
+        or (function()
+            local chunk = loadfile("src/tether/cache.lua")
+            return chunk and chunk()
+        end)()
+end
+
 -- Percent-encode for OAuth authorize URLs and form bodies (RFC 3986).
 function M.url_encode(s)
     return (tostring(s):gsub("[^%w%.%-_~]", function(c)

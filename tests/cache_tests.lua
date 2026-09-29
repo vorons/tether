@@ -1,4 +1,4 @@
--- tests/cache_tests.lua — prompt-cache v1 (change prompt-cache-v1).
+-- tests/cache_tests.lua — prompt-cache (change prompt-cache-cleanup).
 -- Run: lua tests/cache_tests.lua
 
 dofile("tests/helpers.lua")
@@ -104,54 +104,23 @@ do
         "TC4 parent key in child env")
     assert_true(with_parent:find("TETHER_CACHE_SYS=%x+", 1) ~= nil,
         "TC4 parent sys hash in child env")
-    -- child side runs in a subprocess (env is process-level)
-    local probe = os.tmpname()
-    local pf = assert(io.open(probe, "w"))
-    pf:write([==[
-local cache = assert(loadfile("src/tether/cache.lua"))()
-local sys = "ID"
-local sys_hash = cache.blocks_hash({ { name = "identity", text = sys } })
--- matching prompt: parent key reused
-assert(cache.resolve_key({}, sys_hash) == "parent-s1", "child reuses parent key")
--- divergent prompt: derived key
-local other = cache.blocks_hash({ { name = "identity", text = "OTHER" } })
-assert(cache.resolve_key({}, other) == "parent-s1:child", "divergent derives")
-print("TC4-CHILD-OK")
-]==])
-    pf:close()
-    local out = os.tmpname()
-    local rc = os.execute("TETHER_CACHE_KEY=parent-s1 TETHER_CACHE_SYS="
-        .. (function()
-            local c = assert(loadfile("src/tether/cache.lua"))()
-            return c.blocks_hash({ { name = "identity", text = "ID" } })
-        end)()
-        .. " lua " .. probe .. " > " .. out .. " 2>&1")
-    local of = io.open(out, "r")
-    local txt = of and of:read("*a") or ""
-    if of then of:close() end
-    os.remove(probe)
-    os.remove(out)
-    assert_true(rc == true or rc == 0, "TC4 child probe exits 0: " .. txt)
-    assert_true(txt:find("TC4-CHILD-OK", 1, true) ~= nil, "TC4 child semantics")
-    -- no env: the session slug is used (separate probe, clean env)
-    local probe2 = os.tmpname()
-    local pf2 = assert(io.open(probe2, "w"))
-    pf2:write([==[
-local cache = assert(loadfile("src/tether/cache.lua"))()
-assert(cache.resolve_key({ _session_id = "Kid_9" }, nil) == "kid-9", "session slug")
-print("TC4-SLUG-OK")
-]==])
-    pf2:close()
-    local out2 = os.tmpname()
-    local rc2 = os.execute("env -u TETHER_CACHE_KEY -u TETHER_CACHE_SYS"
-        .. " lua " .. probe2 .. " > " .. out2 .. " 2>&1")
-    local of2 = io.open(out2, "r")
-    local txt2 = of2 and of2:read("*a") or ""
-    if of2 then of2:close() end
-    os.remove(probe2)
-    os.remove(out2)
-    assert_true(rc2 == true or rc2 == 0, "TC4 slug probe exits 0: " .. txt2)
-    assert_true(txt2:find("TC4-SLUG-OK", 1, true) ~= nil, "TC4 slug fallback")
+    -- child-side decision is pure (no subprocess): matching prompt reuses
+    -- the parent key, a divergent prompt derives, no env falls back to
+    -- the session slug.
+    local cache_c = fresh_cache()
+    local sys_hash = cache_c.blocks_hash({ { name = "identity", text = "ID" } })
+    assert_eq(cache_c.child_key("parent-s1", sys_hash, sys_hash), "parent-s1",
+        "TC4 child reuses parent key")
+    local other = cache_c.blocks_hash({ { name = "identity", text = "OTHER" } })
+    assert_eq(cache_c.child_key("parent-s1", sys_hash, other), "parent-s1:child",
+        "TC4 divergent derives")
+    assert_eq(cache_c.derive_key("parent-s1"), "parent-s1:child",
+        "TC4 derive fixed suffix")
+    assert_eq(cache_c.derive_key(""), "", "TC4 derive empty parent")
+    if os.getenv("TETHER_CACHE_KEY") == nil then
+        assert_eq(cache_c.resolve_key({ _session_id = "Kid_9" }, nil), "kid-9",
+            "TC4 session slug fallback")
+    end
     print("TC4 subagent inheritance: OK")
 end
 
@@ -183,10 +152,10 @@ do
     local keyed = openai.build_request(hist, "m", nil, nil, plan)
     assert_true(keyed:find('"prompt_cache_key":"s5"', 1, true) ~= nil,
         "TC5 openai key present")
-    -- retention=1h rides as a ttl on the markers
+    -- long_retention rides as a ttl on the markers
     local cache_h = fresh_cache()
     local plan_h = cache_h.plan({ _session_id = "s5h",
-        cache = { retention = "1h" } }, hist)
+        cache = { long_retention = true } }, hist)
     assert_eq(plan_h.ttl, "1h", "TC5 plan ttl")
     local marked_h = anthropic.build_request(hist, "m", 128, nil, plan_h)
     assert_true(marked_h:find('"ttl":"1h"', 1, true) ~= nil, "TC5 ttl marker")
@@ -265,43 +234,15 @@ do
     print("TC7 usage parsing: OK")
 end
 
--- TC8 (5.3): hit-rate diagnostic — low rate + stable prefix names blocks;
--- a provider that reports no cache activity stays quiet.
+-- TC8 (removed): hit-rate diagnostic deleted by the cleanup change.
+-- Usage records (TC9) are the remaining observability; providers that
+-- report no cache fields simply record zeros.
 do
     local cache = fresh_cache()
-    local blocks = { { name = "identity", hash = "h1" },
-        { name = "agents", hash = "h2" } }
-    local cold = { prompt_tokens = 100, cache_read_tokens = 0,
-        cache_write_tokens = 90 }
-    for _ = 1, 4 do
-        assert_true(cache.observe("s8", cold, blocks) == nil,
-            "TC8 warming up is quiet")
-    end
-    local diag = cache.observe("s8", cold, blocks)
-    assert_true(type(diag) == "string"
-        and diag:find("hit%-rate", 1) ~= nil, "TC8 low rate diagnosed")
-    -- changed block is named
-    local changed = { { name = "identity", hash = "h1" },
-        { name = "agents", hash = "hX" } }
-    local diag2 = cache.observe("s8", cold, changed)
-    assert_true(diag2:find("agents", 1, true) ~= nil,
-        "TC8 changed block named")
-    -- healthy rate stays quiet
-    local cache2 = fresh_cache()
-    for _ = 1, 6 do
-        cache2.observe("s9", { prompt_tokens = 100, cache_read_tokens = 95,
-            cache_write_tokens = 5 }, blocks)
-    end
-    assert_true(cache2.observe("s9",
-        { prompt_tokens = 100, cache_read_tokens = 95 }, blocks) == nil,
-        "TC8 healthy rate quiet")
-    -- silent provider (local runtime, no cache fields): never diagnosed
-    local cache3 = fresh_cache()
-    for _ = 1, 6 do
-        assert_true(cache3.observe("s0", { prompt_tokens = 100 }, blocks) == nil,
-            "TC8 silent provider quiet")
-    end
-    print("TC8 hit-rate diagnostic: OK")
+    assert_true(cache.observe == nil, "TC8 observe stays deleted")
+    assert_true(cache.WINDOW == nil and cache.HIT_FLOOR == nil,
+        "TC8 window constants stay deleted")
+    print("TC8 no-diagnosis regression: OK")
 end
 
 -- TC9 (5.1 records): llm_cache_usage record shape + ring.
@@ -332,9 +273,7 @@ do
     local cs = assert(loadfile("src/tether/config_schema.lua"))()
     local d = cs.default_config()
     assert_eq(d.cache.enabled, true, "TC10 default enabled")
-    assert_eq(d.cache.retention, "auto", "TC10 default retention")
-    assert_eq(d.cache.key_scope, "session", "TC10 default scope")
-    assert_eq(d.cache.intermediate_breakpoints, 12, "TC10 default ib")
+    assert_eq(d.cache.long_retention, false, "TC10 default retention")
     assert_eq(d.cache.debug, false, "TC10 default debug")
     _G.provider_catalog = assert(loadfile("src/tether/providers/catalog.lua"))()
     local config = assert(loadfile("src/tether/config.lua"))()
@@ -342,14 +281,15 @@ do
     os.execute("rm -rf " .. home .. " && mkdir -p " .. home .. "/.tether")
     local cfg = config.load(home .. "/no-such-config.lua", home)
     assert_eq(cfg.cache.enabled, true, "TC10 missing table defaults")
+    assert_eq(cfg.cache.long_retention, false, "TC10 missing retention defaults")
     local f = assert(io.open(home .. "/.tether/config.lua", "w"))
-    f:write('return { cache = { enabled = "yes", retention = "2h",'
+    f:write('return { cache = { enabled = "yes", long_retention = "maybe",'
+        .. ' key_scope = "session_role", retention = "1h",'
         .. ' intermediate_breakpoints = -3 } }\n')
     f:close()
     local cfg2 = config.load(home .. "/.tether/config.lua", home)
     assert_eq(cfg2.cache.enabled, true, "TC10 bad enabled falls back")
-    assert_eq(cfg2.cache.retention, "auto", "TC10 bad retention falls back")
-    assert_eq(cfg2.cache.intermediate_breakpoints, 12, "TC10 bad ib falls back")
+    assert_eq(cfg2.cache.long_retention, false, "TC10 bad retention falls back")
     local f2 = assert(io.open(home .. "/.tether/config.lua", "w"))
     f2:write("return { cache = { enabled = false } }\n")
     f2:close()

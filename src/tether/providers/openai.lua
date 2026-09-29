@@ -259,7 +259,7 @@ local function parse_sse_line(line, on_event)
         on_event({ type = "done", reason = S.stop_reason })
     end
 
-    -- usage (prompt-cache v1 also reads prompt_tokens_details.cached_tokens)
+    -- usage (prompt-cache also reads prompt_tokens_details.cached_tokens)
     local pt = tonumber(payload:match('"prompt_tokens"[%s]*:[%s]*(%d+)'))
     local ct = tonumber(payload:match('"completion_tokens"[%s]*:[%s]*(%d+)'))
     local cached = tonumber(payload:match('"cached_tokens"[%s]*:[%s]*(%d+)'))
@@ -308,7 +308,7 @@ local function reasoning_param(reasoning)
 end
 
 function M.build_request(messages, model, _max_tokens, reasoning, plan)
-    -- prompt-cache v1: stable session key; the cache itself is automatic by
+    -- prompt-cache: stable session key; the cache itself is automatic by
     -- prefix, our job is the key plus the byte-stable serialization (R2).
     local key = ""
     if type(plan) == "table" and type(plan.key) == "string" then

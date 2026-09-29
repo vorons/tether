@@ -129,15 +129,16 @@ local retry = _G.retry
     end)()
 assert(retry, "api: cannot load retry")
 
--- prompt-cache v1: pure planner (global in the built binary, loadfile
+-- prompt-cache: pure planner (global in the built binary, loadfile
 -- fallback for development runs and the plain-lua tests). Nil-safe: every
 -- use below guards, so an old build without the module behaves as
 -- cache-disabled.
-local cache_mod = _G.cache
+local common = _G.provider_common
     or (function()
-        local chunk = loadfile("src/tether/cache.lua")
+        local chunk = loadfile("src/tether/providers/common.lua")
         return chunk and chunk()
     end)()
+local cache_mod = common and common.require_cache and common.require_cache()
 
 -- Extract a Retry-After / retry_after value from the body, if present.
 local function extract_retry_after(body)
@@ -369,7 +370,7 @@ local function http_request(cfg, api_key, messages, on_event, opts)
     local pname, P = provider_of(cfg)
     local model = cfg.model
     local url = expand_url(P.stream_url(cfg, model, api_key), cfg)
-    -- prompt-cache v1: plan breakpoints once per request; adapters that
+    -- prompt-cache: plan breakpoints once per request; adapters that
     -- predate the 5th argument ignore it (same convention as reasoning).
     -- One-shot summarize calls pass opts.no_cache so their ad-hoc messages
     -- never pollute the session's stability state.
@@ -443,19 +444,14 @@ local function http_request(cfg, api_key, messages, on_event, opts)
 
     if P.reset_stream then P.reset_stream() end
 
-    -- prompt-cache v1: observe usage events for the hit-rate diagnostic
-    -- and store one llm_cache_usage record per request. Additive only: the
-    -- wrapped event still reaches the caller unchanged.
+    -- prompt-cache: store one llm_cache_usage record per request.
+    -- Additive only: the wrapped event still reaches the caller unchanged.
     local wrapped_event = on_event
     if cache_mod and plan then
         wrapped_event = function(ev)
             if type(ev) == "table" and ev.type == "usage"
                 and type(ev.usage) == "table" then
                 pcall(function()
-                    local diag = cache_mod.observe(plan.key, ev.usage, plan.blocks)
-                    if type(diag) == "string" then
-                        io.stderr:write("tether: " .. diag .. "\n")
-                    end
                     cache_mod.store_record(cache_mod.usage_record{
                         session_id = cfg._session_id,
                         cache_key = plan.key,
@@ -467,17 +463,6 @@ local function http_request(cfg, api_key, messages, on_event, opts)
                         cache_key_present = plan.key ~= "",
                         turn_blocks_count = (type(messages) == "table") and #messages or 0,
                     })
-                    if cache_mod.debug_on(cfg) then
-                        local rec = cache_mod.last_record()
-                        if rec then
-                            io.stderr:write(string.format(
-                                "tether cache: usage in=%d read=%d write=%d key=%s\n",
-                                rec.input_tokens or 0,
-                                rec.cache_read_tokens or 0,
-                                rec.cache_write_tokens or 0,
-                                tostring(plan.key)))
-                        end
-                    end
                 end)
             end
             return on_event(ev)

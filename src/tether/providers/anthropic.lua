@@ -60,12 +60,15 @@ end
 -- arguments in history are RAW (still-JSON-escaped) fragments: exactly one
 -- unescape here turns them back into valid JSON, spliced as `input` verbatim.
 --
--- plan (prompt-cache v1, optional): { sys_texts[], sys_head (idx or nil),
+-- plan (prompt-cache, optional): { sys_texts[], sys_head (idx or nil),
 -- sys_end, tools, last_msg, ttl }. Without it the legacy string-form body
 -- is emitted byte-for-byte as before.
+local CC_5M = '{"type":"ephemeral"}'
+local CC_1H = '{"type":"ephemeral","ttl":"1h"}'
+
 local function cc_json(ttl)
-    if ttl == "1h" then return '{"type":"ephemeral","ttl":"1h"}' end
-    return '{"type":"ephemeral"}'
+    if ttl == "1h" then return CC_1H end
+    return CC_5M
 end
 
 -- System texts -> Anthropic system array value with cache_control on the
@@ -83,13 +86,19 @@ local function system_value(texts, head_idx, ttl)
     return "[" .. table.concat(parts, ",") .. "]"
 end
 
--- The last history message in block form with the rolling write-point
--- marker on its final content block.
-local function last_message_value(m, cc)
+-- One history message in block or string form. cc == nil emits the legacy
+-- plain body; a cc string stamps the rolling write-point marker on the
+-- final content block.
+local function message_value(m, cc)
     if m.role == "tool" then
+        if cc then
+            return string.format(
+                '{"role":"user","content":[{"type":"tool_result","tool_use_id":"%s","content":"%s","cache_control":%s}]}',
+                jesc(m.tool_call_id or ""), jesc(tostring(m.content or "")), cc)
+        end
         return string.format(
-            '{"role":"user","content":[{"type":"tool_result","tool_use_id":"%s","content":"%s","cache_control":%s}]}',
-            jesc(m.tool_call_id or ""), jesc(tostring(m.content or "")), cc)
+            '{"role":"user","content":[{"type":"tool_result","tool_use_id":"%s","content":"%s"}]}',
+            jesc(m.tool_call_id or ""), jesc(tostring(m.content or "")))
     end
     local content = m.content
     if type(content) == "table" and content.tool_calls then
@@ -106,45 +115,27 @@ local function last_message_value(m, cc)
                 jesc(tc["function"] and tc["function"].name or ""),
                 clean_args(raw))
         end
-        if #blocks == 0 then
-            blocks[#blocks + 1] = '{"type":"text","text":""}'
+        if cc then
+            if #blocks == 0 then
+                blocks[#blocks + 1] = '{"type":"text","text":""}'
+            end
+            blocks[#blocks] = blocks[#blocks]:sub(1, -2)
+                .. ',"cache_control":' .. cc .. "}"
         end
-        blocks[#blocks] = blocks[#blocks]:sub(1, -2)
-            .. ',"cache_control":' .. cc .. "}"
-        local role = (m.role == "assistant") and "assistant" or "user"
-        return string.format('{"role":"%s","content":[%s]}', role,
-            table.concat(blocks, ","))
-    end
-    local role = (m.role == "assistant") and "assistant" or "user"
-    return string.format(
-        '{"role":"%s","content":[{"type":"text","text":"%s","cache_control":%s}]}',
-        role, jesc(tostring(content or "")), cc)
-end
-
-local function plain_message_value(m)
-    if m.role == "tool" then
-        return string.format(
-            '{"role":"user","content":[{"type":"tool_result","tool_use_id":"%s","content":"%s"}]}',
-            jesc(m.tool_call_id or ""), jesc(tostring(m.content or "")))
-    end
-    local content = m.content
-    if type(content) == "table" and content.tool_calls then
-        local blocks = {}
-        if type(content.text) == "string" and content.text ~= "" then
-            blocks[#blocks + 1] = string.format('{"type":"text","text":"%s"}', jesc(content.text))
-        end
-        for _, tc in ipairs(content.tool_calls) do
-            local raw = tc["function"] and tc["function"].arguments or ""
-            blocks[#blocks + 1] = string.format(
-                '{"type":"tool_use","id":"%s","name":"%s","input":%s}',
-                jesc(tc.id or ""),
-                jesc(tc["function"] and tc["function"].name or ""),
-                clean_args(raw))
+        if cc then
+            local role = (m.role == "assistant") and "assistant" or "user"
+            return string.format('{"role":"%s","content":[%s]}', role,
+                table.concat(blocks, ","))
         end
         return string.format(
             '{"role":"assistant","content":[%s]}', table.concat(blocks, ","))
     end
     local role = (m.role == "assistant") and "assistant" or "user"
+    if cc then
+        return string.format(
+            '{"role":"%s","content":[{"type":"text","text":"%s","cache_control":%s}]}',
+            role, jesc(tostring(content or "")), cc)
+    end
     return string.format(
         '{"role":"%s","content":"%s"}', role, jesc(tostring(content or "")))
 end
@@ -163,9 +154,9 @@ local function convert_messages(messages, plan)
     local with_markers = type(plan) == "table"
     for i, m in ipairs(nonsys) do
         if with_markers and plan.last_msg and i == #nonsys then
-            out[#out + 1] = last_message_value(m, cc_json(plan.ttl))
+            out[#out + 1] = message_value(m, cc_json(plan.ttl))
         else
-            out[#out + 1] = plain_message_value(m)
+            out[#out + 1] = message_value(m, nil)
         end
     end
     local system = nil
@@ -191,7 +182,7 @@ local function tools_payload(plan)
             input_schema = t.parameters,
         })
     end
-    -- prompt-cache v1: breakpoint at the end of the tools block (last tool).
+    -- prompt-cache: breakpoint at the end of the tools block (last tool).
     if type(plan) == "table" and plan.tools and #out > 0 then
         out[#out] = out[#out]:sub(1, -2)
             .. ',"cache_control":' .. cc_json(plan.ttl) .. "}"
@@ -298,7 +289,7 @@ local function parse_sse_line(line, on_event)
 
     if etype == "message_start" then
         S.input_tokens = tonumber(payload:match('"input_tokens"[%s]*:[%s]*(%d+)'))
-        -- prompt-cache v1: creation/read counts. The 5m/1h breakdown sums to
+        -- prompt-cache: creation/read counts. The 5m/1h breakdown sums to
        -- the total when present, so prefer it (and learn the write TTL).
         local e5 = tonumber(payload:match('"ephemeral_5m_input_tokens"[%s]*:[%s]*(%d+)'))
         local e1 = tonumber(payload:match('"ephemeral_1h_input_tokens"[%s]*:[%s]*(%d+)'))
@@ -379,7 +370,7 @@ local function parse_sse_line(line, on_event)
                 used = (S.input_tokens or 0) + (out or 0),
                 prompt_tokens = S.input_tokens, completion_tokens = out,
             }
-            -- prompt-cache v1: additive cache fields (nil when unreported).
+            -- prompt-cache: additive cache fields (nil when unreported).
             if S.cache_read ~= nil then usage.cache_read_tokens = S.cache_read end
             if S.cache_write ~= nil then usage.cache_write_tokens = S.cache_write end
             if S.cache_ttl ~= nil then usage.cache_write_ttl = S.cache_ttl end

@@ -1115,7 +1115,7 @@ function M.ensure_prompt(cfg)
             workspace = cfg and cfg.workspace,
             agents_files = cfg and cfg._cli_agents_files,
         })
-        -- prompt-cache v1: labeled compose blocks ride on cfg so the cache
+        -- prompt-cache: labeled compose blocks ride on cfg so the cache
         -- planner can split the stable head from the volatile tail without
         -- recomposing (history[1] is the bytes actually sent).
         if cfg and context.blocks then

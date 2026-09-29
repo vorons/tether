@@ -113,13 +113,11 @@ local function default_config()
             path_completion = true, -- 4.3: Tab completes workspace path tokens
         },
         tools = { run_shell = { timeout = 120 } },
-        -- prompt-cache v1: in-agent cache markers + observability.
+        -- prompt-cache: in-agent cache markers + observability.
         -- enabled=false restores today's bodies exactly (no markers).
         cache = {
             enabled = true,
-            retention = "auto",
-            key_scope = "session",
-            intermediate_breakpoints = 12,
+            long_retention = false,
             debug = false,
         },
         -- subagent: child-run orchestration (max concurrent children,

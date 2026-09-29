@@ -242,7 +242,7 @@ end
 
 -- Labeled blocks behind compose(): identity (base prompt), agents
 -- (home/workspace/flag instruction files), skills (discovered index).
--- prompt-cache v1 uses these for the head/tail breakpoint split: a tail
+-- prompt-cache uses these for the head/tail breakpoint split: a tail
 -- change must not invalidate the stable head. compose() above stays the
 -- byte-identical concatenation, so this is behavior-preserving.
 -- opts: same as compose().

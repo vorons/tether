@@ -239,7 +239,7 @@ local function emit_response(payload, on_event)
         any = true
         search_from = fe + 1
     end
-    -- usage (prompt-cache v1 also reads cachedContentTokenCount)
+    -- usage (prompt-cache also reads cachedContentTokenCount)
     local pt = tonumber(payload:match('"promptTokenCount"[%s]*:[%s]*(%d+)'))
     local ct = tonumber(payload:match('"candidatesTokenCount"[%s]*:[%s]*(%d+)'))
     local cached = tonumber(payload:match('"cachedContentTokenCount"[%s]*:[%s]*(%d+)'))

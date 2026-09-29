@@ -41,16 +41,17 @@ local function toolset()
     return rawget(_G, "tools")
 end
 
--- prompt-cache v1: " TETHER_CACHE_KEY=.. [TETHER_CACHE_SYS=..]" for the
+-- prompt-cache: " TETHER_CACHE_KEY=.. [TETHER_CACHE_SYS=..]" for the
 -- child env, or "" when there is no key (or no cache module) to inherit.
 -- Values are slug/hex charset, safe unquoted in the shell command.
 local function cache_inherit_env(ctx)
     local cfg = (type(ctx) == "table") and ctx.cfg or nil
-    local mod = rawget(_G, "cache")
+    local common = _G.provider_common
         or (function()
-            local chunk = loadfile("src/tether/cache.lua")
+            local chunk = loadfile("src/tether/providers/common.lua")
             return chunk and chunk()
         end)()
+    local mod = common and common.require_cache and common.require_cache()
     if not mod then return "" end
     local sys_hash = nil
     if type(cfg) == "table" and type(cfg._system_blocks) == "table" then
@@ -189,7 +190,7 @@ function M.build_command(item, ctx)
     if depth < 0 then depth = 0 end
     local env = string.format("TETHER_SUBAGENT_DEPTH=%d TETHER_WORKSPACE=%s",
         depth + 1, sq(item.cwd))
-    -- prompt-cache v1: the child joins the parent's cache pool. The key and
+    -- prompt-cache: the child joins the parent's cache pool. The key and
     -- the parent system-blocks hash ride the same env channel; the child
     -- (cache.resolve_key) reuses the key when its prompt matches and
     -- derives one when it diverged. Absent key = nothing to inherit.

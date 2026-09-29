@@ -1,15 +1,15 @@
--- tether cache — pure prompt-cache policy (prompt-cache v1).
+-- tether cache — pure prompt-cache policy.
 --
--- Key derivation, breakpoint planning and usage observation. No network, no
+-- Key derivation, breakpoint planning and usage records. No network, no
 -- UI: adapters map the plan to wire markers (anthropic `cache_control`,
 -- openai `prompt_cache_key`), api.lua threads it through, subagent.lua
 -- hands the key to children. Same shape as confirm_policy/compression: a
 -- shared global with a loadfile fallback for dev/test runs.
 --
 -- State (per cache key, in-process only): previous block hashes for the
--- head/tail split, the rolling usage window for the hit-rate diagnostic,
--- and a small ring of usage records. Streams are sequential (single agent
--- loop), so module-level state is safe; tests reset it via M.reset().
+-- head/tail split and a small ring of usage records. Streams are
+-- sequential (single agent loop), so module-level state is safe; tests
+-- reset it via M.reset().
 local M = {}
 
 local common = _G.provider_common
@@ -19,20 +19,10 @@ local common = _G.provider_common
     end)()
 assert(common, "cache: cannot load provider_common")
 
--- Max breakpoints per Anthropic request (API limit).
-M.MAX_BREAKPOINTS = 4
-
--- Rolling usage window for the hit-rate diagnostic (spec: 20 requests).
-M.WINDOW = 20
--- Minimum window fill before a diagnostic can fire (avoids cold-start noise).
-M.WINDOW_MIN = 5
--- Hit-rate floor: below this with a stable prefix something is wrong.
-M.HIT_FLOOR = 0.6
-
 -- Ring capacity for llm_cache_usage records.
 M.RECORDS_CAP = 50
 
-M._state = {}   -- key -> { hashes, window, prev_obs, diag_cooldown }
+M._state = {}   -- key -> { hashes }
 M._records = {} -- newest-first llm_cache_usage records (cap RECORDS_CAP)
 
 function M.reset()
@@ -56,11 +46,10 @@ function M.session_key(session_id)
 end
 
 -- A child with a fully different system prompt gets a derived pool key.
--- (tether has no named roles; divergent children derive under "child".)
-function M.derive_key(parent_key, role)
+function M.derive_key(parent_key)
     parent_key = tostring(parent_key or "")
     if parent_key == "" then return "" end
-    return parent_key .. ":" .. M.slug(role or "child"):sub(1, 32)
+    return parent_key .. ":child"
 end
 
 function M.enabled(cfg)
@@ -86,7 +75,7 @@ function M.block_hash(text)
 end
 
 -- Identity of a block list (names + contents): the child-inheritance
--- comparison and the stability diff both run on this.
+-- comparison runs on this.
 function M.blocks_hash(blocks)
     local parts = {}
     for _, b in ipairs(blocks or {}) do
@@ -96,6 +85,19 @@ function M.blocks_hash(blocks)
         end
     end
     return common.sha256hex(table.concat(parts, "\0"))
+end
+
+-- Child key decision (pure, testable without env): a child that shares
+-- the parent system prompt reuses the parent key, otherwise it derives.
+function M.child_key(parent, parent_hash, sys_hash)
+    parent = tostring(parent or "")
+    if parent == "" then return "" end
+    if type(parent_hash) == "string" and parent_hash ~= ""
+        and type(sys_hash) == "string" and sys_hash ~= ""
+        and parent_hash ~= sys_hash then
+        return M.derive_key(parent)
+    end
+    return parent
 end
 
 -- Final key for this request: explicit override, inherited parent key
@@ -108,13 +110,7 @@ function M.resolve_key(cfg, sys_hash)
     end
     local parent = os.getenv("TETHER_CACHE_KEY")
     if type(parent) == "string" and parent ~= "" then
-        local phash = os.getenv("TETHER_CACHE_SYS")
-        if type(phash) == "string" and phash ~= ""
-            and type(sys_hash) == "string" and sys_hash ~= ""
-            and phash ~= sys_hash then
-            return M.derive_key(parent, "child")
-        end
-        return parent
+        return M.child_key(parent, os.getenv("TETHER_CACHE_SYS"), sys_hash)
     end
     return M.session_key(cfg._session_id)
 end
@@ -123,7 +119,7 @@ local function st_for(key)
     key = tostring(key or "")
     local st = M._state[key]
     if not st then
-        st = { hashes = nil, window = {}, prev_obs = nil }
+        st = { hashes = nil }
         M._state[key] = st
     end
     return st
@@ -203,7 +199,7 @@ function M.plan(cfg, messages, blocks_override)
     for _, b in ipairs(seg) do texts[#texts + 1] = b.text end
     local ttl = nil
     if type(cfg) == "table" and type(cfg.cache) == "table"
-        and cfg.cache.retention == "1h" then
+        and cfg.cache.long_retention == true then
         ttl = "1h"
     end
     local plan = {
@@ -261,72 +257,6 @@ end
 -- Test seam: newest stored record, or nil.
 function M.last_record()
     return M._records[1]
-end
-
--- Observe one usage event. Returns a diagnostic string when the rolling
--- hit rate fell below HIT_FLOOR with a stable prefix, else nil.
--- usage: { prompt_tokens/input_tokens, cache_read_tokens, cache_write_tokens }
--- blocks: {{name, hash}} of the prefix just sent.
--- Quiet unless the provider shows cache activity (reads or writes): a
--- provider that never reports cache fields (local runtimes) must not spam.
-function M.observe(key, usage, blocks)
-    key = tostring(key or "")
-    if key == "" then return nil end
-    local st = st_for(key)
-    usage = (type(usage) == "table") and usage or {}
-    local inp = tonumber(usage.prompt_tokens or usage.input_tokens) or 0
-    local read = tonumber(usage.cache_read_tokens) or 0
-    local written = tonumber(usage.cache_write_tokens) or 0
-    local w = st.window
-    w[#w + 1] = { inp = inp, read = read, write = written }
-    while #w > M.WINDOW do table.remove(w, 1) end
-    if #w < M.WINDOW_MIN then
-        st.prev_obs = blocks
-        return nil
-    end
-    local tin, tr, tw = 0, 0, 0
-    for _, e in ipairs(w) do
-        tin = tin + e.inp; tr = tr + e.read; tw = tw + e.write
-    end
-    if tin == 0 or tw == 0 and tr == 0 then
-        st.prev_obs = blocks
-        return nil
-    end
-    if tr / tin >= M.HIT_FLOOR then
-        st.prev_obs = blocks
-        return nil
-    end
-    -- Low rate: blame only a stable prefix (changed blocks named).
-    local prev = st.prev_obs
-    st.prev_obs = blocks
-    if prev == nil then return nil end
-    local old = {}
-    for _, b in ipairs(prev or {}) do
-        if type(b) == "table" then old[tostring(b.name)] = tostring(b.hash) end
-    end
-    local changed = {}
-    for _, b in ipairs(blocks or {}) do
-        if type(b) == "table" then
-            local n = tostring(b.name)
-            if old[n] ~= nil and old[n] ~= tostring(b.hash) then
-                changed[#changed + 1] = n
-            elseif old[n] == nil then
-                changed[#changed + 1] = n .. " (new)"
-            end
-        end
-    end
-    local rate = math.floor(tr / tin * 100)
-    if #changed == 0 then
-        return string.format(
-            "prompt-cache: hit-rate %d%% (<%d%%) over last %d requests "
-            .. "with a stable prefix (key=%s)",
-            rate, math.floor(M.HIT_FLOOR * 100), #w, key)
-    end
-    return string.format(
-        "prompt-cache: hit-rate %d%% (<%d%%) over last %d requests "
-        .. "(key=%s); changed blocks: %s",
-        rate, math.floor(M.HIT_FLOOR * 100), #w, key,
-        table.concat(changed, ", "))
 end
 
 return M
