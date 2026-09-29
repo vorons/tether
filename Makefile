@@ -93,6 +93,14 @@ $(LUA_DIR)/%.o: $(LUA_DIR)/%.c
 $(EMBED_OUT): $(LUA_MODS) tools/embed.lua build/embed_list.mk src/host/embed_mods.inc
 	@lua tools/embed.lua $(EMBED_OUT) $(EMBED_ARGS)
 
+# test-speed: unit files run under xargs -P (bounded by NPROC, default
+# nproc) with per-file logs in build/test-logs (gitignored). Failures
+# print the file name plus a tail of its log; exit is non-zero iff any
+# file failed. Same files, same env (own LUA_HOME), same green criteria
+# as the old sequential loop (rollback: git revert this hunk).
+NPROC ?= $(shell nproc 2>/dev/null || echo 8)
+TEST_FILES = $(filter-out tests/context_tests.lua,$(wildcard tests/*_tests.lua))
+
 test: tether
 	# 6.1: the syntax check covers every embedded module with no manual
 	# list — LUA_MODS is generated from tools/embed_order.txt (the same
@@ -100,12 +108,19 @@ test: tether
 	# file covers it here automatically.
 	@for m in $(LUA_MODS); do luac -p $$m || exit $$?; done
 	@echo "=== luac ok ==="
-	@LUA_HOME=$$(mktemp -d); rm -rf "$$LUA_HOME"; mkdir -p "$$LUA_HOME"; \
-		for t in tests/*_tests.lua; do \
-			case $$t in tests/context_tests.lua) continue;; esac; \
-			HOME="$$LUA_HOME" TETHER_HOME="$$LUA_HOME" lua $$t || exit $$?; \
-		done; \
-		rm -rf "$$LUA_HOME"
+	@rm -rf build/test-logs && mkdir -p build/test-logs
+	@printf '%s\n' $(TEST_FILES) | xargs -P$(NPROC) -n1 sh -c \
+		'H=$$(mktemp -d); rm -rf "$$H"; mkdir -p "$$H"; \
+		HOME="$$H" TETHER_HOME="$$H" lua "$$0" > "build/test-logs/$$(basename "$$0" .lua).log" 2>&1 \
+		|| echo "$$(basename "$$0" .lua)"; rm -rf "$$H"' \
+		> build/test-logs/failures.txt || exit $$?; \
+		if [ -s build/test-logs/failures.txt ]; then \
+			for f in $$(cat build/test-logs/failures.txt); do \
+				echo "=== FAIL $$f ==="; tail -n 50 "build/test-logs/$$f.log"; \
+			done; \
+			exit 1; \
+		fi
+	@echo "=== unit files ok ==="
 	@CTX_H=$$(mktemp -d); CTX_W=$$(mktemp -d); \
 		rm -rf "$$CTX_H" "$$CTX_W"; mkdir -p "$$CTX_H" "$$CTX_W"; \
 		HOME="$$CTX_H" TETHER_TEST_WORKSPACE="$$CTX_W" lua tests/context_tests.lua; rc=$$?; \
