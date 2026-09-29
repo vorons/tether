@@ -1397,7 +1397,7 @@ end
 -- M.fuzzy_rank primitive as the slash palette, S.palette_items becomes the
 -- ranked visible rows, and the selection resets to the top. A module field
 -- (not a file-local) so the chunk's local budget is untouched; exported as
--- a test seam like _build_model_items / _palette_window.
+-- a test seam like _build_model_items.
 function M._palette_apply_query()
     local all = S._palette_all or {}
     local labels = {}
@@ -3430,7 +3430,10 @@ end
 -- (slash_callbacks entries assign directly above; unknown names have
 -- no entry and no-op, as the old if-chain's fall-through did.)
 
--- Test seam: drive slash dispatch without going through the byte pump.
+-- Test seam (kept per facade-proxy-removal 2.1): drives slash dispatch
+-- with the live S without going through the byte pump. commands.dispatch
+-- forwards to the facade-owned slash_callbacks bodies above, so there is
+-- no module entry point tests could call instead — the proxy stays.
 M._execute_command = function(cmd, rest) if S then execute_command(cmd, rest) end end
 
 -- ============================================================
