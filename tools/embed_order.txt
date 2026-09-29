@@ -28,6 +28,7 @@ ui_auth src/tether/ui/auth.lua
 ui_confirm src/tether/ui/confirm.lua
 ui_ask src/tether/ui/ask.lua
 ui_complete src/tether/ui/complete.lua
+ui_themes src/tether/ui/themes.lua
 transcript src/tether/transcript.lua
 commands src/tether/commands.lua
 turn src/tether/turn.lua
@@ -116,6 +117,8 @@ ui_confirm
 ui_ask
 ## ui_complete: path completion engine (src/tether/ui/complete.lua)
 ui_complete
+## ui_themes: theme tables, role painters, painter builder (src/tether/ui/themes.lua)
+ui_themes
 ui
 ## config_schema: defaults, merge, config-file writers (src/tether/config_schema.lua)
 config_schema

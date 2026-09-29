@@ -114,6 +114,16 @@ if type(M._complete) ~= "table" then
     M._complete = (chunk and chunk()) or {}
 end
 
+-- ui_themes: theme tables, role painters, ASCII mapping, hint painters,
+-- painter-table builder (embedded global `ui_themes`, loadfile fallback
+-- for tests/dev). Same M-field pattern; live seams (theme name, depth,
+-- ascii/light probes) resolve in the facade per call.
+M._themes = _G.ui_themes
+if type(M._themes) ~= "table" then
+    local chunk = loadfile("src/tether/ui/themes.lua")
+    M._themes = (chunk and chunk()) or {}
+end
+
 -- ============================================================
 -- ANSI
 -- ============================================================
@@ -189,89 +199,17 @@ function M.kb_protocol_from_config(cfg_kb)
     return 0
 end
 
--- M8/R1: glyph → ASCII mapping (single pass, longest-first via explicit scan).
--- The spec promises TERM=dumb renders pure ASCII; the old code only stripped
--- ANSI colors, leaving box-drawing and emoji-width glyphs to break layout.
-local GLYPH_MAP = {
-    ["●"] = "*", ["•"] = "*", ["⚙"] = "[t]", ["›"] = ">", ["✗"] = "[x]", ["✓"] = "[ok]", ["✻"] = "*",
-    ["↻"] = "[r]", ["⏹"] = "[x]", ["⚠"] = "!", ["▸"] = ">", ["▾"] = "v", ["⇆"] = "tab",
-    ["┌"] = "+", ["┐"] = "+", ["└"] = "+", ["┘"] = "+", ["─"] = "-",
-    ["│"] = "|",     ["•"] = "-", ["…"] = "...", ["▓"] = "#", ["░"] = "-", ["━"] = "#",
-    ["▀"] = "#", ["█"] = "#", ["▄"] = "#",
-    ["↑"] = "^", ["↓"] = "v", ["←"] = "<", ["→"] = ">",
-    ["·"] = "-",
-    -- add-ask-tool: the question block's glyphs (note marker, quoted freeform)
-    ["↳"] = "->", ["«"] = '"', ["»"] = '"',
-}
+-- M8/R1: glyph → ASCII mapping lives in ui_themes (pure); this wrapper
+-- keeps the facade mode gate so unit tests and goldens observe identical
+-- behavior through ui.to_ascii.
 local function to_ascii(s)
     if not (M._ascii_mode or M._env_ascii or _ascii) then return s end
-    local out = {}
-    local i = 1
-    while i <= #s do
-        local matched = false
-        for glyph, repl in pairs(GLYPH_MAP) do
-            local glen = #glyph
-            if i + glen <= #s + 1 and s:sub(i, i + glen - 1) == glyph then
-                out[#out + 1] = repl
-                i = i + glen
-                matched = true
-                break
-            end
-        end
-        if not matched then
-            out[#out + 1] = s:sub(i, i)
-            i = i + 1
-        end
-    end
-    return table.concat(out)
+    return M._themes.to_ascii(s)
 end
 M.to_ascii = to_ascii
 
-local function sgr(c, s)
-    if (M._ascii_mode or M._env_ascii or _ascii) then return to_ascii(s) end
-    return ESC .. "[" .. c .. "m" .. s .. ESC .. "[0m"
-end
-
--- M8/R2: themes — role→SGR-code tables. cfg.ui.theme selects; unknown → default.
--- "mono" = no colors at all (roles resolve to nil ⇒ raw text).
-local THEMES = {
-    default = {
-        -- green-slate (ported from the Go TUI): accent #69e098, window
-        -- background #101214, input surface #22262a. The renderer emits no
-        -- background fills, so background/input live here as documented
-        -- metadata only; the SGR roles below carry the visible palette.
-        -- accent is depth-aware (mint #69e098): truecolor carries the exact
-        -- rgb, 256-color falls back to the closest palette index (78).
-        -- No bold component by design; headings keep their own bold.
-        accent = { truecolor = "38;2;105;224;152", ["256"] = "38;5;78" },
-        -- error/warn are fixed semantic hues (soft red #e06c75 / soft
-        -- yellow #e5c07b in truecolor terms): bright red/yellow at the
-        -- 16-color depth this renderer negotiates, never the accent, so
-        -- failures and retries stay legible under every accent choice.
-        warn = "33;1", error = "31;1", success = "32",
-        -- muted is the derived neutral gray (dark #8d8f92 tier); dim is its
-        -- darkened tier. muted_light is the dark-gray tier (#565a5f terms)
-        -- for light terminal backgrounds, picked by sgr_role via is_light_bg.
-        dim = "2", muted = "90", muted_light = "30",
-        italic = "3", reverse = "7", bold = "1",
-        -- 7.1: syntax roles (token kinds); default to 16-color codes so
-        -- truecolor/256 render with the same palette. ponytail: no brighter
-        -- per-depth variants; add one if a 256-color theme gets complaints.
-        comment = "2;38", string = "32", number = "33", keyword = "36;1",
-        -- inline code is soft lavender (#b48ead), depth-aware like accent: the
-        -- 16-color magenta (35) reads near-black on the dark window.
-        code = { truecolor = "38;2;180;142;173", ["256"] = "38;5;139" },
-        heading = "36;1",
-    },
-    solarized = {
-        accent = "36", warn = "33", error = "31", success = "32",
-        dim = "2", muted = "90", italic = "3", reverse = "7", bold = "1",
-        comment = "2;38", string = "32", number = "33", keyword = "36",
-        code = { truecolor = "38;2;180;142;173", ["256"] = "38;5;139" },
-        heading = "36;1",
-    },
-    mono = {}, -- every role missing ⇒ no SGR emitted
-}
+-- M8/R2: theme tables live in ui_themes; the active name stays here
+-- (set via set_theme from cfg or tests).
 local _theme_name = "default"
 
 -- M8/R2: wrap toggle (cfg.ui.wrap); false = truncate to width instead.
@@ -292,25 +230,12 @@ function M.is_light_bg()
     return n == 7 or n == 15
 end
 
--- M8/R2: role-based color — theme table drives the code; missing role in a
--- theme (e.g. mono) returns the raw text with no SGR at all; depth
--- "none" (ASCII/NO_COLOR/dumb) also forces raw text (7.1: never highlight),
--- still mapping the glyphs (to_ascii) so ASCII mode stays pure ASCII.
+-- M8/R2: role-based color lives in ui_themes (pure); this wrapper
+-- resolves the live theme/depth/light/ascii state per call.
 local function sgr_role(role, s)
-    local theme = THEMES[_theme_name] or THEMES.default
-    if M.color_depth() == "none" then return to_ascii(s) end
-    local code = theme[role]
-    -- splash-colors: on a light terminal the muted tier switches to the
-    -- dark-gray variant so secondary text stays legible; dim ("2") and the
-    -- fixed error/warn hues read on both backgrounds unchanged.
-    if role == "muted" and theme.muted_light and M.is_light_bg() then
-        code = theme.muted_light
-    end
-    if type(code) == "table" then
-        code = code[M.color_depth()] or code["256"] or code.truecolor
-    end
-    if not code then return to_ascii(s) end
-    return sgr(code, s)
+    return M._themes.paint_role(M._themes.THEMES, _theme_name, role, s,
+        M.color_depth(), M.is_light_bg(),
+        M._ascii_mode or M._env_ascii or _ascii)
 end
 
 -- Role helpers: every UI color goes through the active theme, so selecting
@@ -326,9 +251,9 @@ local function italic(s) return sgr_role("italic",  s) end
 local function rev(s)    return sgr_role("reverse", s) end
 
 -- Exports for unit tests + runtime config hookup (M8/R2)
-M.THEMES = THEMES
+M.THEMES = M._themes.THEMES
 M.set_theme = function(name)
-    if THEMES[name] then
+    if M._themes.THEMES[name] then
         _theme_name = name
     else
         _theme_name = "default"
@@ -2140,42 +2065,15 @@ end
 -- add-ask-tool: is `label` among this question's selected answers?
 -- Canonical implementation lives in ui_ask_view (module-local).
 
--- palette-hints D1: the shared segmented hint painter. A hint is an array of
--- {key, act} pairs; the key token paints in the dim tier, the action word in
--- the muted tier, pairs join with two spaces and no `·` separator.
--- hint_plain is the same text unstyled (the drift guards T228/T267 assert
--- against it); hint_paint clips to `inner` display columns when given,
--- keeping the tiers of whatever survives the clip. ASCII twins arrive through
--- sgr_role -> to_ascii (GLYPH_MAP carries ↑ ↓ ⇆), so neither helper needs an
--- ascii flag. M-fields: ui.lua sits at Lua's 200-locals limit.
+-- palette-hints D1: the shared segmented hint painter lives in ui_themes
+-- (pure over the painter table); these M.* names stay as the seams tests
+-- and goldens drive.
 function M.hint_plain(pairs)
-    local t = {}
-    for _, p in ipairs(pairs) do t[#t + 1] = p.key .. " " .. p.act end
-    return table.concat(t, "  ")
+    return M._themes.hint_plain(pairs)
 end
 
 function M.hint_paint(pairs, inner)
-    local parts, used = {}, 0
-    for _, p in ipairs(pairs) do
-        if used > 0 then
-            if inner and used + 2 > inner then break end
-            parts[#parts + 1] = "  "
-            used = used + 2
-        end
-        local seg = p.key .. " " .. p.act
-        if inner and used + vlen(seg) > inner then
-            local kp = clip(p.key, math.max(inner - used, 1))
-            parts[#parts + 1] = dim(kp)
-            used = used + vlen(kp)
-            if inner - used >= 2 then
-                parts[#parts + 1] = " " .. muted(clip(p.act, inner - used - 1))
-            end
-            break
-        end
-        parts[#parts + 1] = dim(p.key) .. " " .. muted(p.act)
-        used = used + vlen(seg)
-    end
-    return table.concat(parts)
+    return M._themes.hint_paint(M._painters, pairs, inner)
 end
 
 -- ask-block-b: the hint row's pairs for the current phase and mode. Short
@@ -2746,8 +2644,7 @@ M._painters = {
     freeform = ask.FREEFORM_LABEL,
     ascii_none = function() return M.color_depth() == "none" end,
     caret_reverse = function()
-        local theme = THEMES[_theme_name] or THEMES.default
-        return M.color_depth() ~= "none" and theme.reverse ~= nil
+        return M._themes.caret_reverse(M._themes.THEMES, _theme_name, M.color_depth())
     end,
     spinner_interval_ms = SPINNER_INTERVAL_MS,
 }
