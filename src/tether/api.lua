@@ -129,6 +129,16 @@ local retry = _G.retry
     end)()
 assert(retry, "api: cannot load retry")
 
+-- prompt-cache v1: pure planner (global in the built binary, loadfile
+-- fallback for development runs and the plain-lua tests). Nil-safe: every
+-- use below guards, so an old build without the module behaves as
+-- cache-disabled.
+local cache_mod = _G.cache
+    or (function()
+        local chunk = loadfile("src/tether/cache.lua")
+        return chunk and chunk()
+    end)()
+
 -- Extract a Retry-After / retry_after value from the body, if present.
 local function extract_retry_after(body)
     if not body then return nil end
@@ -355,13 +365,22 @@ local function stepped_stream(loop, url, hfile, bfile, feed)
     return step_ok, step_err
 end
 
-local function http_request(cfg, api_key, messages, on_event)
+local function http_request(cfg, api_key, messages, on_event, opts)
     local pname, P = provider_of(cfg)
     local model = cfg.model
     local url = expand_url(P.stream_url(cfg, model, api_key), cfg)
+    -- prompt-cache v1: plan breakpoints once per request; adapters that
+    -- predate the 5th argument ignore it (same convention as reasoning).
+    -- One-shot summarize calls pass opts.no_cache so their ad-hoc messages
+    -- never pollute the session's stability state.
+    local plan = nil
+    if cache_mod and not (type(opts) == "table" and opts.no_cache) then
+        local ok, p = pcall(cache_mod.plan, cfg, messages)
+        if ok and type(p) == "table" then plan = p end
+    end
     -- add-reasoning-level: the normalized level rides as the 4th argument;
     -- adapters that predate it ignore the extra arg.
-    local req = P.build_request(messages, model, nil, cfg.reasoning)
+    local req = P.build_request(messages, model, nil, cfg.reasoning, plan)
 
     -- Optional adapter preflight (missing compound credentials, unexpanded
     -- URL placeholders): fails the attempt before any request is issued.
@@ -424,6 +443,47 @@ local function http_request(cfg, api_key, messages, on_event)
 
     if P.reset_stream then P.reset_stream() end
 
+    -- prompt-cache v1: observe usage events for the hit-rate diagnostic
+    -- and store one llm_cache_usage record per request. Additive only: the
+    -- wrapped event still reaches the caller unchanged.
+    local wrapped_event = on_event
+    if cache_mod and plan then
+        wrapped_event = function(ev)
+            if type(ev) == "table" and ev.type == "usage"
+                and type(ev.usage) == "table" then
+                pcall(function()
+                    local diag = cache_mod.observe(plan.key, ev.usage, plan.blocks)
+                    if type(diag) == "string" then
+                        io.stderr:write("tether: " .. diag .. "\n")
+                    end
+                    cache_mod.store_record(cache_mod.usage_record{
+                        session_id = cfg._session_id,
+                        cache_key = plan.key,
+                        provider = pname,
+                        model = model,
+                        usage = ev.usage,
+                        blocks = plan.blocks,
+                        ttl = plan.ttl,
+                        cache_key_present = plan.key ~= "",
+                        turn_blocks_count = (type(messages) == "table") and #messages or 0,
+                    })
+                    if cache_mod.debug_on(cfg) then
+                        local rec = cache_mod.last_record()
+                        if rec then
+                            io.stderr:write(string.format(
+                                "tether cache: usage in=%d read=%d write=%d key=%s\n",
+                                rec.input_tokens or 0,
+                                rec.cache_read_tokens or 0,
+                                rec.cache_write_tokens or 0,
+                                tostring(plan.key)))
+                        end
+                    end
+                end)
+            end
+            return on_event(ev)
+        end
+    end
+
     -- 4.1: in-process transport (vendor'd libcurl + mbedTLS). Passing the auth
     -- and body temp files as "@path" entries keeps both out of any argv.
     local ok = true
@@ -448,7 +508,7 @@ local function http_request(cfg, api_key, messages, on_event)
         if line ~= "" then
             buf[#buf + 1] = line
             got_data = true
-            local ok2, err = pcall(P.parse_sse_line, line, on_event)
+            local ok2, err = pcall(P.parse_sse_line, line, wrapped_event)
             if not ok2 then
                 parse_failed = true
                 ok = false
@@ -515,7 +575,7 @@ local function http_request(cfg, api_key, messages, on_event)
     -- A non-SSE body is either the provider's REST fallback (Gemini
     -- generateContent) or an HTTP error JSON.
     if body:sub(1, 5) ~= "data:" then
-        if P.handle_non_sse and P.handle_non_sse(body, on_event) then
+        if P.handle_non_sse and P.handle_non_sse(body, wrapped_event) then
             local rf = P.stream_failure and P.stream_failure()
             if rf then
                 return false, retry.failure(retry.classify(rf.message, rf.status),
@@ -534,13 +594,13 @@ local function http_request(cfg, api_key, messages, on_event)
     end
 
     if ok and P.stream_finished then
-        pcall(P.stream_finished, on_event)
+        pcall(P.stream_finished, wrapped_event)
     end
     return true
 end
 
-function M.stream(cfg, api_key, messages, on_event)
-    return http_request(cfg, api_key, messages, on_event)
+function M.stream(cfg, api_key, messages, on_event, opts)
+    return http_request(cfg, api_key, messages, on_event, opts)
 end
 
 -- add-llm-compaction: one-shot summary request. Reuses the provider adapter
@@ -550,11 +610,13 @@ end
 function M.summarize(cfg, api_key, messages)
     local function attempt()
         local acc = {}
+        -- no_cache: one-shot summary messages must not pollute the
+        -- session's cache stability state.
         local ok, failure = M.stream(cfg, api_key, messages, function(ev)
             if ev.type == "text_delta" and type(ev.text) == "string" then
                 acc[#acc + 1] = ev.text
             end
-        end)
+        end, { no_cache = true })
         local text = table.concat(acc):match("^%s*(.-)%s*$") or ""
         return ok, failure, text
     end

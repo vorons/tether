@@ -16,15 +16,20 @@ local jesc = common.jesc
 local json_unescape = common.json_unescape
 
 -- Per-stream state: content-block index -> { id, name }, the message_start
--- input token count, the last stop reason (a terminator carries none of its
--- own) and a provider error. Streams are sequential (single agent loop), so
--- module-level state is safe; the transport resets it per request via
--- reset_stream().
-local S = { index_to_id = {}, input_tokens = nil, stop_reason = nil, failure = nil }
+-- input token count, prompt-cache creation/read counts (+ write TTL), the
+-- last stop reason (a terminator carries none of its own) and a provider
+-- error. Streams are sequential (single agent loop), so module-level state
+-- is safe; the transport resets it per request via reset_stream().
+local S = { index_to_id = {}, input_tokens = nil, cache_write = nil,
+            cache_read = nil, cache_ttl = nil,
+            stop_reason = nil, failure = nil }
 
 function M.reset_stream()
     S.index_to_id = {}
     S.input_tokens = nil
+    S.cache_write = nil
+    S.cache_read = nil
+    S.cache_ttl = nil
     S.stop_reason = nil
     S.failure = nil
 end
@@ -54,50 +59,142 @@ end
 -- History (OpenAI shape, as stored by agent.lua) -> Anthropic JSON body.
 -- arguments in history are RAW (still-JSON-escaped) fragments: exactly one
 -- unescape here turns them back into valid JSON, spliced as `input` verbatim.
-local function convert_messages(messages)
+--
+-- plan (prompt-cache v1, optional): { sys_texts[], sys_head (idx or nil),
+-- sys_end, tools, last_msg, ttl }. Without it the legacy string-form body
+-- is emitted byte-for-byte as before.
+local function cc_json(ttl)
+    if ttl == "1h" then return '{"type":"ephemeral","ttl":"1h"}' end
+    return '{"type":"ephemeral"}'
+end
+
+-- System texts -> Anthropic system array value with cache_control on the
+-- head block (end of the stable prefix) and on the last block.
+local function system_value(texts, head_idx, ttl)
+    local cc = cc_json(ttl)
+    local parts = {}
+    for i, t in ipairs(texts) do
+        local block = string.format('{"type":"text","text":"%s"', jesc(t))
+        if i == head_idx or i == #texts then
+            block = block .. ',"cache_control":' .. cc
+        end
+        parts[#parts + 1] = block .. "}"
+    end
+    return "[" .. table.concat(parts, ",") .. "]"
+end
+
+-- The last history message in block form with the rolling write-point
+-- marker on its final content block.
+local function last_message_value(m, cc)
+    if m.role == "tool" then
+        return string.format(
+            '{"role":"user","content":[{"type":"tool_result","tool_use_id":"%s","content":"%s","cache_control":%s}]}',
+            jesc(m.tool_call_id or ""), jesc(tostring(m.content or "")), cc)
+    end
+    local content = m.content
+    if type(content) == "table" and content.tool_calls then
+        local blocks = {}
+        if type(content.text) == "string" and content.text ~= "" then
+            blocks[#blocks + 1] = string.format('{"type":"text","text":"%s"}',
+                jesc(content.text))
+        end
+        for _, tc in ipairs(content.tool_calls) do
+            local raw = tc["function"] and tc["function"].arguments or ""
+            blocks[#blocks + 1] = string.format(
+                '{"type":"tool_use","id":"%s","name":"%s","input":%s}',
+                jesc(tc.id or ""),
+                jesc(tc["function"] and tc["function"].name or ""),
+                clean_args(raw))
+        end
+        if #blocks == 0 then
+            blocks[#blocks + 1] = '{"type":"text","text":""}'
+        end
+        blocks[#blocks] = blocks[#blocks]:sub(1, -2)
+            .. ',"cache_control":' .. cc .. "}"
+        local role = (m.role == "assistant") and "assistant" or "user"
+        return string.format('{"role":"%s","content":[%s]}', role,
+            table.concat(blocks, ","))
+    end
+    local role = (m.role == "assistant") and "assistant" or "user"
+    return string.format(
+        '{"role":"%s","content":[{"type":"text","text":"%s","cache_control":%s}]}',
+        role, jesc(tostring(content or "")), cc)
+end
+
+local function plain_message_value(m)
+    if m.role == "tool" then
+        return string.format(
+            '{"role":"user","content":[{"type":"tool_result","tool_use_id":"%s","content":"%s"}]}',
+            jesc(m.tool_call_id or ""), jesc(tostring(m.content or "")))
+    end
+    local content = m.content
+    if type(content) == "table" and content.tool_calls then
+        local blocks = {}
+        if type(content.text) == "string" and content.text ~= "" then
+            blocks[#blocks + 1] = string.format('{"type":"text","text":"%s"}', jesc(content.text))
+        end
+        for _, tc in ipairs(content.tool_calls) do
+            local raw = tc["function"] and tc["function"].arguments or ""
+            blocks[#blocks + 1] = string.format(
+                '{"type":"tool_use","id":"%s","name":"%s","input":%s}',
+                jesc(tc.id or ""),
+                jesc(tc["function"] and tc["function"].name or ""),
+                clean_args(raw))
+        end
+        return string.format(
+            '{"role":"assistant","content":[%s]}', table.concat(blocks, ","))
+    end
+    local role = (m.role == "assistant") and "assistant" or "user"
+    return string.format(
+        '{"role":"%s","content":"%s"}', role, jesc(tostring(content or "")))
+end
+
+local function convert_messages(messages, plan)
     local system_parts = {}
-    local out = {}
+    local nonsys = {}
     for _, m in ipairs(messages) do
         if m.role == "system" then
             system_parts[#system_parts + 1] = tostring(m.content or "")
-        elseif m.role == "tool" then
-            out[#out + 1] = string.format(
-                '{"role":"user","content":[{"type":"tool_result","tool_use_id":"%s","content":"%s"}]}',
-                jesc(m.tool_call_id or ""), jesc(tostring(m.content or "")))
         else
-            local content = m.content
-            if type(content) == "table" and content.tool_calls then
-                local blocks = {}
-                if type(content.text) == "string" and content.text ~= "" then
-                    blocks[#blocks + 1] = string.format('{"type":"text","text":"%s"}', jesc(content.text))
-                end
-                for _, tc in ipairs(content.tool_calls) do
-                    local raw = tc["function"] and tc["function"].arguments or ""
-                    blocks[#blocks + 1] = string.format(
-                        '{"type":"tool_use","id":"%s","name":"%s","input":%s}',
-                        jesc(tc.id or ""),
-                        jesc(tc["function"] and tc["function"].name or ""),
-                        clean_args(raw))
-                end
-                out[#out + 1] = string.format(
-                    '{"role":"assistant","content":[%s]}', table.concat(blocks, ","))
-            else
-                local role = (m.role == "assistant") and "assistant" or "user"
-                out[#out + 1] = string.format(
-                    '{"role":"%s","content":"%s"}', role, jesc(tostring(content or "")))
-            end
+            nonsys[#nonsys + 1] = m
         end
     end
-    return table.concat(system_parts, "\n\n"), "[" .. table.concat(out, ",") .. "]"
+    local out = {}
+    local with_markers = type(plan) == "table"
+    for i, m in ipairs(nonsys) do
+        if with_markers and plan.last_msg and i == #nonsys then
+            out[#out + 1] = last_message_value(m, cc_json(plan.ttl))
+        else
+            out[#out + 1] = plain_message_value(m)
+        end
+    end
+    local system = nil
+    if with_markers then
+        local texts = (type(plan.sys_texts) == "table" and #plan.sys_texts > 0)
+            and plan.sys_texts or system_parts
+        if #texts > 0 and plan.sys_end then
+            system = system_value(texts, plan.sys_head, plan.ttl)
+        elseif #system_parts > 0 then
+            system = string.format('"%s"', jesc(table.concat(system_parts, "\n\n")))
+        end
+    elseif #system_parts > 0 then
+        system = string.format('"%s"', jesc(table.concat(system_parts, "\n\n")))
+    end
+    return system, "[" .. table.concat(out, ",") .. "]"
 end
 
-local function tools_payload()
+local function tools_payload(plan)
     local out = {}
-    for _, t in ipairs(common.tools_schema()) do
+    for _, t in ipairs(common.sorted_tools()) do
         out[#out + 1] = common.json_encode({
             name = t.name, description = t.description,
             input_schema = t.parameters,
         })
+    end
+    -- prompt-cache v1: breakpoint at the end of the tools block (last tool).
+    if type(plan) == "table" and plan.tools and #out > 0 then
+        out[#out] = out[#out]:sub(1, -2)
+            .. ',"cache_control":' .. cc_json(plan.ttl) .. "}"
     end
     return "[" .. table.concat(out, ",") .. "]"
 end
@@ -107,8 +204,8 @@ end
 -- enabling a level raises the default 4096 window to budget + 4096.
 local THINK_BUDGET = { low = 4096, medium = 16384, high = 65536 }
 
-function M.build_request(messages, model, max_tokens, reasoning)
-    local system, msgs = convert_messages(messages)
+function M.build_request(messages, model, max_tokens, reasoning, plan)
+    local system, msgs = convert_messages(messages, plan)
     local budget = THINK_BUDGET[reasoning]
     local mt = tonumber(max_tokens) or 4096
     if budget and mt < budget + 4096 then mt = budget + 4096 end
@@ -116,7 +213,7 @@ function M.build_request(messages, model, max_tokens, reasoning)
         string.format('"model":"%s"', jesc(model or "")),
         string.format('"max_tokens":%d', mt),
         string.format('"messages":%s', msgs),
-        string.format('"tools":%s', tools_payload()),
+        string.format('"tools":%s', tools_payload(plan)),
         '"tool_choice":{"type":"auto"}',
         '"stream":true',
     }
@@ -124,8 +221,8 @@ function M.build_request(messages, model, max_tokens, reasoning)
         parts[#parts + 1] = string.format(
             '"thinking":{"type":"enabled","budget_tokens":%d}', budget)
     end
-    if system ~= "" then
-        parts[#parts + 1] = string.format('"system":"%s"', jesc(system))
+    if system ~= nil then
+        parts[#parts + 1] = string.format('"system":%s', system)
     end
     return "{" .. table.concat(parts, ",") .. "}"
 end
@@ -201,6 +298,18 @@ local function parse_sse_line(line, on_event)
 
     if etype == "message_start" then
         S.input_tokens = tonumber(payload:match('"input_tokens"[%s]*:[%s]*(%d+)'))
+        -- prompt-cache v1: creation/read counts. The 5m/1h breakdown sums to
+       -- the total when present, so prefer it (and learn the write TTL).
+        local e5 = tonumber(payload:match('"ephemeral_5m_input_tokens"[%s]*:[%s]*(%d+)'))
+        local e1 = tonumber(payload:match('"ephemeral_1h_input_tokens"[%s]*:[%s]*(%d+)'))
+        S.cache_read = tonumber(payload:match('"cache_read_input_tokens"[%s]*:[%s]*(%d+)'))
+        S.cache_ttl = nil
+        if (e5 or 0) > 0 or (e1 or 0) > 0 then
+            S.cache_write = (e5 or 0) + (e1 or 0)
+            S.cache_ttl = ((e1 or 0) > 0) and "1h" or "5m"
+        else
+            S.cache_write = tonumber(payload:match('"cache_creation_input_tokens"[%s]*:[%s]*(%d+)'))
+        end
         return
     end
 
@@ -266,10 +375,15 @@ local function parse_sse_line(line, on_event)
         if reason then S.stop_reason = STOP_REASONS[reason] or "other" end
         local out = tonumber(payload:match('"output_tokens"[%s]*:[%s]*(%d+)'))
         if out or S.input_tokens then
-            on_event({ type = "usage", usage = {
+            local usage = {
                 used = (S.input_tokens or 0) + (out or 0),
                 prompt_tokens = S.input_tokens, completion_tokens = out,
-            } })
+            }
+            -- prompt-cache v1: additive cache fields (nil when unreported).
+            if S.cache_read ~= nil then usage.cache_read_tokens = S.cache_read end
+            if S.cache_write ~= nil then usage.cache_write_tokens = S.cache_write end
+            if S.cache_ttl ~= nil then usage.cache_write_ttl = S.cache_ttl end
+            on_event({ type = "usage", usage = usage })
         end
         return
     end

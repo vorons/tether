@@ -1115,6 +1115,18 @@ function M.ensure_prompt(cfg)
             workspace = cfg and cfg.workspace,
             agents_files = cfg and cfg._cli_agents_files,
         })
+        -- prompt-cache v1: labeled compose blocks ride on cfg so the cache
+        -- planner can split the stable head from the volatile tail without
+        -- recomposing (history[1] is the bytes actually sent).
+        if cfg and context.blocks then
+            local ok, blocks = pcall(context.blocks, cfg, {
+                workspace = cfg.workspace,
+                agents_files = cfg._cli_agents_files,
+            })
+            if ok and type(blocks) == "table" and #blocks > 0 then
+                cfg._system_blocks = blocks
+            end
+        end
     elseif config and config.get_system_prompt then
         sp = config.get_system_prompt(cfg)
     end

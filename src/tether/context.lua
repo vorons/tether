@@ -233,6 +233,20 @@ end
 -- Compose the full system prompt.
 -- opts: { agents_files = { path, ... }, workspace = string }
 function M.compose(cfg, opts)
+    local parts = {}
+    for _, b in ipairs(M.blocks(cfg, opts)) do
+        parts[#parts + 1] = b.text
+    end
+    return table.concat(parts, "\n\n")
+end
+
+-- Labeled blocks behind compose(): identity (base prompt), agents
+-- (home/workspace/flag instruction files), skills (discovered index).
+-- prompt-cache v1 uses these for the head/tail breakpoint split: a tail
+-- change must not invalidate the stable head. compose() above stays the
+-- byte-identical concatenation, so this is behavior-preserving.
+-- opts: same as compose().
+function M.blocks(cfg, opts)
     local cfg = cfg or {}
     local opts = opts or {}
     local base = BUILTIN_PROMPT
@@ -240,11 +254,12 @@ function M.compose(cfg, opts)
         base = config.get_system_prompt(cfg) or BUILTIN_PROMPT
     end
 
-    local out = { base }
+    local out = { { name = "identity", text = base } }
 
     local auto = M.load_agents_files(opts.workspace)
+    local agents_parts = {}
     if #auto > 0 then
-        out[#out + 1] = render_agents_sections(auto)
+        agents_parts[#agents_parts + 1] = render_agents_sections(auto)
     end
 
     local flag_paths = {}
@@ -257,16 +272,19 @@ function M.compose(cfg, opts)
     if #flag_paths > 0 then
         local flag_secs = M.load_agents_paths(flag_paths)
         if #flag_secs > 0 then
-            out[#out + 1] = render_agents_sections(flag_secs)
+            agents_parts[#agents_parts + 1] = render_agents_sections(flag_secs)
         end
+    end
+    if #agents_parts > 0 then
+        out[#out + 1] = { name = "agents", text = table.concat(agents_parts, "\n\n") }
     end
 
     local index = render_skills_index(M.discover_skills(cfg, opts.workspace))
     if index then
-        out[#out + 1] = index
+        out[#out + 1] = { name = "skills", text = index }
     end
 
-    return table.concat(out, "\n\n")
+    return out
 end
 
 -- Exposed for tests and for agent.lua to keep the built-in prompt in one place.

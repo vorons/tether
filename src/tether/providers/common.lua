@@ -109,6 +109,9 @@ end
 
 -- Minimal JSON encoder for tables (tool schemas, request envelopes).
 -- Objects vs arrays: a table with only 1..n integer keys encodes as an array.
+-- prompt-cache (R2): object keys are emitted in sorted (byte) order so the
+-- same logical value always serializes to the same bytes. Providers parse
+-- JSON semantically, so key order is wire-invisible but cache-visible.
 function M.json_encode(v)
     local t = type(v)
     if t == "string" then
@@ -136,11 +139,17 @@ function M.json_encode(v)
             for i = 1, n do items[#items + 1] = M.json_encode(v[i]) end
             return "[" .. table.concat(items, ",") .. "]"
         end
-        local items = {}
+        local keys = {}
         for k, val in pairs(v) do
             if k ~= "_array" and val ~= nil then
-                items[#items + 1] = '"' .. M.jesc(tostring(k)) .. '":' .. M.json_encode(val)
+                keys[#keys + 1] = k
             end
+        end
+        table.sort(keys, function(a, b) return tostring(a) < tostring(b) end)
+        local items = {}
+        for _, k in ipairs(keys) do
+            items[#items + 1] = '"' .. M.jesc(tostring(k)) .. '":'
+                .. M.json_encode(v[k])
         end
         return "{" .. table.concat(items, ",") .. "}"
     end
@@ -325,6 +334,18 @@ function M.tools_schema()
         if tools_filter[t.name] then kept[#kept + 1] = t end
     end
     return kept
+end
+
+-- prompt-cache (R2): wire payloads must serialize the tool list in a
+-- canonical order. tools_schema() keeps its declaration order (callers such
+-- as the allowlist tests rely on it); payload builders use this sorted copy
+-- so the cached tools segment is byte-stable regardless of filter order.
+function M.sorted_tools()
+    local out = M.tools_schema()
+    table.sort(out, function(a, b)
+        return tostring(a.name) < tostring(b.name)
+    end)
+    return out
 end
 
 -- Percent-encode for OAuth authorize URLs and form bodies (RFC 3986).

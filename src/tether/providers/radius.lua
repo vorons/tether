@@ -25,8 +25,8 @@ function M.header_lines(api_key)
     return { "Authorization: Bearer " .. (api_key or "") }
 end
 
-function M.build_request(messages, model, max_tokens)
-    local req = openai.build_request(messages, model, max_tokens)
+function M.build_request(messages, model, max_tokens, reasoning, plan)
+    local req = openai.build_request(messages, model, max_tokens, reasoning, plan)
     -- pi-messages carries the session for routing; Radius ignores unknown
     -- fields, so annotating the model envelope is harmless.
     return req

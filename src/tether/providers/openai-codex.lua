@@ -90,7 +90,7 @@ end
 
 local function tools_payload()
     local tools = {}
-    for _, t in ipairs(common.tools_schema()) do
+    for _, t in ipairs(common.sorted_tools()) do
         tools[#tools + 1] = { type = "function", name = t.name,
             description = t.description, parameters = t.parameters,
             strict = false }

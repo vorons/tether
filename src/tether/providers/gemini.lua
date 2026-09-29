@@ -117,7 +117,7 @@ end
 
 local function declarations_payload()
     local decls = {}
-    for _, t in ipairs(common.tools_schema()) do
+    for _, t in ipairs(common.sorted_tools()) do
         decls[#decls + 1] = common.json_encode({
             name = t.name, description = t.description,
             parameters = t.parameters,
@@ -239,14 +239,17 @@ local function emit_response(payload, on_event)
         any = true
         search_from = fe + 1
     end
-    -- usage
+    -- usage (prompt-cache v1 also reads cachedContentTokenCount)
     local pt = tonumber(payload:match('"promptTokenCount"[%s]*:[%s]*(%d+)'))
     local ct = tonumber(payload:match('"candidatesTokenCount"[%s]*:[%s]*(%d+)'))
+    local cached = tonumber(payload:match('"cachedContentTokenCount"[%s]*:[%s]*(%d+)'))
     if pt or ct then
-        on_event({ type = "usage", usage = {
+        local usage = {
             used = (pt or 0) + (ct or 0),
             prompt_tokens = pt, completion_tokens = ct,
-        } })
+        }
+        if cached ~= nil then usage.cache_read_tokens = cached end
+        on_event({ type = "usage", usage = usage })
         any = true
     end
     -- finishReason: remembered so the `done` emitted at stream end repeats it

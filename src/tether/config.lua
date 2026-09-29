@@ -247,6 +247,34 @@ function M.load(path, home)
             and math.floor(md) or def_sub.max_depth
     end
 
+    -- prompt-cache v1: cache table with per-key fallbacks; a missing or
+    -- malformed value falls back to its default without failing the
+    -- session (spec config: Cache configuration table).
+    if type(cfg.cache) ~= "table" then
+        cfg.cache = config_schema.default_config().cache
+    else
+        local def_cache = config_schema.default_config().cache
+        if type(cfg.cache.enabled) ~= "boolean" then
+            cfg.cache.enabled = def_cache.enabled
+        end
+        if cfg.cache.retention ~= "auto" and cfg.cache.retention ~= "5m"
+            and cfg.cache.retention ~= "1h" and cfg.cache.retention ~= "24h" then
+            cfg.cache.retention = def_cache.retention
+        end
+        if cfg.cache.key_scope ~= "session" and cfg.cache.key_scope ~= "session_role" then
+            cfg.cache.key_scope = def_cache.key_scope
+        end
+        local ib = tonumber(cfg.cache.intermediate_breakpoints)
+        if ib == nil or ib < 0 then
+            cfg.cache.intermediate_breakpoints = def_cache.intermediate_breakpoints
+        else
+            cfg.cache.intermediate_breakpoints = math.floor(ib)
+        end
+        if type(cfg.cache.debug) ~= "boolean" then
+            cfg.cache.debug = def_cache.debug
+        end
+    end
+
     -- add-reasoning-level: only the four levels are valid; a missing,
     -- unknown or non-string value behaves as `off` without failing the
     -- session (spec config: Defaults).

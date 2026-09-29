@@ -238,7 +238,7 @@ end
 
 local function tools_payload()
     local tools = {}
-    for _, t in ipairs(common.tools_schema()) do
+    for _, t in ipairs(common.sorted_tools()) do
         tools[#tools + 1] = { toolSpec = {
             name = t.name, description = t.description,
             inputSchema = { json = t.parameters } } }

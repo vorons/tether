@@ -259,11 +259,15 @@ local function parse_sse_line(line, on_event)
         on_event({ type = "done", reason = S.stop_reason })
     end
 
-    -- usage
+    -- usage (prompt-cache v1 also reads prompt_tokens_details.cached_tokens)
     local pt = tonumber(payload:match('"prompt_tokens"[%s]*:[%s]*(%d+)'))
     local ct = tonumber(payload:match('"completion_tokens"[%s]*:[%s]*(%d+)'))
+    local cached = tonumber(payload:match('"cached_tokens"[%s]*:[%s]*(%d+)'))
     if pt or ct then
-        on_event({ type = "usage", usage = { used = (pt or 0) + (ct or 0), prompt_tokens = pt, completion_tokens = ct } })
+        local usage = { used = (pt or 0) + (ct or 0),
+                        prompt_tokens = pt, completion_tokens = ct }
+        if cached ~= nil then usage.cache_read_tokens = cached end
+        on_event({ type = "usage", usage = usage })
     end
 
     -- error payloads: {"error":{"message":"...","status":429}}
@@ -283,7 +287,7 @@ end
 
 local function tools_payload()
     local out = {}
-    for _, t in ipairs(common.tools_schema()) do
+    for _, t in ipairs(common.sorted_tools()) do
         out[#out + 1] = {
             type = "function",
             ["function"] = { name = t.name, description = t.description,
@@ -303,11 +307,21 @@ local function reasoning_param(reasoning)
     return ""
 end
 
-function M.build_request(messages, model, _max_tokens, reasoning)
+function M.build_request(messages, model, _max_tokens, reasoning, plan)
+    -- prompt-cache v1: stable session key; the cache itself is automatic by
+    -- prefix, our job is the key plus the byte-stable serialization (R2).
+    local key = ""
+    if type(plan) == "table" and type(plan.key) == "string" then
+        key = plan.key
+    end
+    local tail = reasoning_param(reasoning)
+    if key ~= "" then
+        tail = tail .. string.format(',"prompt_cache_key":"%s"', jesc(key))
+    end
     return string.format(
         '{"model":"%s","messages":%s,"tools":%s,"tool_choice":"auto","stream":true%s}',
         jesc(model or ""), encode_messages(messages),
-        common.json_encode(tools_payload()), reasoning_param(reasoning))
+        common.json_encode(tools_payload()), tail)
 end
 
 function M.stream_url(cfg, _model, _api_key)

@@ -41,6 +41,30 @@ local function toolset()
     return rawget(_G, "tools")
 end
 
+-- prompt-cache v1: " TETHER_CACHE_KEY=.. [TETHER_CACHE_SYS=..]" for the
+-- child env, or "" when there is no key (or no cache module) to inherit.
+-- Values are slug/hex charset, safe unquoted in the shell command.
+local function cache_inherit_env(ctx)
+    local cfg = (type(ctx) == "table") and ctx.cfg or nil
+    local mod = rawget(_G, "cache")
+        or (function()
+            local chunk = loadfile("src/tether/cache.lua")
+            return chunk and chunk()
+        end)()
+    if not mod then return "" end
+    local sys_hash = nil
+    if type(cfg) == "table" and type(cfg._system_blocks) == "table" then
+        local okh, h = pcall(mod.blocks_hash, cfg._system_blocks)
+        if okh and type(h) == "string" and h ~= "" then sys_hash = h end
+    end
+    local okk, key = pcall(mod.resolve_key, cfg, sys_hash)
+    if not okk or type(key) ~= "string" or key == "" then return "" end
+    if sys_hash then
+        return " TETHER_CACHE_KEY=" .. key .. " TETHER_CACHE_SYS=" .. sys_hash
+    end
+    return " TETHER_CACHE_KEY=" .. key
+end
+
 -- Validate one task item. Defaults resolve per field item -> call -> run.
 -- ctx = { cfg, workspace, model, timeout_default }.
 -- Returns a normalized item or nil, err. Pure except cwd containment
@@ -165,6 +189,11 @@ function M.build_command(item, ctx)
     if depth < 0 then depth = 0 end
     local env = string.format("TETHER_SUBAGENT_DEPTH=%d TETHER_WORKSPACE=%s",
         depth + 1, sq(item.cwd))
+    -- prompt-cache v1: the child joins the parent's cache pool. The key and
+    -- the parent system-blocks hash ride the same env channel; the child
+    -- (cache.resolve_key) reuses the key when its prompt matches and
+    -- derives one when it diverged. Absent key = nothing to inherit.
+    env = env .. cache_inherit_env(ctx)
     -- the child continues this journal (fresh or sequel): the flag rides
     -- after the prompt slot so parse_args keeps --print glued to the task.
     local function with_resume()
