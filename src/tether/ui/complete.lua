@@ -7,17 +7,19 @@
 --      Moved verbatim from ui.lua (ui-facade-thinning 1.1) with identical
 --      function names, so the 4.1 OWN block needs only the file added to
 --      the T4.1 scan; the facade keeps thin M.* seams tests drive.
--- OUT: module table { token, apply, tab, cancel, commit, at_token_start,
---      picker_close, mention_refilter, mention_open, mention_accept }.
+-- OUT: module table { completion_token, completion_apply,
+--      path_complete_tab, completion_cancel, completion_commit,
+--      at_token_start, picker_close, mention_refilter, mention_open,
+--      mention_accept }.
 --      No S, no globals, no terminal I/O.
 -- EXAMPLE:
---      complete.tab(bag, deps) --> first candidate applied, path palette open
---      complete.cancel(bag, deps) --> token restored exactly as typed
+--      complete.path_complete_tab(bag, deps) --> first candidate applied
+--      complete.completion_cancel(bag, deps) --> token restored as typed
 local M = {}
 
 -- Token = text from the cursor back to the previous whitespace or line
 -- start; a leading @ is a mention prefix, kept verbatim in the input.
-local function token(bag, deps)
+local function completion_token(bag, deps)
     local lines = deps.lines()
     for _, ln in ipairs(lines) do
         if bag.cursor >= ln.from and bag.cursor <= ln.from + #ln.text then
@@ -29,9 +31,9 @@ local function token(bag, deps)
     end
     return nil
 end
-M.token = token
+M.completion_token = completion_token
 
-local function apply(bag, label)
+local function completion_apply(bag, label)
     local comp = bag.completion
     if not comp then return end
     local at = comp.original:match("^(@)")
@@ -43,16 +45,16 @@ local function apply(bag, label)
     -- past the end of the input (spec tui: Path completion)
     bag.cursor = comp.start - 1 + #replace
 end
-M.apply = apply
+M.completion_apply = completion_apply
 
 -- 4.3: gated on ui.path_completion; Tab inside an open palette keeps its
 -- command-completion meaning (handled by the palette branch of handle_key).
-local function tab(bag, deps)
+local function path_complete_tab(bag, deps)
     if bag.palette_active then return end
     if bag.cfg and bag.cfg.ui and bag.cfg.ui.path_completion == false then return end
     local tools_mod = deps.tools
     if tools_mod == nil or tools_mod.path_complete == nil then return end
-    local tok, token_pos = token(bag, deps)
+    local tok, token_pos = completion_token(bag, deps)
     if not tok or tok == "" then return end
     -- A `@` preview can survive its palette emptying; Tab is a fresh, forcing
     -- completion, so that session (and its cached walk) is handed over here.
@@ -72,7 +74,7 @@ local function tab(bag, deps)
         local one_comp = { start = token_pos, stop = token_pos + #tok,
             original = tok, tail = bag.input:sub(token_pos + #tok) }
         bag.completion = one_comp
-        apply(bag, cands[1])
+        completion_apply(bag, cands[1])
         bag.completion = nil
         return
     end
@@ -97,13 +99,13 @@ local function tab(bag, deps)
         bag.palette_sel = (bag.palette_sel % #comp.items) + 1
     end
     bag.completion = comp
-    apply(bag, comp.items[bag.palette_sel])
+    completion_apply(bag, comp.items[bag.palette_sel])
 end
-M.tab = tab
+M.path_complete_tab = path_complete_tab
 
 -- 4.2: Esc while the completion palette is open restores the token exactly
 -- as typed before the first Tab.
-local function cancel(bag, deps)
+local function completion_cancel(bag, deps)
     local comp = bag.completion
     if not comp then return end
     bag.completion = nil
@@ -115,11 +117,11 @@ local function cancel(bag, deps)
     bag.palette_sel = 1
     deps.sync()
 end
-M.cancel = cancel
+M.completion_cancel = completion_cancel
 
 -- 4.2: any non-tab/non-esc key during active completion keeps the applied
 -- text and clears the cycle state (input is not touched).
-local function commit(bag, deps)
+local function completion_commit(bag, deps)
     if bag.completion then
         bag.completion = nil
         bag.palette_active = false
@@ -129,7 +131,7 @@ local function commit(bag, deps)
         deps.sync()
     end
 end
-M.commit = commit
+M.completion_commit = completion_commit
 
 -- True when the cursor is at a token start: nothing typed yet, or the byte
 -- before it is whitespace. An "@" anywhere else is ordinary text.
@@ -154,7 +156,7 @@ M.picker_close = picker_close
 local function mention_refilter(bag, deps)
     local comp = bag.completion
     if not comp or not comp.mention then return end
-    local tok, token_pos = token(bag, deps)
+    local tok, token_pos = completion_token(bag, deps)
     if not tok or tok:sub(1, 1) ~= "@" then
         picker_close(bag)
         return
@@ -190,7 +192,7 @@ M.mention_refilter = mention_refilter
 
 local function mention_open(bag, deps)
     if bag.cfg and bag.cfg.ui and bag.cfg.ui.path_completion == false then return end
-    local tok, token_pos = token(bag, deps)
+    local tok, token_pos = completion_token(bag, deps)
     if not tok or tok:sub(1, 1) ~= "@" then return end
     bag.completion = { start = token_pos, mention = true }
     mention_refilter(bag, deps)
@@ -203,7 +205,7 @@ local function mention_accept(bag, deps)
     local comp = bag.completion
     local it = comp and bag.palette_items[bag.palette_sel]
     if not it then return end
-    local tok, token_pos = token(bag, deps)
+    local tok, token_pos = completion_token(bag, deps)
     if not tok then picker_close(bag) return end
     local replace = "@" .. it.label
     bag.input = bag.input:sub(1, token_pos - 1) .. replace

@@ -1498,7 +1498,7 @@ end
 -- Test seams: drive path_complete_tab / handle_key from a test harness
 -- after run() has set up S. Placed here (after all local functions are
 -- declared) so the closures capture the locals correctly.
-M._path_complete_tab = function() if S then M._complete.tab(S, M._complete_deps()) end end
+M._path_complete_tab = function() if S then M._complete.path_complete_tab(S, M._complete_deps()) end end
 local function input_insert(s)
     -- input_max_lines is the viewport window (design §7); the buffer may
     -- grow past it and the rule row scrolls with ↑/↓ labels.
@@ -3310,10 +3310,10 @@ local handle_key
 -- OWN: S.ask.* <- handle_agent_event, ask_answer, ask_toggle, ask_advance, handle_ask_key
 -- OWN: S.confirmation <- handle_agent_event, resolve_confirmation
 -- OWN: S.confirmation_sel <- handle_agent_event, handle_confirmation_key, resolve_confirmation
--- OWN: S.palette_active <- palette_sync, palette_hide, path_complete_tab, completion_cancel, completion_commit, M._picker_close, M._mention_refilter, M._mention_open, on_mouse, on_palette_copy, on_palette_resume, close_resume_palette, on_palette_model, close_model_palette, on_palette_think, close_think_palette, on_palette_login, close_login_palette, on_palette_logout, on_palette_mention, on_slash_copy, on_slash_model, on_slash_resume, on_slash_think, on_slash_login, on_slash_logout, begin, cancel, submit, login_command, logout_command, logout_close, M._poll_models_bg
--- OWN: S.palette_mode <- palette_sync, path_complete_tab, completion_cancel, completion_commit, M._picker_close, M._mention_refilter, on_mouse, on_palette_copy, on_palette_resume, close_resume_palette, on_palette_model, close_model_palette, on_palette_think, close_think_palette, on_palette_login, close_login_palette, on_palette_logout, on_slash_copy, on_slash_model, on_slash_resume, on_slash_think, on_slash_login, on_slash_logout, begin, cancel, submit, login_command, logout_command, logout_close, logout_ask_confirm, logout_confirm_back, M._poll_models_bg
--- OWN: S.palette_items <- palette_sync, palette_hide, M._palette_apply_query, path_complete_tab, completion_cancel, completion_commit, M._picker_close, M._mention_refilter, on_mouse, on_palette_copy, on_palette_resume, close_resume_palette, on_palette_model, close_model_palette, on_palette_think, close_think_palette, on_palette_login, close_login_palette, on_palette_logout, on_slash_copy, on_slash_model, on_slash_resume, on_slash_think, on_slash_login, on_slash_logout, begin, cancel, submit, login_command, logout_command, logout_close, logout_ask_confirm
--- OWN: S.palette_sel <- palette_sync, palette_hide, M._palette_apply_query, path_complete_tab, completion_cancel, completion_commit, M._picker_close, M._mention_refilter, on_mouse, on_palette_copy, on_palette_resume, close_resume_palette, on_palette_model, close_model_palette, on_palette_think, close_think_palette, on_palette_login, close_login_palette, on_palette_logout, on_palette_logout_confirm, on_palette_mention, on_palette_path, on_palette_command, on_slash_copy, on_slash_model, on_slash_resume, on_slash_think, on_slash_login, on_slash_logout, begin, cancel, submit, login_command, logout_command, logout_close, logout_ask_confirm, logout_confirm_back, M._poll_models_bg
+-- OWN: S.palette_active <- palette_sync, palette_hide, path_complete_tab, completion_cancel, completion_commit, picker_close, mention_refilter, mention_open, on_mouse, on_palette_copy, on_palette_resume, close_resume_palette, on_palette_model, close_model_palette, on_palette_think, close_think_palette, on_palette_login, close_login_palette, on_palette_logout, on_palette_mention, on_slash_copy, on_slash_model, on_slash_resume, on_slash_think, on_slash_login, on_slash_logout, begin, cancel, submit, login_command, logout_command, logout_close, M._poll_models_bg
+-- OWN: S.palette_mode <- palette_sync, path_complete_tab, completion_cancel, completion_commit, picker_close, mention_refilter, on_mouse, on_palette_copy, on_palette_resume, close_resume_palette, on_palette_model, close_model_palette, on_palette_think, close_think_palette, on_palette_login, close_login_palette, on_palette_logout, on_slash_copy, on_slash_model, on_slash_resume, on_slash_think, on_slash_login, on_slash_logout, begin, cancel, submit, login_command, logout_command, logout_close, logout_ask_confirm, logout_confirm_back, M._poll_models_bg
+-- OWN: S.palette_items <- palette_sync, palette_hide, M._palette_apply_query, path_complete_tab, completion_cancel, completion_commit, picker_close, mention_refilter, on_mouse, on_palette_copy, on_palette_resume, close_resume_palette, on_palette_model, close_model_palette, on_palette_think, close_think_palette, on_palette_login, close_login_palette, on_palette_logout, on_slash_copy, on_slash_model, on_slash_resume, on_slash_think, on_slash_login, on_slash_logout, begin, cancel, submit, login_command, logout_command, logout_close, logout_ask_confirm
+-- OWN: S.palette_sel <- palette_sync, palette_hide, M._palette_apply_query, path_complete_tab, completion_cancel, completion_commit, picker_close, mention_refilter, on_mouse, on_palette_copy, on_palette_resume, close_resume_palette, on_palette_model, close_model_palette, on_palette_think, close_think_palette, on_palette_login, close_login_palette, on_palette_logout, on_palette_logout_confirm, on_palette_mention, on_palette_path, on_palette_command, on_slash_copy, on_slash_model, on_slash_resume, on_slash_think, on_slash_login, on_slash_logout, begin, cancel, submit, login_command, logout_command, logout_close, logout_ask_confirm, logout_confirm_back, M._poll_models_bg
 -- OWN: S.palette_query <- on_mouse, on_slash_model, on_palette_model, close_model_palette, on_palette_login, close_login_palette, on_palette_logout, login_command, logout_command, logout_close
 -- OWN: S.palette_skills <- palette_sync, palette_hide
 -- OWN: S._palette_all <- on_mouse, on_slash_model, close_model_palette, close_login_palette, login_command, logout_command, logout_close, M._poll_models_bg
@@ -3325,8 +3325,8 @@ local handle_key
 -- OWN: S._in_logout_palette <- logout_close, logout_command
 -- OWN: S._logout_confirm <- logout_ask_confirm, logout_confirm_back, logout_close
 -- OWN: S._logout_sel <- logout_ask_confirm, logout_confirm_back, logout_close
--- OWN: S.completion <- path_complete_tab, completion_cancel, completion_commit, M._picker_close, M._mention_refilter, M._mention_open, on_palette_path
--- OWN: S.completion.* <- path_complete_tab, M._mention_refilter, on_palette_mention, on_palette_path
+-- OWN: S.completion <- path_complete_tab, completion_cancel, completion_commit, picker_close, mention_refilter, mention_open, on_palette_path
+-- OWN: S.completion.* <- path_complete_tab, mention_refilter, on_palette_mention, on_palette_path
 -- Out of scope (owned elsewhere): S.login_secret/login_provider/login_flow
 -- (ui_auth begin/cancel/submit/poll_tick), S.confirmation.detail (read by
 -- resolve_confirmation), S.history (input history), S._models_bg/_models_err
@@ -4628,18 +4628,18 @@ on_palette_path = function(bag, k)
                     S.palette_sel = (S.palette_sel % n) + 1
                     comp.sel = S.palette_sel
                     S.completion = comp
-                    M._complete.apply(S, S.palette_items[S.palette_sel].label)
+                    M._complete.completion_apply(S, S.palette_items[S.palette_sel].label)
                 end
                 return
             elseif k.kind == "esc" then
-                M._complete.cancel(S, M._complete_deps())
+                M._complete.completion_cancel(S, M._complete_deps())
                 return
             elseif k.kind == "enter" then
                 local it = S.palette_items[S.palette_sel]
                 if it then
                     S.input = it.label .. " "
                     S.cursor = #S.input
-                    M._complete.commit(S, M._complete_deps())
+                    M._complete.completion_commit(S, M._complete_deps())
                 end
                 return
             elseif k.kind == "special" then
@@ -4656,7 +4656,7 @@ on_palette_path = function(bag, k)
             -- clear the cycle state; re-run palette_sync() so the command
             -- palette reopens if the user typed /, otherwise the palette
             -- stays closed. No fall-through (would double-fire input_insert).
-            M._complete.commit(S, M._complete_deps())
+            M._complete.completion_commit(S, M._complete_deps())
             palette_sync()
 end
 
@@ -4713,7 +4713,7 @@ end
 
 -- 4.2: Tab outside an open palette runs path completion (4.3: gated)
 on_tab_complete = function(bag, k)
-    M._complete.tab(S, M._complete_deps())
+    M._complete.path_complete_tab(S, M._complete_deps())
 end
 
 on_normal = function(bag, k)
