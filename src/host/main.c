@@ -1993,7 +1993,11 @@ static void argv_spawn_fail(int errfd, char stage, int errnum)
     struct argv_spawn_err rep;
     rep.stage = stage;
     rep.errnum = errnum;
-    (void)write(errfd, &rep, sizeof(rep));
+    /* best-effort: nothing to do with a short write before _exit, but the
+       result must be consumed — glibc marks write warn_unused_result and
+       fortified toolchains (Ubuntu CI) turn the discard into -Werror. */
+    ssize_t nw = write(errfd, &rep, sizeof(rep));
+    (void)nw;
     _exit(127);
 }
 
@@ -2834,7 +2838,10 @@ static void oauth_wait_answer(struct oauth_wait *w)
                 break;
             off += (size_t)n;
         }
-        (void)write(w->conn_fd, oauth_wait_page_body, sizeof(oauth_wait_page_body) - 1);
+        /* best-effort body after the careful header loop: consume the
+           result for warn_unused_result toolchains (see argv_spawn_fail). */
+        ssize_t nb = write(w->conn_fd, oauth_wait_page_body, sizeof(oauth_wait_page_body) - 1);
+        (void)nb;
     }
     signal(SIGPIPE, oldpipe);
     oauth_wait_close(w);
