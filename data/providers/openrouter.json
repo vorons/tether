@@ -1,5 +1,5 @@
 {
- "generated_at": 1790756014,
+ "generated_at": 1790764141,
  "id": "openrouter",
  "models": [
   {
@@ -1403,7 +1403,7 @@
    "id": "xiaomi/mimo-v2.5-pro"
   },
   {
-   "context": 1048576,
+   "context": 1050000,
    "id": "xiaomi/mimo-v2.6-flash"
   },
   {
