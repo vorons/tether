@@ -742,6 +742,92 @@ do
   print("T3.1 incremental stream: OK")
 end
 
+-- T316/T317 (audit H1): what makes a body a stream is what the adapter
+-- produced, not the first five bytes of the accumulated body. Anthropic frames
+-- every payload with an `event:` line, so the `data:` sniff judged a fully
+-- delivered answer as a retryable failure (`handle_non_sse` → false) right after
+-- the text had reached the UI. A framed stream that produced no event at all
+-- stays a success — an empty answer is the agent's case, not a transport error.
+do
+  local catfix = assert(loadfile("src/tether/providers/catalog.lua"))()
+  catfix.set_overlay({
+    anthropic = { wire = "anthropic", base_url = "http://x",
+      api_key_env = "ANTHROPIC_API_KEY", model = "x", _source = "test" },
+  }, { generated_at = 0 })
+  _G.provider_catalog = catfix
+  local api_mod = assert(loadfile("src/tether/api.lua"))()
+  local reactor = assert(loadfile("src/tether/reactor.lua"))()
+  local orig = { tether = _G.tether, reactor = _G.reactor,
+                 agent = _G.agent, turn = _G.turn, catalog = _G.provider_catalog }
+  _G.reactor, _G.agent, _G.turn = reactor, nil, nil
+  reactor.set_active(nil)
+
+  local function play(lines, provider)
+    local events = {}
+    _G.tether = host_mock{
+      http_stream = function(_, _, _, _, on_line)
+        for _, line in ipairs(lines) do on_line(line) end
+        return true
+      end,
+      http_get = function() return nil, "not used" end,
+      sleep = function() end,
+    }
+    local ok, failure = api_mod.stream(
+      { provider = provider, base_url = "http://x", model = "m" }, "key",
+      { { role = "user", content = "hi" } },
+      function(ev) events[#events + 1] = ev end)
+    return ok, failure, events
+  end
+
+  -- (a) Anthropic wire: an `event:` line above every `data:` payload
+  local ok, failure, evs = play({
+    "event: message_start",
+    'data: {"type":"message_start","message":{"id":"1","role":"assistant","content":[]}}',
+    "",
+    "event: content_block_start",
+    'data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}',
+    "",
+    "event: content_block_delta",
+    'data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hello"}}',
+    "",
+    "event: message_stop",
+    'data: {"type":"message_stop"}',
+    "",
+  }, "anthropic")
+  local text = ""
+  for _, ev in ipairs(evs) do
+    if ev.type == "text_delta" then text = text .. (ev.text or "") end
+  end
+  assert_true(ok, "T316 an event-framed stream succeeds")
+  assert_eq(failure, nil, "T316 a delivered answer reports no failure")
+  assert_eq(text, "Hello", "T316 the deltas reached the caller")
+
+  -- (b) framed with nothing parseable in it: still a stream, not a failure
+  local ok2, failure2, evs2 = play({ ": keep-alive", "" }, "openai")
+  assert_true(ok2, "T317 a framed stream with no event succeeds")
+  assert_eq(#evs2, 0, "T317 no events were produced")
+  assert_eq(failure2, nil, "T317 no failure record for it")
+  local ok2b, failure2b, evs2b = play({ "data: [DONE]", "" }, "openai")
+  assert_true(ok2b, "T317 a lone completion marker succeeds")
+  assert_eq(failure2b, nil, "T317 no failure record for it")
+  local saw_text = false
+  for _, ev in ipairs(evs2b) do
+    if ev.type == "text_delta" then saw_text = true end
+  end
+  assert_false(saw_text, "T317 no text arrived, so the empty answer stays the agent's case")
+
+  -- (c) a JSON error body (no framing, no events) still fails the attempt
+  local ok3, failure3 = play({ '{"error":{"message":"nope","status":401}}' }, "anthropic")
+  assert_false(ok3, "T316 a JSON error body still fails")
+  assert_true(failure3 ~= nil
+    and tostring(failure3.message):find("^http 401:") ~= nil,
+    "T316 the failure names http 401")
+
+  _G.tether, _G.reactor = orig.tether, orig.reactor
+  _G.agent, _G.turn, _G.provider_catalog = orig.agent, orig.turn, orig.catalog
+  print("T316-T317 stream or error body: OK")
+end
+
 -- T188: an assistant entry with no visible content — a whitespace-only
 -- text_delta (a lone newline/space is common right before a tool call) —
 -- renders no row at all: no lone `•` marker line and no block-gap blank

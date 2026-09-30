@@ -42,6 +42,16 @@ end
 -- footer's provider cell for diagnosis.
 local function warn_unknown() end
 
+-- audit H1: a first line with SSE framing means the response was a stream even
+-- when the adapter found no event in it (keep-alive comments, a lone `data:
+-- [DONE]`), so such a body never enters the HTTP-error path.
+local function sse_framed(body)
+    local first = body:match("^[^\r\n]*") or ""
+    return first:find("^data:") ~= nil or first:find("^event:") ~= nil
+        or first:find("^id:") ~= nil or first:find("^retry:") ~= nil
+        or first:find("^:") ~= nil
+end
+
 local function wire_spec(wire)
     if WIRE_MODULES[wire] then return WIRE_MODULES[wire] end
     -- Tier-B adapter: module id doubles as the file/global name.
@@ -501,6 +511,13 @@ local function http_request(cfg, api_key, messages, on_event, opts)
 
     -- 4.1: in-process transport (vendor'd libcurl + mbedTLS). Passing the auth
     -- and body temp files as "@path" entries keeps both out of any argv.
+    -- audit H1: whether the response was a stream is decided by what the
+    -- adapter produced, so every event it emits is counted at this funnel.
+    local events = 0
+    local function counted_event(ev)
+        events = events + 1
+        return wrapped_event(ev)
+    end
     local ok = true
     local got_data = false
     local parse_failed = false
@@ -523,7 +540,7 @@ local function http_request(cfg, api_key, messages, on_event, opts)
         if line ~= "" then
             buf[#buf + 1] = line
             got_data = true
-            local ok2, err = pcall(P.parse_sse_line, line, wrapped_event)
+            local ok2, err = pcall(P.parse_sse_line, line, counted_event)
             if not ok2 then
                 parse_failed = true
                 ok = false
@@ -587,10 +604,13 @@ local function http_request(cfg, api_key, messages, on_event, opts)
         return false, retry.failure("empty", "empty response")
     end
 
-    -- A non-SSE body is either the provider's REST fallback (Gemini
-    -- generateContent) or an HTTP error JSON.
-    if body:sub(1, 5) ~= "data:" then
-        if P.handle_non_sse and P.handle_non_sse(body, wrapped_event) then
+    -- A body that produced no event and carries no SSE framing is either the
+    -- provider's REST fallback (Gemini generateContent) or an HTTP error JSON.
+    -- The first line, not the first five bytes: Anthropic frames every payload
+    -- with an `event:` line, so a `data:` prefix test judged its delivered
+    -- streams as errors (audit H1).
+    if events == 0 and not sse_framed(body) then
+        if P.handle_non_sse and P.handle_non_sse(body, counted_event) then
             local rf = P.stream_failure and P.stream_failure()
             if rf then
                 return false, retry.failure(retry.classify(rf.message, rf.status),
