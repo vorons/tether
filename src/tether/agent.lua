@@ -1161,11 +1161,14 @@ local function main_loop(cfg, api_key, on_event)
             -- boundary), but echoing them raw adds a whole escape layer and
             -- strict providers 400 every follow-up ("arguments must be valid
             -- JSON"). Execution keeps using the raw form via parse_args below.
+            -- A call streamed with no argument fragments assembles "": echo
+            -- "{}" instead — "" is not valid JSON and poisons every replay.
+            local arg_str = sse_unescape(tc.arguments or "")
+            if arg_str:match("^%s*$") then arg_str = "{}" end
             tc_list[#tc_list + 1] = {
                 id = tc.id,
                 type = "function",
-                ['function'] = { name = tc.name,
-                                 arguments = sse_unescape(tc.arguments or "") },
+                ['function'] = { name = tc.name, arguments = arg_str },
             }
         end
         -- 1.2: keep any text the model emitted alongside its tool calls

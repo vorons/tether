@@ -1872,6 +1872,56 @@ do
   print("T208 host quit flag honored: OK")
 end
 
+-- T-empty-args: a tool call streamed with no argument fragments must echo
+-- arguments "{}" (valid JSON), not "" — strict gateways 400 every
+-- follow-up request replaying arguments:"" ("must be valid JSON"), while
+-- local execution keeps its {} fallback.
+do
+  local ws = os.tmpname()
+  os.remove(ws)
+  assert(host_fs.mkdirp(ws))
+  _G.tether = host_mock({
+    getcwd = function() return ws end,
+    realpath = function(p) return p end,
+    exec = function() return true, 0 end,
+    monotonic_ms = function() return 0 end,
+  })
+  _G.tools = assert(loadfile("src/tether/tools.lua"))()
+  _G.session = { append = function() end }
+  _G.config = { get_system_prompt = function() return nil end }
+  _G.extensions = nil
+  local ncalls = 0
+  _G.api = {
+    stream = function(_, _, _, on_event)
+      ncalls = ncalls + 1
+      if ncalls == 1 then
+        on_event({ type = "tool_call_start", id = "c1", name = "run", arguments = "" })
+        -- no tool_call_delta chunks: the model sent no arguments
+      end
+      on_event({ type = "text_delta", text = "done" })
+      on_event({ type = "done", reason = "stop" })
+      return true, nil
+    end,
+  }
+  local agent = assert(loadfile("src/tether/agent.lua"))()
+  agent.clear()
+  local ok = agent.turn({ workspace = ws }, "", "do it", function() end)
+  assert_true(ok, "T-empty-args turn completes")
+  local args_out = nil
+  for _, m in ipairs(agent.get_history()) do
+    local tcalls = (m.role == "assistant" and type(m.content) == "table")
+        and m.content.tool_calls or nil
+    for _, tc in ipairs(tcalls or {}) do
+      if tc.id == "c1" and tc["function"] then
+        args_out = tc["function"].arguments
+      end
+    end
+  end
+  assert_eq(args_out, "{}", "T-empty-args echo carries valid JSON")
+  os.execute("rm -rf '" .. ws .. "'")
+  print("T-empty-args empty arguments echo as {}: OK")
+end
+
 
 if failed > 0 then
     os.exit(1)
