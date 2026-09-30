@@ -1052,6 +1052,78 @@ do
   print("T82 2.1 palette window: OK")
 end
 
+-- T-missing-paths: nonexistent paths resolve lexically for containment (a
+-- new file inside the workspace is not "outside"), and write creates
+-- missing parents (an approved write must not die on a missing dir).
+-- Regression: realpath fails on missing paths, so within_workspace said
+-- "outside" for every new file (bogus menu), and atomic_write's sibling
+-- temp file then failed with "cannot open temp file" (bogus ✗).
+do
+  local ws = os.tmpname()
+  os.remove(ws)
+  assert(host_fs.mkdirp(ws))
+  local function shq(s) return "'" .. tostring(s):gsub("'", "'\\''") .. "'" end
+  _G.tether = host_mock{
+    getcwd = function() return ws end,
+    -- faithful realpath: fails on missing paths, like the C host. `-e` matters:
+    -- bare coreutils realpath tolerates a missing LAST component, while
+    -- realpath(3) (src/host/main.c:437) requires every component to exist, so
+    -- without the flag the lexical walk stops one level too deep.
+    realpath = function(p)
+      local f = io.popen("realpath -e " .. shq(p) .. " 2>/dev/null")
+      if not f then return nil end
+      local out = f:read("*a") or ""
+      f:close()
+      out = out:gsub("%s+$", "")
+      if out == "" then return nil end
+      return out
+    end,
+  }
+  local tools = assert(loadfile("src/tether/tools.lua"))()
+  local cfg = { workspace = ws }
+  -- missing file inside the workspace: contained, not outside
+  local inside_missing = tools._resolve("newdir/newfile.lua", cfg)
+  assert_true(tools._within(inside_missing, cfg),
+    "T-missing-paths missing inside path is within workspace")
+  -- missing file outside the workspace: still outside (no silent pass)
+  local outside_missing = ws .. "/../tether_outside_probe_x7q/file.lua"
+  assert_false(tools._within(outside_missing, cfg),
+    "T-missing-paths missing outside path stays outside")
+  -- TP2: a MISSING intermediate plus enough ".." must not read as contained.
+  -- Regression: realpath_lexical cancelled the surplus ".." with table.remove
+  -- on an empty list, so ws/newdir2/../../<outside>/file.lua answered
+  -- "inside" — and atomic_write's new mkdirp then created newdir2, at which
+  -- point the kernel resolved that very string above the workspace.
+  local crafted = ws .. "/newdir2/../../tether_outside_probe_x7q/file.lua"
+  assert_false(tools._within(crafted, cfg),
+    "TP2 surplus .. above the existing ancestor stays outside")
+  assert_false(tools._within("newdir2/../../tether_outside_probe_x7q/file.lua", cfg),
+    "TP2 relative crafted traversal stays outside")
+  -- a .. that cancels a named missing component is still contained
+  assert_true(tools._within(ws .. "/a/../b/file.lua", cfg),
+    "TP2 cancelling .. inside the missing tail stays inside")
+  -- existing outside path: still outside
+  assert_false(tools._within("/etc/hosts", cfg),
+    "T-missing-paths existing outside path stays outside")
+  -- write creates missing parents
+  local res, err = tools.write(
+    { path = "newdir/newfile.lua", content = "hello-new" }, cfg)
+  assert_notnil(res, "T-missing-paths write into missing dir succeeds: " .. tostring(err))
+  local f = assert(io.open(ws .. "/newdir/newfile.lua", "r"))
+  assert_eq(f:read("*a"), "hello-new", "T-missing-paths written content lands")
+  f:close()
+  -- patch creating a new file in a missing dir
+  local pres, perr = tools.patch(
+    "--- /dev/null\n+++ b/other/new.lua\n@@ -0,0 +1 @@\n+brand new\n", cfg)
+  assert_notnil(pres, "T-missing-paths patch into missing dir succeeds: " .. tostring(perr))
+  local pf = assert(io.open(ws .. "/other/new.lua", "r"))
+  assert_true((pf:read("*a") or ""):find("brand new", 1, true) ~= nil,
+    "T-missing-paths patched content lands")
+  pf:close()
+  os.execute("rm -rf " .. shq(ws))
+  print("T-missing-paths nonexistent paths resolve + write: OK")
+end
+
 if failed > 0 then
     os.exit(1)
 end

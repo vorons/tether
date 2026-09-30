@@ -54,10 +54,49 @@ local function to_rel(path, cfg)
     return path
 end
 
+-- realpath fails on missing paths (a new file has no inode yet): walk up
+-- to the nearest existing ancestor, resolve it, and reattach the missing
+-- tail lexically. Exact: nothing exists below the ancestor, so no symlink
+-- can redirect the tail, and name/.. pairs cancel precisely there.
+local function realpath_lexical(path)
+    if not tether.realpath then return nil end
+    local clean = path:gsub("/+$", "")
+    if clean == "" then clean = "/" end
+    local tail = {}
+    local cur = clean
+    while true do
+        local ok, rp = pcall(tether.realpath, cur)
+        if ok and rp then
+            local parts = {}
+            for _, comp in ipairs(tail) do
+                if comp == ".." then
+                    -- nothing left to cancel inside the missing tail: the path
+                    -- climbs above the existing ancestor, which no lexical
+                    -- answer can place back inside the workspace
+                    if #parts == 0 then return nil end
+                    table.remove(parts)
+                elseif comp ~= "." then parts[#parts + 1] = comp end
+            end
+            if #parts == 0 then return rp end
+            return rp .. "/" .. table.concat(parts, "/")
+        end
+        local parent, base = cur:match("^(.*)/([^/]+)$")
+        if not parent then return nil end
+        if parent == "" then parent = "/" end
+        table.insert(tail, 1, base)
+        if parent == cur then return nil end
+        cur = parent
+    end
+end
+
 -- Design §7: symlinks are resolved; path traversal via ".." is rejected.
 local function within_workspace(path, cfg)
     if cfg and cfg.allow_outside_workspace == true then return true end
+    if type(path) == "string" and not path:find("^/") then
+        path = current_workspace(cfg) .. "/" .. path
+    end
     local rp = tether.realpath and tether.realpath(path) or nil
+    if not rp then rp = realpath_lexical(path) end
     if not rp then return false end
     local ws = current_workspace(cfg)
     return rp == ws or rp:sub(1, #ws + 1) == ws .. "/"
@@ -383,6 +422,14 @@ end
 -- to be reported as success, so the model believed an edit had landed when the
 -- file still held its old bytes. On any failure the temp file is removed.
 local function atomic_write(path, content)
+    local dir = path:match("^(.*)/[^/]*$")
+    if dir and dir ~= "" then
+        -- the file may be new in a missing tree (an approved write after
+        -- the menu): create parents first; the sibling temp file below
+        -- still guards the write itself.
+        if tether.mkdirp then pcall(tether.mkdirp, dir)
+        else os.execute("mkdir -p " .. sq(dir)) end
+    end
     local tmp = path .. ".tmp." .. math.random(100000, 999999)
     local f = io.open(tmp, "w")
     if not f then return nil, "cannot open temp file" end
