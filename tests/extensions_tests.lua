@@ -56,34 +56,125 @@ return {
     print("1.1 loader registers/skips: OK")
 end
 
--- 1.1 sandbox: no io, no tether host table, no loaders inside ext code.
+-- 1.1 sandbox: no io, no tether host table, no loaders inside ext code — in a
+-- tool fn and in a hook alike, with ctx still the documented way out.
 do
     _G.tether = host_mock({})
     local home = tmp_home()
     write_file(home .. "/.tether/extensions/sb/sb.lua", [[
+local function leaks()
+  local seen = {}
+  if io ~= nil then seen[#seen + 1] = "io" end
+  if tether ~= nil then seen[#seen + 1] = "tether" end
+  if loadfile ~= nil then seen[#seen + 1] = "loadfile" end
+  if os and os.execute ~= nil then seen[#seen + 1] = "os.execute" end
+  return table.concat(seen, ",")
+end
 return {
   name = "sb", api_version = 1,
   tools = { { name = "sb_tool", description = "d",
-              fn = function()
-                local seen = {}
-                if io ~= nil then seen[#seen + 1] = "io" end
-                if tether ~= nil then seen[#seen + 1] = "tether" end
-                if loadfile ~= nil then seen[#seen + 1] = "loadfile" end
-                if os and os.execute ~= nil then seen[#seen + 1] = "os.execute" end
-                if #seen > 0 then error("leak: " .. table.concat(seen, ",")) end
-                return { content = "clean" }
+              fn = function(a, ctx)
+                local l = leaks()
+                if l ~= "" then error("leak: " .. l) end
+                return { content = "clean", ctx_kind = type(ctx.run),
+                         read_kind = type(ctx.read) }
               end } },
+  hooks = { on_before_tool = function(tool, args, ctx)
+              local l = leaks()
+              if l ~= "" then error("leak in hook: " .. l) end
+              return nil
+            end },
+}
+]])
+    local ext = fresh_ext()
+    local reg = ext.load(home, {})
+    local fn = ext.tool_fn("sb_tool")
+    assert_notnil(fn, "1.1 sandboxed tool loads")
+    assert_eq(#reg.before, 1, "1.1 the sandboxed hook registers")
+    local ok, res = pcall(fn, {}, ext.ctx_for({ workspace = "/ws" },
+        { ext = "sb", surface = "tool" }))
+    assert_true(ok, "1.1 sandboxed fn runs without leaks")
+    assert_eq(res.content, "clean", "1.1 sandboxed fn returns")
+    assert_eq(res.ctx_kind, "function", "1.1 ctx.run keeps working")
+    assert_eq(res.read_kind, "function", "1.1 ctx.read keeps working")
+    local verdict, why = ext.run_before("read", { path = "x" }, { workspace = "/ws" })
+    assert_eq(verdict, "allow", "1.1 the hook runs sandboxed and allows (" .. tostring(why) .. ")")
+    os.execute("rm -rf '" .. home .. "'")
+    print("1.1 sandbox denies io/tether/loaders: OK")
+end
+
+-- T327 (audit H3): the chunk env is an allowlist, so a name the old denylist
+-- simply forgot reads nil instead of falling through to the host.
+do
+    _G.tether = host_mock({})
+    local home = tmp_home()
+    write_file(home .. "/.tether/extensions/es/es.lua", [[
+return {
+  name = "es", api_version = 1,
+  tools = { { name = "es_tool", description = "d", fn = function()
+    local holes = {}
+    for _, v in ipairs({ { "io", io }, { "load", load }, { "loadfile", loadfile },
+                         { "dofile", dofile }, { "require", require },
+                         { "debug", debug }, { "tether", tether }, { "_G", _G } }) do
+      if v[2] ~= nil then holes[#holes + 1] = v[1] end
+    end
+    -- _G.io / _G.load("return 1")() were the practical escapes: both routes
+    -- need _G, which is now simply absent
+    if _G and _G.io then holes[#holes + 1] = "_G.io" end
+    local os2 = os or {}
+    for _, k in ipairs({ "execute", "remove", "rename", "exit", "tmpname" }) do
+      if k ~= "tmpname" and os2[k] ~= nil then holes[#holes + 1] = "os." .. k end
+    end
+    local missing = {}
+    local function need(name, v) if v == nil then missing[#missing + 1] = name end end
+    need("string.format", string and string.format)
+    need("table.concat", table and table.concat)
+    need("math.floor", math and math.floor)
+    need("coroutine.create", coroutine and coroutine.create)
+    need("pcall", pcall)
+    need("error", error)
+    need("assert", assert)
+    need("type", type)
+    need("ipairs", ipairs)
+    need("pairs", pairs)
+    need("next", next)
+    need("select", select)
+    need("setmetatable", setmetatable)
+    need("getmetatable", getmetatable)
+    need("rawget", rawget)
+    need("rawset", rawset)
+    need("tostring", tostring)
+    need("tonumber", tonumber)
+    need("utf8.len", utf8 and utf8.len)
+    need("print", print)
+    need("os.time", os and os.time)
+    need("os.getenv", os and os.getenv)
+    need("os.date", os and os.date)
+    need("os.clock", os and os.clock)
+    need("os.difftime", os and os.difftime)
+    need("os.tmpname", os and os.tmpname)
+    -- the allowed names must also be usable, not merely present
+    local used = { string.format("%d", 1), table.concat({ "a", "b" }, ""),
+                   math.floor(1.7), utf8.len("абв"), select("#", 1, 2),
+                   (next({ 1 }) ~= nil), tostring(1) .. tonumber("2"),
+                   getmetatable(""), rawget({ a = 1 }, "a") }
+    return { holes = table.concat(holes, ","), missing = table.concat(missing, ","),
+             content = "used:" .. #used }
+  end } },
 }
 ]])
     local ext = fresh_ext()
     ext.load(home, {})
-    local fn = ext.tool_fn("sb_tool")
-    assert_notnil(fn, "1.1 sandboxed tool loads")
-    local ok, res = pcall(fn, {}, ext.ctx_for({}))
-    assert_true(ok, "1.1 sandboxed fn runs without leaks")
-    assert_eq(res.content, "clean", "1.1 sandboxed fn returns")
+    local fn = ext.tool_fn("es_tool")
+    assert_notnil(fn, "T327 the probing tool loads")
+    local ok, res = pcall(fn, {}, ext.ctx_for({ workspace = "/ws" },
+        { ext = "es", surface = "tool" }))
+    assert_true(ok, "T327 the probe runs to completion")
+    assert_eq(res.holes, "", "T327 no forbidden name resolves (" .. tostring(res.holes) .. ")")
+    assert_eq(res.missing, "", "T327 every documented name still resolves (" .. tostring(res.missing) .. ")")
+    assert_eq(res.content, "used:9", "T327 the allowlisted names work")
     os.execute("rm -rf '" .. home .. "'")
-    print("1.1 sandbox denies io/tether/loaders: OK")
+    print("T327 extension env is an allowlist: OK")
 end
 
 -- 1.1 validation: wrong name and bad api_version are fail-closed.
@@ -721,13 +812,20 @@ end
 -- (the same call serves the new-session and resume paths in app.lua).
 do
     _G.tether = host_mock({})
-    _G.__st_starts = 0
     local home = tmp_home()
+    -- the counter lives in the extension's own scope and reports through a
+    -- command: the sandbox env (T327) is an allowlist, so `_G.x = …` is not a
+    -- channel an extension can use, and the test must not assume one either.
     write_file(home .. "/.tether/extensions/st/st.lua", [[
+local starts = 0
 return { name = "st", api_version = 1,
-  commands = { { name = "stk", description = "st cmd", fn = function() return "ok" end } },
+  commands = {
+    { name = "stk", description = "st cmd", fn = function() return "ok" end },
+    { name = "stcount", description = "starts seen",
+      fn = function() return "starts:" .. starts end },
+  },
   hooks = { on_session_start = function(ctx)
-    _G.__st_starts = _G.__st_starts + 1
+    starts = starts + 1
   end } }]])
     local cmds = assert(loadfile("src/tether/commands.lua"))()
     _G.commands = cmds
@@ -737,11 +835,18 @@ return { name = "st", api_version = 1,
     local reg = app.boot_extensions(cfg, home)
     assert_notnil(reg, "3.3 boot_extensions returns a registry")
     assert_notnil(cmds.dispatch["stk"], "3.3 boot registers the extension command")
-    assert_eq(_G.__st_starts, 0, "3.3 nothing fires at load time")
+    local function starts_seen()
+        local seen = {}
+        cmds.dispatch["stcount"]({ workspace = cfg.workspace,
+            cfg = { workspace = cfg.workspace, _session_id = "st" } },
+            { note = function(t) seen[#seen + 1] = t end }, "stcount", "")
+        return seen[1]
+    end
+    assert_eq(starts_seen(), "starts:0", "3.3 nothing fires at load time")
     app.fire_session_start(cfg)
-    assert_eq(_G.__st_starts, 1, "3.3 on_session_start fires once")
+    assert_eq(starts_seen(), "starts:1", "3.3 on_session_start fires once")
     app.fire_session_start(cfg)
-    assert_eq(_G.__st_starts, 1, "3.3 repeated fires stay deduped")
+    assert_eq(starts_seen(), "starts:1", "3.3 repeated fires stay deduped")
     os.execute("rm -rf '" .. home .. "'")
     print("3.3 session start + bootstrap: OK")
 end

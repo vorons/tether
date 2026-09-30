@@ -89,23 +89,31 @@ local function now_ms()
     return nil
 end
 
--- Restricted chunk env: everything except the denylist falls through to _G.
--- os arrives as a safe subset (no execute/remove/rename); io, loaders and
--- the tether host table are unreachable, so ctx is the only outside path.
+-- Restricted chunk env: an explicit allowlist, nothing else resolves. os
+-- arrives as a safe subset (no execute/remove/rename); io, the loaders, the
+-- tether host table and _G itself are absent, so ctx is the only outside path.
 local function sandbox_env()
     local safe_os = {}
     for _, k in ipairs({ "clock", "date", "difftime", "time", "getenv", "tmpname" }) do
         safe_os[k] = os[k]
     end
-    local env = { os = safe_os, print = print }
-    setmetatable(env, { __index = function(_, k)
-        if k == "io" or k == "dofile" or k == "load" or k == "loadfile"
-            or k == "require" or k == "tether" then
-            return nil
-        end
-        return _G[k]
-    end })
-    return env
+    -- audit H3: the previous env forwarded every unknown name to _G and denied
+    -- a list of six. One name outside that list — `_G` itself, `debug`, the
+    -- `debug`-reachable setmetables — restored file, shell and network access,
+    -- so the denylist had to be complete to work; the allowlist only has to be
+    -- correct once. next/rawget/rawset/getmetatable/utf8 join the documented
+    -- names because ordinary Lua needs them (no escape power: io and the
+    -- loaders are simply not in scope).
+    return {
+        os = safe_os, print = print,
+        string = string, table = table, math = math, coroutine = coroutine,
+        utf8 = utf8,
+        assert = assert, error = error, type = type, pcall = pcall,
+        ipairs = ipairs, pairs = pairs, next = next, select = select,
+        rawget = rawget, rawset = rawset,
+        getmetatable = getmetatable, setmetatable = setmetatable,
+        tostring = tostring, tonumber = tonumber,
+    }
 end
 
 local function valid_tool_name(n)
