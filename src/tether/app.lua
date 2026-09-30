@@ -261,6 +261,10 @@ function M._startup_update(cfg, opts, home)
     -- a one-shot run has no banner to show and no user waiting on it, so it
     -- performs no release probe at all (spec: one-shot runs do not check).
     if opts and opts.print_mode then return nil end
+    -- a piped stdin is the same case without the flag: nobody is reading a
+    -- banner, so leave no marker behind. Absent primitive (plain-Lua runtime)
+    -- counts as interactive.
+    if tether and tether.is_tty and not tether.is_tty() then return nil end
     if not (update and update.check) then return nil end
     local ok, res = pcall(update.check, cfg, home)
     if not ok then return nil end

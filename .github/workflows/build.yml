@@ -33,6 +33,8 @@ jobs:
           # self-update assets: `tether update` reads the bare executable, and
           # VERSION is the cheap probe for the newest release. Names here and
           # URLs in src/tether/update.lua are one contract — change both.
+          # tests/update_tests.lua (T315) pins both urls the module builds, so a
+          # rename fails a test instead of users.
           cp tether "tether-${short}-linux-x86_64"
           printf '%s\n' "$short" > VERSION
           echo "SHORT=${short}" >> "$GITHUB_ENV"

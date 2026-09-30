@@ -278,7 +278,7 @@ do
 end
 
 -- ---------------------------------------------------------------
--- T304: the startup hook never runs for a one-shot run, and never raises.
+-- T304: the startup hook never runs for a one-shot or piped run, and never raises.
 do
     local upd = fresh_update()
     _G.update = upd
@@ -296,6 +296,29 @@ do
     assert_eq(app._startup_update({ update_check = true }, {}, home),
         "background", "T304 interactive start schedules the probe")
     assert_eq(spawns, 1, "T304 interactive start spawns one probe")
+    -- a piped stdin is a one-shot run without the flag: same silence, and no
+    -- marker left behind for a user who never sees a banner. A fresh home,
+    -- because the probe above already parked a marker in this one and a marker
+    -- is itself a reason to schedule nothing.
+    local home2 = tmp_home()
+    put_record(home2, "dead001", os.time() - 25 * 3600)
+    _G.tether = host_mock({ is_tty = function() return false end,
+        fetch_bg = function() spawns = spawns + 1 return true end })
+    assert_eq(app._startup_update({ update_check = true }, {}, home2), nil,
+        "T304 a piped start gets no status")
+    assert_eq(spawns, 1, "T304 a piped start schedules nothing")
+    assert_eq(read_file(marker_of(home2)), nil,
+        "T304 a piped start leaves no marker")
+    _G.tether = host_mock({ is_tty = function() return true end,
+        fetch_bg = function() spawns = spawns + 1 return true end })
+    assert_eq(app._startup_update({ update_check = true }, {}, home2),
+        "background", "T304 a tty start schedules the probe")
+    assert_eq(spawns, 2, "T304 the tty start spawned one probe")
+    rm_tree(home2)
+    _G.tether = host_mock({ fetch_bg = function()
+        spawns = spawns + 1
+        return true
+    end })
     -- a raising module must not take the session down with it
     _G.update = { check = function() error("boom") end }
     assert_eq(app._startup_update({ update_check = true }, {}, home), nil,
@@ -397,6 +420,53 @@ do
     local ui4 = run_ui_with({ 17 }, {})
     assert_eq(#tentries(ui4), 1, "T305 a raising notice module shows only splash")
     print("T305/T306 notice seeding and width: OK")
+end
+
+-- ---------------------------------------------------------------
+-- T313: the notice is a startup row — ordered right after the splash when a
+-- resumed session seeds ahead of it, and gone for good once the transcript is
+-- reset inside the session (spec: "at most once per session").
+do
+    local NOTICE = "update available: tether dead001  (run: tether update)"
+    _G.build_version = "aaaaaaa"
+    _G.update = { notice = function() return NOTICE end }
+
+    -- resumed history: splash, notice, then the restored messages, then the
+    -- resume marker. The insert walks the rows in reverse into position 1, so
+    -- the order here is what that loop produces.
+    local hist = { { role = "user", content = "one" },
+                  { role = "assistant", content = "two" } }
+    local uim = run_ui_with({ 17 }, { agent = {
+        get_history = function() return hist end,
+        turn = function() return true end } })
+    local e = tentries(uim)
+    assert_eq(e[1] and e[1].role, "splash",
+        "T313 the splash leads a resumed transcript")
+    assert_eq(e[2] and e[2].text, NOTICE,
+        "T313 the notice follows the splash, ahead of the history")
+    assert_eq(e[3] and e[3].role, "user",
+        "T313 the restored messages keep their order after the notice")
+    assert_eq(e[4] and e[4].role, "assistant", "T313 both history rows seeded")
+    assert_true(tostring(e[#e].text):find("session resumed", 1, true) ~= nil,
+        "T313 the resume marker still closes the transcript")
+
+    -- inside the session a reset re-seeds the splash only, so the notice
+    -- cannot be shown twice by clearing or starting over.
+    local function str_bytes(s)
+        local b = {}
+        for i = 1, #s do b[#b + 1] = s:byte(i) end
+        return b
+    end
+    local bytes = str_bytes("/clear")
+    bytes[#bytes + 1] = 13
+    bytes[#bytes + 1] = 17
+    local uic = run_ui_with(bytes, { agent = {
+        get_history = function() return nil end,
+        turn = function() return true end } })
+    local ce = tentries(uic)
+    assert_eq(#ce, 1, "T313 /clear leaves only the splash")
+    assert_eq(ce[1] and ce[1].role, "splash", "T313 the splash survives /clear")
+    print("T313 notice lifetime: OK")
 end
 _G.update = orig_update
 _G.build_version = orig_build
@@ -602,6 +672,57 @@ do
 
     _G.tether = orig_tether
     print("T308-T312 tether update: OK")
+end
+
+-- ---------------------------------------------------------------
+-- T314: `update_check = false` silences the startup probe and the banner, not
+-- the verb — opting out of checking must not opt out of updating.
+do
+    local upd = fresh_update()
+    upd.MIN_BINARY_BYTES = 16
+    _G.update = upd
+    local app = assert(loadfile("src/tether/app.lua"))()
+    local dir, exe = exe_tree()
+    local home = tmp_home()
+    write_file(home .. "/.tether/config.lua", "return { update_check = false }\n")
+    _G.build_version = "aaaaaaa"
+    _G.tether = host_mock({
+        exepath = function() return exe end,
+        http_get = function(url)
+            if url:find("VERSION", 1, true) then return "dead001\n" end
+            return ELF
+        end,
+    })
+    assert_eq(upd.notice({ update_check = false }, home, "aaaaaaa"), nil,
+        "T314 the opt-out still silences the banner")
+    local code, text = app._update_verb(home)
+    assert_eq(code, 0, "T314 the verb runs with the check off: " .. tostring(text))
+    assert_true(read_file(exe) == ELF, "T314 the swap happened with the check off")
+    rm_tree(home)
+    os.execute("rm -rf " .. dir)
+    _G.tether = orig_tether
+    _G.update = orig_update
+    _G.build_version = orig_build
+    print("T314 tether update ignores update_check: OK")
+end
+
+-- ---------------------------------------------------------------
+-- T315: the release URLs are the published asset names — pinned verbatim so a
+-- rename in .github/workflows/build.yml fails a test instead of users.
+do
+    local upd = fresh_update()
+    local base = upd.base_url()
+    assert_eq(upd.version_url(), base .. "/releases/latest/download/VERSION",
+        "T315 the probe url names the VERSION asset")
+    assert_eq(upd.binary_url("dead001"), base
+        .. "/releases/download/tether-dead001/tether-dead001-linux-x86_64",
+        "T315 the install url names the bare-binary asset")
+    -- the probed sha is hex-checked before it can reach a URL: nothing else may
+    -- steer the updater to a host or path of its own.
+    assert_eq(upd.binary_url("dead001/../x"), nil, "T315 a non-hex sha is refused")
+    assert_eq(upd.binary_url(""), nil, "T315 an empty sha is refused")
+    assert_eq(upd.binary_url(7), nil, "T315 a non-string sha is refused")
+    print("T315 release url contract: OK")
 end
 
 _G.tether = orig_tether
