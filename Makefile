@@ -85,6 +85,13 @@ tether: $(LUA_OBJS) src/host/main.c $(EMBED_OUT) $(KREP_OBJS) $(VENDOR_ARCHIVES)
 		-I$(MBEDTLS_DIR)/include \
 		-o $@ src/host/main.c $(LUA_OBJS) $(KREP_OBJS) $(VENDOR_ARCHIVES) \
 		-lpthread -lm
+	# UPX-pack the binary (--best --lzma, same as `release`).
+	# PACK=0 skips it (used by `release`, which strips first and packs
+	# last); a missing upx is a warning, not an error, so minimal
+	# environments and CI without upx keep building.
+	@if [ "$(PACK)" = 0 ]; then exit 0; fi; \
+	if command -v upx >/dev/null 2>&1; then upx -q --best --lzma $@; \
+	else echo "tether: upx not found, skipping pack"; fi
 
 build/krep.o: $(KREP_DIR)/krep.c
 	@mkdir -p build
@@ -185,14 +192,15 @@ clean:
 	rm -f $(EMBED_OUT)
 	rm -rf build
 
-# install: build, then drop the self-contained binary on PATH. PREFIX is
-# where it lands, DESTDIR offsets the whole path for staging/packaging:
-#   sudo make install
-#   make install PREFIX=$HOME/.local
+# install: build, then drop the self-contained binary on PATH. Default is
+# the user tree (~/.local/bin, no root needed); DESTDIR offsets the whole
+# path for staging/packaging:
+#   make install
+#   sudo make install PREFIX=/usr/local
 #   make install DESTDIR=$PWD/pkg
 # Depends on `tether`, so `make release && make install` installs the
 # optimized binary without rebuilding it.
-PREFIX  ?= /usr/local
+PREFIX  ?= $(HOME)/.local
 DESTDIR ?=
 install: tether
 	@mkdir -p $(DESTDIR)$(PREFIX)/bin
@@ -201,10 +209,11 @@ install: tether
 # release: maximum-optimization build for distribution. Non-portable
 # (-march=native), asserts off (-DNDEBUG), link-time optimization, stripped
 # and UPX-packed. Separate from the default build so dev iteration stays
-# fast and portable.
+# fast and portable. PACK=0 here: the tether rule must not pre-pack, since
+# strip runs first and the final pack is --best --lzma below.
 release:
 	@$(MAKE) clean >/dev/null
-	@$(MAKE) tether OPT="-O3 -march=native -flto=auto -DNDEBUG" WERROR=
+	@$(MAKE) tether OPT="-O3 -march=native -flto=auto -DNDEBUG" WERROR= PACK=0
 	@strip --strip-all tether
 	@upx --best --lzma tether
 	@ls -la tether
