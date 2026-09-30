@@ -65,6 +65,9 @@ local function default_config()
         -- offline-provider-catalog: model-metadata (context limits) network
         -- refresh; false disables shard fetch entirely (disk still reads).
         metadata_refresh = true,
+        -- add-self-update: startup release probe + update banner; false never
+        -- touches the network at start (`tether update` still works).
+        update_check = true,
         workspace = nil,
         allow_outside_workspace = false,
         auto_approve = {},
@@ -295,12 +298,13 @@ M.BOOTSTRAP_ORDER = {
     "workspace", "allow_outside_workspace", "auto_approve",
     "context", "retry", "ui", "tools",
     "system_prompt", "skills_dirs", "agents_files", "extensions", "log_level",
-    "providers", "providers_url", "metadata_refresh",
+    "providers", "providers_url", "metadata_refresh", "update_check",
 }
 M.BOOTSTRAP_COMMENTS = {
     provider = "active provider: any catalog id (default llama-cpp = local llama.cpp; cloud ids arrive via the providers cache; override the sync source with providers_url)",
     providers_url = "override the providers-cache sync source (default: the data file published by .github/workflows/sync-providers.yml)",
     metadata_refresh = "model-metadata network refresh (false = never fetch shards; disk still reads)",
+    update_check = "background release probe at startup and the update banner (false = no probe; the `tether update` command still works)",
     api_key_env = "legacy top-level key env (per-provider providers.<id>.api_key_env wins)",
     base_url = "legacy top-level endpoint (per-provider providers.<id>.base_url wins)",
     model = "legacy top-level model (per-provider providers.<id>.model wins; /model writes here)",

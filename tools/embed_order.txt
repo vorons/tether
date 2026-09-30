@@ -67,6 +67,7 @@ subagent src/tether/subagent.lua
 diff src/tether/diff.lua
 cache src/tether/cache.lua
 extensions src/tether/extensions.lua
+update src/tether/update.lua
 
 [load]
 ## build_version first: version string for --version and the splash
@@ -104,6 +105,9 @@ transcript
 commands
 ## turn: control facade over agent; abort seam + busy reset (src/tether/turn.lua)
 turn
+## update: release probe/cache/banner + `tether update` (src/tether/update.lua)
+## ui reads it for the banner row, app dispatches the command
+update
 ## ui_copy: UI strings safe-edit zone, data only (src/tether/ui/copy.lua)
 ui_copy
 ## ui_markdown: markdown-lite inline-strip pass (src/tether/ui/markdown.lua)

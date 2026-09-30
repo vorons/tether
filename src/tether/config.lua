@@ -305,6 +305,12 @@ function M.load(path, home)
         cfg.metadata_refresh = true
     end
 
+    -- add-self-update: startup release probe knob; same fallback discipline —
+    -- a missing or non-boolean value means enabled, never a failed load.
+    if type(cfg.update_check) ~= "boolean" then
+        cfg.update_check = true
+    end
+
     -- prompt-cache: cache table with per-key fallbacks; a missing or
     -- malformed value falls back to its default without failing the
     -- session (spec config: Cache configuration table). Unknown keys

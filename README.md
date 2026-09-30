@@ -73,7 +73,19 @@ tether --resume              # resume the latest session for this workspace
 tether --model claude-opus-4-6
 tether --agents-file ./rules.md   # extra instructions; repeatable
 tether --version
+tether update                  # replace this binary with the newest release
 ```
+
+Releases are named by the short git sha of the commit they were built from, and
+`tether --version` prints that sha. On an interactive start tether looks at a
+cached result of its last release probe (`~/.tether/update.json`) and, when it
+holds a different sha, shows one dim row under the splash telling you to run
+`tether update`. The probe itself runs detached in the background, so startup
+never waits on the network; a failed or slow probe is invisible. Set
+`update_check = false` in `~/.tether/config.lua` to skip both the probe and the
+banner. `tether update` needs write access to the directory holding the running
+binary — for a root-owned `/usr/local/bin` install run it with `sudo`, or
+reinstall under `$HOME/.local` with `make install PREFIX=$HOME/.local`.
 
 Without a config the default provider is `llama-cpp` (a local llama.cpp server).
 To use a cloud provider, set its key env var or run `/login` in the TUI, and pick

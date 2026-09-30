@@ -30,6 +30,11 @@ jobs:
         run: |
           short="${GITHUB_SHA::7}"
           tar czf "tether-${short}-linux-x86_64.tar.gz" tether
+          # self-update assets: `tether update` reads the bare executable, and
+          # VERSION is the cheap probe for the newest release. Names here and
+          # URLs in src/tether/update.lua are one contract — change both.
+          cp tether "tether-${short}-linux-x86_64"
+          printf '%s\n' "$short" > VERSION
           echo "SHORT=${short}" >> "$GITHUB_ENV"
       - uses: actions/upload-artifact@v4
         with:
@@ -41,4 +46,9 @@ jobs:
         with:
           tag_name: tether-${{ env.SHORT }}
           name: tether-${{ env.SHORT }}
-          files: "*.tar.gz"
+          # the bare binary glob must stay exact-suffixed: `*.tar.gz` already
+          # carries the archive, and `-linux-x86_64` cannot match it.
+          files: |
+            *.tar.gz
+            tether-*-linux-x86_64
+            VERSION

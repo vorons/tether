@@ -243,12 +243,47 @@ function M._run_ext_cli(argv, home)
     return nil
 end
 
+-- add-self-update: seams for the update paths, so tests drive the behaviour
+-- without os.exit, a TTY or the network. _update_verb returns (code, message);
+-- _startup_update schedules the background probe and returns its status, never
+-- raising and never blocking. Both tolerate a missing `update` module (plain
+-- Lua test/dev runtime).
+function M._update_verb(home)
+    if not (update and update.run) then
+        return 1, "update module unavailable"
+    end
+    local ok, code, text = pcall(update.run, home, build_version)
+    if not ok then return 1, tostring(code) end
+    return tonumber(code) or 1, text or "no result"
+end
+
+function M._startup_update(cfg, opts, home)
+    -- a one-shot run has no banner to show and no user waiting on it, so it
+    -- performs no release probe at all (spec: one-shot runs do not check).
+    if opts and opts.print_mode then return nil end
+    if not (update and update.check) then return nil end
+    local ok, res = pcall(update.check, cfg, home)
+    if not ok then return nil end
+    return res
+end
+
 local function run_inner()
     -- extension-system: management verbs run before the flag parser, which
     -- would otherwise ignore them and open a session.
     local argv = arg or {}
     if argv[1] == "install" or argv[1] == "list" or argv[1] == "remove" then
         os.exit(M._run_ext_cli(argv) or 0)
+    end
+    -- add-self-update: the update verb is trimmed here for the same reason the
+    -- extension verbs are — the flag parser would ignore it and open a session.
+    if argv[1] == "update" then
+        local code, text = M._update_verb()
+        if code ~= 0 then
+            io.stderr:write("tether: " .. tostring(text) .. "\n")
+        else
+            io.stdout:write(tostring(text) .. "\n")
+        end
+        os.exit(code)
     end
     local opts = parse_args()
     if version then print("tether " .. tostring(build_version or "dev")); os.exit(0) end
@@ -456,6 +491,10 @@ local function run_inner()
     -- extension-system: registry (tools/prompt/hooks) + slash commands,
     -- composed before the resume seed and the first turn.
     M.boot_extensions(cfg)
+    -- add-self-update: probe for a newer release (or reuse a fresh cache)
+    -- before the TUI paints. Never blocks, never raises, never runs in a
+    -- one-shot pass — see M._startup_update.
+    M._startup_update(cfg, opts)
 
     -- Resume logic (design §10): only with -r
     local resume_id = nil

@@ -2407,6 +2407,24 @@ function M._splash_entry()
         extensions = res.extensions or {} }
 end
 
+-- add-self-update: rows a fresh transcript starts with — the splash block, then
+-- one notice row when the cached release probe knows a build other than this
+-- one. Decided from disk only, and any failure of the probe module just means
+-- no notice; startup never waits on it. /clear and /new keep using
+-- M._splash_entry() alone, so the notice shows at most once per session.
+function M._startup_rows()
+    local rows = { M._splash_entry() }
+    local st = M._get_state()
+    local upd = rawget(_G, "update")
+    if st and upd and upd.notice then
+        local ok, text = pcall(upd.notice, st.cfg, nil, build_version)
+        if ok and type(text) == "string" and text ~= "" then
+            rows[#rows + 1] = { role = "system", text = text }
+        end
+    end
+    return rows
+end
+
 -- add-ask-tool: is `label` among this question's selected answers?
 -- Canonical implementation lives in ui_ask_view (module-local).
 
@@ -5156,15 +5174,16 @@ function M.run(app_cfg)
             if #seeded > 0 then
                 -- restored history keeps its order; the splash stays first,
                 -- like a fresh start that already knows the conversation.
-                table.insert(seeded, 1, M._splash_entry())
+                local rows = M._startup_rows()
+                for i = #rows, 1, -1 do table.insert(seeded, 1, rows[i]) end
                 transcript.reset(seeded)
                 transcript.append(
                     { role = "system", text = "↻ session resumed" })
             else
-                reset_transcript({ M._splash_entry() })
+                reset_transcript(M._startup_rows())
             end
         else
-            reset_transcript({ M._splash_entry() })
+            reset_transcript(M._startup_rows())
         end
     end
 
