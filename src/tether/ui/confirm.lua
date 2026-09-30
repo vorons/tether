@@ -31,8 +31,19 @@ local function menu_rows(c, sel, width, P)
     if not c then return {} end
     local co = { "", P.yellow("⚠ " .. (c.label or "confirmation")) }
     if c.body and c.body ~= "" then
-        for _, l in ipairs(P.wrap(c.body, width - 2)) do
-            co[#co + 1] = "  " .. l
+        -- patch bodies render through the diff pipeline (highlighted, same
+        -- as the tool result rows); everything else wraps plainly. P.diff
+        -- is the facade hook — older callers without it keep plain wrap.
+        local dname = c.detail and c.detail.name
+        local dargs = c.detail and c.detail.args
+        if dname == "patch" and P.diff then
+            for _, l in ipairs(P.diff(c.body, dargs and dargs.path, width - 2) or {}) do
+                co[#co + 1] = "  " .. l
+            end
+        else
+            for _, l in ipairs(P.wrap(c.body, width - 2)) do
+                co[#co + 1] = "  " .. l
+            end
         end
     end
     co[#co + 1] = ""
@@ -112,6 +123,33 @@ M.resolve_confirmation = resolve_confirmation
 local function handle_confirmation_key(bag, deps, k)
     deps = deps or {}
     if not k then return end
+    -- the menu owns the keyboard but never the scroll: wheel and PgUp/PgDn
+    -- reach the transcript (same math as the normal handlers), otherwise a
+    -- long patch body is unviewable while deciding.
+    if k.kind == "mouse" and (k.name == "scroll_up" or k.name == "scroll_down") then
+        if k.name == "scroll_up" then
+            bag.scroll = (bag.scroll or 0) + 3
+            bag.user_scrolled = true
+        else
+            bag.scroll = math.max(0, (bag.scroll or 0) - 3)
+            if bag.scroll == 0 then bag.user_scrolled = false end
+        end
+        if deps.sync then deps.sync() end
+        return
+    end
+    if k.kind == "special" and (k.name == "pgup" or k.name == "pgdn") then
+        local h = (bag.h and bag.h > 0) and bag.h or 24
+        local step = math.max(1, math.floor(h / 2))
+        if k.name == "pgup" then
+            bag.scroll = (bag.scroll or 0) + step
+            bag.user_scrolled = true
+        else
+            bag.scroll = math.max(0, (bag.scroll or 0) - step)
+            if bag.scroll == 0 then bag.user_scrolled = false end
+        end
+        if deps.sync then deps.sync() end
+        return
+    end
     if k.kind == "mouse" and k.name == "press" then
         -- options are rendered inside the transcript flow; match by column band
         local c = bag.confirmation

@@ -586,12 +586,11 @@ do
   uimod2._handle_agent_event({ type = "ask", id = "a2", questions = three })
   local joined2 = table.concat(uimod2._render_all(80), "\n")
   assert_true(joined2:find("Question 1", 1, true) ~= nil, "T124 the first question is shown")
-  -- ask-block-redesign: the tab strip replaces the (i/N) counter; tabs carry
-  -- clipped question text, and only the current question's rows render
-  assert_true(joined2:find("Question 2", 1, true) ~= nil, "T124 the tab strip lists every question")
-  assert_true(joined2:find("Confirm", 1, true) ~= nil, "T124 the tab strip ends with Confirm")
-  local _, q2_count = joined2:gsub("Question 2", "Question 2")
-  assert_eq(q2_count, 1, "T124 the next question appears only as a tab")
+  -- no tab strip in the question phase: the current question renders once,
+  -- position carried by the (i/N) counter; the strip lives in Confirm only.
+  assert_true(joined2:find("Question 2", 1, true) == nil, "T124 the next question is not duplicated")
+  assert_true(joined2:find("Confirm", 1, true) == nil, "T124 no tab strip in the question phase")
+  assert_true(joined2:find("(1/3)", 1, true) ~= nil, "T124 the progress counter names the position")
 
   -- a multi question marks every option, and a saved note renders under its option
   S2.ask.questions[1].multi = true
@@ -653,8 +652,9 @@ do
   for _, e in ipairs(tentries(m)) do
     if e.role == "system" and (e.text or ""):find("→ ask:", 1, true) then row = e.text end
   end
-  assert_notnil(row, "T125 a summary row is appended")
-  assert_true(row and row:find("scope=all", 1, true) ~= nil, "T125 the row names the answer")
+  -- the answered tool call renders its own row with the same summary, so no
+  -- separate → ask: note may be appended (dedup).
+  assert_eq(row, nil, "T125 no duplicate ask note is appended")
 
   -- a digit submits that option
   rec.answer = nil
@@ -1002,7 +1002,8 @@ do
   assert_true(mj:find("( )", 1, true) == nil and mj:find("(*)", 1, true) == nil,
     "T228 no round marker appears in multi mode")
 
-  -- 2.1/2.2: no tab strip for one question, tab strip for many, no Agent asks line
+  -- 2.1/2.2: no tab strip for one question, progress counter for many (the
+  -- strip lives in the Confirm phase only), no Agent asks line
   assert_true(j:find("Confirm", 1, true) == nil, "T228 a single question shows no tab strip")
   assert_true(j:find("Agent asks", 1, true) == nil, "T228 no Agent asks label line")
   local m3q = boot({ { id = "q1", question = "First?",
@@ -1010,8 +1011,10 @@ do
                       { id = "q2", question = "Second?",
                         options = { { label = "b" } } } })
   local qj = plain(m3q)
-  assert_true(qj:find("First?", 1, true) ~= nil, "T228 the strip lists question tabs")
-  assert_true(qj:find("Confirm", 1, true) ~= nil, "T228 the strip ends with Confirm")
+  assert_true(qj:find("First?", 1, true) ~= nil, "T228 the current question renders once")
+  assert_true(qj:find("Second?", 1, true) == nil, "T228 the next question is not duplicated")
+  assert_true(qj:find("Confirm", 1, true) == nil, "T228 no tab strip in the question phase")
+  assert_true(qj:find("(1/2)", 1, true) ~= nil, "T228 the progress counter names the position")
   assert_true(qj:find("Agent asks", 1, true) == nil, "T228 no Agent asks label in multi sets either")
 
   -- 3.1: hint rows per mode name the handled keys; every named key is in ASK_KEYS

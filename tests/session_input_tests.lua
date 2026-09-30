@@ -1554,6 +1554,36 @@ do
   assert_true(saw, "T134 /compact appends summary row with LLM body")
   print("T134 /compact free-text parse: OK")
 end
+
+-- TKwrap: a long single line soft-wraps and grows the box (regression:
+-- the input stayed one row with the overflow hidden in horizontal scroll,
+-- so a long prompt was invisible and the box never grew).
+do
+  local agent_stub = { turn = function() return true end, get_history = function() return {} end }
+  local function strip(s) return (s or ""):gsub("\27%[[%d;]*m", "") end
+  local uimod = run_ui_with({ 17 }, { agent = agent_stub, size = { width = 40, height = 24 } })
+  local long = string.rep("ab ", 34) -- 102 chars, no newlines
+  for i = 1, #long do
+    uimod._handle_key({ kind = "text", char = long:sub(i, i) })
+  end
+  uimod._paint(true)
+  local L = uimod._layout()
+  assert_true(L.input_h >= 3, "TKwrap long line wraps to several rows")
+  local r1 = strip(uimod._row(L.input_row) or "")
+  local rlast = strip(uimod._row(L.input_row + L.input_h - 1) or "")
+  assert_true(r1:find("^%s*ab", 1) ~= nil, "TKwrap head row shows the start")
+  assert_true(rlast:find("ab", 1, true) ~= nil, "TKwrap tail row shows the end")
+  -- caret sits on the last visual row: Up moves within the input instead
+  -- of recalling history (pre-fix there was a single buffer line, so Up
+  -- fell through to history_prev and the cursor never moved).
+  local S = uimod._get_state()
+  local cur0 = S.cursor
+  assert_eq(cur0, #long, "TKwrap caret starts at end of input")
+  uimod._handle_key({ kind = "special", name = "up" })
+  assert_eq(S.input, long, "TKwrap Up keeps the input intact")
+  assert_true(S.cursor < cur0, "TKwrap Up moves to the previous visual row")
+  print("TKwrap long input wraps and grows: OK")
+end
 -- helpers for transcript assertions (entries/tails live on the module now)
 
 

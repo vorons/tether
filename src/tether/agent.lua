@@ -710,6 +710,11 @@ local function drive_pending(cfg, on_event)
         elseif not should_confirm(call.name, call.args, cfg)
             or check_auto_approve(call.name, call.args, cfg)
             or is_session_approved(call.name, call.args) then
+            -- menu skipped by policy/session/auto-approve: re-grant the
+            -- exception this dispatch rides on (one-shot grants are
+            -- consumed on use, so every approved run re-grants).
+            confirm_policy.grant_exception(cfg,
+                confirm_policy.exception_target(call.name, call.args, cfg))
             run_tool_call(cfg, on_event, call.id, call.name, call.args, call.projection)
             call.done = true
             p.idx = p.idx + 1
@@ -1285,6 +1290,11 @@ function M.confirm(id, decision, cfg, on_event)
                 if decision == "always" then
                     approval.persist_auto_approve(call.name, call.args, cfg)
                 end
+                -- the tools layer re-checks containment at execution time, so
+                -- the granted exception travels with the call (single use:
+                -- the tool consumes it, a retry re-asks).
+                confirm_policy.grant_exception(cfg,
+                    confirm_policy.exception_target(call.name, call.args, cfg))
                 run_tool_call(cfg, on_event, call.id, call.name, call.args, call.projection)
             elseif decision == "cancel" then
                 -- deny this call; the remaining ones are denied in the loop below

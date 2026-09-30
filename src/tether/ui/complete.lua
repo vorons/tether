@@ -3,7 +3,7 @@
 --
 -- IN:  bag is the state (S.input/cursor/completion/palette_*/workspace/cfg);
 --      deps is the impure edge { tools (tools module or M._tools_stub),
---      sync (facade palette_sync), lines (facade input_lines closure) }.
+--      sync (facade palette_sync), lines (facade visual-rows closure) }.
 --      Moved verbatim from ui.lua (ui-facade-thinning 1.1) with identical
 --      function names, so the 4.1 OWN block needs only the file added to
 --      the T4.1 scan; the facade keeps thin M.* seams tests drive.

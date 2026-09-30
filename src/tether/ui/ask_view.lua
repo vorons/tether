@@ -114,9 +114,6 @@ local function render(a, width, P)
         out[#out + 1] = P.hint(ask_hint(a, q, P.copy), inner)
         return out
     end
-    if #a.questions > 1 then
-        out[#out + 1] = render_tabs(a, width, P)
-    end
     local progress = #a.questions > 1
         and string.format(" (%d/%d)", a.qidx, #a.questions) or ""
     out[#out + 1] = P.cyan("? ") .. (q.question or "") .. P.dim(progress)
@@ -125,6 +122,9 @@ local function render(a, width, P)
             out[#out + 1] = "  " .. l
         end
     end
+    -- air between the question and the options: without it a long question
+    -- glues to option 1 and reads as one block.
+    out[#out + 1] = ""
 
     for i, opt in ipairs(q.options) do
         local row = {}
@@ -167,7 +167,9 @@ local function render(a, width, P)
         out[#out + 1] = text
     end
     -- ask-block-b: one muted hint row under the freeform row, clipped to the
-    -- width so it never wraps into extra rows.
+    -- width so it never wraps into extra rows. A blank separates it from
+    -- the options so the key legend doesn't glue to the last row.
+    out[#out + 1] = ""
     out[#out + 1] = P.hint(ask_hint(a, q, P.copy), inner)
     return out
 end

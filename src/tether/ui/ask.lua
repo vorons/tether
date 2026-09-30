@@ -72,10 +72,9 @@ local function resolve_ask(bag, deps, cancelled)
     if not a then return end
     local questions, answers = a.questions or {}, a.answers or {}
     bag.ask = nil
-    if deps.note then
-        deps.note("→ ask: " .. (cancelled and deps.askmod.CANCELLED_TEXT
-            or deps.askmod.summary(questions, answers)))
-    end
+    -- no separate summary note: the answered tool call renders its own row
+    -- with the same summary text (record_ask_result), so a note here would
+    -- duplicate it line for line.
     deps.turn.finish(bag)
     local ok, err = deps.turn.answer(a.id,
         cancelled and { cancelled = true } or answers, bag.cfg, deps.on_event)

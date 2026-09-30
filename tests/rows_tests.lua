@@ -1778,6 +1778,59 @@ do
   print("T4.2a ui_confirm rows+kernel: OK")
 end
 
+-- T4.2b: the confirmation menu never swallows scroll: wheel and PgUp/PgDn
+-- reach the transcript while the menu owns the keyboard (regression: a big
+-- patch body was unviewable — the menu ate every scroll gesture).
+do
+  local cf = assert(loadfile("src/tether/ui/confirm.lua"))()
+  local synced = 0
+  local deps = { sync = function() synced = synced + 1 end }
+  local bag = { confirmation = { label = "patch f", options = { "allow", "deny" },
+      detail = { id = "c1", name = "patch" } },
+    confirmation_sel = 1, scroll = 0, user_scrolled = false, h = 24 }
+  cf.handle_confirmation_key(bag, deps, { kind = "special", name = "pgup" })
+  assert_true(bag.scroll > 0, "T4.2b PgUp scrolls while the menu is open")
+  assert_true(bag.user_scrolled, "T4.2b PgUp marks user scroll")
+  assert_true(synced > 0, "T4.2b PgUp repaints")
+  cf.handle_confirmation_key(bag, deps, { kind = "special", name = "pgdn" })
+  assert_eq(bag.scroll, 0, "T4.2b PgDn scrolls back")
+  assert_false(bag.user_scrolled, "T4.2b bottom clears user scroll")
+  cf.handle_confirmation_key(bag, deps, { kind = "mouse", name = "scroll_up", row = 20 })
+  assert_true(bag.scroll > 0, "T4.2b wheel scrolls while the menu is open")
+  assert_notnil(bag.confirmation, "T4.2b scrolling keeps the menu open")
+  print("T4.2b confirm menu scroll passthrough: OK")
+end
+
+-- T4.2c: patch menu body renders through the diff pipeline (highlighted),
+-- not as plain wrapped text.
+do
+  local cf = assert(loadfile("src/tether/ui/confirm.lua"))()
+  local P = { yellow = function(s) return "Y" .. s end, rev = function(s) return "R" .. s end,
+    wrap = function(s) return { s } end, hint = function() return "HINT" end,
+    confirm_hint = {},
+    diff = function(body, path, w) return { "DIFF:" .. tostring(path) } end }
+  local c = { label = "patch f.lua", body = "--- a/f\n+++ b/f\n+new",
+    question = "Allow?", options = { "allow", "deny" },
+    detail = { id = "c1", name = "patch", args = { path = "f.lua" } } }
+  local rows = cf.menu_rows(c, 1, 80, P)
+  local seen = false
+  for _, r in ipairs(rows) do
+    if r:find("DIFF:f.lua", 1, true) then seen = true end
+  end
+  assert_true(seen, "T4.2c patch body renders through the diff hook")
+  -- without the hook (older callers) the plain wrap path still works
+  local P2 = { yellow = function(s) return "Y" .. s end, rev = function(s) return "R" .. s end,
+    wrap = function(s) return { s } end, hint = function() return "HINT" end,
+    confirm_hint = {} }
+  local rows2 = cf.menu_rows(c, 1, 80, P2)
+  local seen2 = false
+  for _, r in ipairs(rows2) do
+    if r:find("+new", 1, true) then seen2 = true end
+  end
+  assert_true(seen2, "T4.2c plain wrap fallback intact without the hook")
+  print("T4.2c confirm menu diff highlight: OK")
+end
+
 -- streaming-repaint-budget 3.1: wall-clock budgets for streaming repaints.
 -- Realistic multi-line model output (NOT single-line floods — those defeat
 -- line-based incrementality by construction, see ui.lua md_cached).

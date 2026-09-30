@@ -8,8 +8,9 @@
 --          tokens_used, tokens_max, tokens_in, tokens_out,
 --          model_name, cfg_provider, cfg_reasoning, cfg_summarize_at,
 --          cfg_providers, ws_tilde, home (footer/session cells),
---          login (nil or { buf, provider, flow }) (secret box),
---          catalog (provider catalog or nil — read fresh per paint).
+--        login (nil or { buf, provider, flow }) (secret box),
+--        catalog (provider catalog or nil — read fresh per paint),
+--        wrap_enabled (bool, nil-safe: nil means wrap on).
 --        L: layout rows (rule/input/palette/footer row indices + heights).
 --        P: painter/capability table built once by the facade:
 --          dim, muted, red, green, yellow, cyan, rev (role painters),
@@ -21,7 +22,7 @@
 --      runtime by tests/host, so a build-once snapshot would go stale).
 --      Pure cells (scroll_indicator, scroll_shift_seq, token_pct,
 --      token_usage, format_count, footer_stats, tail_cols, drop_cols,
---      take_cols, input_lines, cursor_line_col) take values only.
+--      take_cols, input_visual_rows, visual_cursor_row) take values only.
 -- OUT: renderers return an ORDERED rowmap: array of {row, text} applied by
 --      the facade via set_row (terminal I/O stays in the facade). Pure
 --      cells return values. No S, no globals, no mutation.
@@ -164,33 +165,72 @@ local function footer_stats(left, right, width, P)
 end
 M.footer_stats = footer_stats
 
-local function input_lines(input)
+-- Visual rows: every \n-separated buffer line cut into display-width
+-- segments (hard cut at character boundaries, never inside a char).
+-- A visual row is { text, from, line }: the segment text, its buffer byte
+-- offset, and the parent buffer line { text, from } the kill ops need for
+-- buffer-line bounds. wrapen=false keeps one row per buffer line (the
+-- legacy horizontal-scroll path in input_row_text). The input box height,
+-- caret mapping and cursor ops all count visual rows — that is what makes
+-- long input wrap and grow instead of scrolling sideways.
+local function char_next_pos(s, pos)
+    -- byte pos of the next character start; tolerant of invalid bytes
+    -- (a stray continuation steps one byte, never raises, never stalls).
+    local b = s:byte(pos)
+    if not b then return nil end
+    if b < 0x80 then return pos + 1 end
+    if b >= 0xC0 then
+        return pos + (b < 0xE0 and 2 or b < 0xF0 and 3 or 4)
+    end
+    return pos + 1
+end
+
+local function input_visual_rows(input, width, wrapen, P)
+    width = math.max(1, width or 1)
     local out = {}
     local pos = 1
     while true do
         local nl = input:find("\n", pos, true)
-        if not nl then
-            out[#out + 1] = { text = input:sub(pos), from = pos - 1 }
-            break
+        local ltext = input:sub(pos, (nl and nl - 1) or #input)
+        local lfrom = pos - 1
+        local parent = { text = ltext, from = lfrom }
+        if wrapen == false or P.vlen(ltext) <= width then
+            out[#out + 1] = { text = ltext, from = lfrom, line = parent }
+        else
+            local sp = 1
+            while sp <= #ltext do
+                local seg_w, cp = 0, sp
+                while cp <= #ltext do
+                    local np = char_next_pos(ltext, cp) or (#ltext + 1)
+                    local cw = P.vlen(ltext:sub(cp, np - 1))
+                    if seg_w + cw > width and cp > sp then break end
+                    seg_w, cp = seg_w + cw, np
+                end
+                -- cp always advanced: a single over-wide char overflows its
+                -- own row instead of stalling the loop.
+                out[#out + 1] = { text = ltext:sub(sp, cp - 1),
+                    from = lfrom + sp - 1, line = parent }
+                sp = cp
+            end
         end
-        out[#out + 1] = { text = input:sub(pos, nl - 1), from = pos - 1 }
+        if not nl then break end
         pos = nl + 1
     end
     return out
 end
-M.input_lines = input_lines
+M.input_visual_rows = input_visual_rows
 
-local function cursor_line_col(input, cursor)
-    local lines = input_lines(input)
-    for i, ln in ipairs(lines) do
-        if cursor >= ln.from and cursor <= ln.from + #ln.text then
-            return i, cursor - ln.from
+local function visual_cursor_row(input, cursor, width, wrapen, P)
+    local rows = input_visual_rows(input, width, wrapen, P)
+    for i, r in ipairs(rows) do
+        if cursor >= r.from and cursor <= r.from + #r.text then
+            return i, cursor - r.from
         end
     end
-    local last = lines[#lines]
-    return #lines, #last.text
+    local last = rows[#rows]
+    return #rows, #last.text
 end
-M.cursor_line_col = cursor_line_col
+M.visual_cursor_row = visual_cursor_row
 
 -- Spinner frame from wall-clock ms (TW2: time-based, not paint-count-based).
 local function spinner_glyph(slice, P)
@@ -451,19 +491,22 @@ local function render_input(slice, L, P)
         out[#out + 1] = { L.rule_bottom_row, slice.gutter .. rule_row(slice.content_width, nil, nil, P) }
         return out
     end
-    local lines = input_lines(slice.input)
+    local wrapen = slice.wrap_enabled ~= false
+    local lines = input_visual_rows(slice.input, slice.content_w, wrapen, P)
     local total = #lines
     local shown = L.input_h
     local start = 1
     if total > shown then
-        local li = cursor_line_col(slice.input, slice.cursor)
+        local li = visual_cursor_row(slice.input, slice.cursor,
+            slice.content_w, wrapen, P)
         start = li - math.floor(shown / 2)
         if start < 1 then start = 1 end
         if start > total - shown + 1 then start = total - shown + 1 end
     end
     local content_w = slice.content_w
     local side = slice.side
-    local cursor_li = cursor_line_col(slice.input, slice.cursor)
+    local cursor_li = visual_cursor_row(slice.input, slice.cursor,
+        slice.content_w, wrapen, P)
 
     -- pi-style-input-and-footer: the box. The top rule carries the turn's
     -- status and, like the bottom rule, names the input rows the window hides.

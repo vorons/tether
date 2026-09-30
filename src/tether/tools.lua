@@ -1,6 +1,20 @@
 -- tether M4: tools — read, list, glob, grep, write, patch, run
 local M = {}
 
+-- confirm_policy is pure (no deps back into tools): the outside-workspace
+-- exception the menu grants is consumed here, single use per grant.
+local confirm_policy = _G.confirm_policy
+    or (function()
+        local chunk = loadfile("src/tether/confirm_policy.lua")
+        return chunk and chunk()
+    end)()
+
+-- Granted exception for an outside target: consume it and run, else refuse
+-- with the text the agent's policy check matches on (spec tools).
+local function use_exception(cfg, abs)
+    return confirm_policy and confirm_policy.consume_exception(cfg, abs) or false
+end
+
 -- Design §7: workspace defaults to cwd; override comes from cfg.workspace
 -- (-w / config), resolved via realpath with symlinks expanded.
 local function current_workspace(cfg)
@@ -390,7 +404,7 @@ function M.write(args, cfg)
     local path, perr = require_path(args)
     if not path then return nil, perr end
     path = resolve(path, cfg)
-    if not within_workspace(path, cfg) then
+    if not within_workspace(path, cfg) and not use_exception(cfg, path) then
         return nil, "write outside workspace requires confirmation"
     end
     local content = args.content or ""
@@ -463,7 +477,7 @@ function M.patch(patch_str, cfg)
 
     for fname, fdata in pairs(file_patches) do
         local full_path = resolve(fname, c)
-        if not within_workspace(full_path, c) then
+        if not within_workspace(full_path, c) and not use_exception(c, full_path) then
             return nil, string.format("%s outside workspace requires confirmation", fname)
         end
         local f = io.open(full_path, "r")
@@ -534,7 +548,7 @@ function M.run(args, cfg)
     if timeout_val < 1 then timeout_val = 1 end
     timeout_val = math.floor(timeout_val)
     local cwd = args.cwd and resolve(args.cwd, c) or current_workspace(c)
-    if not within_workspace(cwd, c) then
+    if not within_workspace(cwd, c) and not use_exception(c, cwd) then
         return nil, "run outside workspace requires confirmation"
     end
 

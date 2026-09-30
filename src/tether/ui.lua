@@ -1258,10 +1258,6 @@ M.caret_glyph = caret_glyph
 -- ============================================================
 -- Layout
 -- ============================================================
-local function input_lines()
-    return M._regions.input_lines(S.input)
-end
-
 -- unified-slash-palette 2.1: palette window geometry lives in
 -- ui_palette.window (pure); tests drive it with S-derived args.
 -- (facade-proxy-removal 2.1: M._palette_window alias deleted.)
@@ -1281,6 +1277,17 @@ end
 
 local function box_padding(width)
     return M.editor_padding(width, S.cfg and S.cfg.ui and S.cfg.ui.editor_padding_x)
+end
+
+local function input_content_w()
+    -- same arithmetic as _dock_slice: the width visual rows wrap to.
+    local cw = M._content_width(S.w)
+    return math.max(1, cw - box_padding(cw) * 2)
+end
+
+local function input_vrows()
+    return M._regions.input_visual_rows(S.input, input_content_w(),
+        _wrap_enabled, painters())
 end
 
 -- ui-padding: the blank gutter left/right of every painted row. Whole columns,
@@ -1313,7 +1320,7 @@ end
 -- removed per user request; the math stays for tests and potential reuse.
 
 local function layout()
-    local total = #input_lines()
+    local total = #input_vrows()
     local max_in = (S.cfg and S.cfg.ui and S.cfg.ui.input_max_lines) or 8
     local shown_in = math.min(total, max_in)
     if shown_in < 1 then shown_in = 1 end
@@ -1773,11 +1780,12 @@ local function input_clear()
 end
 
 local function cursor_line_col()
-    return M._regions.cursor_line_col(S.input, S.cursor)
+    return M._regions.visual_cursor_row(S.input, S.cursor,
+        input_content_w(), _wrap_enabled, painters())
 end
 
 local function set_cursor(li, col)
-    local lines = input_lines()
+    local lines = input_vrows()
     if li < 1 then li = 1 end
     if li > #lines then li = #lines end
     local ln = lines[li]
@@ -1803,7 +1811,7 @@ end
 
 local function move_cursor_down()
     local li, col = cursor_line_col()
-    if li >= #input_lines() then return false end
+    if li >= #input_vrows() then return false end
     set_cursor(li + 1, col)
     return true
 end
@@ -1815,39 +1823,47 @@ end
 
 local function move_line_end()
     local li = cursor_line_col()
-    local lines = input_lines()
+    local lines = input_vrows()
     set_cursor(li, #lines[li].text)
 end
 
 local function kill_to_start()
     local li, col = cursor_line_col()
-    local lines = input_lines()
+    local lines = input_vrows()
     local ln = lines[li]
-    S.input = S.input:sub(1, ln.from) .. ln.text:sub(col + 1) ..
-              S.input:sub(ln.from + #ln.text + 1)
-    S.cursor = ln.from
+    -- the visual-row col is segment-relative; kills span the parent
+    -- buffer line, so rebase onto it.
+    local lfrom, ltext = ln.line.from, ln.line.text
+    local col_in_line = col + (ln.from - lfrom)
+    S.input = S.input:sub(1, lfrom) .. ltext:sub(col_in_line + 1) ..
+              S.input:sub(lfrom + #ltext + 1)
+    S.cursor = lfrom
     palette_sync()
 end
 
 local function kill_to_end()
     local li, col = cursor_line_col()
-    local lines = input_lines()
+    local lines = input_vrows()
     local ln = lines[li]
-    S.input = S.input:sub(1, ln.from + col)
-    S.cursor = ln.from + col
+    local lfrom = ln.line.from
+    local col_in_line = col + (ln.from - lfrom)
+    S.input = S.input:sub(1, lfrom + col_in_line)
+    S.cursor = lfrom + col_in_line
     palette_sync()
 end
 
 local function kill_word_before()
     local li, col = cursor_line_col()
-    local lines = input_lines()
+    local lines = input_vrows()
     local ln = lines[li]
-    if col == 0 then return end
-    local head = ln.text:sub(1, col)
+    local lfrom, ltext = ln.line.from, ln.line.text
+    local col_in_line = col + (ln.from - lfrom)
+    if col_in_line == 0 then return end
+    local head = ltext:sub(1, col_in_line)
     local new_head = head:gsub("%s*%S+%s*$", "")
-    S.input = S.input:sub(1, ln.from) .. new_head ..
-              ln.text:sub(col + 1) .. S.input:sub(ln.from + #ln.text + 1)
-    S.cursor = ln.from + #new_head
+    S.input = S.input:sub(1, lfrom) .. new_head ..
+              ltext:sub(col_in_line + 1) .. S.input:sub(lfrom + #ltext + 1)
+    S.cursor = lfrom + #new_head
     palette_sync()
 end
 
@@ -2455,6 +2471,11 @@ local function render_entry(e, width, prev_role)
             yellow = P.yellow, rev = P.rev, wrap = P.wrap,
             hint = P.hint,
             confirm_hint = M.CONFIRM_HINT,
+            -- patch menu bodies reuse the tool-result diff renderer
+            -- (highlighted); menu_rows falls back to plain wrap without it.
+            diff = function(body, path, w)
+                return render_tool_body("patch", { body = body, path = path }, w)
+            end,
         })
     else
         local role = e.role or "system"
@@ -2984,6 +3005,8 @@ function M._dock_slice(L)
         login = S.login_secret and {
             buf = S.login_secret.buf, provider = S.login_provider, flow = S.login_flow,
         } or nil,
+        -- input soft-wrap follows the wrap toggle (nil-safe: wrap on).
+        wrap_enabled = _wrap_enabled,
         -- read fresh per paint: tests/host can re-point the catalog at runtime.
         catalog = M._provider_catalog,
     }
@@ -3553,6 +3576,30 @@ local function handle_agent_event(ev)
             if name == "run" and args.cwd and (args.command or "") ~= "" then
                 label = label .. "  (cwd=" .. args.cwd .. ")"
             end
+            -- outside-workspace targets show the resolved absolute path with
+            -- an explicit marker: the raw model text ("dir/file") never says
+            -- which tree it lands in. Inside-workspace keeps the short form.
+            do
+                local tools = _G.tools
+                local target = nil
+                if name == "write" or name == "patch" then target = args.path
+                elseif name == "run" then target = args.cwd
+                end
+                if tools and tools._resolve and tools._within
+                    and type(target) == "string" and target ~= "" then
+                    local ok, abs = pcall(tools._resolve, target, S.cfg)
+                    if ok and type(abs) == "string" and abs ~= "" then
+                        local ok2, inside = pcall(tools._within, abs, S.cfg)
+                        if ok2 and not inside then
+                            if name == "run" then
+                                label = label .. "  (outside workspace)"
+                            else
+                                label = name .. " " .. abs .. " (outside workspace)"
+                            end
+                        end
+                    end
+                end
+            end
             local body = ""
             if name == "patch" and args.patch then
                 body = args.patch
@@ -3845,7 +3892,7 @@ function M._complete_deps()
             or (pcall(require, "tools") and package.loaded.tools)
             or nil,
         sync = palette_sync,
-        lines = function() return input_lines() end,
+        lines = function() return input_vrows() end,
     }
 end
 

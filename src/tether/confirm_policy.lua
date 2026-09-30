@@ -65,6 +65,42 @@ function M.approve_key(tool_name, args)
     return tool_name .. ":" .. M.path_of(args)
 end
 
+-- Outside-workspace exception: the confirmation menu grants it, the tools
+-- layer consumes it. Keyed by resolved absolute target (not by args), so
+-- both sides agree even when the tool receives a reshaped payload
+-- (tools.patch takes the diff string, not the args table). Single use =
+-- one-shot "allow" stays one-shot; the dispatch sites re-grant per run,
+-- so session/auto-approve stick without extra state.
+function M.exception_target(tool_name, args, cfg)
+    local tools = _G.tools
+    if not tools or type(cfg) ~= "table" then return nil end
+    args = (type(args) == "table" and args) or {}
+    local target = nil
+    if tool_name == "write" then target = args.path
+    elseif tool_name == "patch" then target = args.path or M.patch_target_path(args)
+    elseif tool_name == "run" then target = args.cwd
+    end
+    if type(target) ~= "string" or target == "" then return nil end
+    local ok, abs = pcall(tools._resolve, target, cfg)
+    if not ok or type(abs) ~= "string" or abs == "" then return nil end
+    local ok2, inside = pcall(tools._within, abs, cfg)
+    if not ok2 or inside then return nil end
+    return abs
+end
+
+function M.grant_exception(cfg, abs)
+    if type(cfg) ~= "table" or type(abs) ~= "string" or abs == "" then return end
+    cfg._approved_paths = cfg._approved_paths or {}
+    cfg._approved_paths[abs] = true
+end
+
+function M.consume_exception(cfg, abs)
+    if type(cfg) ~= "table" or type(cfg._approved_paths) ~= "table" then return false end
+    if cfg._approved_paths[abs] ~= true then return false end
+    cfg._approved_paths[abs] = nil
+    return true
+end
+
 function M.check_auto_approve(tool_name, args, cfg)
     if not cfg or not cfg.auto_approve then return false end
     local key = M.approve_key(tool_name, args)
