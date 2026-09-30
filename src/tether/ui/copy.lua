@@ -26,6 +26,7 @@ M.splash = {
     narrow_title = " Tether",
     context_header = "[Context]",
     skills_header = "[Skills]",
+    extensions_header = "[Extensions]",
 }
 
 -- Out-of-workspace confirmation menu.

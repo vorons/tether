@@ -925,6 +925,57 @@ do
   print("T1c splash Context names both home files: OK")
 end
 
+-- splash-extensions: [Extensions] lists loaded extensions after [Skills].
+do
+  local ui = assert((function() return loadfile("src/tether/ui.lua")() end)())
+  local function plain(rows)
+    return table.concat(rows, "\n"):gsub("\27%[[0-9;]*m", "")
+  end
+  -- 2.3: extension-less output is byte-identical to the field-less call.
+  local a = ui._splash_rows({ version = "v9.9-test",
+    agents = { "~/.tether/AGENTS.md" }, skills = { "review" } }, 80, 1)
+  local b = ui._splash_rows({ version = "v9.9-test",
+    agents = { "~/.tether/AGENTS.md" }, skills = { "review" },
+    extensions = {} }, 80, 1)
+  assert_eq(table.concat(a, "\n"), table.concat(b, "\n"),
+    "T1e empty extensions render byte-identical")
+  -- 2.1: hidden when empty, ordered after [Skills] with comma-joined names.
+  local p0 = plain(a)
+  assert_true(p0:find("[Extensions]", 1, true) == nil,
+    "T1e empty Extensions section hidden")
+  local p1 = plain(ui._splash_rows({ version = "v9.9-test",
+    agents = { "~/.tether/AGENTS.md" }, skills = { "review" },
+    extensions = { "changes", "jira" } }, 80, 1))
+  local sk_at = p1:find("[Skills]", 1, true)
+  local ext_at = p1:find("[Extensions]", 1, true)
+  assert_true(sk_at ~= nil and ext_at ~= nil and sk_at < ext_at,
+    "T1e Extensions header renders after Skills")
+  assert_true(p1:find("changes, jira", 1, true) ~= nil,
+    "T1e Extensions value joins names like Skills")
+  print("T1e splash Extensions section: OK")
+end
+
+-- splash-extensions 2.2: only loaded extensions reach the splash — a
+-- disabled/broken extension never lands in reg.exts, so collection names
+-- just the loaded one. Drives the real collector with a stubbed registry.
+do
+  local prev_ext = rawget(_G, "extensions")
+  _G.extensions = { get = function()
+    return { exts = { { name = "changes", def = {} } } }
+  end }
+  local uimod, S = run_ui_with({ 17 }, {}, {})
+  _G.extensions = prev_ext
+  local res = (S and S.splash_resources) or {}
+  assert_eq(#(res.extensions or {}), 1, "T1f one loaded extension collected")
+  assert_eq(res.extensions[1], "changes", "T1f collected name is the loaded one")
+  local blob = table.concat(uimod._render_all(80), "\n"):gsub("\27%[[0-9;]*m", "")
+  assert_true(blob:find("[Extensions]", 1, true) ~= nil,
+    "T1f splash shows Extensions for the loaded ext")
+  assert_true(blob:find("changes", 1, true) ~= nil,
+    "T1f splash names the loaded ext")
+  print("T1f splash collects only loaded extensions: OK")
+end
+
 
 if failed > 0 then
     os.exit(1)

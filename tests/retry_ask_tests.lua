@@ -1189,6 +1189,17 @@ do
   assert_eq(commands.resolve_slash("deploy", cmds, skills), "skill", "T3.1b skill case-insensitive")
   assert_eq(commands.resolve_slash("nope", cmds, skills), "unknown", "T3.1b unknown keeps command path")
   assert_eq(commands.resolve_slash("nope", cmds, nil), "unknown", "T3.1b nil skills")
+  -- prompts-as-commands: 4-arg routing, commands > prompts > skills.
+  local prompts = { { name = "review", prompt = true }, { name = "Deploy", prompt = true } }
+  assert_eq(commands.resolve_slash("review", cmds, prompts, skills), "prompt", "T3.1c prompt expands")
+  assert_eq(commands.resolve_slash("DEPLOY", cmds, prompts, skills), "prompt", "T3.1c prompt beats skill, case-insensitive")
+  assert_eq(commands.resolve_slash("clear", cmds, prompts, skills), "command", "T3.1c command beats prompt")
+  assert_eq(commands.resolve_slash("nope", cmds, prompts, skills), "unknown", "T3.1c unknown with prompts")
+  assert_eq(commands.resolve_slash("nope", cmds, nil, nil), "unknown", "T3.1c nil prompts and skills")
+  -- legacy 3-arg call: a prompts-shaped list still routes as prompt,
+  -- a plain skill list still routes as skill.
+  assert_eq(commands.resolve_slash("review", cmds, prompts), "prompt", "T3.1c legacy 3-arg prompts list")
+  assert_eq(commands.resolve_slash("review", cmds, skills), "skill", "T3.1c legacy 3-arg skills list")
   print("T3.1b resolve_slash routing: OK")
 end
 

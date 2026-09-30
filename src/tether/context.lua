@@ -115,6 +115,91 @@ local function default_skill_dirs(workspace, home)
     return dirs
 end
 
+-- Prompt file discovery (prompts-as-commands): same 4-dir order as skills,
+-- but flat *.md files, not SKILL.md subdirectories. No command-name
+-- filtering here: the caller (ui) drops names colliding with its command
+-- set so palette and submit agree on one filter point.
+local function default_prompt_dirs(workspace, home)
+    local dirs = {}
+    local function add(d)
+        if d ~= nil then dirs[#dirs + 1] = d end
+    end
+    add(home and (home .. "/.tether/prompts"))
+    add(workspace and (workspace .. "/.tether/prompts"))
+    add(home and (home .. "/.agents/prompts"))
+    add(workspace and (workspace .. "/.agents/prompts"))
+    return dirs
+end
+
+-- Top-level *.md files of `dir`, sorted; nil when not listable.
+local function ls_markdown_files(dir)
+    if not tether or not tether.readdir then return nil end
+    local names = tether.readdir(dir)
+    if not names then return nil end
+    local entries = {}
+    for _, name in ipairs(names) do
+        if name:find("/", 1, true) == nil and #name > 3
+            and name:sub(-3) == ".md" then
+            entries[#entries + 1] = name
+        end
+    end
+    table.sort(entries)
+    return entries
+end
+
+-- Strip a leading ---...--- frontmatter block, returning the body.
+-- No closing fence: the whole text is the body.
+function M.split_frontmatter(text)
+    if type(text) ~= "string" then return "" end
+    local s, e = text:find("^%-%-%-\n.-\n%-%-%-[ \t]*\n?")
+    if s then return text:sub(e + 1) end
+    return text
+end
+
+function M.discover_prompts(cfg, workspace)
+    local home = os.getenv("HOME") or ""
+    local dirs = default_prompt_dirs(workspace, home)
+
+    local seen = {}
+    local prompts = {}
+    for _, dir in ipairs(dirs) do
+        local entries = ls_markdown_files(dir)
+        if entries then
+            for _, file in ipairs(entries) do
+                local name = file:sub(1, -4)
+                local key = name:lower()
+                if not seen[key] then
+                    seen[key] = true
+                    local path = dir .. "/" .. file
+                    local text = read_file(path) or ""
+                    -- name is always the basename (spec); only the
+                    -- description is parsed from frontmatter.
+                    local fm = M.parse_skill_frontmatter(text, name)
+                    prompts[#prompts + 1] = {
+                        name = name,
+                        description = fm.description,
+                        path = path,
+                    }
+                end
+            end
+        end
+    end
+    return prompts
+end
+
+-- Read a prompt file into its submit-ready body: frontmatter stripped,
+-- 16 KiB UTF-8-safe cap with truncation marker (same idiom as AGENTS.md).
+-- Returns body, or nil when the file cannot be read.
+function M.read_prompt_body(path)
+    local data = read_file(path)
+    if data == nil then return nil end
+    local body = M.split_frontmatter(data)
+    if #body > AGENTS_CAP_BYTES then
+        body = common.utf8_prefix(body, AGENTS_CAP_BYTES) .. "…(truncated)"
+    end
+    return body
+end
+
 function M.discover_skills(cfg, workspace)
     local cfg = cfg or {}
     local home = os.getenv("HOME") or ""
@@ -306,6 +391,7 @@ end
 -- Exposed for tests and for agent.lua to keep the built-in prompt in one place.
 M.builtin_prompt = BUILTIN_PROMPT
 M.default_skill_dirs = default_skill_dirs
+M.default_prompt_dirs = default_prompt_dirs
 M.AGENTS_CAP_BYTES = AGENTS_CAP_BYTES
 
 return M

@@ -49,12 +49,14 @@ skips itself when the CLI is absent.
 
 ## Install
 
-There is no `make install` target; just build and copy the binary somewhere on
-your `PATH`:
-
 ```sh
-make && sudo cp tether /usr/local/bin/
+sudo make install                    # /usr/local/bin/tether
+make install PREFIX=$HOME/.local     # no root; ~/.local/bin/tether
+make install DESTDIR=$PWD/pkg        # stage into a tree, don't touch the system
 ```
+
+`make install` builds the binary first (so `make release && make install`
+installs the optimized one), then copies it to `$(DESTDIR)$(PREFIX)/bin`.
 
 The binary is self-contained — `ldd tether` shows only `libc` and `libm` — so it
 also runs fine straight out of the build directory or from a USB stick. Point
