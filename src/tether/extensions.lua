@@ -342,6 +342,36 @@ local function ctx_error(err)
     return s
 end
 
+-- tui-stderr-guard: the shared session-log writer. ctx.log is info-level
+-- and file-only in every mode (never stderr); the ui/app sinks append to
+-- the same file, so the destination — not the function — is the contract.
+-- cfg._log_dir is the internal test seam (same rule as ui.lua).
+-- session_log_dir is canonical for all three call sites (ui sink, app
+-- early sink, here): they delegate to it instead of reimplementing the
+-- rule, so a path change lands in exactly one place.
+function M.session_log_dir(cfg)
+    if type(cfg) == "table" and type(cfg._log_dir) == "string"
+        and cfg._log_dir ~= "" then
+        return cfg._log_dir
+    end
+    return (os.getenv("HOME") or "/tmp") .. "/.tether/log"
+end
+function M.session_log_path(cfg)
+    return M.session_log_dir(cfg) .. "/tether.log"
+end
+function M.session_log(cfg, msg)
+    local line = tostring(msg):gsub("\n$", "")
+    pcall(function()
+        local th = rawget(_G, "tether")
+        if th and th.mkdirp then
+            local dir = M.session_log_path(cfg):match("^(.*)/[^/]*$")
+            if dir then th.mkdirp(dir) end
+        end
+        local fh = io.open(M.session_log_path(cfg), "a")
+        if fh then fh:write(line .. "\n") fh:close() end
+    end)
+end
+
 function M.ctx_for(cfg, ident)
     ident = ident or {}
     local tools = _G.tools
@@ -356,7 +386,7 @@ function M.ctx_for(cfg, ident)
     end
     local ctx = { workspace = ws, config = cfg }
     function ctx.log(msg)
-        io.stderr:write("tether: extension: " .. tostring(msg) .. "\n")
+        M.session_log(cfg, msg)
     end
     function ctx.read(path)
         if not tools then return nil, "tools unavailable" end

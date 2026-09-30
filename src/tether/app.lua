@@ -46,6 +46,63 @@ function M.fire_session_start(cfg)
     pcall(ext.fire_start, cfg, type(cfg) == "table" and cfg.workspace or nil)
 end
 
+-- tui-stderr-guard: pre-TUI stderr capture. Installed on the interactive
+-- path after provider/config fatals (those must keep the terminal — the
+-- TUI never starts there) and before boot_extensions, so load warnings and
+-- the resume fire_start land in the session log instead of scrollback.
+-- Extension lines are additionally collected into cfg._startup_warnings
+-- for the TUI error banner; everything else is file-only. The sink opens
+-- and closes the file per line (few lines ever flow here), so restoring is
+-- just a global swap — ui.run installs its own persistent sink on top.
+local early_saved_stderr = nil
+-- Canonical path lives in extensions.session_log_dir (single source of
+-- truth); same delegate-then-fallback shape as ui.lua.
+local function early_log_path(cfg)
+    local ext = ext_mod()
+    if ext and ext.session_log_dir then
+        local ok, dir = pcall(ext.session_log_dir, cfg)
+        if ok and type(dir) == "string" and dir ~= "" then return dir end
+    end
+    if type(cfg) == "table" and type(cfg._log_dir) == "string"
+        and cfg._log_dir ~= "" then
+        return cfg._log_dir
+    end
+    return (os.getenv("HOME") or "/tmp") .. "/.tether/log"
+end
+function M._early_stderr_sink(cfg)
+    if early_saved_stderr ~= nil then return end
+    local dir = early_log_path(cfg)
+    pcall(function()
+        local th = rawget(_G, "tether")
+        if th and th.mkdirp then th.mkdirp(dir) end
+    end)
+    local path = dir .. "/tether.log"
+    if type(cfg) == "table" and type(cfg._startup_warnings) ~= "table" then
+        cfg._startup_warnings = {}
+    end
+    early_saved_stderr = io.stderr
+    io.stderr = { write = function(_, ...)
+        local parts = {}
+        for i = 1, select("#", ...) do parts[#parts + 1] = tostring(select(i, ...)) end
+        local line = table.concat(parts):gsub("\n$", "")
+        pcall(function()
+            local fh = io.open(path, "a")
+            if fh then fh:write(line .. "\n") fh:close() end
+        end)
+        if type(cfg) == "table" and cfg._startup_warnings
+            and line:find("^tether: extension") == 1 then
+            cfg._startup_warnings[#cfg._startup_warnings + 1] = line
+        end
+        return io.stderr
+    end }
+end
+function M._restore_early_stderr_sink()
+    if early_saved_stderr ~= nil then
+        io.stderr = early_saved_stderr
+        early_saved_stderr = nil
+    end
+end
+
 local function parse_args()
     local args = arg or {}
     local opts = {
@@ -393,6 +450,9 @@ local function run_inner()
     if not cfg.workspace then cfg.workspace = tether.getcwd() end
     local rp = tether.realpath(cfg.workspace)
     if rp then cfg.workspace = rp end
+    -- tui-stderr-guard: from here until the TUI owns the screen, pre-TUI
+    -- diagnostics go to the session log (banner-bound ones collected).
+    M._early_stderr_sink(cfg)
     -- extension-system: registry (tools/prompt/hooks) + slash commands,
     -- composed before the resume seed and the first turn.
     M.boot_extensions(cfg)
@@ -456,6 +516,17 @@ end
 function M.run()
     local ok, err = pcall(run_inner)
     if not ok then
+        -- tui-stderr-guard: a raise inside the guarded window must not
+        -- swallow the fatal into the log — hand the terminal back first.
+        -- Every restore here is idempotent and safe with no guard active.
+        pcall(function()
+            if type(ui) == "table" and ui._stderr_guard_restore then
+                ui._stderr_guard_restore()
+            end
+        end)
+        pcall(M._restore_early_stderr_sink)
+        local th = rawget(_G, "tether")
+        if th and th.stderr_restore then pcall(th.stderr_restore) end
         io.stderr:write("tether: " .. tostring(err) .. "\n")
         os.exit(1)
     end

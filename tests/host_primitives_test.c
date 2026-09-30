@@ -2281,6 +2281,52 @@ static void test_oauth_wait(lua_State *L)
     }
 }
 
+/* --- tui-stderr-guard: fd-2 redirect for the TUI window ------------------- */
+static void test_stderr_redirect(lua_State *L)
+{
+    char path[256];
+    snprintf(path, sizeof(path), "/tmp/tether_stderr_test_%d.log", (int)getpid());
+    unlink(path);
+    if (call1(L, "stderr_to_file", path)) {
+        check(lua_toboolean(L, -1) == 1,
+              "tether.stderr_to_file reports success");
+        lua_pop(L, 1);
+    }
+    fprintf(stderr, "c-probe-line\n");
+    fflush(stderr);
+    lua_getglobal(L, "tether");
+    lua_getfield(L, -1, "stderr_restore");
+    lua_remove(L, -2);
+    if (lua_pcall(L, 0, 1, 0) == LUA_OK) {
+        check(lua_toboolean(L, -1) == 1,
+              "tether.stderr_restore reports success");
+        lua_pop(L, 1);
+    } else {
+        report_lua_error(L, "tether.stderr_restore");
+    }
+    lua_getglobal(L, "tether");
+    lua_getfield(L, -1, "stderr_restore");
+    lua_remove(L, -2);
+    if (lua_pcall(L, 0, 1, 0) == LUA_OK) {
+        check(lua_toboolean(L, -1) == 1,
+              "tether.stderr_restore is idempotent");
+        lua_pop(L, 1);
+    } else {
+        report_lua_error(L, "tether.stderr_restore (second)");
+    }
+    FILE *f = fopen(path, "r");
+    check(f != NULL, "redirect target file exists");
+    if (f != NULL) {
+        char buf[1024];
+        size_t n = fread(buf, 1, sizeof(buf) - 1, f);
+        buf[n] = '\0';
+        fclose(f);
+        check(strstr(buf, "c-probe-line") != NULL,
+              "C fprintf during the window lands in the file");
+    }
+    unlink(path);
+}
+
 int main(void)
 {
     char dir[256], nested[512], f1[512], f2[512];
@@ -2427,6 +2473,7 @@ int main(void)
     test_interrupt_aborts_transfer(L);
     test_exec_bg_argv(L);
     test_oauth_wait(L);
+    test_stderr_redirect(L);
 
     lua_close(L);
 

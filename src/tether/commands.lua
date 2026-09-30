@@ -904,7 +904,22 @@ local function ext_ctx(bag, ename)
     end
     local ctx = { workspace = bag and bag.workspace or nil, config = cfg }
     function ctx.log(msg)
-        io.stderr:write("tether: extension: " .. tostring(msg) .. "\n")
+        -- tui-stderr-guard: degraded path (no extensions module at all) —
+        -- still file-only, never stderr. Best effort, same destination.
+        if ext and ext.session_log then
+            ext.session_log(cfg, msg)
+        else
+            pcall(function()
+                local dir = (os.getenv("HOME") or "/tmp") .. "/.tether/log"
+                local th = rawget(_G, "tether")
+                if th and th.mkdirp then th.mkdirp(dir) end
+                local fh = io.open(dir .. "/tether.log", "a")
+                if fh then
+                    fh:write(tostring(msg):gsub("\n$", "") .. "\n")
+                    fh:close()
+                end
+            end)
+        end
     end
     return ctx
 end

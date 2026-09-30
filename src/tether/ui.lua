@@ -1009,13 +1009,93 @@ local function queue_push(q, text)
     return true
 end
 M._queue_push = queue_push
+-- tui-stderr-guard: the session log is always open during the TUI window
+-- (not only under --debug) and owns every diagnostic that must not reach
+-- the terminal. debug_log() stays debug-gated; session_log() always writes.
+-- cfg._log_dir is an internal test seam (the Makefile already isolates
+-- HOME per test file, but harness tests point the log at a tmp dir).
 local debug_log_fh = nil
+-- Canonical path lives in extensions.session_log_dir (single source of
+-- truth); this delegates to it and only falls back to the inline rule
+-- when the module is unreachable (dev without src tree, never the binary).
+local function ext_session_log_dir(cfg)
+    local ext = rawget(_G, "extensions")
+    if not (ext and ext.session_log_dir) then
+        local chunk = loadfile("src/tether/extensions.lua")
+        ext = chunk and chunk() or nil
+    end
+    if ext and ext.session_log_dir then
+        local ok, dir = pcall(ext.session_log_dir, cfg)
+        if ok and type(dir) == "string" and dir ~= "" then return dir end
+    end
+    return nil
+end
+local function session_log_dir(cfg)
+    return ext_session_log_dir(cfg)
+        or ((type(cfg) == "table" and type(cfg._log_dir) == "string"
+                and cfg._log_dir ~= "") and cfg._log_dir
+            or (os.getenv("HOME") or "/tmp") .. "/.tether/log")
+end
+local function session_log_write(msg)
+    if not debug_log_fh then return end
+    -- flush every line: without it the file stays empty until exit (and a
+    -- kill/crash loses everything), so tailing tether.log shows nothing.
+    pcall(function()
+        debug_log_fh:write(tostring(msg) .. "\n")
+        debug_log_fh:flush()
+    end)
+end
+local function init_session_log(cfg)
+    if debug_log_fh ~= nil then return end
+    local dir = session_log_dir(cfg)
+    pcall(function()
+        local th = rawget(_G, "tether")
+        if th and th.mkdirp then th.mkdirp(dir) end
+    end)
+    local ok, fh = pcall(io.open, dir .. "/tether.log", "a")
+    if ok and fh then
+        debug_log_fh = fh
+        session_log_write("[" .. os.date("%H:%M:%S") .. "] session log started")
+    end
+end
+-- Captured io.stderr writes arrive with their "\n" already attached, so the
+-- sink strips one trailing newline to keep single lines single.
+local saved_stderr = nil
+local function stderr_sink_write(self, ...)
+    for i = 1, select("#", ...) do
+        local s = tostring(select(i, ...)):gsub("\n$", "")
+        session_log_write(s)
+        local cap = M._debug_capture
+        if cap then cap[#cap + 1] = s end
+    end
+    return self
+end
+function M._stderr_guard_install(cfg)
+    init_session_log(cfg)
+    if saved_stderr == nil then
+        saved_stderr = io.stderr
+        io.stderr = { write = stderr_sink_write }
+    end
+    local th = rawget(_G, "tether")
+    if th and th.stderr_to_file then
+        pcall(th.stderr_to_file, session_log_dir(cfg) .. "/tether.log")
+    end
+end
+function M._stderr_guard_restore()
+    local th = rawget(_G, "tether")
+    if th and th.stderr_restore then
+        pcall(th.stderr_restore)
+    end
+    if saved_stderr ~= nil then
+        io.stderr = saved_stderr
+        saved_stderr = nil
+    end
+end
 M._debug_capture = nil -- test seam: append every logged line when set
 local function debug_log(msg)
-    if S and S.debug then
-        local cap = M._debug_capture
-        if cap then cap[#cap + 1] = msg end
-    end
+    if not (S and S.debug) then return end
+    local cap = M._debug_capture
+    if cap then cap[#cap + 1] = msg end
     if not debug_log_fh then return end
     -- flush every line: without it the file stays empty until exit (and a
     -- kill/crash loses everything), so tailing tether.log shows nothing.
@@ -1024,16 +1104,9 @@ local function debug_log(msg)
         debug_log_fh:flush()
     end)
 end
+-- Superseded by init_session_log (the log is always open now); kept so
+-- existing callers keep compiling while the cutover lands.
 local function init_debug_log()
-    if S and S.debug and debug_log_fh == nil then
-        local dir = (os.getenv("HOME") or "/tmp") .. "/.tether/log"
-        pcall(function() tether.mkdirp(dir) end)
-        local ok, fh = pcall(io.open, dir .. "/tether.log", "a")
-        if ok and fh then
-            debug_log_fh = fh
-            debug_log("debug log started")
-        end
-    end
 end
 
 local function new_state()
@@ -4960,7 +5033,16 @@ function M.run(app_cfg)
         S.thinking_visible = M.initial_thinking_visible(S.cfg.ui.thinking)
     end
     S.started_at = os.date("%Y-%m-%d %H:%M:%S")
-    init_debug_log()
+    -- tui-stderr-guard: from here until teardown every io.stderr write
+    -- (and, once task 1.2 lands, every C fprintf) lands in the session log.
+    M._stderr_guard_install(S.cfg)
+    debug_log("debug log started")
+    -- tui-stderr-guard: pre-TUI warnings collected by the app sink surface
+    -- here; the full texts are already in the session log.
+    if type(S.cfg._startup_warnings) == "table"
+        and #S.cfg._startup_warnings > 0 then
+        S.error_banner = table.concat(S.cfg._startup_warnings, " | ")
+    end
 
     -- splash-colors: version and startup resources back the splash block;
     -- /clear and /new re-render it from these, so they stay fixed here.
@@ -5236,6 +5318,8 @@ function M.run(app_cfg)
         pcall(function() debug_log_fh:close() end)
         debug_log_fh = nil
     end
+    -- tui-stderr-guard: hand the terminal stderr back before leaving.
+    M._stderr_guard_restore()
     if tether.set_tick_hook then tether.set_tick_hook(nil) end
     -- Restore the keyboard protocol while the alternate screen (and with it
     -- kitty's own flag stack) is still current, then leave alt-screen.

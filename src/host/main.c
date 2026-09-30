@@ -787,6 +787,59 @@ static int l_krep_search(lua_State *L)
     return 1;
 }
 
+/* --- tui-stderr-guard: fd-2 redirect for the TUI window --------------------
+   The TUI owns the alternate screen; any C-level fprintf(stderr) in that
+   window would draw over it or pollute the scrollback (Lua io.stderr writes
+   are captured separately by the ui sink). stderr_to_file appends fd 2 to
+   the session log; stderr_restore hands the terminal back. Restore is
+   idempotent and safe to call with no redirect active (error unwind calls
+   it unconditionally). Signal exits need no restore: dup2 is per-process
+   and _exit drops the table with the process. */
+static int saved_stderr_fd = -1;
+
+static int l_stderr_to_file(lua_State *L)
+{
+    const char *path = luaL_checkstring(L, 1);
+    fflush(stderr);
+    if (saved_stderr_fd < 0) {
+        saved_stderr_fd = dup(STDERR_FILENO);
+        if (saved_stderr_fd < 0) {
+            lua_pushnil(L);
+            lua_pushstring(L, strerror(errno));
+            return 2;
+        }
+    }
+    FILE *f = fopen(path, "a");
+    if (f == NULL) {
+        lua_pushnil(L);
+        lua_pushstring(L, strerror(errno));
+        return 2;
+    }
+    int fd = fileno(f);
+    int rc = dup2(fd, STDERR_FILENO);
+    int e = errno;
+    fclose(f);
+    if (rc < 0) {
+        lua_pushnil(L);
+        lua_pushstring(L, strerror(e));
+        return 2;
+    }
+    lua_pushboolean(L, 1);
+    return 1;
+}
+
+static int l_stderr_restore(lua_State *L)
+{
+    if (saved_stderr_fd >= 0) {
+        fflush(stderr);
+        dup2(saved_stderr_fd, STDERR_FILENO);
+        close(saved_stderr_fd);
+        saved_stderr_fd = -1;
+    }
+    lua_pushboolean(L, 1);
+    return 1;
+}
+
 /* --- in-process HTTP(S) via vendor'd libcurl + mbedTLS + zlib --- */
 
 /* RS256 (PKCS#1 v1.5 over SHA-256) with a PEM RSA private key, via the
@@ -3147,6 +3200,8 @@ static luaL_Reg tether_api[] = {
     {"is_tty",      l_tty},
     {"get_terminal_size", l_get_terminal_size},
     {"mkdirp",      l_mkdirp},
+    {"stderr_to_file", l_stderr_to_file},
+    {"stderr_restore", l_stderr_restore},
     {"fchmod",      l_fchmod},
     {"readdir",     l_readdir},
     {"stat",        l_stat},
