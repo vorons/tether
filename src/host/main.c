@@ -72,6 +72,25 @@ static int pending_take(unsigned char *out)
     return 1;
 }
 
+/* Queue one ordinary byte. audit H2: the old guard compared the *unread*
+   count against the whole capacity, so once the reader had consumed anything
+   a full queue kept appending past g_pending. Compact first (slide the unread
+   tail to the front), append only if room then remains, and drop the byte
+   otherwise — a paste longer than the queue loses its tail, never memory. */
+static void pending_put(unsigned char byte)
+{
+    if (g_pending_len == PENDING_CAP) {
+        if (g_pending_pos > 0) {
+            size_t unread = g_pending_len - g_pending_pos;
+            memmove(g_pending, g_pending + g_pending_pos, unread);
+            g_pending_len = unread;
+            g_pending_pos = 0;
+        }
+        if (g_pending_len == PENDING_CAP) return;
+    }
+    g_pending[g_pending_len++] = byte;
+}
+
 /* Non-blocking: queue every available byte, remember a Ctrl+C. Returns non-zero
    when an interrupt is pending. Never blocks and never delays a caller. */
 static int poll_interrupt(void)
@@ -101,8 +120,8 @@ static int poll_interrupt(void)
                    consumed like the interrupt's: the flag is the signal. */
                 g_quit = 1;
                 g_interrupt = 1;
-            } else if (g_pending_len - g_pending_pos < PENDING_CAP) {
-                g_pending[g_pending_len++] = buf[i];
+            } else {
+                pending_put(buf[i]);
             }
         }
     }

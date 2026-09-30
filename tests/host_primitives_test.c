@@ -1197,6 +1197,96 @@ static void test_interrupt_watch(lua_State *L)
     }
 }
 
+/* audit H2: the queue that holds keystrokes typed while a turn blocks is
+ * bounded. The old guard compared the *unread* count against the whole
+ * capacity, so once read_char had consumed a byte a full queue appended past
+ * g_pending. Feed it a paste longer than the queue with nothing draining, then
+ * with the reader halfway through, and the array must stay inside its bounds. */
+static void test_pending_queue_bounded(void)
+{
+    int fds[2];
+    if (pipe(fds) != 0) {
+        failures++;
+        fprintf(stderr, "FAIL: cannot create the pending queue pipe\n");
+        return;
+    }
+    if (dup2(fds[0], STDIN_FILENO) < 0) {
+        failures++;
+        fprintf(stderr, "FAIL: cannot point stdin at the pending queue pipe\n");
+        close(fds[0]);
+        close(fds[1]);
+        return;
+    }
+    close(fds[0]); /* keep the writer open: the queue must not see EOF */
+
+    static unsigned char payload[600];
+    for (int i = 0; i < 600; i++) payload[i] = (unsigned char)('a' + (i % 26));
+
+    g_interrupt = 0; g_quit = 0; g_stdin_eof = 0;
+    g_pending_len = g_pending_pos = 0;
+    if (write(fds[1], payload, sizeof payload) < 0) {
+        failures++;
+        fprintf(stderr, "FAIL: cannot write the pending queue paste\n");
+    }
+    check(poll_interrupt() == 0, "a paste of ordinary bytes raises no interrupt");
+    check(g_pending_len == PENDING_CAP,
+          "a paste longer than the queue is capped, not appended past it");
+    unsigned char b = 0;
+    int order_ok = 1;
+    for (int i = 0; i < PENDING_CAP; i++) {
+        if (!pending_take(&b) || b != payload[i]) { order_ok = 0; break; }
+    }
+    check(order_ok, "the queue keeps the leading bytes of the paste in order");
+    check(!pending_take(&b), "the bytes past the capacity are dropped, never stored");
+
+    /* With the reader partway through, a fresh paste must have its tail byte
+       reclaimed into the consumed gap (compaction) instead of written past the
+       array: 300 bytes in, one taken out, then a tail paste. */
+    g_pending_len = g_pending_pos = 0;
+    if (write(fds[1], payload, 300) < 0) {
+        failures++;
+        fprintf(stderr, "FAIL: cannot refill the pending queue\n");
+    }
+    poll_interrupt();
+    check(pending_take(&b) && b == payload[0],
+          "the first byte of the refill is delivered");
+    if (write(fds[1], "TAIL", 4) < 0) {
+        failures++;
+        fprintf(stderr, "FAIL: cannot write the pending queue tail\n");
+    }
+    poll_interrupt();
+    check(g_pending_len == PENDING_CAP,
+          "appending to a full queue the reader has drained stays in bounds");
+    int tail_ok = 1;
+    for (int i = 1; i < PENDING_CAP; i++) {
+        if (!pending_take(&b) || b != payload[i]) { tail_ok = 0; break; }
+    }
+    check(tail_ok, "compaction keeps the unread bytes in order");
+    check(pending_take(&b) && b == 'T', "the tail byte lands after them");
+    check(!pending_take(&b), "and the queue still never exceeds its capacity");
+
+    /* control bytes stay flags, never queued input */
+    g_interrupt = 0; g_quit = 0;
+    g_pending_len = g_pending_pos = 0;
+    const char ctrl[] = { 'x', 3, 'y', 17 };
+    if (write(fds[1], ctrl, sizeof ctrl) < 0) {
+        failures++;
+        fprintf(stderr, "FAIL: cannot write the pending queue control bytes\n");
+    }
+    check(poll_interrupt() == 1, "the watch still reports Ctrl+C while queuing");
+    check(g_interrupt == 1 && g_quit == 1, "Ctrl+Q raises quit on top of the interrupt");
+    check(g_pending_len == 2, "control bytes never occupy the queue");
+    check(pending_take(&b) && b == 'x' && pending_take(&b) && b == 'y',
+          "the ordinary bytes around them stay queued in order");
+
+    close(fds[1]);
+    int quiet = open("/dev/null", O_RDONLY);
+    if (quiet >= 0) {
+        if (dup2(quiet, STDIN_FILENO) < 0) { /* best effort */ }
+        close(quiet);
+    }
+}
+
 /* --- incremental transfers for the reactor ----------------------------------
  * tether.http_start/step/lines/abort/free/fds + tether.poll against a local
  * server: a stepped transfer delivers the same lines as http_stream
@@ -2470,6 +2560,7 @@ int main(void)
     test_http_get_ticks(L);
     test_tls_verification(L);
     test_interrupt_watch(L);
+    test_pending_queue_bounded();
     test_interrupt_aborts_transfer(L);
     test_exec_bg_argv(L);
     test_oauth_wait(L);
