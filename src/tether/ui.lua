@@ -3569,6 +3569,17 @@ local function handle_agent_event(ev)
         S.retry_wait = { attempt = ev.attempt or 1, delay = ev.delay or 0,
                          reason = ev.reason }
         S.streaming = false
+        -- the transcript row truncates the provider text to one short line;
+        -- the full detail belongs to the debug log (when on), or a 400 with
+        -- a malformed tool-call payload is undebuggable.
+        if type(ev.detail) == "string" and ev.detail ~= "" then
+            debug_log(string.format("retry %d (waiting %.1fs): %s — %s",
+                ev.attempt or 1, ev.delay or 0.5, tostring(ev.reason or ""),
+                ev.detail:gsub("%s+", " ")))
+        else
+            debug_log(string.format("retry %d (waiting %.1fs): %s",
+                ev.attempt or 1, ev.delay or 0.5, tostring(ev.reason or "")))
+        end
     elseif ev.type == "continuation" then
         S.retry_wait = nil
         S.streaming = false

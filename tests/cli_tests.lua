@@ -421,6 +421,16 @@ do
     local _, f8 = run_stream_with_error("Could not connect to server")
     assert_eq(f8 and f8.kind, "connection", "T15 a refused connection stays retryable")
     assert_true(f8 and f8.retryable, "T15 a refused connection is retryable")
+
+    -- Case 9: a long provider error body survives into the failure message
+    -- whole (regression: the 200-char snippet cut the evidence — a 400
+    -- naming the bad tool call arrived truncated mid-JSON, undebuggable
+    -- in both transcript and debug log).
+    local long_body = '{"error":{"message":"' .. string.rep("E", 400)
+        .. 'TAIL-MARKER","status":400}}'
+    local _, f9 = run_stream({ [1] = { long_body } })
+    assert_true(f9 and f9.message and f9.message:find("TAIL-MARKER", 1, true) ~= nil,
+        "T15 long error body reaches the failure message intact")
 end
 
 -- T19: print mode — parse --print/-p with optional prompt, mark non-interactive

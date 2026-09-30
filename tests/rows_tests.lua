@@ -756,6 +756,45 @@ do
   print("T263 retry note truncation keeps glyphs whole: OK")
 end
 
+-- T-retrylog: the full provider error text behind a retry notice lands in
+-- the debug log (regression: --debug runs showed the truncated transcript
+-- row while the log stayed empty, leaving 400s undebuggable). The event
+-- fires mid-run through the turn stub's live on_event (post-run the log
+-- handle is already closed, so a post-run event proves nothing).
+do
+  local detail = string.rep("E", 300) .. "TAIL-MARKER"
+  local agent_stub = {
+    turn = function(_, _, _, on_event)
+      on_event({ type = "retry", attempt = 3, delay = 8.0,
+                 reason = "bad request", detail = detail })
+      return true
+    end,
+    get_history = function() return {} end,
+  }
+  local logdir = os.tmpname()
+  os.remove(logdir)
+  assert(host_fs.mkdirp(logdir))
+  local uimod, _ = run_ui_with({ 104, 105, 13, 17 }, {
+    agent = agent_stub,
+    config = { load = function()
+        return { model = "test", workspace = "/tmp", debug = true,
+                 ui = { input_max_lines = 8 }, _log_dir = logdir }
+      end,
+      api_key = function() return "" end },
+  })
+  local f = assert(io.open(logdir .. "/tether.log", "r"))
+  local log = f:read("*a") or ""
+  f:close()
+  assert_true(log:find("TAIL-MARKER", 1, true) ~= nil,
+    "T-retrylog the full retry detail reaches the debug log")
+  local row
+  for _, e in ipairs(tentries(uimod)) do if e.role == "system" then row = e end end
+  assert_true(row and row.text:find("TAIL-MARKER", 1, true) == nil,
+    "T-retrylog the transcript row stays truncated")
+  os.execute("rm -rf '" .. logdir .. "'")
+  print("T-retrylog retry detail reaches the debug log: OK")
+end
+
 -- T264: the resume picker probes a bounded head + tail window of each journal
 -- instead of decoding every byte of up to 100 files (a long session is
 -- megabytes of tool output, so opening the picker was O(all sessions)). The

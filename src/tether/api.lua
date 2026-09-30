@@ -600,9 +600,12 @@ local function http_request(cfg, api_key, messages, on_event, opts)
         end
         -- M7/D5b: surface the HTTP error instead of returning success silently
         -- (parse_sse_line skips a non-SSE body, so 'ok' stays true).
+        -- The snippet budget is deliberately generous: a 200-char cut once
+        -- truncated a 400 mid-JSON (hiding which tool call was rejected),
+        -- while the transcript and the error banner clip on their own.
         local status = tonumber(body:match('"status"[%s]*:[%s]*(%d+)'))
             or tonumber(body:match('"code"[%s]*:[%s]*"?([%d]+)"?'))
-        local snippet = body:sub(1, 200):gsub("%s+", " ")
+        local snippet = body:sub(1, 2000):gsub("%s+", " ")
         local text = "http " .. tostring(status or "?") .. ": " .. snippet
         return false, retry.failure(retry.classify(text, status), text, status,
             extract_retry_after(body))
