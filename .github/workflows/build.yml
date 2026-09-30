@@ -1,11 +1,16 @@
 name: build
 
 # Linux binary on every push to main, packed as tar.gz.
-# Versioning: short commit hash in the archive name (no tags needed).
+# Versioning: short commit hash in the release tag (no manual tags needed).
+# Releases (not just artifacts) because artifact-blob downloads periodically
+# fail with Azure SAS errors outside our control.
 on:
   push:
     branches: [main]
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -23,8 +28,15 @@ jobs:
         run: |
           short="${GITHUB_SHA::7}"
           tar czf "tether-${short}-linux-x86_64.tar.gz" tether
+          echo "SHORT=${short}" >> "$GITHUB_ENV"
       - uses: actions/upload-artifact@v4
         with:
           name: tether-linux
           path: "*.tar.gz"
           retention-days: 30
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: tether-${{ env.SHORT }}
+          name: tether-${{ env.SHORT }}
+          files: "*.tar.gz"
