@@ -1935,6 +1935,9 @@ local function load_history()
     f:close()
     -- keep last 200 for this workspace
     while #S.history > 200 do table.remove(S.history, 1) end
+    -- TH2: recall starts past the newest entry, so the first Up lands on it.
+    -- The 0 default in make_state would clamp to index 1 — the oldest line.
+    S.history_pos = #S.history + 1
 end
 M._load_history = load_history
 

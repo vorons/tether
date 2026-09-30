@@ -855,6 +855,65 @@ do
   print("TH1 history jsonl parse per workspace: OK")
 end
 
+-- TH2: a fresh session recalls persisted history newest-first. Regression:
+-- run() loaded ~/.tether/history.jsonl into S.history but left S.history_pos at
+-- its 0 default, so the first Up computed p = -1, clamped to 1 and recalled the
+-- OLDEST persisted message; every later Up clamped to 1 as well — the newest
+-- entries were unreachable until the user submitted something in this session.
+do
+  local HOME = "/tmp/tether_th2_home"
+  os.execute("rm -rf " .. HOME .. " && mkdir -p " .. HOME .. "/.tether")
+  local hf = assert(io.open(HOME .. "/.tether/history.jsonl", "w"))
+  hf:write('{"text":"first","workspace":"/tmp/wsA"}\n')
+  hf:write('{"text":"second","workspace":"/tmp/wsA"}\n')
+  hf:write('{"text":"third","workspace":"/tmp/wsA"}\n')
+  hf:close()
+
+  local names = {"tether", "config", "session", "agent", "api"}
+  local originals, preload = {}, {}
+  for _, n in ipairs(names) do originals[n] = _G[n]; preload[n] = package.preload[n] end
+
+  local function recall(key_bytes)
+    local q, qi = {}, 0
+    for _, b in ipairs(key_bytes) do q[#q + 1] = b end
+    _G.tether = host_mock{
+      write = function() end,
+      resize_requested = function() return false end,
+      get_terminal_size = function() return { width = 80, height = 24 } end,
+      getcwd = function() return "/tmp/wsA" end,
+      read_char = function() qi = qi + 1; return q[qi] or 17 end,
+      read_char_nb = function() qi = qi + 1; if qi <= #q then return q[qi] end return nil end,
+    }
+    _G.config = { load = function()
+        return { model = "test", workspace = "/tmp/wsA", ui = { input_max_lines = 8 } } end,
+      api_key = function() return "" end }
+    _G.session = { new_session = function() return "sid" end }
+    _G.agent = { turn = function() return true end, get_history = function() return {} end }
+    _G.api = { list_models = function() return {} end }
+    for _, n in ipairs(names) do
+      package.preload[n] = (function(k) return function() return _G[k] end end)(n)
+    end
+    local ui_mod = assert(loadfile("src/tether/ui.lua"))()
+    ui_mod._history_file = HOME .. "/.tether/history.jsonl"
+    ui_mod.run()
+    local S = ui_mod._get_state()
+    for _, n in ipairs(names) do _G[n] = originals[n]; package.preload[n] = preload[n] end
+    return S
+  end
+
+  local UP = { 27, 91, 65 }
+  local DOWN = { 27, 91, 66 }
+  local s1 = recall(UP)
+  assert_eq(#s1.history, 3, "TH2 persisted history loaded")
+  assert_eq(s1.input, "third", "TH2 first Up recalls the newest entry")
+  local s2 = recall({ UP[1], UP[2], UP[3], UP[1], UP[2], UP[3] })
+  assert_eq(s2.input, "second", "TH2 second Up steps back to the next-newest")
+  -- Down walks back toward the newest entry
+  local s3 = recall({ UP[1], UP[2], UP[3], UP[1], UP[2], UP[3], DOWN[1], DOWN[2], DOWN[3] })
+  assert_eq(s3.input, "third", "TH2 Up Up then Down returns to the newest")
+  print("TH2 fresh session history recall starts at the newest: OK")
+end
+
 -- TW1: mouse wheel scrolls the transcript, never history. Regression: with
 -- mouse mode auto the tracking was enabled only over confirmation/palette, so
 -- a wheel tick outside them hit the terminal's own arrow-key fallback and
