@@ -20,8 +20,10 @@ jobs:
       - name: Install Lua (only non-default build tool)
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq lua5.4
+          sudo apt-get install -y -qq lua5.4 upx-ucl
           sudo ln -sf /usr/bin/lua5.4 /usr/local/bin/lua
+          # upx-ucl may not register the bare `upx` name — ensure it.
+          command -v upx >/dev/null || sudo ln -sf "$(command -v upx-ucl)" /usr/local/bin/upx
       - name: Build
         run: make tether
       - name: Pack
