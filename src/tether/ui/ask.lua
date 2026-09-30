@@ -203,7 +203,11 @@ local function handle_ask_key(bag, deps, k)
             return
         end
         if k.kind == "paste" then
-            a.editor = (a.editor or "") .. ((k.text or ""):gsub("[%r%n]+", " "))
+            -- audit H7: flatten control runs (CR, LF, the ESC of a stray escape
+            -- sequence) to one space. `%r`/`%n` are not pattern classes, so the
+            -- old `[%r%n]+` was `[rn]+` — it deleted every r and n from the
+            -- paste and left the line breaks in the answer.
+            a.editor = (a.editor or "") .. ((k.text or ""):gsub("%c+", " "))
             sync()
             return
         end

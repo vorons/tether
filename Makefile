@@ -139,7 +139,7 @@ TEST_FILES = $(filter-out tests/context_tests.lua,$(wildcard tests/*_tests.lua))
 SMOKE_FILES ?= tests/keys_tests.lua tests/compression_tests.lua \
 	tests/copy_tests.lua tests/markdown_tests.lua tests/highlight_tests.lua \
 	tests/palette_tests.lua tests/tool_dispatch_tests.lua tests/busy_tests.lua \
-	tests/auth_flow_tests.lua tests/ask_view_tests.lua
+	tests/auth_flow_tests.lua tests/ask_view_tests.lua tests/ask_paste_tests.lua
 
 smoke: build/providers_snapshot.lua build/version.lua
 	@for m in $(LUA_MODS); do luac -p $$m || exit $$?; done
