@@ -51,6 +51,38 @@ do
   print("T5.1 tool_dispatch shape: OK")
 end
 
+-- T321 (audit H5): an implementation that raises degrades into the error
+-- shape instead of unwinding through the turn — the call still gets exactly
+-- one history result and one tool_result event.
+do
+  local td = assert(loadfile("src/tether/tool_dispatch.lua"))()
+  local history, journaled, events = {}, {}, {}
+  local deps = {
+    execute = function(name)
+      error("attempt to index a " .. type(name) .. " value", 0)
+    end,
+    summarize = function(name) return "sum:" .. name end,
+    body = function(_, res) return res.content end,
+    truncate = function(s) return s end,
+    add_history = function(id, res) history[#history + 1] = { id = id, res = res } end,
+    journal = function(e) journaled[#journaled + 1] = e end,
+  }
+  local ok, res = pcall(td.run_tool_call, {}, function(ev)
+      events[#events + 1] = ev
+    end, "t9", "patch", { patch = {} }, nil, deps)
+  assert_true(ok, "T321 a raising tool does not escape the dispatch")
+  assert_notnil(res, "T321 the dispatch still returns a result")
+  assert_true(type(res.error) == "string"
+      and res.error:find("tool 'patch' failed:", 1, true) ~= nil,
+    "T321 the raise becomes a tool error carrying the message")
+  assert_eq(#history, 1, "T321 history gets exactly one result for the call")
+  assert_true(history[1].res.error ~= nil, "T321 the history result is the error")
+  assert_eq(#events, 1, "T321 exactly one tool_result event")
+  assert_eq(events[1].type, "tool_result", "T321 the event is the tool result")
+  assert_eq(#journaled, 1, "T321 the journal records the failure")
+  print("T321 raising tool degrades: OK")
+end
+
 -- Phase E 5.2: prune/bg orchestration stays in agent (the 5.1 split moves
 -- only the loader + run_tool_call wrapper). Guard: no diff hunk outside
 -- those two regions, and the wrapper routes through the module.

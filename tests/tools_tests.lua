@@ -314,6 +314,55 @@ do
   print("T112 patch applies: OK")
 end
 
+-- T322/T323 (audit H5): a malformed argument shape is a tool error the model
+-- can correct, not a Lua raise. `patch` used to call gmatch on whatever it got
+-- (a table, when arguments failed to decode); `run` reached sq()'s gsub with the
+-- same payload.
+do
+  local orig = _G.tether
+  local ws = "/tmp/tether_t322_ws"
+  os.execute("rm -rf " .. ws .. " && mkdir -p " .. ws)
+  local exec_calls = 0
+  _G.tether = host_mock{ getcwd = function() return "/tmp" end,
+                realpath = function(p) return (p:gsub("/+$", "")) end,
+                exec = function() exec_calls = exec_calls + 1; return true, 0 end }
+  local tools = assert(loadfile("src/tether/tools.lua"))()
+
+  local p1, e1 = tools.patch({}, { workspace = ws })
+  assert_true(p1 == nil, "T322 a table diff is refused")
+  assert_true(type(e1) == "string" and e1:find("patch", 1, true) ~= nil,
+    "T322 the refusal names the argument (" .. tostring(e1) .. ")")
+  local p2, e2 = tools.patch({ patch = { "a" } }, { workspace = ws })
+  assert_true(p2 == nil, "T322 a nested table diff is refused")
+  assert_true(type(e2) == "string", "T322 the nested refusal is text")
+  local f = assert(io.open(ws .. "/t322.txt", "w")); f:write("one\n"); f:close()
+  local p3, e3 = tools.patch("--- a/t322.txt\n+++ b/t322.txt\n@@ -1 +1 @@\n-one\n+two\n",
+    { workspace = ws })
+  assert_true(p3 ~= nil, "T322 a real diff still applies (" .. tostring(e3) .. ")")
+
+  local r1, r1err = tools.run({ command = { "ls" } }, { workspace = ws })
+  assert_true(r1 == nil, "T323 a table command is refused")
+  assert_true(type(r1err) == "string" and r1err:find("command", 1, true) ~= nil,
+    "T323 the refusal names the command (" .. tostring(r1err) .. ")")
+  assert_eq(exec_calls, 0, "T323 nothing was spawned for the malformed call")
+  local r2 = tools.run({ command = "echo ok" }, { workspace = ws })
+  assert_true(r2 ~= nil and exec_calls == 1, "T323 a string command still runs")
+
+  -- specs/tools: an absent argument keeps the pre-existing degradation — empty
+  -- output for `run`, the named error for `read` — rather than a new raise.
+  local r3 = tools.run({}, { workspace = ws })
+  assert_true(r3 ~= nil, "T323 run without a command still returns a result")
+  assert_eq(r3.output, "", "T323 run without a command captures nothing")
+  assert_eq(r3.exit_code, 0, "T323 run without a command reports exit 0")
+  local rd, rderr = tools.read({}, { workspace = ws })
+  assert_true(rd == nil, "T323 read without a path is refused")
+  assert_eq(rderr, "missing path argument", "T323 read names its missing argument")
+
+  _G.tether = orig
+  os.execute("rm -rf " .. ws)
+  print("T322-T323 malformed tool arguments degrade: OK")
+end
+
 -- T113 (1.4/1.5/2.2): `list`, `glob` and `grep` run on the in-process
 -- primitives (readdir/stat/krep_search) with their documented record shapes:
 -- workspace-relative paths, glob's recursive walk plus 500-file cap and `**`

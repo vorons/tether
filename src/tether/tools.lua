@@ -464,6 +464,12 @@ function M.write(args, cfg)
 end
 
 function M.patch(patch_str, cfg)
+    -- audit H5: arguments that fail to decode, or a `patch` the model sent as
+    -- an object, reach here as a table — gmatch on it raised. Same contract as
+    -- require_path: a tool error the model can correct, never a crash.
+    if type(patch_str) ~= "string" then
+        return nil, "missing or malformed patch argument"
+    end
     local c = cfg
     local file_patches = {}
     local current_file = nil
@@ -588,6 +594,11 @@ end
 function M.run(args, cfg)
     local c = cfg
     local command = args.command or ""
+    -- audit H5: arguments that did not decode can arrive as a table; sq() below
+    -- raised on gsub. Surface a tool error the model can correct instead.
+    if type(command) ~= "string" then
+        return nil, "missing or malformed command argument"
+    end
     -- 3.7: the model may send a string/float timeout; coerce before %d.
     local timeout_val = tonumber(args.timeout)
         or (c and c.tools and c.tools.run_shell and tonumber(c.tools.run_shell.timeout))

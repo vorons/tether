@@ -310,7 +310,11 @@ local function execute_tool(name, args, cfg)
     elseif name == "glob" then return tools.glob(args, cfg)
     elseif name == "grep" then return tools.grep(args, cfg)
     elseif name == "run" then return tools.run(args, cfg)
-    elseif name == "patch" then return tools.patch(args.patch or args, cfg)
+    elseif name == "patch" then
+        -- audit H5: tools.patch takes the diff text. Args that did not decode
+        -- are {} here, and passing that table on made the tool raise.
+        local diff = (type(args) == "table" and args.patch) or args
+        return tools.patch(diff, cfg)
     elseif name == "subagent" then
         local sm = rawget(_G, "subagent")
         if not sm or not sm.run_call then return nil, "unknown tool: subagent" end

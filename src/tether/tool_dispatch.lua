@@ -25,7 +25,15 @@ local M = {}
 
 local function run_tool_call(cfg, on_event, id, name, args, projection, deps)
     deps = deps or {}
-    local result, err = deps.execute(name, args, cfg)
+    -- audit H5: a tool that raises must degrade like a tool that reported an
+    -- error. An uncaught raise skipped the history write below, leaving the
+    -- assistant's tool_calls message with no matching tool result, so every
+    -- later request of the session was rejected for an unclosed conversation.
+    local ok_exec, result, err = pcall(deps.execute, name, args, cfg)
+    if not ok_exec then
+        result = nil
+        err = string.format("tool '%s' failed: %s", tostring(name), tostring(result))
+    end
     local res
     if result then
         res = result

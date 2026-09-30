@@ -2009,6 +2009,70 @@ do
 end
 
 
+-- T321 (audit H5, turn level): a tool call the built-in cannot accept must
+-- close the conversation. Before the fix `patch` reached tools.patch as a table
+-- and raised, so the dispatch never wrote the tool result: the assistant
+-- message with tool_calls stayed unmatched and every later request of the
+-- session was rejected for an unclosed conversation.
+do
+  local ws = os.tmpname()
+  os.remove(ws)
+  assert(host_fs.mkdirp(ws))
+  _G.tether = host_mock({
+    getcwd = function() return ws end,
+    realpath = function(p) return p end,
+    exec = function() return true, 0 end,
+    monotonic_ms = function() return 0 end,
+  })
+  _G.tools = assert(loadfile("src/tether/tools.lua"))()
+  _G.session = { append = function() end }
+  _G.config = { get_system_prompt = function() return nil end }
+  _G.extensions = nil
+  local ncalls = 0
+  _G.api = {
+    stream = function(_, _, _, on_event)
+      ncalls = ncalls + 1
+      if ncalls == 1 then
+        on_event({ type = "tool_call_start", id = "p1", name = "patch", arguments = "" })
+        -- arguments that do not decode into a diff: the shape that used to raise
+        on_event({ type = "tool_call_delta", index = 0, id = "p1",
+                   arguments = '{"files":{"a.lua":1}}' })
+      else
+        on_event({ type = "text_delta", text = "recovered" })
+      end
+      on_event({ type = "done", reason = "stop" })
+      return true, nil
+    end,
+  }
+  local agent = assert(loadfile("src/tether/agent.lua"))()
+  agent.clear()
+  local events = {}
+  local ok = agent.turn({ workspace = ws }, "", "patch it",
+    function(ev) events[#events + 1] = ev end)
+  assert_true(ok, "T321 the turn survives a tool it cannot run")
+  assert_true(ncalls >= 2, "T321 the turn went on to the next request")
+  local results, answered = 0, nil
+  for _, m in ipairs(agent.get_history()) do
+    if m.role == "tool" and m.tool_call_id == "p1" then
+      results = results + 1
+      answered = m
+    end
+  end
+  assert_eq(results, 1, "T321 exactly one tool result for the call")
+  local body = answered and (type(answered.content) == "table"
+      and tostring(answered.content.error) or tostring(answered.content)) or ""
+  assert_true(body:find("patch", 1, true) ~= nil,
+    "T321 the result tells the model what failed (" .. body .. ")")
+  local tool_events = 0
+  for _, ev in ipairs(events) do
+    if ev.type == "tool_result" then tool_events = tool_events + 1 end
+  end
+  assert_eq(tool_events, 1, "T321 exactly one tool_result event")
+  os.execute("rm -rf '" .. ws .. "'")
+  print("T321 raising tool keeps history closed: OK")
+end
+
+
 if failed > 0 then
     os.exit(1)
 end
