@@ -1883,6 +1883,24 @@ if type(M._provider_common) ~= "table" then
     M._provider_common = (chunk and chunk()) or nil
 end
 
+-- Per-model token budget for the footer (M-field: the main chunk sits at
+-- Lua's 200-locals limit). Delegates to compression.budget_max_tokens;
+-- 32768 only when that module is unreachable (never in the binary).
+function M._budget_max_tokens(cfg)
+    local comp = rawget(_G, "compression")
+    if type(comp) ~= "table" or type(comp.budget_max_tokens) ~= "function" then
+        local chunk = loadfile("src/tether/compression.lua")
+        comp = chunk and chunk() or nil
+    end
+    if comp and comp.budget_max_tokens then
+        local ok, n = pcall(comp.budget_max_tokens, cfg)
+        if ok and type(n) == "number" and n > 0 then return math.floor(n) end
+    end
+    local explicit = cfg and cfg.context and tonumber(cfg.context.max_tokens)
+    if explicit and explicit > 0 then return math.floor(explicit) end
+    return 32768
+end
+
 local function history_file()
     return M._history_file
         or (os.getenv("HOME") or "") .. "/.tether/history.jsonl"
@@ -5067,8 +5085,10 @@ function M.run(app_cfg)
         S.api_key = S.cfg.api_key
     end
     S.debug = S.cfg.debug or false
-    -- F3: token budget percent must follow the configured budget
-    S.tokens_max = (S.cfg.context and S.cfg.context.max_tokens) or 32768
+    -- F3: token budget follows the per-model metadata limit (explicit user
+    -- max_tokens wins); resolved at startup and on every /model pick, so
+    -- the footer never shows a stale number for the active model.
+    S.tokens_max = M._budget_max_tokens(S.cfg)
     -- M8/R2: wire config keys to the theme/wrap seams
     if S.cfg.ui and S.cfg.ui.theme then M.set_theme(S.cfg.ui.theme) end
     if S.cfg.ui then M.set_wrap(S.cfg.ui.wrap ~= false) end

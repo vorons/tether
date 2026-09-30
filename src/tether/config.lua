@@ -170,6 +170,32 @@ function M.load(path, home)
                 lists[#lists + 1] = shard
             end
         end
+        -- the live /models list is fresher than the metadata shard (a new
+        -- model id lands here first): a model it knows is not a typo and
+        -- stays silent. Disk only, no fetch — same discipline as above.
+        do
+            local pc = _G.provider_common
+                or (function()
+                    local chunk = loadfile("src/tether/providers/common.lua")
+                    return chunk and chunk()
+                end)()
+            local h = home or os.getenv("HOME")
+            if pc and pc.json_decode and type(h) == "string" and h ~= "" then
+                local f = io.open(h .. "/.tether/models_cache.json", "r")
+                if f then
+                    local ok, cache = pcall(pc.json_decode, f:read("*a") or "")
+                    f:close()
+                    if ok and type(cache) == "table" then
+                        local entry = cache[p]
+                        if type(entry) == "table"
+                            and type(entry.models) == "table"
+                            and #entry.models > 0 then
+                            lists[#lists + 1] = entry.models
+                        end
+                    end
+                end
+            end
+        end
         if #lists > 0 and type(cfg.model) == "string" and cfg.model ~= "" then
             local found = false
             for _, ids in ipairs(lists) do
@@ -215,8 +241,15 @@ function M.load(path, home)
             cfg.context.keep_recent_messages, def_ctx.keep_recent_messages)
         local sat = tonumber(cfg.context.summarize_at)
         if not sat or sat <= 0 or sat >= 1 then cfg.context.summarize_at = def_ctx.summarize_at end
-        local mt = tonumber(cfg.context.max_tokens)
-        if not mt or mt <= 0 then cfg.context.max_tokens = def_ctx.max_tokens end
+        -- no backfill: only a user-written value counts (a hand-written
+        -- value, even equal to the default, is explicit). Absent/invalid
+        -- stays nil so the per-model metadata chain
+        -- (compression.budget_max_tokens) applies downstream.
+        local eu_ctx = user_tbl and user_tbl.context
+        local raw = (type(eu_ctx) == "table") and eu_ctx.max_tokens or nil
+        local explicit = tonumber(raw)
+        if explicit and explicit > 0 then cfg.context.max_tokens = math.floor(explicit)
+        else cfg.context.max_tokens = nil end
         -- compaction-anchors-preflight-prune: boolean knobs; a missing or
         -- non-boolean value falls back to its default without failing.
         for _, k in ipairs({ "anchors", "preflight", "prune_superseded_reads" }) do

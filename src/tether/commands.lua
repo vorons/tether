@@ -338,6 +338,15 @@ local function metadata_module()
     return md
 end
 
+local function compression_module()
+    local comp = rawget(_G, "compression")
+    if not comp then
+        local chunk = loadfile("src/tether/compression.lua")
+        comp = chunk and chunk() or nil
+    end
+    return comp
+end
+
 -- offline-provider-catalog: the client cache is slim (routing only, no
 -- models[]). Old full-form payloads still parse; only slim is stored, so
 -- the download shrinks ~15x and old caches slim down on next refresh.
@@ -781,6 +790,17 @@ function M.pick_model(bag, deps, item, provider)
     end
     bag.model_name = model_id
     if bag.cfg then bag.cfg.model = model_id end
+    -- the budget follows the pick (per-model metadata limit, explicit user
+    -- value wins): the footer stops showing the previous model's number.
+    do
+        local comp = compression_module()
+        if comp and comp.budget_max_tokens then
+            local ok, n = pcall(comp.budget_max_tokens, bag.cfg)
+            if ok and type(n) == "number" and n > 0 then
+                bag.tokens_max = math.floor(n)
+            end
+        end
+    end
     -- T177: persist the pick to the machine-managed side file so a restart
     -- reloads it via config.load. Best-effort (pcall): the in-memory state
     -- above already applies for this session.

@@ -276,7 +276,9 @@ do
   assert_eq(cfg.context.reserve_tokens, 16384, "T130 default reserve_tokens")
   assert_eq(cfg.context.keep_recent_messages, 4, "T130 default keep_recent_messages")
   assert_eq(cfg.context.summarize_at, 0.7, "T130 default summarize_at")
-  assert_eq(cfg.context.max_tokens, 32768, "T130 default max_tokens")
+  -- no max_tokens backfill: absent stays nil so the per-model metadata
+  -- chain applies downstream (explicit values still pass through).
+  assert_eq(cfg.context.max_tokens, nil, "T130 default max_tokens unset")
 
   local bad = assert(io.open(home .. "/.tether/config.lua", "w"))
   bad:write('return { context = { reserve_tokens = "lots", keep_recent_messages = "two" } }\n')

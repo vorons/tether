@@ -379,6 +379,21 @@ local function write_bootstrap(path)
                 buf[#buf + 1] = "  -- e.g. providers = { anthropic ="
                 buf[#buf + 1] = ' { model = "claude-sonnet-4-20250514" } },\n'
                 buf[#buf + 1] = "  providers = {},\n"
+            elseif k == "context" and type(v) == "table" then
+                -- max_tokens stays out of the bootstrap: a real line here
+                -- would pin the shipped default and the per-model metadata
+                -- chain would never apply. Absent = per-model metadata,
+                -- uncomment to pin.
+                local slim = {}
+                for ck, cv in pairs(v) do
+                    if ck ~= "max_tokens" then slim[ck] = cv end
+                end
+                buf[#buf + 1] = "  " .. k .. " = "
+                write_lua_value(buf, slim, "  ")
+                buf[#buf + 1] = ",\n"
+                buf[#buf + 1] = "  -- context.max_tokens = "
+                    .. tostring((def.context or {}).max_tokens)
+                    .. ",  -- uncomment to pin (absent = per-model metadata),\n"
             else
                 buf[#buf + 1] = "  " .. k .. " = "
                 write_lua_value(buf, v, "  ")

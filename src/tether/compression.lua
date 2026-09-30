@@ -66,6 +66,16 @@ local function catalog_max_tokens(cfg)
 end
 M.catalog_max_tokens = catalog_max_tokens
 
+-- Display + compaction budget, one rule everywhere: an explicit user
+-- max_tokens wins, otherwise the per-model metadata/catalog limit,
+-- otherwise the fallback. The footer and compaction must agree, and both
+-- must follow a /model pick (see commands.pick_model).
+function M.budget_max_tokens(cfg)
+    local explicit = cfg and cfg.context and tonumber(cfg.context.max_tokens)
+    if explicit and explicit > 0 then return math.floor(explicit) end
+    return catalog_max_tokens(cfg) or M.FALLBACK_MAX_TOKENS
+end
+
 local function estimate_tokens(history)
     local total = 0
     for _, m in ipairs(history) do
@@ -93,10 +103,7 @@ M.context_flag = context_flag
 
 local function compaction_thresholds(cfg)
     local ctx = (cfg and cfg.context) or {}
-    local max_tokens = tonumber(ctx.max_tokens)
-    if not max_tokens then
-        max_tokens = catalog_max_tokens(cfg) or M.FALLBACK_MAX_TOKENS
-    end
+    local max_tokens = M.budget_max_tokens(cfg)
     local fraction = tonumber(ctx.summarize_at)
     if not fraction or fraction <= 0 or fraction >= 1 then fraction = 0.7 end
     local reserve = tonumber(ctx.reserve_tokens)
