@@ -9,7 +9,11 @@
 local M = {}
 
 function M.path_of(args)
-    return args.path or args.command or args.cwd or ""
+    -- audit H8: cwd before command, so a run's approval key is the directory the
+    -- call works in (matching exception_target) instead of its command text —
+    -- otherwise approving one outside-workspace run covers the same command in
+    -- any other directory.
+    return args.path or args.cwd or args.command or ""
 end
 
 -- fix-audit-findings 1.2: patch arguments are the diff text, not a path;
@@ -51,14 +55,17 @@ function M.should_confirm(tool_name, args, cfg)
         if not target then return false end
         return not tools._within(tools._resolve(target, cfg), cfg)
     end
-    local path = args.path or args.command or ""
-    if path == "" and tool_name == "run" then path = args.cwd or "" end
-    if tool_name == "write" or (tool_name == "patch" and args.path) or (tool_name == "run" and args.cwd) then
-        -- target path known: check membership
-        return not tools._within(tools._resolve(path, cfg), cfg)
+    if tool_name == "run" then
+        -- audit H8: run's target is its cwd, never the command string. Resolving
+        -- the command text made an outside cwd look inside the workspace, so the
+        -- menu never opened for the refusal tools.run then returned.
+        local cwd = args.cwd
+        if type(cwd) ~= "string" or cwd == "" then return false end
+        return not tools._within(tools._resolve(cwd, cfg), cfg)
     end
-    -- run without cwd: executed in workspace root — allowed there
-    return false
+    local path = args.path
+    if type(path) ~= "string" or path == "" then return false end
+    return not tools._within(tools._resolve(path, cfg), cfg)
 end
 
 function M.approve_key(tool_name, args)
