@@ -1,0 +1,59 @@
+{
+ "generated_at": 1790756014,
+ "id": "tokengo",
+ "models": [
+  {
+   "context": 131072,
+   "id": "deepseek/deepseek-v3.1"
+  },
+  {
+   "context": 128000,
+   "id": "deepseek/deepseek-v3.2"
+  },
+  {
+   "context": 1000000,
+   "id": "deepseek/deepseek-v4-flash"
+  },
+  {
+   "context": 1000000,
+   "id": "deepseek/deepseek-v4-pro"
+  },
+  {
+   "context": 204800,
+   "id": "minimax/minimax-m2.5"
+  },
+  {
+   "context": 262144,
+   "id": "moonshotai/kimi-k2.6"
+  },
+  {
+   "context": 1048576,
+   "id": "moonshotai/kimi-k3"
+  },
+  {
+   "context": 262144,
+   "id": "qwen/qwen3.5-397b-a17b"
+  },
+  {
+   "context": 204800,
+   "id": "z-ai/glm-5"
+  },
+  {
+   "context": 200000,
+   "id": "z-ai/glm-5.1"
+  },
+  {
+   "context": 1000000,
+   "id": "z-ai/glm-5.2"
+  },
+  {
+   "context": 1000000,
+   "id": "z-ai/glm-5.3"
+  },
+  {
+   "context": 1000000,
+   "id": "z-ai/glm-5.3-flash"
+  }
+ ],
+ "schema": 1
+}

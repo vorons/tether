@@ -1,0 +1,31 @@
+{
+ "generated_at": 1790756014,
+ "id": "amd",
+ "models": [
+  {
+   "context": 1048576,
+   "id": "DeepSeek-V4-Flash"
+  },
+  {
+   "context": 1000000,
+   "id": "DeepSeek-V4-Flash-Vision-Exp"
+  },
+  {
+   "context": 1048576,
+   "id": "DeepSeek-V4.1-Flash"
+  },
+  {
+   "context": 131072,
+   "id": "MiniCPM5-2B"
+  },
+  {
+   "context": 131072,
+   "id": "Qwen3.8-27B"
+  },
+  {
+   "context": 262144,
+   "id": "Qwen3.8-Flash-Next"
+  }
+ ],
+ "schema": 1
+}

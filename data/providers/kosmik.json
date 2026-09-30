@@ -1,0 +1,11 @@
+{
+ "generated_at": 1790756014,
+ "id": "kosmik",
+ "models": [
+  {
+   "context": 262144,
+   "id": "qwen/qwen3.8-27b"
+  }
+ ],
+ "schema": 1
+}

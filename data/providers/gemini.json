@@ -1,0 +1,163 @@
+{
+ "generated_at": 1790756014,
+ "id": "gemini",
+ "models": [
+  {
+   "context": 131072,
+   "id": "deep-research-max-preview-04-2026"
+  },
+  {
+   "context": 131072,
+   "id": "deep-research-preview-04-2026"
+  },
+  {
+   "context": 128000,
+   "id": "gemini-2.5-computer-use-preview-10-2025"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini-2.5-flash"
+  },
+  {
+   "context": 32768,
+   "id": "gemini-2.5-flash-image"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini-2.5-flash-lite"
+  },
+  {
+   "context": 8192,
+   "id": "gemini-2.5-flash-preview-tts"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini-2.5-pro"
+  },
+  {
+   "context": 8192,
+   "id": "gemini-2.5-pro-preview-tts"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini-3-flash-preview"
+  },
+  {
+   "context": 65536,
+   "id": "gemini-3-pro-image"
+  },
+  {
+   "context": 131072,
+   "id": "gemini-3-pro-image-preview"
+  },
+  {
+   "context": 131072,
+   "id": "gemini-3.1-flash-image"
+  },
+  {
+   "context": 65536,
+   "id": "gemini-3.1-flash-image-preview"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini-3.1-flash-lite"
+  },
+  {
+   "context": 65536,
+   "id": "gemini-3.1-flash-lite-image"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini-3.1-flash-lite-preview"
+  },
+  {
+   "context": 131072,
+   "id": "gemini-3.1-flash-live-preview"
+  },
+  {
+   "context": 8192,
+   "id": "gemini-3.1-flash-tts-preview"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini-3.1-pro-preview"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini-3.1-pro-preview-customtools"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini-3.5-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini-3.5-flash-lite"
+  },
+  {
+   "context": 16384,
+   "id": "gemini-3.5-live-translate-preview"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini-3.6-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini-3.7-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini-3.8-flash"
+  },
+  {
+   "context": 2048,
+   "id": "gemini-embedding-001"
+  },
+  {
+   "context": 8192,
+   "id": "gemini-embedding-2"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini-flash-latest"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini-flash-lite-latest"
+  },
+  {
+   "context": 131072,
+   "id": "gemini-omni-flash-preview"
+  },
+  {
+   "context": 262144,
+   "id": "gemma-4-26b-a4b-it"
+  },
+  {
+   "context": 262144,
+   "id": "gemma-4-31b-it"
+  },
+  {
+   "context": 1048576,
+   "id": "lyria-3-clip-preview"
+  },
+  {
+   "context": 1048576,
+   "id": "lyria-3-pro-preview"
+  },
+  {
+   "context": 480,
+   "id": "veo-3.1-fast-generate-preview"
+  },
+  {
+   "context": 480,
+   "id": "veo-3.1-generate-preview"
+  },
+  {
+   "context": 480,
+   "id": "veo-3.1-lite-generate-preview"
+  }
+ ],
+ "schema": 1
+}

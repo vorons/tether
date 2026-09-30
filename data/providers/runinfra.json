@@ -1,0 +1,35 @@
+{
+ "generated_at": 1790756014,
+ "id": "runinfra",
+ "models": [
+  {
+   "context": 262144,
+   "id": "Inferact/Qwen3.8-2.4T-A95B-NVFP4"
+  },
+  {
+   "context": 262144,
+   "id": "Qwen/Qwen3.8-27B"
+  },
+  {
+   "context": 1048576,
+   "id": "deepseek-ai/DeepSeek-V4-Flash-0731"
+  },
+  {
+   "context": 1048576,
+   "id": "deepseek-ai/DeepSeek-V4-Pro-0813"
+  },
+  {
+   "context": 262144,
+   "id": "nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-BF16"
+  },
+  {
+   "context": 262144,
+   "id": "ornith-ai/Ornith-1.5-35B-A3B"
+  },
+  {
+   "context": 1048576,
+   "id": "zai-org/GLM-5.3-Flash"
+  }
+ ],
+ "schema": 1
+}

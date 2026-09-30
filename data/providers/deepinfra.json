@@ -1,0 +1,291 @@
+{
+ "generated_at": 1790756014,
+ "id": "deepinfra",
+ "models": [
+  {
+   "context": 256000,
+   "id": "ByteDance/Seed-2.0-code"
+  },
+  {
+   "context": 256000,
+   "id": "ByteDance/Seed-2.0-mini"
+  },
+  {
+   "context": 256000,
+   "id": "ByteDance/Seed-2.0-pro"
+  },
+  {
+   "context": 196608,
+   "id": "MiniMaxAI/MiniMax-M2.5"
+  },
+  {
+   "context": 196608,
+   "id": "MiniMaxAI/MiniMax-M2.7"
+  },
+  {
+   "context": 524288,
+   "id": "MiniMaxAI/MiniMax-M3"
+  },
+  {
+   "context": 262144,
+   "id": "Qwen/Qwen3-235B-A22B-Instruct-2507"
+  },
+  {
+   "context": 40960,
+   "id": "Qwen/Qwen3-30B-A3B"
+  },
+  {
+   "context": 40960,
+   "id": "Qwen/Qwen3-32B"
+  },
+  {
+   "context": 262144,
+   "id": "Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo"
+  },
+  {
+   "context": 256000,
+   "id": "Qwen/Qwen3-Max"
+  },
+  {
+   "context": 262144,
+   "id": "Qwen/Qwen3-Next-80B-A3B-Instruct"
+  },
+  {
+   "context": 262144,
+   "id": "Qwen/Qwen3-VL-235B-A22B-Instruct"
+  },
+  {
+   "context": 262144,
+   "id": "Qwen/Qwen3.5-122B-A10B"
+  },
+  {
+   "context": 262144,
+   "id": "Qwen/Qwen3.5-27B"
+  },
+  {
+   "context": 262144,
+   "id": "Qwen/Qwen3.5-35B-A3B"
+  },
+  {
+   "context": 262144,
+   "id": "Qwen/Qwen3.5-397B-A17B"
+  },
+  {
+   "context": 262144,
+   "id": "Qwen/Qwen3.5-9B"
+  },
+  {
+   "context": 262144,
+   "id": "Qwen/Qwen3.6-27B"
+  },
+  {
+   "context": 262144,
+   "id": "Qwen/Qwen3.6-35B-A3B"
+  },
+  {
+   "context": 256000,
+   "id": "Qwen/Qwen3.7-Max"
+  },
+  {
+   "context": 262144,
+   "id": "Qwen/Qwen3.8-2.4T-A95B"
+  },
+  {
+   "context": 262144,
+   "id": "Qwen/Qwen3.8-27B"
+  },
+  {
+   "context": 1000000,
+   "id": "Qwen/Qwen3.8-Flash"
+  },
+  {
+   "context": 256000,
+   "id": "Qwen/Qwen3.8-Max"
+  },
+  {
+   "context": 262144,
+   "id": "XiaomiMiMo/MiMo-V2.5"
+  },
+  {
+   "context": 1048576,
+   "id": "XiaomiMiMo/MiMo-V2.5-Pro"
+  },
+  {
+   "context": 1048576,
+   "id": "XiaomiMiMo/MiMo-V2.6-Flash"
+  },
+  {
+   "context": 1048576,
+   "id": "XiaomiMiMo/MiMo-V2.6-Pro"
+  },
+  {
+   "context": 163840,
+   "id": "deepseek-ai/DeepSeek-R1-0528"
+  },
+  {
+   "context": 163840,
+   "id": "deepseek-ai/DeepSeek-V3"
+  },
+  {
+   "context": 163840,
+   "id": "deepseek-ai/DeepSeek-V3-0324"
+  },
+  {
+   "context": 163840,
+   "id": "deepseek-ai/DeepSeek-V3.1"
+  },
+  {
+   "context": 163840,
+   "id": "deepseek-ai/DeepSeek-V3.2"
+  },
+  {
+   "context": 1048576,
+   "id": "deepseek-ai/DeepSeek-V4-Flash"
+  },
+  {
+   "context": 1048576,
+   "id": "deepseek-ai/DeepSeek-V4-Flash-0731"
+  },
+  {
+   "context": 1048576,
+   "id": "deepseek-ai/DeepSeek-V4-Flash-Vision-Exp"
+  },
+  {
+   "context": 1048576,
+   "id": "deepseek-ai/DeepSeek-V4-Pro"
+  },
+  {
+   "context": 1048576,
+   "id": "deepseek-ai/DeepSeek-V4-Pro-0813"
+  },
+  {
+   "context": 1048576,
+   "id": "deepseek-ai/DeepSeek-V4.1-Flash"
+  },
+  {
+   "context": 131072,
+   "id": "google/gemma-3-12b-it"
+  },
+  {
+   "context": 131072,
+   "id": "google/gemma-3-27b-it"
+  },
+  {
+   "context": 131072,
+   "id": "google/gemma-3-4b-it"
+  },
+  {
+   "context": 262144,
+   "id": "google/gemma-4-26B-A4B-it"
+  },
+  {
+   "context": 262144,
+   "id": "google/gemma-4-31B-it"
+  },
+  {
+   "context": 131072,
+   "id": "google/gemma-4-E4B-it"
+  },
+  {
+   "context": 131072,
+   "id": "meta-llama/Llama-3.3-70B-Instruct-Turbo"
+  },
+  {
+   "context": 1048576,
+   "id": "meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8"
+  },
+  {
+   "context": 327680,
+   "id": "meta-llama/Llama-4-Scout-17B-16E-Instruct"
+  },
+  {
+   "context": 262144,
+   "id": "moonshotai/Kimi-K2.5"
+  },
+  {
+   "context": 262144,
+   "id": "moonshotai/Kimi-K2.6"
+  },
+  {
+   "context": 262144,
+   "id": "moonshotai/Kimi-K2.7-Code"
+  },
+  {
+   "context": 1048576,
+   "id": "moonshotai/Kimi-K3"
+  },
+  {
+   "context": 131072,
+   "id": "nvidia/Llama-3.3-Nemotron-Super-49B-v1.5"
+  },
+  {
+   "context": 262144,
+   "id": "nvidia/Nemotron-3-Nano-30B-A3B"
+  },
+  {
+   "context": 262144,
+   "id": "nvidia/Nemotron-3-Nano-Omni-30B-A3B-Reasoning"
+  },
+  {
+   "context": 131072,
+   "id": "openai/gpt-oss-120b"
+  },
+  {
+   "context": 131072,
+   "id": "openai/gpt-oss-20b"
+  },
+  {
+   "context": 262144,
+   "id": "stepfun-ai/Step-3.7-Flash"
+  },
+  {
+   "context": 262144,
+   "id": "tencent/Hy3"
+  },
+  {
+   "context": 1048576,
+   "id": "tencent/Hy4-preview"
+  },
+  {
+   "context": 524288,
+   "id": "thinkingmachines/Inkling"
+  },
+  {
+   "context": 524288,
+   "id": "thinkingmachines/Inkling-Small"
+  },
+  {
+   "context": 202752,
+   "id": "zai-org/GLM-4.6"
+  },
+  {
+   "context": 202752,
+   "id": "zai-org/GLM-4.7"
+  },
+  {
+   "context": 202752,
+   "id": "zai-org/GLM-4.7-Flash"
+  },
+  {
+   "context": 202752,
+   "id": "zai-org/GLM-5"
+  },
+  {
+   "context": 202752,
+   "id": "zai-org/GLM-5.1"
+  },
+  {
+   "context": 1048576,
+   "id": "zai-org/GLM-5.2"
+  },
+  {
+   "context": 1048576,
+   "id": "zai-org/GLM-5.3"
+  },
+  {
+   "context": 1048576,
+   "id": "zai-org/GLM-5.3-Flash"
+  }
+ ],
+ "schema": 1
+}

@@ -194,7 +194,7 @@ local function run_inner()
         os.exit(M._run_ext_cli(argv) or 0)
     end
     local opts = parse_args()
-    if version then print("tether 0.1.0"); os.exit(0) end
+    if version then print("tether " .. tostring(build_version or "dev")); os.exit(0) end
 
     -- Stage log for --print children (and the parent when debugged):
     -- open/append/close per line, safe across forked processes sharing

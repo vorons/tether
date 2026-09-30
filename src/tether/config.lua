@@ -146,19 +146,38 @@ function M.load(path, home)
         cfg.model = up.model or eu.model
             or def_p.model or cfg.model
     end
-    -- dynamic-provider-catalog: a pinned model absent from the merged
-    -- catalog still resolves (the request goes out verbatim) but warns
-    -- here — pre-TUI startup is the only legal stderr moment. An empty
-    -- merged list means "unknown", never "renamed": no warning then.
+    -- dynamic-provider-catalog: a pinned model absent from every known
+    -- list still resolves (the request goes out verbatim) but warns
+    -- here — pre-TUI startup is the only legal stderr moment. Known lists
+    -- are legacy entry.models plus the cached metadata shard (disk only:
+    -- startup never fetches). No known list at all means "unknown", never
+    -- "renamed": silence then.
     do
         local p = cfg.provider
         local e = (catalog and catalog.get and p) and catalog.get(p) or nil
-        local ids = (e and type(e.models) == "table") and e.models or nil
-        if ids and #ids > 0 and type(cfg.model) == "string" and cfg.model ~= "" then
+        local lists = {}
+        if e and type(e.models) == "table" and #e.models > 0 then
+            lists[#lists + 1] = e.models
+        end
+        local md = _G.provider_metadata
+            or (function()
+                local chunk = loadfile("src/tether/metadata.lua")
+                return chunk and chunk()
+            end)()
+        if md and md.cached then
+            local shard = md.cached(p, home)
+            if type(shard) == "table" and #shard > 0 then
+                lists[#lists + 1] = shard
+            end
+        end
+        if #lists > 0 and type(cfg.model) == "string" and cfg.model ~= "" then
             local found = false
-            for _, m in ipairs(ids) do
-                local id = (type(m) == "table" and m.id) or m
-                if id == cfg.model then found = true; break end
+            for _, ids in ipairs(lists) do
+                for _, m in ipairs(ids) do
+                    local id = (type(m) == "table" and m.id) or m
+                    if id == cfg.model then found = true; break end
+                end
+                if found then break end
             end
             if not found then
                 io.stderr:write("tether: model '" .. cfg.model
@@ -245,6 +264,12 @@ function M.load(path, home)
         local md = tonumber(cfg.subagents.max_depth)
         cfg.subagents.max_depth = (md and math.floor(md) >= 0)
             and math.floor(md) or def_sub.max_depth
+    end
+
+    -- offline-provider-catalog: metadata network refresh knob; a missing
+    -- or non-boolean value falls back to enabled without failing.
+    if type(cfg.metadata_refresh) ~= "boolean" then
+        cfg.metadata_refresh = true
     end
 
     -- prompt-cache: cache table with per-key fallbacks; a missing or

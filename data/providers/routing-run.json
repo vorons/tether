@@ -1,0 +1,67 @@
+{
+ "generated_at": 1790756014,
+ "id": "routing-run",
+ "models": [
+  {
+   "context": 1000000,
+   "id": "claude-opus-4-8"
+  },
+  {
+   "context": 1000000,
+   "id": "claude-sonnet-4-6"
+  },
+  {
+   "context": 1000000,
+   "id": "deepseek-v4-flash"
+  },
+  {
+   "context": 1000000,
+   "id": "deepseek-v4-pro"
+  },
+  {
+   "context": 200000,
+   "id": "glm-5.2"
+  },
+  {
+   "context": 200000,
+   "id": "glm-5.2-nitro"
+  },
+  {
+   "context": 1000000,
+   "id": "gpt-5.6-luna"
+  },
+  {
+   "context": 1000000,
+   "id": "gpt-5.6-sol"
+  },
+  {
+   "context": 1000000,
+   "id": "gpt-5.6-terra"
+  },
+  {
+   "context": 200000,
+   "id": "kimi-k2.6"
+  },
+  {
+   "context": 200000,
+   "id": "kimi-k2.6-nitro"
+  },
+  {
+   "context": 200000,
+   "id": "kimi-k2.7-code"
+  },
+  {
+   "context": 200000,
+   "id": "kimi-k2.7-code-nitro"
+  },
+  {
+   "context": 131072,
+   "id": "nemotron-3-ultra"
+  },
+  {
+   "context": 262144,
+   "id": "qwen3.5-9b"
+  }
+ ],
+ "schema": 1
+}

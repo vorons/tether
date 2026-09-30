@@ -1,0 +1,223 @@
+{
+ "generated_at": 1790756014,
+ "id": "google-vertex",
+ "models": [
+  {
+   "context": 1000000,
+   "id": "claude-fable-5-1@default"
+  },
+  {
+   "context": 1000000,
+   "id": "claude-fable-5@default"
+  },
+  {
+   "context": 200000,
+   "id": "claude-haiku-4-5@20251001"
+  },
+  {
+   "context": 200000,
+   "id": "claude-opus-4-1@20250805"
+  },
+  {
+   "context": 200000,
+   "id": "claude-opus-4-5@20251101"
+  },
+  {
+   "context": 1000000,
+   "id": "claude-opus-4-6@default"
+  },
+  {
+   "context": 1000000,
+   "id": "claude-opus-4-7@default"
+  },
+  {
+   "context": 1000000,
+   "id": "claude-opus-4-8@default"
+  },
+  {
+   "context": 200000,
+   "id": "claude-opus-4@20250514"
+  },
+  {
+   "context": 1000000,
+   "id": "claude-opus-5-5@default"
+  },
+  {
+   "context": 1000000,
+   "id": "claude-opus-5@default"
+  },
+  {
+   "context": 200000,
+   "id": "claude-sonnet-4-5@20250929"
+  },
+  {
+   "context": 1000000,
+   "id": "claude-sonnet-4-6@default"
+  },
+  {
+   "context": 200000,
+   "id": "claude-sonnet-4@20250514"
+  },
+  {
+   "context": 1000000,
+   "id": "claude-sonnet-5-5@default"
+  },
+  {
+   "context": 1000000,
+   "id": "claude-sonnet-5@default"
+  },
+  {
+   "context": 163840,
+   "id": "deepseek-ai/deepseek-v3.1-maas"
+  },
+  {
+   "context": 163840,
+   "id": "deepseek-ai/deepseek-v3.2-maas"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini-2.5-flash"
+  },
+  {
+   "context": 32768,
+   "id": "gemini-2.5-flash-image"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini-2.5-flash-lite"
+  },
+  {
+   "context": 32768,
+   "id": "gemini-2.5-flash-tts"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini-2.5-pro"
+  },
+  {
+   "context": 32768,
+   "id": "gemini-2.5-pro-tts"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini-3-flash-preview"
+  },
+  {
+   "context": 65536,
+   "id": "gemini-3-pro-image"
+  },
+  {
+   "context": 131072,
+   "id": "gemini-3.1-flash-image"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini-3.1-flash-lite"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini-3.1-flash-lite-preview"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini-3.1-pro-preview"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini-3.1-pro-preview-customtools"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini-3.5-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini-3.5-flash-lite"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini-3.6-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini-3.7-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini-3.8-flash"
+  },
+  {
+   "context": 2048,
+   "id": "gemini-embedding-001"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini-flash-latest"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini-flash-lite-latest"
+  },
+  {
+   "context": 128000,
+   "id": "meta/llama-3.3-70b-instruct-maas"
+  },
+  {
+   "context": 524288,
+   "id": "meta/llama-4-maverick-17b-128e-instruct-maas"
+  },
+  {
+   "context": 262144,
+   "id": "moonshotai/kimi-k2-thinking-maas"
+  },
+  {
+   "context": 131072,
+   "id": "openai/gpt-oss-120b-maas"
+  },
+  {
+   "context": 131072,
+   "id": "openai/gpt-oss-20b-maas"
+  },
+  {
+   "context": 262144,
+   "id": "qwen/qwen3-235b-a22b-instruct-2507-maas"
+  },
+  {
+   "context": 128000,
+   "id": "xai/grok-4.1-fast-non-reasoning"
+  },
+  {
+   "context": 128000,
+   "id": "xai/grok-4.1-fast-reasoning"
+  },
+  {
+   "context": 2000000,
+   "id": "xai/grok-4.20-non-reasoning"
+  },
+  {
+   "context": 2000000,
+   "id": "xai/grok-4.20-reasoning"
+  },
+  {
+   "context": 200000,
+   "id": "xai/grok-4.3"
+  },
+  {
+   "context": 524288,
+   "id": "xai/grok-4.6"
+  },
+  {
+   "context": 200000,
+   "id": "zai-org/glm-4.7-maas"
+  },
+  {
+   "context": 200000,
+   "id": "zai-org/glm-5-maas"
+  },
+  {
+   "context": 1000000,
+   "id": "zai-org/glm-5.2-maas"
+  }
+ ],
+ "schema": 1
+}

@@ -1,0 +1,79 @@
+{
+ "generated_at": 1790756014,
+ "id": "regolo-ai",
+ "models": [
+  {
+   "context": 30000,
+   "id": "apertus-70b"
+  },
+  {
+   "context": 100000,
+   "id": "brick-complexity-pro"
+  },
+  {
+   "context": 100000,
+   "id": "brick-v1-beta"
+  },
+  {
+   "context": 4000,
+   "id": "deepseek-ocr-2"
+  },
+  {
+   "context": 448,
+   "id": "faster-whisper-large-v3"
+  },
+  {
+   "context": 100000,
+   "id": "gemma4-31b"
+  },
+  {
+   "context": 96000,
+   "id": "glm5.2"
+  },
+  {
+   "context": 128000,
+   "id": "gpt-oss-120b"
+  },
+  {
+   "context": 128000,
+   "id": "gpt-oss-20b"
+  },
+  {
+   "context": 128000,
+   "id": "llama-3.3-70b-instruct"
+  },
+  {
+   "context": 256000,
+   "id": "mistral-small-4-119b"
+  },
+  {
+   "context": 8192,
+   "id": "qwen-image"
+  },
+  {
+   "context": 262144,
+   "id": "qwen3-coder-next"
+  },
+  {
+   "context": 32768,
+   "id": "qwen3-embedding-8b"
+  },
+  {
+   "context": 32768,
+   "id": "qwen3-reranker-4b"
+  },
+  {
+   "context": 262144,
+   "id": "qwen3.5-122b"
+  },
+  {
+   "context": 262144,
+   "id": "qwen3.5-9b"
+  },
+  {
+   "context": 120000,
+   "id": "qwen3.8-27b"
+  }
+ ],
+ "schema": 1
+}

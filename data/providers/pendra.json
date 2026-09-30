@@ -1,0 +1,31 @@
+{
+ "generated_at": 1790756014,
+ "id": "pendra",
+ "models": [
+  {
+   "context": 1000000,
+   "id": "deepseek-v4-flash"
+  },
+  {
+   "context": 200000,
+   "id": "glm-4.7-flash"
+  },
+  {
+   "context": 131072,
+   "id": "gpt-oss:120b"
+  },
+  {
+   "context": 128000,
+   "id": "llama3.3:70b"
+  },
+  {
+   "context": 262144,
+   "id": "qwen3-coder:30b"
+  },
+  {
+   "context": 262144,
+   "id": "qwen3.6:27b"
+  }
+ ],
+ "schema": 1
+}

@@ -1,0 +1,75 @@
+{
+ "generated_at": 1790756014,
+ "id": "io-net",
+ "models": [
+  {
+   "context": 106000,
+   "id": "Intel/Qwen3-Coder-480B-A35B-Instruct-int4-mixed-ar"
+  },
+  {
+   "context": 32000,
+   "id": "Qwen/Qwen2.5-VL-32B-Instruct"
+  },
+  {
+   "context": 262144,
+   "id": "Qwen/Qwen3-235B-A22B-Thinking-2507"
+  },
+  {
+   "context": 262144,
+   "id": "Qwen/Qwen3-Next-80B-A3B-Instruct"
+  },
+  {
+   "context": 128000,
+   "id": "deepseek-ai/DeepSeek-R1-0528"
+  },
+  {
+   "context": 16000,
+   "id": "meta-llama/Llama-3.2-90B-Vision-Instruct"
+  },
+  {
+   "context": 128000,
+   "id": "meta-llama/Llama-3.3-70B-Instruct"
+  },
+  {
+   "context": 430000,
+   "id": "meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8"
+  },
+  {
+   "context": 128000,
+   "id": "mistralai/Devstral-Small-2505"
+  },
+  {
+   "context": 128000,
+   "id": "mistralai/Magistral-Small-2506"
+  },
+  {
+   "context": 128000,
+   "id": "mistralai/Mistral-Large-Instruct-2411"
+  },
+  {
+   "context": 128000,
+   "id": "mistralai/Mistral-Nemo-Instruct-2407"
+  },
+  {
+   "context": 32768,
+   "id": "moonshotai/Kimi-K2-Instruct-0905"
+  },
+  {
+   "context": 32768,
+   "id": "moonshotai/Kimi-K2-Thinking"
+  },
+  {
+   "context": 131072,
+   "id": "openai/gpt-oss-120b"
+  },
+  {
+   "context": 64000,
+   "id": "openai/gpt-oss-20b"
+  },
+  {
+   "context": 200000,
+   "id": "zai-org/GLM-4.6"
+  }
+ ],
+ "schema": 1
+}

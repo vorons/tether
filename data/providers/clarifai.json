@@ -1,0 +1,55 @@
+{
+ "generated_at": 1790756014,
+ "id": "clarifai",
+ "models": [
+  {
+   "context": 131072,
+   "id": "arcee_ai/AFM/models/trinity-mini"
+  },
+  {
+   "context": 32768,
+   "id": "clarifai/main/models/mm-poly-8b"
+  },
+  {
+   "context": 8192,
+   "id": "deepseek-ai/deepseek-ocr/models/DeepSeek-OCR"
+  },
+  {
+   "context": 204800,
+   "id": "minimaxai/chat-completion/models/MiniMax-M2_5-high-throughput"
+  },
+  {
+   "context": 262144,
+   "id": "mistralai/completion/models/Ministral-3-14B-Reasoning-2512"
+  },
+  {
+   "context": 262144,
+   "id": "mistralai/completion/models/Ministral-3-3B-Reasoning-2512"
+  },
+  {
+   "context": 262144,
+   "id": "moonshotai/chat-completion/models/Kimi-K2_6"
+  },
+  {
+   "context": 131072,
+   "id": "openai/chat-completion/models/gpt-oss-120b-high-throughput"
+  },
+  {
+   "context": 131072,
+   "id": "openai/chat-completion/models/gpt-oss-20b"
+  },
+  {
+   "context": 262144,
+   "id": "qwen/qwenCoder/models/Qwen3-Coder-30B-A3B-Instruct"
+  },
+  {
+   "context": 262144,
+   "id": "qwen/qwenLM/models/Qwen3-30B-A3B-Instruct-2507"
+  },
+  {
+   "context": 262144,
+   "id": "qwen/qwenLM/models/Qwen3-30B-A3B-Thinking-2507"
+  }
+ ],
+ "schema": 1
+}

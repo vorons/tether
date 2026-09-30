@@ -1,0 +1,19 @@
+{
+ "generated_at": 1790756014,
+ "id": "inception",
+ "models": [
+  {
+   "context": 128000,
+   "id": "mercury-2"
+  },
+  {
+   "context": 260000,
+   "id": "mercury-2.5"
+  },
+  {
+   "context": 32000,
+   "id": "mercury-edit-2"
+  }
+ ],
+ "schema": 1
+}

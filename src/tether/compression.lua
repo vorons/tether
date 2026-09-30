@@ -25,22 +25,44 @@ local catalog = _G.provider_catalog
         return chunk and chunk()
     end)()
 
--- Per-model context limit: exact hit, else provider default, else nil.
+-- offline-provider-catalog: lazy metadata instance (same pattern).
+local metadata = _G.provider_metadata
+    or (function()
+        local chunk = loadfile("src/tether/metadata.lua")
+        return chunk and chunk()
+    end)()
+
+-- Final fallback when neither the user config nor any catalog data names
+-- a limit (spec: context-compaction per-model resolution).
+M.FALLBACK_MAX_TOKENS = 200000
+
+-- Per-model context limit: metadata exact hit, else metadata provider
+-- default, else legacy entry.models (old full-form caches), else 200000.
+-- Disk only — compaction never fetches (warmth arrives via /model).
 local function catalog_max_tokens(cfg)
-    if not (catalog and catalog.get and cfg) then return nil end
-    local entry = catalog.get(cfg.provider)
-    if not (entry and type(entry.models) == "table") then return nil end
-    local want, fallback = cfg.model, entry.model
-    local fb = nil
-    for _, m in ipairs(entry.models) do
-        local id = (type(m) == "table" and m.id) or m
-        local cx = (type(m) == "table" and m.context) or nil
-        if type(cx) == "number" and cx > 0 then
-            if id == want then return cx end
-            if id == fallback then fb = cx end
-        end
+    if not (cfg and cfg.provider) then return M.FALLBACK_MAX_TOKENS end
+    local entry = (catalog and catalog.get and catalog.get(cfg.provider))
+        or nil
+    local want = cfg.model
+    local fallback = (entry and entry.model) or nil
+    if metadata and metadata.cached and metadata.limit then
+        local models = metadata.cached(cfg.provider, cfg._auth_home)
+        local hit = metadata.limit(models, want, fallback)
+        if hit then return hit end
     end
-    return fb
+    if entry and type(entry.models) == "table" then
+        local fb = nil
+        for _, m in ipairs(entry.models) do
+            local id = (type(m) == "table" and m.id) or m
+            local cx = (type(m) == "table" and m.context) or nil
+            if type(cx) == "number" and cx > 0 then
+                if id == want then return cx end
+                if id == fallback then fb = cx end
+            end
+        end
+        if fb then return fb end
+    end
+    return M.FALLBACK_MAX_TOKENS
 end
 M.catalog_max_tokens = catalog_max_tokens
 
@@ -73,7 +95,7 @@ local function compaction_thresholds(cfg)
     local ctx = (cfg and cfg.context) or {}
     local max_tokens = tonumber(ctx.max_tokens)
     if not max_tokens then
-        max_tokens = catalog_max_tokens(cfg) or 32768
+        max_tokens = catalog_max_tokens(cfg) or M.FALLBACK_MAX_TOKENS
     end
     local fraction = tonumber(ctx.summarize_at)
     if not fraction or fraction <= 0 or fraction >= 1 then fraction = 0.7 end

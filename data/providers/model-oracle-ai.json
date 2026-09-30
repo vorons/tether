@@ -1,0 +1,67 @@
+{
+ "generated_at": 1790756014,
+ "id": "model-oracle-ai",
+ "models": [
+  {
+   "context": 1000000,
+   "id": "auto"
+  },
+  {
+   "context": 1000000,
+   "id": "claude-fable-5"
+  },
+  {
+   "context": 200000,
+   "id": "claude-haiku-4.5"
+  },
+  {
+   "context": 1000000,
+   "id": "claude-opus-4.8"
+  },
+  {
+   "context": 1000000,
+   "id": "claude-sonnet-5"
+  },
+  {
+   "context": 1000000,
+   "id": "deepseek-v4-pro"
+  },
+  {
+   "context": 1000000,
+   "id": "glm-5.2"
+  },
+  {
+   "context": 1047576,
+   "id": "gpt-4.1"
+  },
+  {
+   "context": 1047576,
+   "id": "gpt-4.1-mini"
+  },
+  {
+   "context": 400000,
+   "id": "gpt-5"
+  },
+  {
+   "context": 1050000,
+   "id": "gpt-5.4"
+  },
+  {
+   "context": 400000,
+   "id": "gpt-5.4-mini"
+  },
+  {
+   "context": 400000,
+   "id": "gpt-5.4-nano"
+  },
+  {
+   "context": 1050000,
+   "id": "gpt-5.5"
+  },
+  {
+   "context": 200000,
+   "id": "o4-mini"
+  }
+ ],
+ "schema": 1
+}

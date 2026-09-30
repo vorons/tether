@@ -1,0 +1,11 @@
+{
+ "generated_at": 1790756014,
+ "id": "longcat",
+ "models": [
+  {
+   "context": 1000000,
+   "id": "LongCat-2.0"
+  }
+ ],
+ "schema": 1
+}

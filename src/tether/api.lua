@@ -366,7 +366,37 @@ local function stepped_stream(loop, url, hfile, bfile, feed)
     return step_ok, step_err
 end
 
+local function extract_ids(list)
+    local ids = {}
+    if type(list) ~= "table" then return ids end
+    for _, m in ipairs(list) do
+        local id = (type(m) == "table" and m.id) or m
+        if type(id) == "string" and id ~= "" then
+            ids[#ids + 1] = id
+        end
+    end
+    return ids
+end
+
+-- offline-provider-catalog: single-model local servers need no /model pick.
+-- With an empty pin on a loopback endpoint, adopt the server's only model
+-- (single served model or one running router model). Ambiguity (zero or
+-- several) and fetch failure leave the pin empty and the request goes out
+-- verbatim. In-memory only, never persisted: the server's model may change.
+-- Runs at most once per cfg: a successful adopt fills cfg.model, so retries
+-- and later turns skip the lookup.
+local function adopt_local_model(cfg, api_key)
+    if not cfg or (cfg.model ~= nil and cfg.model ~= "") then return end
+    if not M._is_loopback(expand_url(cfg.base_url or "", cfg)) then return end
+    local ok, live = pcall(M.list_models_live, cfg, api_key or "", 5)
+    if not ok or type(live) ~= "table" then return end
+    local ids = extract_ids(live)
+    if #ids == 1 then cfg.model = ids[1] end
+end
+M._adopt_local_model = adopt_local_model -- test seam (6.1 auto-adopt pinning)
+
 local function http_request(cfg, api_key, messages, on_event, opts)
+    adopt_local_model(cfg, api_key)
     local pname, P = provider_of(cfg)
     local model = cfg.model
     local url = expand_url(P.stream_url(cfg, model, api_key), cfg)
@@ -620,24 +650,63 @@ M._header_file = header_file
 
 local NATIVE_WIRES = { openai = true, anthropic = true, gemini = true }
 
+local function metadata_module()
+    return _G.provider_metadata
+        or (function()
+            local chunk = loadfile("src/tether/metadata.lua")
+            return chunk and chunk()
+        end)()
+end
+
+-- offline-provider-catalog: Tier-A static fallback without entry.models.
+-- The vendored snapshot carries no model lists, so resolve the last live
+-- listing (the same models_cache.json commands.list_models serves) then
+-- lazy shard ids from disk; never network here — the caller tries live
+-- next. Empty means "unknown yet": the caller attempts live and explains.
+local function tier_a_ids(cfg, pname)
+    local home = (type(cfg) == "table" and cfg._auth_home) or nil
+    local h = home
+    if type(h) ~= "string" or h == "" then h = os.getenv("HOME") or "." end
+    local common = _G.provider_common
+        or (function()
+            local chunk = loadfile("src/tether/providers/common.lua")
+            return chunk and chunk()
+        end)()
+    if common then
+        local f = io.open(h .. "/.tether/models_cache.json", "r")
+        if f then
+            local body = f:read("*a")
+            f:close()
+            local ok, tbl = pcall(common.json_decode, body or "")
+            if ok and type(tbl) == "table" then
+                local entry = tbl[pname]
+                if type(entry) == "table" then
+                    local ids = extract_ids(entry.models)
+                    if #ids > 0 then return ids end
+                end
+            end
+        end
+    end
+    local md = metadata_module()
+    if md then
+        local ids = extract_ids(md.cached(pname, h))
+        if #ids > 0 then return ids end
+    end
+    return {}
+end
+
 function M.list_models(cfg)
     local pname, P = provider_of(cfg)
     local entry = M._catalog_entry(pname)
     -- dynamic-provider-catalog: native ids and Tier-B adapters keep their
-    -- curated static_models(); every other id falls back to its
-    -- pipeline/bundled models[] (ids only), else empty. Live listing stays
-    -- authoritative one layer up (commands.list_models tries live first).
+    -- curated static_models(); every other id resolves legacy entry.models
+    -- (old full-form caches) first, then live-cache/shard ids, else empty.
+    -- Live listing stays authoritative one layer up
+    -- (commands.list_models tries live first).
     if entry and NATIVE_WIRES[entry.wire] and pname ~= entry.wire then
-        local ids = {}
-        if type(entry.models) == "table" then
-            for _, m in ipairs(entry.models) do
-                local id = (type(m) == "table" and m.id) or m
-                if type(id) == "string" and id ~= "" then
-                    ids[#ids + 1] = id
-                end
-            end
-        end
-        return ids
+        local legacy = extract_ids(entry.models)
+        if #legacy > 0 then return legacy end
+        return tier_a_ids(cfg, pname)
     end
     return P.static_models()
 end

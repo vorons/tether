@@ -1,0 +1,15 @@
+{
+ "generated_at": 1790756014,
+ "id": "cerebras",
+ "models": [
+  {
+   "context": 131072,
+   "id": "gpt-oss-120b"
+  },
+  {
+   "context": 131072,
+   "id": "qwen-3.8-27b"
+  }
+ ],
+ "schema": 1
+}

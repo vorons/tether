@@ -1,0 +1,43 @@
+{
+ "generated_at": 1790756014,
+ "id": "xiaomi",
+ "models": [
+  {
+   "context": 262144,
+   "id": "mimo-v2-flash"
+  },
+  {
+   "context": 262144,
+   "id": "mimo-v2-omni"
+  },
+  {
+   "context": 1048576,
+   "id": "mimo-v2-pro"
+  },
+  {
+   "context": 1048576,
+   "id": "mimo-v2.5"
+  },
+  {
+   "context": 1048576,
+   "id": "mimo-v2.5-pro"
+  },
+  {
+   "context": 1048576,
+   "id": "mimo-v2.5-pro-ultraspeed"
+  },
+  {
+   "context": 1048576,
+   "id": "mimo-v2.6-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "mimo-v2.6-pro"
+  },
+  {
+   "context": 1048576,
+   "id": "mimo-v2.6-pro-ultraspeed"
+  }
+ ],
+ "schema": 1
+}

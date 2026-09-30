@@ -1,0 +1,27 @@
+{
+ "generated_at": 1790756014,
+ "id": "cloudferro-sherlock",
+ "models": [
+  {
+   "context": 196000,
+   "id": "MiniMaxAI/MiniMax-M2.5"
+  },
+  {
+   "context": 70000,
+   "id": "meta-llama/Llama-3.3-70B-Instruct"
+  },
+  {
+   "context": 131000,
+   "id": "openai/gpt-oss-120b"
+  },
+  {
+   "context": 32000,
+   "id": "speakleash/Bielik-11B-v2.6-Instruct"
+  },
+  {
+   "context": 32000,
+   "id": "speakleash/Bielik-11B-v3.0-Instruct"
+  }
+ ],
+ "schema": 1
+}

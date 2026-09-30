@@ -1,0 +1,35 @@
+{
+ "generated_at": 1790756014,
+ "id": "arcee",
+ "models": [
+  {
+   "context": 1048576,
+   "id": "deepseek/deepseek-v4-flash-latest"
+  },
+  {
+   "context": 512000,
+   "id": "deepseek/deepseek-v4-pro"
+  },
+  {
+   "context": 1048576,
+   "id": "deepseek/deepseek-v4-pro-0813"
+  },
+  {
+   "context": 1048576,
+   "id": "moonshotai/kimi-k3"
+  },
+  {
+   "context": 262144,
+   "id": "thinkingmachines/inkling-small"
+  },
+  {
+   "context": 262144,
+   "id": "trinity-large-thinking"
+  },
+  {
+   "context": 262144,
+   "id": "zai-org/glm-5.2"
+  }
+ ],
+ "schema": 1
+}

@@ -1,0 +1,83 @@
+{
+ "generated_at": 1790756014,
+ "id": "meganova",
+ "models": [
+  {
+   "context": 196608,
+   "id": "MiniMaxAI/MiniMax-M2.1"
+  },
+  {
+   "context": 204800,
+   "id": "MiniMaxAI/MiniMax-M2.5"
+  },
+  {
+   "context": 16384,
+   "id": "Qwen/Qwen2.5-VL-32B-Instruct"
+  },
+  {
+   "context": 262000,
+   "id": "Qwen/Qwen3-235B-A22B-Instruct-2507"
+  },
+  {
+   "context": 1000000,
+   "id": "Qwen/Qwen3.5-Plus"
+  },
+  {
+   "context": 262144,
+   "id": "XiaomiMiMo/MiMo-V2-Flash"
+  },
+  {
+   "context": 163840,
+   "id": "deepseek-ai/DeepSeek-R1-0528"
+  },
+  {
+   "context": 163840,
+   "id": "deepseek-ai/DeepSeek-V3-0324"
+  },
+  {
+   "context": 164000,
+   "id": "deepseek-ai/DeepSeek-V3.1"
+  },
+  {
+   "context": 164000,
+   "id": "deepseek-ai/DeepSeek-V3.2"
+  },
+  {
+   "context": 164000,
+   "id": "deepseek-ai/DeepSeek-V3.2-Exp"
+  },
+  {
+   "context": 131072,
+   "id": "meta-llama/Llama-3.3-70B-Instruct"
+  },
+  {
+   "context": 131072,
+   "id": "mistralai/Mistral-Nemo-Instruct-2407"
+  },
+  {
+   "context": 32768,
+   "id": "mistralai/Mistral-Small-3.2-24B-Instruct-2506"
+  },
+  {
+   "context": 262144,
+   "id": "moonshotai/Kimi-K2-Thinking"
+  },
+  {
+   "context": 262144,
+   "id": "moonshotai/Kimi-K2.5"
+  },
+  {
+   "context": 202752,
+   "id": "zai-org/GLM-4.6"
+  },
+  {
+   "context": 202752,
+   "id": "zai-org/GLM-4.7"
+  },
+  {
+   "context": 202752,
+   "id": "zai-org/GLM-5"
+  }
+ ],
+ "schema": 1
+}

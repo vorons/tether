@@ -1,0 +1,35 @@
+{
+ "generated_at": 1790756014,
+ "id": "llama",
+ "models": [
+  {
+   "context": 128000,
+   "id": "cerebras-llama-4-maverick-17b-128e-instruct"
+  },
+  {
+   "context": 128000,
+   "id": "cerebras-llama-4-scout-17b-16e-instruct"
+  },
+  {
+   "context": 128000,
+   "id": "groq-llama-4-maverick-17b-128e-instruct"
+  },
+  {
+   "context": 128000,
+   "id": "llama-3.3-70b-instruct"
+  },
+  {
+   "context": 128000,
+   "id": "llama-3.3-8b-instruct"
+  },
+  {
+   "context": 128000,
+   "id": "llama-4-maverick-17b-128e-instruct-fp8"
+  },
+  {
+   "context": 128000,
+   "id": "llama-4-scout-17b-16e-instruct-fp8"
+  }
+ ],
+ "schema": 1
+}

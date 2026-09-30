@@ -1079,6 +1079,7 @@ local function new_state()
         palette_items = {},
         palette_sel = 1,
         palette_skills = nil,    -- 1.3: skill rows, resolved once per palette open
+        palette_prompts = nil,   -- prompts-as-commands: prompt rows, same discipline
         palette_query = nil,     -- palette-fuzzy-search: typed filter for model/login palettes
         _palette_all = nil,      -- palette-fuzzy-search: unfiltered rows while a query is active
         _in_copy_palette = nil,  -- 5.2: set when the /copy palette is open
@@ -1428,11 +1429,48 @@ local function palette_skill_rows()
     return rows
 end
 
+-- prompts-as-commands: prompt rows mirror skill rows. Discovery comes
+-- from context.discover_prompts (stubbed by M._prompts_stub in tests);
+-- a prompt colliding with a command is dropped, a prompt sharing its
+-- name with a skill coexists (the [p] vs [s] markers tell them apart).
+local function discover_palette_prompts()
+    local ok, res
+    if M._prompts_stub then
+        ok, res = pcall(M._prompts_stub)
+    else
+        ok, res = pcall(function()
+            local ctx = context
+            return ctx and ctx.discover_prompts(S.cfg, S.workspace)
+        end)
+    end
+    if not ok or type(res) ~= "table" then return {} end
+    return res
+end
+
+local function palette_prompt_rows()
+    local commands = command_set()
+    local rows = {}
+    for _, p in ipairs(discover_palette_prompts()) do
+        local name = tostring(p.name or "")
+        if name ~= "" and not commands[name:lower()] then
+            rows[#rows + 1] = {
+                label = "/" .. name,
+                desc = "[p] " .. (p.description or ""),
+                prompt = true,
+                name = name,
+                path = p.path or "",
+            }
+        end
+    end
+    return rows
+end
+
 -- forward declaration: palette_pick_skill closes the palette through it
 local palette_sync
 
--- 4.1: a skill row only composes text into the input and closes the palette —
--- nothing is executed and no skill body is read (spec: Palette).
+-- 4.1: a skill or prompt row only composes text into the input and closes
+-- the palette — nothing is executed and no skill/prompt body is read
+-- (spec: Palette).
 local function palette_pick_skill(it)
     S.input = (it.label or ("/" .. (it.name or ""))) .. " "
     S.cursor = #S.input
@@ -1455,6 +1493,7 @@ palette_sync = function()
         S.palette_items = {}
         S.palette_sel = 1
         S.palette_skills = nil
+        S.palette_prompts = nil
     end
 
     if first:sub(1, 1) ~= "/" then palette_hide() return end
@@ -1464,16 +1503,20 @@ palette_sync = function()
     local was_active = S.palette_active
     S.palette_active = true
     -- 1.3: resolved once per open, not on every keystroke
-    if not was_active then S.palette_skills = palette_skill_rows() end
+    if not was_active then
+        S.palette_skills = palette_skill_rows()
+        S.palette_prompts = palette_prompt_rows()
+    end
 
     -- 3.2: fuzzy ranking; declaration-order tie-breaks, empty filter lists all.
     -- unified-slash-palette 1.4: one list — commands in declared order, then
-    -- extension commands, then the discovered skills, ranked together so a
-    -- prefix match wins in any group.
+    -- extension commands, then the discovered skills, then the discovered
+    -- prompts, ranked together so a prefix match wins in any group.
     local entries = {}
     for _, c in ipairs(SLASH_COMMANDS) do entries[#entries + 1] = c end
     for _, c in ipairs(discover_palette_ext_commands()) do entries[#entries + 1] = c end
     for _, r in ipairs(S.palette_skills or {}) do entries[#entries + 1] = r end
+    for _, r in ipairs(S.palette_prompts or {}) do entries[#entries + 1] = r end
     local labels = {}
     for _, e in ipairs(entries) do labels[#labels + 1] = e.label end
     local order = M._palette.fuzzy_rank(filter, labels)
@@ -1548,6 +1591,8 @@ end
 M._tools_stub = nil
 -- 6.1: seam for tests to stub skill discovery (mirrors M._tools_stub).
 M._skills_stub = nil
+-- prompts-as-commands: seam for tests to stub prompt discovery.
+M._prompts_stub = nil
 -- ============================================================
 -- at-file-picker: the `@` trigger (spec tui: Path completion)
 -- ============================================================
@@ -2139,6 +2184,7 @@ function M._splash_rows(res, width, pad)
     end
     section(M._copy.splash.context_header, res.agents)
     section(M._copy.splash.skills_header, res.skills)
+    section(M._copy.splash.extensions_header, res.extensions)
     return rows
 end
 
@@ -2192,7 +2238,27 @@ function M._collect_splash_resources()
             end
         end
     end
-    return { agents = agents, skills = skills }
+    -- splash-extensions: names of loaded extensions from the already-booted
+    -- registry (same _G + loadfile idiom as skills); disabled and broken
+    -- extensions never reach reg.exts, so they stay off the splash.
+    local extensions = {}
+    local extmod = rawget(_G, "extensions")
+    if type(extmod) ~= "table" then
+        local chunk = loadfile("src/tether/extensions.lua")
+        extmod = (chunk and chunk()) or nil
+    end
+    if type(extmod) == "table" and type(extmod.get) == "function" then
+        local ok, reg = pcall(extmod.get)
+        if ok and type(reg) == "table" and type(reg.exts) == "table" then
+            for _, e in ipairs(reg.exts) do
+                local nm = (type(e) == "table" and e.name) or nil
+                if type(nm) == "string" and nm ~= "" then
+                    extensions[#extensions + 1] = nm
+                end
+            end
+        end
+    end
+    return { agents = agents, skills = skills, extensions = extensions }
 end
 
 -- splash-colors: AGENTS.md ancestor chain, mirroring the old Go
@@ -2225,9 +2291,10 @@ end
 -- chunk local: ui.lua sits at Lua's 200-locals limit for the main chunk).
 function M._splash_entry()
     local st = M._get_state()
-    local res = (st and st.splash_resources) or { agents = {}, skills = {} }
+    local res = (st and st.splash_resources) or { agents = {}, skills = {}, extensions = {} }
     return { role = "splash", version = (st and st.version) or "v0.1.0",
-        agents = res.agents or {}, skills = res.skills or {} }
+        agents = res.agents or {}, skills = res.skills or {},
+        extensions = res.extensions or {} }
 end
 
 -- add-ask-tool: is `label` among this question's selected answers?
@@ -2320,9 +2387,9 @@ local function render_entry(e, width, prev_role)
         local role = e.role or "system"
         if role == "splash" then
             -- splash-colors: startup splash block (wordmark, version,
-            -- Context/Skills sections); rows from the entry's own data.
-            out = M._splash_rows({ version = e.version,
-                agents = e.agents, skills = e.skills }, width, ui_pad(width))
+            -- Context/Skills/Extensions sections); rows from the entry's own data.
+            out = M._splash_rows({ version = e.version, agents = e.agents,
+                skills = e.skills, extensions = e.extensions }, width, ui_pad(width))
         elseif role == "separator" then
             -- tui: Turn separators — muted rule with the local submission time
             local label = "── " .. (e.text or "") .. " "
@@ -3171,6 +3238,15 @@ slash_callbacks.model = function(bag, cmd, rest)
             S._models_bg = { provider = (S.cfg and S.cfg.provider) or "openai",
                 started = os.time() }
         end
+        -- offline-provider-catalog: warm the active provider's metadata
+        -- shard while the user browses models; a spawned fetch is polled
+        -- alongside the model-list refresh (limits land silently).
+        if commands.warm_metadata then
+            local ok, spawned = pcall(commands.warm_metadata, S.cfg)
+            if ok and spawned then
+                S._metadata_bg = (S.cfg and S.cfg.provider) or "openai"
+            end
+        end
         -- palette-only R2: model list is a palette under the input
         S.error_banner = nil
         S.palette_mode = "model"
@@ -3193,7 +3269,8 @@ slash_callbacks.model = function(bag, cmd, rest)
             local age = commands.providers_age
                 and commands.providers_age(home) or nil
             if age and age.stale then
-                S.toast = "providers catalog " .. age.text .. " old"
+                local qual = (age.source == "snapshot") and " (vendored)" or ""
+                S.toast = "providers catalog" .. qual .. " " .. age.text .. " old"
                 debug_log("providers catalog age: " .. age.text)
             end
         end
@@ -3311,6 +3388,7 @@ local handle_key
 -- OWN: S.palette_sel <- palette_sync, palette_hide, M._palette_apply_query, path_complete_tab, completion_cancel, completion_commit, picker_close, mention_refilter, on_mouse, on_palette_copy, on_palette_resume, close_resume_palette, on_palette_model, close_model_palette, on_palette_think, close_think_palette, on_palette_login, close_login_palette, on_palette_logout, on_palette_logout_confirm, on_palette_mention, on_palette_path, on_palette_command, on_slash_copy, on_slash_model, on_slash_resume, on_slash_think, on_slash_login, on_slash_logout, begin, cancel, submit, login_command, logout_command, logout_close, logout_ask_confirm, logout_confirm_back, M._poll_models_bg
 -- OWN: S.palette_query <- on_mouse, on_slash_model, on_palette_model, close_model_palette, on_palette_login, close_login_palette, on_palette_logout, login_command, logout_command, logout_close
 -- OWN: S.palette_skills <- palette_sync, palette_hide
+-- OWN: S.palette_prompts <- palette_sync, palette_hide
 -- OWN: S._palette_all <- on_mouse, on_slash_model, close_model_palette, close_login_palette, login_command, logout_command, logout_close, M._poll_models_bg
 -- OWN: S._in_copy_palette <- on_slash_copy, on_palette_copy
 -- OWN: S._in_resume_palette <- on_mouse, on_slash_resume, on_palette_resume, close_resume_palette
@@ -3325,7 +3403,8 @@ local handle_key
 -- Out of scope (owned elsewhere): S.login_secret/login_provider/login_flow
 -- (ui_auth begin/cancel/submit/poll_tick), S.confirmation.detail (read by
 -- resolve_confirmation), S.history (input history), S._models_bg/_models_err
--- (model refresh bookkeeping).
+-- (model refresh bookkeeping), S._metadata_bg (metadata warm bookkeeping,
+-- set by on_slash_model, cleared by M._poll_models_bg).
 
 local function handle_agent_event(ev)
     if not ev or not ev.type then return end
@@ -3705,13 +3784,17 @@ local function commit_input()
     end
     local trimmed = text:match("^%s*(.-)%s*$")
     if trimmed:sub(1, 1) == "/" then
-        -- add-llm-compaction: capture free text after the command word
-        local word, rest = trimmed:match("^/(%w+)%s*(.*)$")
+        -- add-llm-compaction: capture free text after the command word.
+        -- prompts-as-commands: the word class covers kebab-case names
+        -- (review.md -> /my-check); at least one word char is required so
+        -- inputs like "/- ..." keep the legacy plain-message path.
+        local word, rest = trimmed:match("^/([%w_.-]*[%w_][%w_.-]*)%s*(.*)$")
         if word then
             -- unified-slash-palette 4.2: names compare without regard to case.
-            -- Routing lives in commands.resolve_slash; a skill name falls
-            -- through to the ordinary submit path below. Test/dev stubs of
-            -- the commands global predate resolve_slash (3.1 pattern).
+            -- Routing lives in commands.resolve_slash; a prompt name expands
+            -- into a user message, a skill name falls through to the ordinary
+            -- submit path below. Test/dev stubs of the commands global
+            -- predate resolve_slash (3.1 pattern).
             local resolve = commands.resolve_slash
             if type(resolve) ~= "function" then
                 local chunk = loadfile("src/tether/commands.lua")
@@ -3719,13 +3802,43 @@ local function commit_input()
                 resolve = real and real.resolve_slash
             end
             local route = (type(resolve) == "function")
-                and resolve(word, command_set(), palette_skill_rows()) or "unknown"
+                and resolve(word, command_set(),
+                    palette_prompt_rows(), palette_skill_rows()) or "unknown"
             if route == "command" then
                 execute_command(word:lower(), rest)
                 return
             elseif route == "unknown" then
                 execute_command(word, rest)
                 return
+            elseif route == "prompt" then
+                -- Single-pass expansion: the body is read now (resolved at
+                -- submit time), $ARGUMENTS takes the invocation args, and the
+                -- expanded text continues down the ordinary path. An expanded
+                -- leading "/" or "!" is data, never re-dispatched.
+                local path = nil
+                for _, r in ipairs(palette_prompt_rows()) do
+                    if tostring(r.name or ""):lower() == word:lower() then
+                        path = r.path
+                        break
+                    end
+                end
+                local ctx = context
+                if not (ctx and ctx.read_prompt_body) then
+                    local chunk = loadfile("src/tether/context.lua")
+                    ctx = (chunk and chunk()) or nil
+                end
+                local body = nil
+                if ctx and ctx.read_prompt_body then
+                    local ok, res = pcall(ctx.read_prompt_body, path)
+                    if ok then body = res end
+                end
+                if body == nil then
+                    io.stderr:write("tether: cannot read prompt file: "
+                        .. tostring(path) .. "\n")
+                    S.error_banner = "cannot read prompt file: " .. tostring(path)
+                    return
+                end
+                text = body:gsub("%$ARGUMENTS", function() return rest end)
             end
         end
     end
@@ -4178,7 +4291,7 @@ on_mouse = function(bag, k)
                 if k.row <= last then
                     local it = S.palette_items[off + (k.row - L.palette_row) - 1]
                     if it then
-                        if it.skill then
+                        if it.skill or it.prompt then
                             palette_pick_skill(it)
                         elseif it.cmd then
                             execute_command(it.cmd)
@@ -4673,8 +4786,8 @@ on_palette_command = function(bag, k)
             if k.kind == "enter" then
                 local it = S.palette_items[S.palette_sel]
                 if it then
-                    -- 4.1: a skill row composes text; a command row runs
-                    if it.skill then palette_pick_skill(it) else execute_command(it.cmd) end
+                    -- 4.1: a skill or prompt row composes text; a command row runs
+                    if it.skill or it.prompt then palette_pick_skill(it) else execute_command(it.cmd) end
                 end
                 return
             elseif k.kind == "tab" then
@@ -4851,7 +4964,7 @@ function M.run(app_cfg)
 
     -- splash-colors: version and startup resources back the splash block;
     -- /clear and /new re-render it from these, so they stay fixed here.
-    S.version = "v0.1.0"
+    S.version = "v" .. tostring(build_version or "dev")
     S.splash_resources = M._collect_splash_resources()
 
     local size = tether.get_terminal_size()
@@ -4940,6 +5053,12 @@ function M.run(app_cfg)
     -- M-field (not a run() local): M.run sits at Lua's 200-locals limit.
     function M._poll_models_bg()
         if not (S._models_bg and commands and commands.poll_models_refresh) then
+            -- no model-list fetch in flight, but a metadata warm may be.
+            if S._metadata_bg and commands and commands.poll_metadata then
+                local mst = commands.poll_metadata(
+                    (S.cfg and S.cfg._auth_home) or nil, S._metadata_bg)
+                if mst ~= "waiting" then S._metadata_bg = nil end
+            end
             return
         end
         local st = commands.poll_models_refresh(S.cfg, S._models_bg)

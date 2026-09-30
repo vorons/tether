@@ -1,0 +1,23 @@
+{
+ "generated_at": 1790756014,
+ "id": "sakana",
+ "models": [
+  {
+   "context": 1000000,
+   "id": "fugu"
+  },
+  {
+   "context": 1000000,
+   "id": "fugu-ultra"
+  },
+  {
+   "context": 1000000,
+   "id": "fugu-ultra-20260615"
+  },
+  {
+   "context": 262144,
+   "id": "sakana-namazu"
+  }
+ ],
+ "schema": 1
+}

@@ -1,0 +1,19 @@
+{
+ "generated_at": 1790756014,
+ "id": "drun",
+ "models": [
+  {
+   "context": 131072,
+   "id": "public/deepseek-r1"
+  },
+  {
+   "context": 131072,
+   "id": "public/deepseek-v3"
+  },
+  {
+   "context": 204800,
+   "id": "public/minimax-m25"
+  }
+ ],
+ "schema": 1
+}

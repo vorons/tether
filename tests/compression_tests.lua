@@ -65,6 +65,60 @@ do
   print("TCMP anchor_trim_prefix pinning: OK")
 end
 
+-- offline-provider-catalog: per-model limit chain ends at 200000.
+do
+  local home = os.tmpname()
+  os.remove(home)
+  assert(os.execute("mkdir -p " .. home .. "/.tether"))
+  local common = assert(loadfile("src/tether/providers/common.lua"))()
+  local function write_shard(models)
+    local cache = { metap = { checked_at = os.time(), models = models } }
+    local f = assert(io.open(home .. "/.tether/metadata_cache.json", "w"))
+    f:write(common.json_encode(cache))
+    f:close()
+  end
+  local orig_catalog, orig_md = _G.provider_catalog, _G.provider_metadata
+  local catfix = assert(loadfile("src/tether/providers/catalog.lua"))()
+  catfix.set_overlay({
+    metap = { wire = "openai", base_url = "https://m.example/v1",
+      api_key_env = "M", model = "def", _source = "test" },
+  }, { generated_at = 0 })
+  _G.provider_catalog = catfix
+  _G.provider_metadata = assert(loadfile("src/tether/metadata.lua"))()
+  local comp = assert(loadfile("src/tether/compression.lua"))()
+
+  -- metadata exact hit.
+  write_shard({ { id = "m", context = 9000 }, { id = "def", context = 5000 } })
+  assert_eq(comp.catalog_max_tokens({ provider = "metap", model = "m",
+    _auth_home = home }), 9000, "TCMP metadata exact hit")
+  -- metadata provider-default fallback.
+  assert_eq(comp.catalog_max_tokens({ provider = "metap", model = "unknown",
+    _auth_home = home }), 5000, "TCMP metadata default fallback")
+  -- absent everywhere: 200000, never nil.
+  assert_eq(comp.catalog_max_tokens({ provider = "metap", model = "nope",
+    _auth_home = home .. "-empty" }), 200000, "TCMP absent is 200k")
+  assert_eq(comp.catalog_max_tokens({}), 200000, "TCMP no provider is 200k")
+  -- legacy entry.models still serves (old full-form caches).
+  catfix.set_overlay({
+    metap = { wire = "openai", base_url = "https://m.example/v1",
+      api_key_env = "M", model = "def",
+      models = { { id = "legacy-m", context = 7000 } }, _source = "test" },
+  }, { generated_at = 0 })
+  assert_eq(comp.catalog_max_tokens({ provider = "metap",
+    model = "legacy-m", _auth_home = home .. "-empty" }), 7000,
+    "TCMP legacy entry.models serves")
+  -- metadata wins over legacy for the same id.
+  assert_eq(comp.catalog_max_tokens({ provider = "metap", model = "m",
+    _auth_home = home }), 9000, "TCMP metadata wins over legacy")
+  -- explicit user value wins over everything.
+  local mt = comp.compaction_thresholds({ provider = "metap", model = "m",
+    _auth_home = home, context = { max_tokens = 16384 } })
+  assert_eq(mt, 16384, "TCMP user value wins")
+  _G.provider_catalog, _G.provider_metadata = orig_catalog, orig_md
+  os.execute("rm -rf " .. home)
+  print("TCMP metadata chain: OK")
+end
+
 if failed > 0 then
     os.exit(1)
 end

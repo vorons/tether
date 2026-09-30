@@ -1,7 +1,9 @@
 -- tether providers/catalog — thin bootstrap + merged view.
--- Tier-A provider data arrives via the pipeline cache
+-- Tier-A routing data ships in the binary as a vendored slim snapshot
+-- (every pipeline id as of the build, no models[]; see snapshot()) and is
+-- refreshed at runtime by the pipeline cache
 -- (~/.tether/providers_cache.json, generated from models.dev; see
--- dynamic-provider-catalog) and an optional user overlay
+-- dynamic-provider-catalog) plus an optional user overlay
 -- (~/.tether/models.lua). This file bundles only what the pipeline cannot
 -- provide: local runtimes, Tier-B adapter entries, and endpoint-less ids.
 -- get()/ids() read the merged view; entries stays the bootstrap.
@@ -55,7 +57,9 @@ local PINNED = { "openai", "anthropic", "gemini" }
 M.PROVIDERS_URL =
     "https://raw.githubusercontent.com/vorons/tether/main/data/providers.json"
 M.SCHEMA_VERSION = 1
-M.CACHE_TTL = 12 * 3600
+-- offline-provider-catalog: endpoints change rarely and the vendored
+-- snapshot covers fresh installs, so the runtime refresh is weekly.
+M.CACHE_TTL = 7 * 24 * 3600
 M.DEFAULT_ID = "llama-cpp"
 
 local function home_dir(home)
@@ -142,15 +146,63 @@ local function copy_entry(e)
     return out
 end
 
--- Merge layers low -> high: bootstrap < pipeline cache < models.lua
--- (whole entry per id). Pure function over inputs; never mutates them.
+-- Routing-only projection of a catalog entry (no models[]: model lists
+-- come from the live provider API, context limits from lazy metadata).
+-- Shared with tools/gen-snapshot.lua so the vendored snapshot is exactly
+-- this shape however it is produced.
+M.SLIM_KEYS = { "wire", "base_url", "url_template", "api_key_env",
+                "model", "extra_headers" }
+
+function M.slim_entry(e)
+    if type(e) ~= "table" then return nil end
+    local out = {}
+    for _, k in ipairs(M.SLIM_KEYS) do
+        if e[k] ~= nil then out[k] = e[k] end
+    end
+    return out
+end
+
+-- Vendored slim snapshot: the embedded `providers_snapshot` global (a JSON
+-- string module) in the binary; plain-lua dev/test runs read
+-- data/providers.json from the source tree instead. Returns providers,
+-- generated_at or nil when unusable (unsupported schema counts as absent).
+function M.snapshot()
+    local body = nil
+    if type(_G.providers_snapshot) == "string" then
+        body = _G.providers_snapshot
+    else
+        local f = io.open("data/providers.json", "r")
+        if not f then return nil end
+        body = f:read("*a")
+        f:close()
+    end
+    local tbl = M.parse_file(body or "")
+    if not tbl then return nil end
+    local out = {}
+    for id, e in pairs(tbl.providers) do
+        if type(id) == "string" then
+            local s = M.slim_entry(e)
+            if s then s._source = "snapshot"; out[id] = s end
+        end
+    end
+    return out, tbl.generated_at
+end
+
+-- Merge layers low -> high: base (vendored snapshot under the bootstrap)
+-- < pipeline cache < models.lua (whole entry per id). Pure function over
+-- inputs; never mutates them.
 -- Returns merged entries + meta {generated_at, sources}.
-function M.merge(bootstrap, cache_providers, models_lua_providers, generated_at)
+function M.merge(base, cache_providers, models_lua_providers, generated_at)
     local merged = {}
-    if type(bootstrap) == "table" then
-        for id, e in pairs(bootstrap) do
+    if type(base) == "table" then
+        for id, e in pairs(base) do
             local c = copy_entry(e)
-            if c then c._source = "bootstrap"; merged[id] = c end
+            -- the base layer carries its own source tags (vendored snapshot
+            -- under the bootstrap); untagged callers keep the legacy label.
+            if c then
+                if c._source == nil then c._source = "bootstrap" end
+                merged[id] = c
+            end
         end
     end
     if type(cache_providers) == "table" then
@@ -172,7 +224,7 @@ function M.merge(bootstrap, cache_providers, models_lua_providers, generated_at)
         end
     end
     return merged, { generated_at = generated_at,
-        bootstrap = type(bootstrap) == "table",
+        bootstrap = type(base) == "table",
         cache = type(cache_providers) == "table",
         overlay = type(models_lua_providers) == "table" }
 end
@@ -188,7 +240,8 @@ M._home = nil
 M._pinned = false
 
 -- Test seam / poll hook: layer entries over the bootstrap as the merged
--- view (same position as the pipeline cache layer). nil clears the view
+-- view (same position as the pipeline cache layer). The vendored snapshot
+-- does not join here — only ensure() layers it lowest. nil clears the view
 -- (poll re-merges from disk right after) and releases the pin.
 function M.set_overlay(entries, meta)
     if entries == nil then
@@ -205,14 +258,26 @@ function M.overlay_meta()
     return M._meta
 end
 
--- Load cache + models.lua from home and merge over the bootstrap.
--- Returns "ready" | nil + reason. Missing cache is nil + a naming error
--- (the caller decides: bootstrap-local ids still work offline).
+-- Load cache + models.lua from home and merge over the vendored snapshot
+-- and the bootstrap. Returns "ready" | nil + reason. With no cache and no
+-- overlay the vendored snapshot still serves (offline fresh install); only
+-- a missing snapshot AND no cache/overlay is nil + a naming error.
 function M.ensure(home)
     -- one home per process in prod; a different home re-merges (tests use
     -- several temp homes in one process — a stale merge would leak).
     -- A pinned overlay (set_overlay) always wins over disk state.
     if M._merged and (M._home == home or M._pinned) then return "ready" end
+    -- offline-provider-catalog: vendored snapshot is the lowest layer;
+    -- the bootstrap overlays it so hand-tuned local/Tier-B entries win.
+    local snap_providers, snap_generated = M.snapshot()
+    local base = {}
+    if type(snap_providers) == "table" then
+        for id, e in pairs(snap_providers) do base[id] = e end
+    end
+    for id, e in pairs(M.entries) do
+        local c = copy_entry(e)
+        if c then c._source = "bootstrap"; base[id] = c end
+    end
     local cache_providers, generated_at = nil, nil
     local cf = io.open(M.cache_path(home), "r")
     local cache_err = nil
@@ -229,14 +294,18 @@ function M.ensure(home)
         cache_err = "no providers cache at " .. M.cache_path(home)
     end
     local overlay = M.read_models_lua(home)
-    if not cache_providers and not overlay then
+    if not snap_providers and not cache_providers and not overlay then
         return nil, cache_err or "no providers available"
     end
-    if cache_err and not cache_providers then
+    if cache_err and not cache_providers and snap_providers then
+        io.stderr:write("tether: providers cache unavailable ("
+            .. cache_err .. "); serving vendored snapshot\n")
+    elseif cache_err and not cache_providers then
         io.stderr:write("tether: providers cache ignored (" .. cache_err .. ")\n")
     end
-    local merged, meta = M.merge(M.entries, cache_providers, overlay,
-        generated_at)
+    local merged, meta = M.merge(base, cache_providers, overlay,
+        generated_at or snap_generated)
+    meta.snapshot = snap_providers ~= nil
     M._merged = merged
     M._meta = meta
     M._home = home
@@ -257,7 +326,7 @@ function M.env_name(v)
     return type(v[1]) == "string" and v[1] or nil
 end
 
--- Full merged view (bootstrap when no overlay loaded yet).
+-- Full merged view (bootstrap when ensure() never ran).
 function M.all()
     return M._merged or M.entries
 end

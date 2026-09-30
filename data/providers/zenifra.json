@@ -1,0 +1,11 @@
+{
+ "generated_at": 1790756014,
+ "id": "zenifra",
+ "models": [
+  {
+   "context": 262144,
+   "id": "alibaba/qwen3.6-35b-a3b"
+  }
+ ],
+ "schema": 1
+}

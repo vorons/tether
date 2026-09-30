@@ -1,0 +1,19 @@
+{
+ "generated_at": 1790756014,
+ "id": "morph",
+ "models": [
+  {
+   "context": 32000,
+   "id": "auto"
+  },
+  {
+   "context": 16000,
+   "id": "morph-v3-fast"
+  },
+  {
+   "context": 32000,
+   "id": "morph-v3-large"
+  }
+ ],
+ "schema": 1
+}

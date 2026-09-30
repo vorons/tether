@@ -1,0 +1,43 @@
+{
+ "generated_at": 1790756014,
+ "id": "oci",
+ "models": [
+  {
+   "context": 128000,
+   "id": "meta.llama-3.3-70b-instruct"
+  },
+  {
+   "context": 512000,
+   "id": "meta.llama-4-maverick-17b-128e-instruct-fp8"
+  },
+  {
+   "context": 192000,
+   "id": "meta.llama-4-scout-17b-16e-instruct"
+  },
+  {
+   "context": 128000,
+   "id": "openai.gpt-oss-120b"
+  },
+  {
+   "context": 128000,
+   "id": "openai.gpt-oss-20b"
+  },
+  {
+   "context": 1000000,
+   "id": "xai.grok-4.20-non-reasoning"
+  },
+  {
+   "context": 1000000,
+   "id": "xai.grok-4.20-reasoning"
+  },
+  {
+   "context": 1000000,
+   "id": "xai.grok-4.3"
+  },
+  {
+   "context": 500000,
+   "id": "xai.grok-4.6"
+  }
+ ],
+ "schema": 1
+}

@@ -1,0 +1,23 @@
+{
+ "generated_at": 1790756014,
+ "id": "deepseek",
+ "models": [
+  {
+   "context": 1000000,
+   "id": "deepseek-flash"
+  },
+  {
+   "context": 1000000,
+   "id": "deepseek-v4-flash"
+  },
+  {
+   "context": 1000000,
+   "id": "deepseek-v4-flash-vision-exp"
+  },
+  {
+   "context": 1000000,
+   "id": "deepseek-v4-pro"
+  }
+ ],
+ "schema": 1
+}

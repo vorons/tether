@@ -1,0 +1,15 @@
+{
+ "generated_at": 1790756014,
+ "id": "sarvam",
+ "models": [
+  {
+   "context": 131072,
+   "id": "sarvam-105b"
+  },
+  {
+   "context": 65536,
+   "id": "sarvam-30b"
+  }
+ ],
+ "schema": 1
+}

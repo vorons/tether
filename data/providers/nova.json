@@ -1,0 +1,15 @@
+{
+ "generated_at": 1790756014,
+ "id": "nova",
+ "models": [
+  {
+   "context": 1000000,
+   "id": "nova-2-lite-v1"
+  },
+  {
+   "context": 1000000,
+   "id": "nova-2-pro-v1"
+  }
+ ],
+ "schema": 1
+}

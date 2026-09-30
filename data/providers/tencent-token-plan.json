@@ -1,0 +1,15 @@
+{
+ "generated_at": 1790756014,
+ "id": "tencent-token-plan",
+ "models": [
+  {
+   "context": 256000,
+   "id": "hy3"
+  },
+  {
+   "context": 1024000,
+   "id": "hy4-preview"
+  }
+ ],
+ "schema": 1
+}

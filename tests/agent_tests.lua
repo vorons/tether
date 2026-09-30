@@ -1271,7 +1271,7 @@ do
     end,
   }
 
-  -- miss + live success -> ok, cache written with checked_at
+  -- miss + live success -> ok, slim cache written with checked_at
   assert_eq(commands.sync_providers(home), "ok", "T196 ok on miss")
   assert_eq(calls.n, 1, "T196 one sync attempt")
   local cp = catalog.cache_path(home)
@@ -1280,14 +1280,16 @@ do
   f:close()
   assert_true(raw:find('"checked_at"', 1, true) ~= nil, "T196 checked_at stored")
   assert_true(raw:find('"generated_at":456', 1, true) ~= nil, "T196 payload stored")
+  assert_true(raw:find('"models"', 1, true) == nil, "T196 cache stored slim")
 
   -- fresh -> instant, zero network (stub would explode the count only)
   assert_eq(commands.sync_providers(home), "fresh", "T196 fresh instant")
   assert_eq(calls.n, 1, "T196 no network on fresh")
 
   -- stale + live failure -> stale served with reason (sync path: no fetch_bg)
+  -- 8d back: past the weekly endpoints TTL.
   local old_raw = raw:gsub('"checked_at":(%d+)',
-    function(ts) return '"checked_at":' .. (tonumber(ts) - 13 * 3600) end)
+    function(ts) return '"checked_at":' .. (tonumber(ts) - 8 * 86400) end)
   local wf = io.open(cp, "w")
   wf:write(old_raw)
   wf:close()
@@ -1320,8 +1322,8 @@ do
   -- background spawn path: stale cache serves while one spawn refreshes;
   -- no duplicate while the marker lives. (No cache at all takes the sync
   -- path instead so a first run can bootstrap: see commands.sync_providers.)
-  local stale_wrap = '{"checked_at":' .. (os.time() - 13 * 3600)
-    .. ',"schema":1,"generated_at":' .. (os.time() - 13 * 3600)
+  local stale_wrap = '{"checked_at":' .. (os.time() - 8 * 86400)
+    .. ',"schema":1,"generated_at":' .. (os.time() - 8 * 86400)
     .. ',"providers":{}}'
   local swf = io.open(cp, "w")
   swf:write(stale_wrap)
@@ -1416,14 +1418,14 @@ do
   -- the current local id (4.4 trims to llama-cpp + Tier-B).
   assert_true(commands.check_providers(home, "llama") == true,
     "T198 bootstrap-local passes offline")
-  -- unknown id with no cache anywhere -> error names the cache file
-  -- (fresh home: no cache, no models.lua — nothing to fall back to)
+  -- unknown id with no cache anywhere -> gate passes on the snapshot;
+  -- the unknown id falls through to the alias-fallback path downstream
+  -- (offline fresh install serves every snapshot id).
   local bare = "/tmp/tether_t198_bare"
   os.execute("rm -rf '" .. bare .. "' && mkdir -p '" .. bare .. "/.tether'")
   local ok, err = commands.check_providers(bare, "definitely-not-a-provider")
-  assert_true(ok == nil, "T198 gate fails without catalog")
-  assert_true(err:find("providers_cache.json", 1, true) ~= nil,
-    "T198 error names the cache file")
+  assert_true(ok == true, "T198 unknown id passes on snapshot ("
+    .. tostring(err) .. ")")
 
   -- malformed models.lua warns and is ignored: the pipeline catalog still
   -- serves (t197 home holds a cache; garbage overlay must not break it)
@@ -1620,8 +1622,11 @@ do
   local commands = assert(loadfile("src/tether/commands.lua"))()
   local catalog = assert(loadfile("src/tether/providers/catalog.lua"))()
 
-  -- missing cache -> no age
-  assert_true(commands.providers_age(home) == nil, "T199 no age without cache")
+  -- missing cache -> vendored snapshot age (offline installs mark build age)
+  local no_cache = commands.providers_age(home)
+  assert_true(no_cache ~= nil and no_cache.source == "snapshot",
+    "T199 no cache serves snapshot age")
+  assert_true(no_cache.text ~= nil, "T199 snapshot age has text")
 
   -- fresh cache -> age present, not stale
   local now = os.time()
@@ -1631,15 +1636,17 @@ do
   f:close()
   local young = commands.providers_age(home)
   assert_true(young ~= nil and young.stale == false, "T199 fresh not stale")
+  assert_eq(young.source, "cache", "T199 fresh age source is cache")
 
-  -- old data -> stale with human text
+  -- old data -> stale with human text (8d back: past the weekly TTL)
   local of = io.open(catalog.cache_path(home), "w")
-  of:write('{"checked_at":' .. (now - 13 * 3600) .. ',"schema":1,'
-    .. '"generated_at":' .. (now - 3 * 86400) .. ',"providers":{}}')
+  of:write('{"checked_at":' .. (now - 8 * 86400) .. ',"schema":1,'
+    .. '"generated_at":' .. (now - 8 * 86400) .. ',"providers":{}}')
   of:close()
   local old = commands.providers_age(home)
   assert_true(old ~= nil and old.stale == true, "T199 old is stale")
-  assert_eq(old.text, "3d", "T199 age text days")
+  assert_eq(old.text, "8d", "T199 age text days")
+  assert_eq(old.source, "cache", "T199 old age source is cache")
 
   -- /model open on a stale catalog sets the age toast (T78 pattern:
   -- drive _handle_key directly, read state back)
@@ -1659,8 +1666,37 @@ do
   local S = uimod._get_state()
   assert_true(S.palette_mode == "model", "T199 model palette open")
   assert_true(S.toast ~= nil
-    and S.toast:find("providers catalog 3d old", 1, true) ~= nil,
+    and S.toast:find("providers catalog 8d old", 1, true) ~= nil,
     "T199 stale age toast set")
+
+  -- /model with no cache toasts the vendored snapshot age when stale.
+  local bare_home = "/tmp/tether_t199_bare"
+  os.execute("rm -rf '" .. bare_home .. "' && mkdir -p '" .. bare_home .. "/.tether'")
+  local cfg_bare = {
+    load = function()
+      return { model = "test", workspace = "/tmp", _auth_home = bare_home,
+        provider = "openai", ui = { input_max_lines = 8 } }
+    end,
+    api_key = function() return "" end,
+  }
+  local uimod2 = run_ui_with({ 17 }, { config = cfg_bare,
+    api = { list_models = function() return {} end } })
+  for i = 1, #"/model" do
+    uimod2._handle_key({ kind = "text", char = ("/model"):sub(i, i) })
+  end
+  uimod2._handle_key({ kind = "enter" })
+  local S2 = uimod2._get_state()
+  local bare_age = commands.providers_age(bare_home)
+  assert_true(bare_age ~= nil and bare_age.source == "snapshot",
+    "T199 bare home serves snapshot age")
+  if bare_age.stale then
+    assert_true(S2.toast ~= nil
+      and S2.toast:find("(vendored)", 1, true) ~= nil,
+      "T199 vendored age toast set")
+  else
+    assert_true(S2.toast == nil, "T199 fresh snapshot sets no toast")
+  end
+  os.execute("rm -rf '" .. bare_home .. "'")
   print("T199 catalog age marks: OK")
 end
 

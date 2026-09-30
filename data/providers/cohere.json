@@ -1,0 +1,63 @@
+{
+ "generated_at": 1790756014,
+ "id": "cohere",
+ "models": [
+  {
+   "context": 128000,
+   "id": "c4ai-aya-expanse-32b"
+  },
+  {
+   "context": 8000,
+   "id": "c4ai-aya-expanse-8b"
+  },
+  {
+   "context": 16000,
+   "id": "c4ai-aya-vision-32b"
+  },
+  {
+   "context": 16000,
+   "id": "c4ai-aya-vision-8b"
+  },
+  {
+   "context": 256000,
+   "id": "command-a-03-2025"
+  },
+  {
+   "context": 128000,
+   "id": "command-a-plus-05-2026"
+  },
+  {
+   "context": 256000,
+   "id": "command-a-reasoning-08-2025"
+  },
+  {
+   "context": 8000,
+   "id": "command-a-translate-08-2025"
+  },
+  {
+   "context": 128000,
+   "id": "command-a-vision-07-2025"
+  },
+  {
+   "context": 128000,
+   "id": "command-r-08-2024"
+  },
+  {
+   "context": 128000,
+   "id": "command-r-plus-08-2024"
+  },
+  {
+   "context": 128000,
+   "id": "command-r7b-12-2024"
+  },
+  {
+   "context": 128000,
+   "id": "command-r7b-arabic-02-2025"
+  },
+  {
+   "context": 256000,
+   "id": "north-mini-code-1-0"
+  }
+ ],
+ "schema": 1
+}

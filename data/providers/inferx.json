@@ -1,0 +1,55 @@
+{
+ "generated_at": 1790756014,
+ "id": "inferx",
+ "models": [
+  {
+   "context": 262000,
+   "id": "Agents-A1"
+  },
+  {
+   "context": 128000,
+   "id": "Devstral-2-123B-Instruct-2512-int4-AutoRound"
+  },
+  {
+   "context": 262000,
+   "id": "Ornith-1.0-35B-FP8"
+  },
+  {
+   "context": 256144,
+   "id": "Qwen3-Coder-Next-FP8"
+  },
+  {
+   "context": 260000,
+   "id": "Qwen3-Coder-Next-FP8-no-thinking"
+  },
+  {
+   "context": 32768,
+   "id": "Qwen3-Embedding-8B"
+  },
+  {
+   "context": 262144,
+   "id": "Qwen3.6-27B-FP8"
+  },
+  {
+   "context": 262000,
+   "id": "Qwen3.6-35B-A3B-FP8"
+  },
+  {
+   "context": 262000,
+   "id": "Qwen3.6-35B-A3B-fp8-no-thinking"
+  },
+  {
+   "context": 1000000,
+   "id": "deepseek-v4-flash"
+  },
+  {
+   "context": 262144,
+   "id": "gemma-4-31B-it-fp8"
+  },
+  {
+   "context": 1000000,
+   "id": "mimo-v25"
+  }
+ ],
+ "schema": 1
+}

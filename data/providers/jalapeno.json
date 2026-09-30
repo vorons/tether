@@ -1,0 +1,75 @@
+{
+ "generated_at": 1790756014,
+ "id": "jalapeno",
+ "models": [
+  {
+   "context": 1048576,
+   "id": "DeepSeek-V4-Flash"
+  },
+  {
+   "context": 1048576,
+   "id": "DeepSeek-V4-Pro"
+  },
+  {
+   "context": 202752,
+   "id": "GLM-5.1"
+  },
+  {
+   "context": 1048576,
+   "id": "GLM-5.2"
+  },
+  {
+   "context": 202752,
+   "id": "Hy3"
+  },
+  {
+   "context": 262144,
+   "id": "Kimi-K2.5"
+  },
+  {
+   "context": 271360,
+   "id": "Kimi-K2.7-Code"
+  },
+  {
+   "context": 1048576,
+   "id": "Kimi-K3"
+  },
+  {
+   "context": 524288,
+   "id": "MiniMax-M3"
+  },
+  {
+   "context": 129024,
+   "id": "Qwen3-Next-80B-A3B-Instruct"
+  },
+  {
+   "context": 131072,
+   "id": "Qwen3-Next-80B-A3B-Thinking"
+  },
+  {
+   "context": 129024,
+   "id": "Qwen3-VL-235B-A22B-Instruct"
+  },
+  {
+   "context": 131072,
+   "id": "Qwen3-VL-235B-A22B-Thinking"
+  },
+  {
+   "context": 262144,
+   "id": "Qwen3.5-122B-A10B"
+  },
+  {
+   "context": 262144,
+   "id": "Qwen3.5-27B"
+  },
+  {
+   "context": 262144,
+   "id": "Qwen3.5-35B-A3B"
+  },
+  {
+   "context": 262144,
+   "id": "Qwen3.5-397B-A17B"
+  }
+ ],
+ "schema": 1
+}

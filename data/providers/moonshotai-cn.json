@@ -1,0 +1,23 @@
+{
+ "generated_at": 1790756014,
+ "id": "moonshotai-cn",
+ "models": [
+  {
+   "context": 262144,
+   "id": "kimi-k2.6"
+  },
+  {
+   "context": 262144,
+   "id": "kimi-k2.7-code"
+  },
+  {
+   "context": 262144,
+   "id": "kimi-k2.7-code-highspeed"
+  },
+  {
+   "context": 1048576,
+   "id": "kimi-k3"
+  }
+ ],
+ "schema": 1
+}

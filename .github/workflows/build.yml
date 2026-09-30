@@ -1,0 +1,30 @@
+name: build
+
+# Linux binary on every push to main, packed as tar.gz.
+# Versioning: short commit hash in the archive name (no tags needed).
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install Lua (only non-default build tool)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq lua5.4
+          sudo ln -sf /usr/bin/lua5.4 /usr/local/bin/lua
+      - name: Build
+        run: make tether
+      - name: Pack
+        run: |
+          short="${GITHUB_SHA::7}"
+          tar czf "tether-${short}-linux-x86_64.tar.gz" tether
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tether-linux
+          path: "*.tar.gz"
+          retention-days: 30

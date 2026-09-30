@@ -1,0 +1,143 @@
+{
+ "generated_at": 1790756014,
+ "id": "mistral",
+ "models": [
+  {
+   "context": 256000,
+   "id": "codestral-latest"
+  },
+  {
+   "context": 262144,
+   "id": "devstral-2512"
+  },
+  {
+   "context": 262144,
+   "id": "devstral-latest"
+  },
+  {
+   "context": 128000,
+   "id": "devstral-medium-2507"
+  },
+  {
+   "context": 262144,
+   "id": "devstral-medium-latest"
+  },
+  {
+   "context": 128000,
+   "id": "devstral-small-2505"
+  },
+  {
+   "context": 128000,
+   "id": "devstral-small-2507"
+  },
+  {
+   "context": 256000,
+   "id": "labs-devstral-small-2512"
+  },
+  {
+   "context": 128000,
+   "id": "magistral-medium-latest"
+  },
+  {
+   "context": 128000,
+   "id": "ministral-3b-latest"
+  },
+  {
+   "context": 128000,
+   "id": "ministral-8b-latest"
+  },
+  {
+   "context": 8000,
+   "id": "mistral-embed"
+  },
+  {
+   "context": 131072,
+   "id": "mistral-large-2411"
+  },
+  {
+   "context": 262144,
+   "id": "mistral-large-2512"
+  },
+  {
+   "context": 262144,
+   "id": "mistral-large-latest"
+  },
+  {
+   "context": 131072,
+   "id": "mistral-medium-2505"
+  },
+  {
+   "context": 262144,
+   "id": "mistral-medium-2508"
+  },
+  {
+   "context": 262144,
+   "id": "mistral-medium-2604"
+  },
+  {
+   "context": 262144,
+   "id": "mistral-medium-latest"
+  },
+  {
+   "context": 128000,
+   "id": "mistral-nemo"
+  },
+  {
+   "context": 128000,
+   "id": "mistral-small-2506"
+  },
+  {
+   "context": 256000,
+   "id": "mistral-small-2603"
+  },
+  {
+   "context": 256000,
+   "id": "mistral-small-latest"
+  },
+  {
+   "context": 8000,
+   "id": "open-mistral-7b"
+  },
+  {
+   "context": 128000,
+   "id": "open-mistral-nemo"
+  },
+  {
+   "context": 64000,
+   "id": "open-mixtral-8x22b"
+  },
+  {
+   "context": 32000,
+   "id": "open-mixtral-8x7b"
+  },
+  {
+   "context": 128000,
+   "id": "pixtral-12b"
+  },
+  {
+   "context": 128000,
+   "id": "pixtral-large-latest"
+  },
+  {
+   "context": 0,
+   "id": "voxtral-mini-latest"
+  },
+  {
+   "context": 0,
+   "id": "voxtral-mini-tts-latest"
+  },
+  {
+   "context": 32000,
+   "id": "voxtral-small-latest"
+  },
+  {
+   "context": 1000000,
+   "id": "zai-glm-5-2"
+  },
+  {
+   "context": 1000000,
+   "id": "zai-glm-5-3"
+  }
+ ],
+ "schema": 1
+}

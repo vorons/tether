@@ -1,0 +1,55 @@
+{
+ "generated_at": 1790756014,
+ "id": "ambient",
+ "models": [
+  {
+   "context": 202752,
+   "id": "ambient/large"
+  },
+  {
+   "context": 1048576,
+   "id": "deepseek/deepseek-v4-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "deepseek/deepseek-v4-flash-0731"
+  },
+  {
+   "context": 262144,
+   "id": "moonshotai/kimi-k2.6"
+  },
+  {
+   "context": 262144,
+   "id": "moonshotai/kimi-k2.7-code"
+  },
+  {
+   "context": 32768,
+   "id": "qwen/qwen3.6-27b"
+  },
+  {
+   "context": 32768,
+   "id": "qwen/qwen3.8-27b"
+  },
+  {
+   "context": 262144,
+   "id": "stepfun/step-3.7-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "xiaomi/mimo-v2.5"
+  },
+  {
+   "context": 202752,
+   "id": "z-ai/glm-5.2"
+  },
+  {
+   "context": 202752,
+   "id": "zai-org/GLM-5.1-FP8"
+  },
+  {
+   "context": 202752,
+   "id": "zai-org/GLM-5.2-FP8"
+  }
+ ],
+ "schema": 1
+}

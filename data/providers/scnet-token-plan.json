@@ -1,0 +1,83 @@
+{
+ "generated_at": 1790756014,
+ "id": "scnet-token-plan",
+ "models": [
+  {
+   "context": 1000000,
+   "id": "DeepSeek-V4-Flash"
+  },
+  {
+   "context": 1000000,
+   "id": "DeepSeek-V4-Flash-0731"
+  },
+  {
+   "context": 1000000,
+   "id": "DeepSeek-V4-Pro"
+  },
+  {
+   "context": 1000000,
+   "id": "DeepSeek-V4-Pro-0813"
+  },
+  {
+   "context": 1000000,
+   "id": "DeepSeek-V4.1-Flash"
+  },
+  {
+   "context": 204800,
+   "id": "GLM-5"
+  },
+  {
+   "context": 200000,
+   "id": "GLM-5.1"
+  },
+  {
+   "context": 1000000,
+   "id": "GLM-5.2"
+  },
+  {
+   "context": 1000000,
+   "id": "GLM-5.3"
+  },
+  {
+   "context": 1000000,
+   "id": "GLM-5.3-Flash"
+  },
+  {
+   "context": 262144,
+   "id": "Kimi-K2.5"
+  },
+  {
+   "context": 262144,
+   "id": "Kimi-K2.6"
+  },
+  {
+   "context": 262144,
+   "id": "Kimi-K2.7-Code"
+  },
+  {
+   "context": 1048576,
+   "id": "Kimi-K3"
+  },
+  {
+   "context": 204800,
+   "id": "MiniMax-M2.5"
+  },
+  {
+   "context": 204800,
+   "id": "MiniMax-M2.7"
+  },
+  {
+   "context": 1048576,
+   "id": "MiniMax-M3"
+  },
+  {
+   "context": 1000000,
+   "id": "Qwen3.8-Flash"
+  },
+  {
+   "context": 1000000,
+   "id": "Qwen3.8-Max"
+  }
+ ],
+ "schema": 1
+}

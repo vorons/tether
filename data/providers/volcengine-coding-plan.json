@@ -1,0 +1,47 @@
+{
+ "generated_at": 1790756014,
+ "id": "volcengine-coding-plan",
+ "models": [
+  {
+   "context": 1000000,
+   "id": "deepseek-v4-flash"
+  },
+  {
+   "context": 1000000,
+   "id": "deepseek-v4-pro"
+  },
+  {
+   "context": 256000,
+   "id": "doubao-seed-2.0-lite"
+  },
+  {
+   "context": 256000,
+   "id": "doubao-seed-2.1-turbo"
+  },
+  {
+   "context": 256000,
+   "id": "doubao-seed-evolving"
+  },
+  {
+   "context": 1000000,
+   "id": "glm-5.3"
+  },
+  {
+   "context": 1000000,
+   "id": "glm-5.3-flash"
+  },
+  {
+   "context": 262144,
+   "id": "kimi-k2.7-code"
+  },
+  {
+   "context": 1048576,
+   "id": "kimi-k3"
+  },
+  {
+   "context": 1048576,
+   "id": "minimax-m3"
+  }
+ ],
+ "schema": 1
+}

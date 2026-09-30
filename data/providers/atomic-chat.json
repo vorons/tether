@@ -1,0 +1,27 @@
+{
+ "generated_at": 1790756014,
+ "id": "atomic-chat",
+ "models": [
+  {
+   "context": 131072,
+   "id": "Meta-Llama-3_1-8B-Instruct-GGUF"
+  },
+  {
+   "context": 32768,
+   "id": "Qwen3_5-9B-MLX-4bit"
+  },
+  {
+   "context": 32768,
+   "id": "Qwen3_5-9B-Q4_K_M"
+  },
+  {
+   "context": 32768,
+   "id": "gemma-4-E4B-it-IQ4_XS"
+  },
+  {
+   "context": 32768,
+   "id": "gemma-4-E4B-it-MLX-4bit"
+  }
+ ],
+ "schema": 1
+}

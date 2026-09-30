@@ -1,0 +1,667 @@
+{
+ "generated_at": 1790756014,
+ "id": "requesty",
+ "models": [
+  {
+   "context": 1000000,
+   "id": "claude-fable-5"
+  },
+  {
+   "context": 1000000,
+   "id": "claude-fable-5.1"
+  },
+  {
+   "context": 1000000,
+   "id": "claude-fable-5.1@eu"
+  },
+  {
+   "context": 1000000,
+   "id": "claude-fable-5@eu"
+  },
+  {
+   "context": 200000,
+   "id": "claude-haiku-4-5"
+  },
+  {
+   "context": 200000,
+   "id": "claude-haiku-4-5@eu"
+  },
+  {
+   "context": 200000,
+   "id": "claude-opus-4-1"
+  },
+  {
+   "context": 200000,
+   "id": "claude-opus-4-5"
+  },
+  {
+   "context": 200000,
+   "id": "claude-opus-4-5@eu"
+  },
+  {
+   "context": 1000000,
+   "id": "claude-opus-4-6"
+  },
+  {
+   "context": 1000000,
+   "id": "claude-opus-4-6@eu"
+  },
+  {
+   "context": 1000000,
+   "id": "claude-opus-4-7"
+  },
+  {
+   "context": 1000000,
+   "id": "claude-opus-4-7@eu"
+  },
+  {
+   "context": 1000000,
+   "id": "claude-opus-4-8"
+  },
+  {
+   "context": 1000000,
+   "id": "claude-opus-4-8@eu"
+  },
+  {
+   "context": 1000000,
+   "id": "claude-opus-5"
+  },
+  {
+   "context": 1000000,
+   "id": "claude-opus-5-5"
+  },
+  {
+   "context": 1000000,
+   "id": "claude-opus-5-5@eu"
+  },
+  {
+   "context": 1000000,
+   "id": "claude-opus-5@eu"
+  },
+  {
+   "context": 1000000,
+   "id": "claude-sonnet-4-5"
+  },
+  {
+   "context": 1000000,
+   "id": "claude-sonnet-4-5@eu"
+  },
+  {
+   "context": 1000000,
+   "id": "claude-sonnet-4-6"
+  },
+  {
+   "context": 1000000,
+   "id": "claude-sonnet-4-6@eu"
+  },
+  {
+   "context": 1000000,
+   "id": "claude-sonnet-4@eu"
+  },
+  {
+   "context": 1000000,
+   "id": "claude-sonnet-5"
+  },
+  {
+   "context": 1000000,
+   "id": "claude-sonnet-5-5"
+  },
+  {
+   "context": 1000000,
+   "id": "claude-sonnet-5-5@eu"
+  },
+  {
+   "context": 1000000,
+   "id": "claude-sonnet-5@eu"
+  },
+  {
+   "context": 1048576,
+   "id": "deepseek-v4-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "deepseek-v4-flash-0731"
+  },
+  {
+   "context": 1048576,
+   "id": "deepseek-v4-flash-0731@eu"
+  },
+  {
+   "context": 1000000,
+   "id": "deepseek-v4-pro"
+  },
+  {
+   "context": 1000000,
+   "id": "deepseek-v4-pro-0813"
+  },
+  {
+   "context": 1048576,
+   "id": "deepseek-v4-pro-0813@eu"
+  },
+  {
+   "context": 1048576,
+   "id": "deepseek-v4-pro@eu"
+  },
+  {
+   "context": 1048576,
+   "id": "deepseek-v4.1-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "deepseek-v4.1-flash@eu"
+  },
+  {
+   "context": 256000,
+   "id": "devstral-latest"
+  },
+  {
+   "context": 256000,
+   "id": "devstral-latest@eu"
+  },
+  {
+   "context": 1048576,
+   "id": "fugu-ultra"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini-2.5-flash-lite@eu"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini-2.5-flash@eu"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini-2.5-pro@eu"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini-3-pro-image"
+  },
+  {
+   "context": 131072,
+   "id": "gemini-3.1-flash-image"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini-3.1-flash-lite"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini-3.1-flash-lite@eu"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini-3.1-pro-preview"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini-3.5-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini-3.5-flash-lite"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini-3.5-flash-lite@eu"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini-3.5-flash@eu"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini-3.6-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini-3.7-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini-3.7-flash@eu"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini-3.8-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini-3.8-flash@eu"
+  },
+  {
+   "context": 262144,
+   "id": "gemma-4-26b-a4b-it"
+  },
+  {
+   "context": 262144,
+   "id": "gemma-4-31b-it"
+  },
+  {
+   "context": 200000,
+   "id": "glm-5.1"
+  },
+  {
+   "context": 200000,
+   "id": "glm-5.1@eu"
+  },
+  {
+   "context": 1048576,
+   "id": "glm-5.2"
+  },
+  {
+   "context": 1000000,
+   "id": "glm-5.2-fast"
+  },
+  {
+   "context": 1048576,
+   "id": "glm-5.2@eu"
+  },
+  {
+   "context": 1048576,
+   "id": "glm-5.3"
+  },
+  {
+   "context": 1000000,
+   "id": "glm-5.3-flash"
+  },
+  {
+   "context": 1000000,
+   "id": "glm-5.3-flash@eu"
+  },
+  {
+   "context": 1048576,
+   "id": "glm-5.3@eu"
+  },
+  {
+   "context": 1047576,
+   "id": "gpt-4.1-mini@eu"
+  },
+  {
+   "context": 1047576,
+   "id": "gpt-4.1-nano@eu"
+  },
+  {
+   "context": 1047576,
+   "id": "gpt-4.1@eu"
+  },
+  {
+   "context": 128000,
+   "id": "gpt-4o-mini@eu"
+  },
+  {
+   "context": 200000,
+   "id": "gpt-5-mini@eu"
+  },
+  {
+   "context": 200000,
+   "id": "gpt-5-nano@eu"
+  },
+  {
+   "context": 400000,
+   "id": "gpt-5.1@eu"
+  },
+  {
+   "context": 400000,
+   "id": "gpt-5.3-codex"
+  },
+  {
+   "context": 1050000,
+   "id": "gpt-5.4"
+  },
+  {
+   "context": 400000,
+   "id": "gpt-5.4-mini"
+  },
+  {
+   "context": 400000,
+   "id": "gpt-5.4-nano"
+  },
+  {
+   "context": 1050000,
+   "id": "gpt-5.4-pro"
+  },
+  {
+   "context": 1050000,
+   "id": "gpt-5.4@eu"
+  },
+  {
+   "context": 1050000,
+   "id": "gpt-5.5"
+  },
+  {
+   "context": 1050000,
+   "id": "gpt-5.5-pro"
+  },
+  {
+   "context": 1050000,
+   "id": "gpt-5.5@eu"
+  },
+  {
+   "context": 1050000,
+   "id": "gpt-5.6-luna"
+  },
+  {
+   "context": 1050000,
+   "id": "gpt-5.6-luna@eu"
+  },
+  {
+   "context": 1050000,
+   "id": "gpt-5.6-sol"
+  },
+  {
+   "context": 1050000,
+   "id": "gpt-5.6-sol@eu"
+  },
+  {
+   "context": 1050000,
+   "id": "gpt-5.6-terra"
+  },
+  {
+   "context": 1050000,
+   "id": "gpt-5.6-terra@eu"
+  },
+  {
+   "context": 400000,
+   "id": "gpt-5@eu"
+  },
+  {
+   "context": 1050000,
+   "id": "gpt-6-astra"
+  },
+  {
+   "context": 1050000,
+   "id": "gpt-6-luna"
+  },
+  {
+   "context": 1050000,
+   "id": "gpt-6-luna@eu"
+  },
+  {
+   "context": 1050000,
+   "id": "gpt-6-sol"
+  },
+  {
+   "context": 1050000,
+   "id": "gpt-6-sol@eu"
+  },
+  {
+   "context": 1050000,
+   "id": "gpt-6.1-sol"
+  },
+  {
+   "context": 1050000,
+   "id": "gpt-6.1-sol@eu"
+  },
+  {
+   "context": 2000000,
+   "id": "grok-4.2-beta"
+  },
+  {
+   "context": 1000000,
+   "id": "grok-4.3"
+  },
+  {
+   "context": 500000,
+   "id": "grok-4.5"
+  },
+  {
+   "context": 500000,
+   "id": "grok-4.6"
+  },
+  {
+   "context": 256000,
+   "id": "grok-build-0.1"
+  },
+  {
+   "context": 262144,
+   "id": "hy3"
+  },
+  {
+   "context": 65536,
+   "id": "inkling"
+  },
+  {
+   "context": 262144,
+   "id": "inkling-256k"
+  },
+  {
+   "context": 256000,
+   "id": "kat-coder-pro"
+  },
+  {
+   "context": 262144,
+   "id": "kimi-k2.6"
+  },
+  {
+   "context": 256000,
+   "id": "kimi-k2.6@eu"
+  },
+  {
+   "context": 262144,
+   "id": "kimi-k2.7-code"
+  },
+  {
+   "context": 262144,
+   "id": "kimi-k2.7-code@eu"
+  },
+  {
+   "context": 1048576,
+   "id": "kimi-k3"
+  },
+  {
+   "context": 1048576,
+   "id": "kimi-k3@eu"
+  },
+  {
+   "context": 32768,
+   "id": "laguna-m.1"
+  },
+  {
+   "context": 32768,
+   "id": "laguna-xs.2"
+  },
+  {
+   "context": 262144,
+   "id": "leanstral-1-5"
+  },
+  {
+   "context": 262144,
+   "id": "leanstral-1-5@eu"
+  },
+  {
+   "context": 262144,
+   "id": "ling-2.6-1t"
+  },
+  {
+   "context": 262144,
+   "id": "ling-2.6-flash"
+  },
+  {
+   "context": 262144,
+   "id": "ling-3.0-tiny"
+  },
+  {
+   "context": 1048576,
+   "id": "mimo-v2.5"
+  },
+  {
+   "context": 1048576,
+   "id": "mimo-v2.5-pro"
+  },
+  {
+   "context": 1048576,
+   "id": "mimo-v2.6-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "mimo-v2.6-pro"
+  },
+  {
+   "context": 200000,
+   "id": "minimax-m2.7"
+  },
+  {
+   "context": 200000,
+   "id": "minimax-m2.7-highspeed"
+  },
+  {
+   "context": 1000000,
+   "id": "minimax-m3"
+  },
+  {
+   "context": 1048576,
+   "id": "minimax-m3@eu"
+  },
+  {
+   "context": 262144,
+   "id": "mistral-medium-3-5"
+  },
+  {
+   "context": 262144,
+   "id": "mistral-medium-3-5@eu"
+  },
+  {
+   "context": 131072,
+   "id": "mistral-medium-latest"
+  },
+  {
+   "context": 131072,
+   "id": "mistral-medium-latest@eu"
+  },
+  {
+   "context": 256000,
+   "id": "mistral-small-2603"
+  },
+  {
+   "context": 256000,
+   "id": "mistral-small-2603@eu"
+  },
+  {
+   "context": 131072,
+   "id": "muse-glimmer-30b"
+  },
+  {
+   "context": 300000,
+   "id": "nemotron-3-nano-omni"
+  },
+  {
+   "context": 131072,
+   "id": "nemotron-3-nano-omni-30b-a3b-reasoning"
+  },
+  {
+   "context": 300000,
+   "id": "nemotron-3-nano-omni@eu"
+  },
+  {
+   "context": 1048576,
+   "id": "nemotron-3-super-120b-a12b"
+  },
+  {
+   "context": 1048576,
+   "id": "nemotron-3-ultra-550b-a55b"
+  },
+  {
+   "context": 262144,
+   "id": "nemotron-3-ultra-nvfp4"
+  },
+  {
+   "context": 131072,
+   "id": "nemotron-3.5-content-safety"
+  },
+  {
+   "context": 1048576,
+   "id": "nemotron-3.5-lightning-30b-a3b"
+  },
+  {
+   "context": 262144,
+   "id": "nemotron-lightning-3.5-30b-a3b"
+  },
+  {
+   "context": 262144,
+   "id": "nvidia-nemotron-3-super-120b-a12b"
+  },
+  {
+   "context": 262144,
+   "id": "nvidia-nemotron-3-ultra"
+  },
+  {
+   "context": 200000,
+   "id": "o4-mini@eu"
+  },
+  {
+   "context": 262144,
+   "id": "qwen3.5-27b"
+  },
+  {
+   "context": 262144,
+   "id": "qwen3.5-2b"
+  },
+  {
+   "context": 262144,
+   "id": "qwen3.5-35b-a3b"
+  },
+  {
+   "context": 1000000,
+   "id": "qwen3.6-plus"
+  },
+  {
+   "context": 1048576,
+   "id": "qwen3.7-max"
+  },
+  {
+   "context": 1048576,
+   "id": "qwen3.7-plus"
+  },
+  {
+   "context": 262144,
+   "id": "qwen3.8-2.4T-A95B"
+  },
+  {
+   "context": 1000000,
+   "id": "qwen3.8-2.4T-A95B@eu"
+  },
+  {
+   "context": 1048576,
+   "id": "qwen3.8-flash"
+  },
+  {
+   "context": 262144,
+   "id": "qwen3.8-flash-next"
+  },
+  {
+   "context": 262144,
+   "id": "qwen3.8-flash-next@eu"
+  },
+  {
+   "context": 1048576,
+   "id": "qwen3.8-max"
+  },
+  {
+   "context": 262144,
+   "id": "ring-2.6-1t"
+  },
+  {
+   "context": 256000,
+   "id": "seed-1.8"
+  },
+  {
+   "context": 256000,
+   "id": "seed-2.0-code"
+  },
+  {
+   "context": 256000,
+   "id": "seed-2.0-mini"
+  },
+  {
+   "context": 256000,
+   "id": "seed-2.0-pro"
+  },
+  {
+   "context": 262144,
+   "id": "step-3.7-flash"
+  }
+ ],
+ "schema": 1
+}

@@ -1,0 +1,39 @@
+{
+ "generated_at": 1790756014,
+ "id": "minimax-coding-plan",
+ "models": [
+  {
+   "context": 204800,
+   "id": "MiniMax-M2"
+  },
+  {
+   "context": 204800,
+   "id": "MiniMax-M2.1"
+  },
+  {
+   "context": 204800,
+   "id": "MiniMax-M2.5"
+  },
+  {
+   "context": 204800,
+   "id": "MiniMax-M2.5-highspeed"
+  },
+  {
+   "context": 204800,
+   "id": "MiniMax-M2.7"
+  },
+  {
+   "context": 204800,
+   "id": "MiniMax-M2.7-highspeed"
+  },
+  {
+   "context": 1048576,
+   "id": "MiniMax-M3"
+  },
+  {
+   "context": 1000000,
+   "id": "MiniMax-M3.1-Flash-Preview"
+  }
+ ],
+ "schema": 1
+}

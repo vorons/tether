@@ -1,0 +1,11 @@
+{
+ "generated_at": 1790756014,
+ "id": "standardcompute",
+ "models": [
+  {
+   "context": 1000000,
+   "id": "standardcompute"
+  }
+ ],
+ "schema": 1
+}

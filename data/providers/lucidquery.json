@@ -1,0 +1,23 @@
+{
+ "generated_at": 1790756014,
+ "id": "lucidquery",
+ "models": [
+  {
+   "context": 120000,
+   "id": "lucidnova-rf1-100b"
+  },
+  {
+   "context": 300000,
+   "id": "lucidquery-agi-01-frontier"
+  },
+  {
+   "context": 300000,
+   "id": "lucidquery-agi-01-swift"
+  },
+  {
+   "context": 250000,
+   "id": "lucidquery-nexus-coder"
+  }
+ ],
+ "schema": 1
+}

@@ -1,0 +1,63 @@
+{
+ "generated_at": 1790756014,
+ "id": "iflowcn",
+ "models": [
+  {
+   "context": 128000,
+   "id": "deepseek-r1"
+  },
+  {
+   "context": 128000,
+   "id": "deepseek-v3"
+  },
+  {
+   "context": 128000,
+   "id": "deepseek-v3.2"
+  },
+  {
+   "context": 200000,
+   "id": "glm-4.6"
+  },
+  {
+   "context": 128000,
+   "id": "kimi-k2"
+  },
+  {
+   "context": 256000,
+   "id": "kimi-k2-0905"
+  },
+  {
+   "context": 128000,
+   "id": "qwen3-235b"
+  },
+  {
+   "context": 256000,
+   "id": "qwen3-235b-a22b-instruct"
+  },
+  {
+   "context": 256000,
+   "id": "qwen3-235b-a22b-thinking-2507"
+  },
+  {
+   "context": 128000,
+   "id": "qwen3-32b"
+  },
+  {
+   "context": 256000,
+   "id": "qwen3-coder-plus"
+  },
+  {
+   "context": 256000,
+   "id": "qwen3-max"
+  },
+  {
+   "context": 256000,
+   "id": "qwen3-max-preview"
+  },
+  {
+   "context": 256000,
+   "id": "qwen3-vl-plus"
+  }
+ ],
+ "schema": 1
+}

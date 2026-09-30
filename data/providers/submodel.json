@@ -1,0 +1,43 @@
+{
+ "generated_at": 1790756014,
+ "id": "submodel",
+ "models": [
+  {
+   "context": 262144,
+   "id": "Qwen/Qwen3-235B-A22B-Instruct-2507"
+  },
+  {
+   "context": 262144,
+   "id": "Qwen/Qwen3-235B-A22B-Thinking-2507"
+  },
+  {
+   "context": 262144,
+   "id": "Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8"
+  },
+  {
+   "context": 75000,
+   "id": "deepseek-ai/DeepSeek-R1-0528"
+  },
+  {
+   "context": 75000,
+   "id": "deepseek-ai/DeepSeek-V3-0324"
+  },
+  {
+   "context": 75000,
+   "id": "deepseek-ai/DeepSeek-V3.1"
+  },
+  {
+   "context": 131072,
+   "id": "openai/gpt-oss-120b"
+  },
+  {
+   "context": 131072,
+   "id": "zai-org/GLM-4.5-Air"
+  },
+  {
+   "context": 131072,
+   "id": "zai-org/GLM-4.5-FP8"
+  }
+ ],
+ "schema": 1
+}

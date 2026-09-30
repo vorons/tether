@@ -1,0 +1,31 @@
+{
+ "generated_at": 1790756014,
+ "id": "bee",
+ "models": [
+  {
+   "context": 262144,
+   "id": "bee-brood"
+  },
+  {
+   "context": 262144,
+   "id": "bee-buzz"
+  },
+  {
+   "context": 131072,
+   "id": "bee-cell"
+  },
+  {
+   "context": 262144,
+   "id": "bee-comb"
+  },
+  {
+   "context": 262144,
+   "id": "bee-hive"
+  },
+  {
+   "context": 1000000,
+   "id": "bee-swarm"
+  }
+ ],
+ "schema": 1
+}

@@ -1,0 +1,15 @@
+{
+ "generated_at": 1790756014,
+ "id": "subconscious",
+ "models": [
+  {
+   "context": 1000000,
+   "id": "subconscious/glm-5.2"
+  },
+  {
+   "context": 8192,
+   "id": "subconscious/tim-qwen3.6-27b"
+  }
+ ],
+ "schema": 1
+}

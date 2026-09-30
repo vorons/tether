@@ -1,0 +1,71 @@
+{
+ "generated_at": 1790756014,
+ "id": "scaleway",
+ "models": [
+  {
+   "context": 8191,
+   "id": "bge-multilingual-gemma2"
+  },
+  {
+   "context": 256000,
+   "id": "deepseek-v4-flash-0731"
+  },
+  {
+   "context": 256000,
+   "id": "gemma-4-26b-a4b-it"
+  },
+  {
+   "context": 256000,
+   "id": "glm-5.2"
+  },
+  {
+   "context": 128000,
+   "id": "gpt-oss-120b"
+  },
+  {
+   "context": 100000,
+   "id": "llama-3.3-70b-instruct"
+  },
+  {
+   "context": 256000,
+   "id": "mistral-medium-3.5-128b"
+  },
+  {
+   "context": 128000,
+   "id": "mistral-small-3.2-24b-instruct-2506"
+  },
+  {
+   "context": 128000,
+   "id": "pixtral-12b-2409"
+  },
+  {
+   "context": 260000,
+   "id": "qwen3-235b-a22b-instruct-2507"
+  },
+  {
+   "context": 128000,
+   "id": "qwen3-coder-30b-a3b-instruct"
+  },
+  {
+   "context": 32768,
+   "id": "qwen3-embedding-8b"
+  },
+  {
+   "context": 256000,
+   "id": "qwen3.5-397b-a17b"
+  },
+  {
+   "context": 128000,
+   "id": "qwen3.6-35b-a3b"
+  },
+  {
+   "context": 262144,
+   "id": "qwen3.8-27b"
+  },
+  {
+   "context": 0,
+   "id": "whisper-large-v3"
+  }
+ ],
+ "schema": 1
+}

@@ -1,0 +1,27 @@
+{
+ "generated_at": 1790756014,
+ "id": "mixlayer",
+ "models": [
+  {
+   "context": 262144,
+   "id": "qwen/qwen3.5-122b-a10b"
+  },
+  {
+   "context": 262144,
+   "id": "qwen/qwen3.5-27b"
+  },
+  {
+   "context": 262144,
+   "id": "qwen/qwen3.5-35b-a3b"
+  },
+  {
+   "context": 262144,
+   "id": "qwen/qwen3.5-397b-a17b"
+  },
+  {
+   "context": 262144,
+   "id": "qwen/qwen3.5-9b"
+  }
+ ],
+ "schema": 1
+}

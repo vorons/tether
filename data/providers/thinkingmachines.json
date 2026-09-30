@@ -1,0 +1,15 @@
+{
+ "generated_at": 1790756014,
+ "id": "thinkingmachines",
+ "models": [
+  {
+   "context": 65536,
+   "id": "thinkingmachines/Inkling"
+  },
+  {
+   "context": 262144,
+   "id": "thinkingmachines/Inkling:peft:262144"
+  }
+ ],
+ "schema": 1
+}

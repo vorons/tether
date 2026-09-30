@@ -1,0 +1,103 @@
+{
+ "generated_at": 1790756014,
+ "id": "ollama-cloud",
+ "models": [
+  {
+   "context": 1048576,
+   "id": "deepseek-v4-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "deepseek-v4-flash:0731"
+  },
+  {
+   "context": 1048576,
+   "id": "deepseek-v4-pro"
+  },
+  {
+   "context": 1048576,
+   "id": "deepseek-v4-pro:0813"
+  },
+  {
+   "context": 1048576,
+   "id": "deepseek-v4.1-flash"
+  },
+  {
+   "context": 262144,
+   "id": "gemma4:31b"
+  },
+  {
+   "context": 202752,
+   "id": "glm-5.1"
+  },
+  {
+   "context": 976000,
+   "id": "glm-5.2"
+  },
+  {
+   "context": 1048576,
+   "id": "glm-5.3"
+  },
+  {
+   "context": 1000000,
+   "id": "glm-5.3-flash"
+  },
+  {
+   "context": 131072,
+   "id": "gpt-oss:120b"
+  },
+  {
+   "context": 131072,
+   "id": "gpt-oss:20b"
+  },
+  {
+   "context": 262144,
+   "id": "kimi-k2.5"
+  },
+  {
+   "context": 262144,
+   "id": "kimi-k2.6"
+  },
+  {
+   "context": 262144,
+   "id": "kimi-k2.7-code"
+  },
+  {
+   "context": 1048576,
+   "id": "kimi-k3"
+  },
+  {
+   "context": 204800,
+   "id": "minimax-m2.5"
+  },
+  {
+   "context": 196608,
+   "id": "minimax-m2.7"
+  },
+  {
+   "context": 512000,
+   "id": "minimax-m3"
+  },
+  {
+   "context": 262144,
+   "id": "mistral-large-3:675b"
+  },
+  {
+   "context": 1048576,
+   "id": "nemotron-3-nano:30b"
+  },
+  {
+   "context": 262144,
+   "id": "nemotron-3-super"
+  },
+  {
+   "context": 262144,
+   "id": "nemotron-3-ultra"
+  },
+  {
+   "context": 262144,
+   "id": "qwen3.5:397b"
+  }
+ ],
+ "schema": 1
+}

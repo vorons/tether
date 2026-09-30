@@ -1,0 +1,23 @@
+{
+ "generated_at": 1790756014,
+ "id": "neosmith",
+ "models": [
+  {
+   "context": 1000000,
+   "id": "neosmith.intelligent-basic"
+  },
+  {
+   "context": 1000000,
+   "id": "neosmith.intelligent-maestro"
+  },
+  {
+   "context": 1000000,
+   "id": "neosmith.intelligent-pro"
+  },
+  {
+   "context": 512000,
+   "id": "neosmith.neolite"
+  }
+ ],
+ "schema": 1
+}

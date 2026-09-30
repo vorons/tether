@@ -1,0 +1,43 @@
+{
+ "generated_at": 1790756014,
+ "id": "tinfoil",
+ "models": [
+  {
+   "context": 1048576,
+   "id": "deepseek-v4-1-flash"
+  },
+  {
+   "context": 262144,
+   "id": "gemma4-31b"
+  },
+  {
+   "context": 1048576,
+   "id": "glm-5-3"
+  },
+  {
+   "context": 1048576,
+   "id": "glm-5-3-flash"
+  },
+  {
+   "context": 131072,
+   "id": "gpt-oss-120b"
+  },
+  {
+   "context": 131072,
+   "id": "gpt-oss-safeguard-120b"
+  },
+  {
+   "context": 262144,
+   "id": "kimi-k3"
+  },
+  {
+   "context": 131072,
+   "id": "llama3-3-70b"
+  },
+  {
+   "context": 8192,
+   "id": "nomic-embed-text"
+  }
+ ],
+ "schema": 1
+}

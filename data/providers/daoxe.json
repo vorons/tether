@@ -1,0 +1,43 @@
+{
+ "generated_at": 1790756014,
+ "id": "daoxe",
+ "models": [
+  {
+   "context": 200000,
+   "id": "claude-haiku-4-5-20251001"
+  },
+  {
+   "context": 1000000,
+   "id": "claude-opus-4-8"
+  },
+  {
+   "context": 1000000,
+   "id": "claude-sonnet-4-6"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini-3.1-pro-preview"
+  },
+  {
+   "context": 1050000,
+   "id": "gpt-5.4"
+  },
+  {
+   "context": 1050000,
+   "id": "gpt-5.5"
+  },
+  {
+   "context": 1000000,
+   "id": "grok-4.3"
+  },
+  {
+   "context": 500000,
+   "id": "grok-4.5"
+  },
+  {
+   "context": 262144,
+   "id": "kimi-k2.5"
+  }
+ ],
+ "schema": 1
+}

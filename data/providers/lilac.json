@@ -1,0 +1,23 @@
+{
+ "generated_at": 1790756014,
+ "id": "lilac",
+ "models": [
+  {
+   "context": 262100,
+   "id": "google/gemma-4-31b-it"
+  },
+  {
+   "context": 1048576,
+   "id": "minimaxai/minimax-m3"
+  },
+  {
+   "context": 262144,
+   "id": "moonshotai/kimi-k2.6"
+  },
+  {
+   "context": 524288,
+   "id": "zai-org/glm-5.2"
+  }
+ ],
+ "schema": 1
+}

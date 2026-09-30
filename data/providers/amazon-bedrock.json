@@ -1,0 +1,739 @@
+{
+ "generated_at": 1790756014,
+ "id": "amazon-bedrock",
+ "models": [
+  {
+   "context": 1000000,
+   "id": "amazon.nova-2-lite-v1:0"
+  },
+  {
+   "context": 300000,
+   "id": "amazon.nova-lite-v1:0"
+  },
+  {
+   "context": 128000,
+   "id": "amazon.nova-micro-v1:0"
+  },
+  {
+   "context": 300000,
+   "id": "amazon.nova-pro-v1:0"
+  },
+  {
+   "context": 1000000,
+   "id": "anthropic.claude-fable-5"
+  },
+  {
+   "context": 1000000,
+   "id": "anthropic.claude-fable-5-1"
+  },
+  {
+   "context": 200000,
+   "id": "anthropic.claude-haiku-4-5-20251001-v1:0"
+  },
+  {
+   "context": 200000,
+   "id": "anthropic.claude-opus-4-1-20250805-v1:0"
+  },
+  {
+   "context": 200000,
+   "id": "anthropic.claude-opus-4-5-20251101-v1:0"
+  },
+  {
+   "context": 1000000,
+   "id": "anthropic.claude-opus-4-6-v1"
+  },
+  {
+   "context": 1000000,
+   "id": "anthropic.claude-opus-4-7"
+  },
+  {
+   "context": 1000000,
+   "id": "anthropic.claude-opus-4-8"
+  },
+  {
+   "context": 1000000,
+   "id": "anthropic.claude-opus-5"
+  },
+  {
+   "context": 1000000,
+   "id": "anthropic.claude-opus-5-5"
+  },
+  {
+   "context": 200000,
+   "id": "anthropic.claude-sonnet-4-5-20250929-v1:0"
+  },
+  {
+   "context": 1000000,
+   "id": "anthropic.claude-sonnet-4-6"
+  },
+  {
+   "context": 1000000,
+   "id": "anthropic.claude-sonnet-5"
+  },
+  {
+   "context": 1000000,
+   "id": "anthropic.claude-sonnet-5-5"
+  },
+  {
+   "context": 300000,
+   "id": "apac.amazon.nova-lite-v1:0"
+  },
+  {
+   "context": 128000,
+   "id": "apac.amazon.nova-micro-v1:0"
+  },
+  {
+   "context": 300000,
+   "id": "apac.amazon.nova-pro-v1:0"
+  },
+  {
+   "context": 200000,
+   "id": "apac.anthropic.claude-sonnet-4-20250514-v1:0"
+  },
+  {
+   "context": 200000,
+   "id": "au.anthropic.claude-haiku-4-5-20251001-v1:0"
+  },
+  {
+   "context": 1000000,
+   "id": "au.anthropic.claude-opus-4-6-v1"
+  },
+  {
+   "context": 1000000,
+   "id": "au.anthropic.claude-opus-4-7"
+  },
+  {
+   "context": 1000000,
+   "id": "au.anthropic.claude-opus-4-8"
+  },
+  {
+   "context": 1000000,
+   "id": "au.anthropic.claude-opus-5"
+  },
+  {
+   "context": 1000000,
+   "id": "au.anthropic.claude-opus-5-5"
+  },
+  {
+   "context": 200000,
+   "id": "au.anthropic.claude-sonnet-4-5-20250929-v1:0"
+  },
+  {
+   "context": 1000000,
+   "id": "au.anthropic.claude-sonnet-4-6"
+  },
+  {
+   "context": 1000000,
+   "id": "au.anthropic.claude-sonnet-5"
+  },
+  {
+   "context": 300000,
+   "id": "ca.amazon.nova-lite-v1:0"
+  },
+  {
+   "context": 128000,
+   "id": "deepseek.r1-v1:0"
+  },
+  {
+   "context": 163840,
+   "id": "deepseek.v3-v1:0"
+  },
+  {
+   "context": 163840,
+   "id": "deepseek.v3.2"
+  },
+  {
+   "context": 1000000,
+   "id": "eu.amazon.nova-2-lite-v1:0"
+  },
+  {
+   "context": 300000,
+   "id": "eu.amazon.nova-lite-v1:0"
+  },
+  {
+   "context": 128000,
+   "id": "eu.amazon.nova-micro-v1:0"
+  },
+  {
+   "context": 300000,
+   "id": "eu.amazon.nova-pro-v1:0"
+  },
+  {
+   "context": 1000000,
+   "id": "eu.anthropic.claude-fable-5"
+  },
+  {
+   "context": 200000,
+   "id": "eu.anthropic.claude-haiku-4-5-20251001-v1:0"
+  },
+  {
+   "context": 200000,
+   "id": "eu.anthropic.claude-opus-4-5-20251101-v1:0"
+  },
+  {
+   "context": 1000000,
+   "id": "eu.anthropic.claude-opus-4-6-v1"
+  },
+  {
+   "context": 1000000,
+   "id": "eu.anthropic.claude-opus-4-7"
+  },
+  {
+   "context": 1000000,
+   "id": "eu.anthropic.claude-opus-4-8"
+  },
+  {
+   "context": 1000000,
+   "id": "eu.anthropic.claude-opus-5"
+  },
+  {
+   "context": 1000000,
+   "id": "eu.anthropic.claude-opus-5-5"
+  },
+  {
+   "context": 200000,
+   "id": "eu.anthropic.claude-sonnet-4-20250514-v1:0"
+  },
+  {
+   "context": 200000,
+   "id": "eu.anthropic.claude-sonnet-4-5-20250929-v1:0"
+  },
+  {
+   "context": 1000000,
+   "id": "eu.anthropic.claude-sonnet-4-6"
+  },
+  {
+   "context": 1000000,
+   "id": "eu.anthropic.claude-sonnet-5"
+  },
+  {
+   "context": 128000,
+   "id": "eu.mistral.pixtral-large-2502-v1:0"
+  },
+  {
+   "context": 1000000,
+   "id": "global.amazon.nova-2-lite-v1:0"
+  },
+  {
+   "context": 1000000,
+   "id": "global.anthropic.claude-fable-5"
+  },
+  {
+   "context": 1000000,
+   "id": "global.anthropic.claude-fable-5-1"
+  },
+  {
+   "context": 200000,
+   "id": "global.anthropic.claude-haiku-4-5-20251001-v1:0"
+  },
+  {
+   "context": 200000,
+   "id": "global.anthropic.claude-opus-4-5-20251101-v1:0"
+  },
+  {
+   "context": 1000000,
+   "id": "global.anthropic.claude-opus-4-6-v1"
+  },
+  {
+   "context": 1000000,
+   "id": "global.anthropic.claude-opus-4-7"
+  },
+  {
+   "context": 1000000,
+   "id": "global.anthropic.claude-opus-4-8"
+  },
+  {
+   "context": 1000000,
+   "id": "global.anthropic.claude-opus-5"
+  },
+  {
+   "context": 1000000,
+   "id": "global.anthropic.claude-opus-5-5"
+  },
+  {
+   "context": 200000,
+   "id": "global.anthropic.claude-sonnet-4-20250514-v1:0"
+  },
+  {
+   "context": 200000,
+   "id": "global.anthropic.claude-sonnet-4-5-20250929-v1:0"
+  },
+  {
+   "context": 1000000,
+   "id": "global.anthropic.claude-sonnet-4-6"
+  },
+  {
+   "context": 1000000,
+   "id": "global.anthropic.claude-sonnet-5"
+  },
+  {
+   "context": 1000000,
+   "id": "global.anthropic.claude-sonnet-5-5"
+  },
+  {
+   "context": 1048576,
+   "id": "global.moonshotai.kimi-k3"
+  },
+  {
+   "context": 1050000,
+   "id": "global.openai.gpt-5.6-luna"
+  },
+  {
+   "context": 1050000,
+   "id": "global.openai.gpt-5.6-sol"
+  },
+  {
+   "context": 1050000,
+   "id": "global.openai.gpt-5.6-terra"
+  },
+  {
+   "context": 1050000,
+   "id": "global.openai.gpt-6-astra"
+  },
+  {
+   "context": 1050000,
+   "id": "global.openai.gpt-6-luna"
+  },
+  {
+   "context": 1050000,
+   "id": "global.openai.gpt-6-sol"
+  },
+  {
+   "context": 500000,
+   "id": "global.xai.grok-4.6"
+  },
+  {
+   "context": 500000,
+   "id": "global.xai.grok-4.7"
+  },
+  {
+   "context": 131072,
+   "id": "google.gemma-3-12b-it"
+  },
+  {
+   "context": 131072,
+   "id": "google.gemma-3-27b-it"
+  },
+  {
+   "context": 131072,
+   "id": "google.gemma-3-4b-it"
+  },
+  {
+   "context": 262144,
+   "id": "google.gemma-4-26b-a4b"
+  },
+  {
+   "context": 262144,
+   "id": "google.gemma-4-31b"
+  },
+  {
+   "context": 131072,
+   "id": "google.gemma-4-e2b"
+  },
+  {
+   "context": 1050000,
+   "id": "in.openai.gpt-5.6-luna"
+  },
+  {
+   "context": 1050000,
+   "id": "in.openai.gpt-5.6-terra"
+  },
+  {
+   "context": 1000000,
+   "id": "jp.amazon.nova-2-lite-v1:0"
+  },
+  {
+   "context": 200000,
+   "id": "jp.anthropic.claude-haiku-4-5-20251001-v1:0"
+  },
+  {
+   "context": 1000000,
+   "id": "jp.anthropic.claude-opus-4-7"
+  },
+  {
+   "context": 1000000,
+   "id": "jp.anthropic.claude-opus-4-8"
+  },
+  {
+   "context": 1000000,
+   "id": "jp.anthropic.claude-opus-5"
+  },
+  {
+   "context": 1000000,
+   "id": "jp.anthropic.claude-opus-5-5"
+  },
+  {
+   "context": 200000,
+   "id": "jp.anthropic.claude-sonnet-4-5-20250929-v1:0"
+  },
+  {
+   "context": 1000000,
+   "id": "jp.anthropic.claude-sonnet-4-6"
+  },
+  {
+   "context": 1000000,
+   "id": "jp.anthropic.claude-sonnet-5"
+  },
+  {
+   "context": 128000,
+   "id": "meta.llama3-1-70b-instruct-v1:0"
+  },
+  {
+   "context": 128000,
+   "id": "meta.llama3-1-8b-instruct-v1:0"
+  },
+  {
+   "context": 128000,
+   "id": "meta.llama3-3-70b-instruct-v1:0"
+  },
+  {
+   "context": 1000000,
+   "id": "meta.llama4-maverick-17b-instruct-v1:0"
+  },
+  {
+   "context": 10000000,
+   "id": "meta.llama4-scout-17b-instruct-v1:0"
+  },
+  {
+   "context": 204608,
+   "id": "minimax.minimax-m2"
+  },
+  {
+   "context": 196608,
+   "id": "minimax.minimax-m2.1"
+  },
+  {
+   "context": 196608,
+   "id": "minimax.minimax-m2.5"
+  },
+  {
+   "context": 262144,
+   "id": "mistral.devstral-2-123b"
+  },
+  {
+   "context": 128000,
+   "id": "mistral.magistral-small-2509"
+  },
+  {
+   "context": 128000,
+   "id": "mistral.ministral-3-14b-instruct"
+  },
+  {
+   "context": 256000,
+   "id": "mistral.ministral-3-3b-instruct"
+  },
+  {
+   "context": 128000,
+   "id": "mistral.ministral-3-8b-instruct"
+  },
+  {
+   "context": 262144,
+   "id": "mistral.mistral-large-3-675b-instruct"
+  },
+  {
+   "context": 128000,
+   "id": "mistral.pixtral-large-2502-v1:0"
+  },
+  {
+   "context": 32768,
+   "id": "mistral.voxtral-mini-3b-2507"
+  },
+  {
+   "context": 32768,
+   "id": "mistral.voxtral-small-24b-2507"
+  },
+  {
+   "context": 262144,
+   "id": "moonshot.kimi-k2-thinking"
+  },
+  {
+   "context": 262144,
+   "id": "moonshotai.kimi-k2.5"
+  },
+  {
+   "context": 131072,
+   "id": "nvidia.nemotron-nano-12b-v2"
+  },
+  {
+   "context": 262144,
+   "id": "nvidia.nemotron-nano-3-30b"
+  },
+  {
+   "context": 131072,
+   "id": "nvidia.nemotron-nano-9b-v2"
+  },
+  {
+   "context": 262144,
+   "id": "nvidia.nemotron-super-3-120b"
+  },
+  {
+   "context": 1000000,
+   "id": "openai.gpt-5.4"
+  },
+  {
+   "context": 1000000,
+   "id": "openai.gpt-5.5"
+  },
+  {
+   "context": 1050000,
+   "id": "openai.gpt-5.6-luna"
+  },
+  {
+   "context": 1050000,
+   "id": "openai.gpt-5.6-sol"
+  },
+  {
+   "context": 1050000,
+   "id": "openai.gpt-5.6-terra"
+  },
+  {
+   "context": 1050000,
+   "id": "openai.gpt-6-astra"
+  },
+  {
+   "context": 1050000,
+   "id": "openai.gpt-6-luna"
+  },
+  {
+   "context": 1050000,
+   "id": "openai.gpt-6-sol"
+  },
+  {
+   "context": 131072,
+   "id": "openai.gpt-oss-120b"
+  },
+  {
+   "context": 131072,
+   "id": "openai.gpt-oss-120b-1:0"
+  },
+  {
+   "context": 131072,
+   "id": "openai.gpt-oss-20b"
+  },
+  {
+   "context": 131072,
+   "id": "openai.gpt-oss-20b-1:0"
+  },
+  {
+   "context": 128000,
+   "id": "openai.gpt-oss-safeguard-120b"
+  },
+  {
+   "context": 128000,
+   "id": "openai.gpt-oss-safeguard-20b"
+  },
+  {
+   "context": 262144,
+   "id": "qwen.qwen3-235b-a22b-2507-v1:0"
+  },
+  {
+   "context": 32768,
+   "id": "qwen.qwen3-32b-v1:0"
+  },
+  {
+   "context": 262144,
+   "id": "qwen.qwen3-coder-30b-a3b-v1:0"
+  },
+  {
+   "context": 131072,
+   "id": "qwen.qwen3-coder-480b-a35b-v1:0"
+  },
+  {
+   "context": 262144,
+   "id": "qwen.qwen3-coder-next"
+  },
+  {
+   "context": 262144,
+   "id": "qwen.qwen3-next-80b-a3b"
+  },
+  {
+   "context": 262144,
+   "id": "qwen.qwen3-vl-235b-a22b"
+  },
+  {
+   "context": 128000,
+   "id": "us-gov.openai.gpt-oss-120b-1:0"
+  },
+  {
+   "context": 128000,
+   "id": "us-gov.openai.gpt-oss-20b-1:0"
+  },
+  {
+   "context": 1000000,
+   "id": "us.amazon.nova-2-lite-v1:0"
+  },
+  {
+   "context": 300000,
+   "id": "us.amazon.nova-lite-v1:0"
+  },
+  {
+   "context": 128000,
+   "id": "us.amazon.nova-micro-v1:0"
+  },
+  {
+   "context": 1000000,
+   "id": "us.amazon.nova-premier-v1:0"
+  },
+  {
+   "context": 300000,
+   "id": "us.amazon.nova-pro-v1:0"
+  },
+  {
+   "context": 1000000,
+   "id": "us.anthropic.claude-fable-5"
+  },
+  {
+   "context": 1000000,
+   "id": "us.anthropic.claude-fable-5-1"
+  },
+  {
+   "context": 200000,
+   "id": "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+  },
+  {
+   "context": 200000,
+   "id": "us.anthropic.claude-opus-4-1-20250805-v1:0"
+  },
+  {
+   "context": 200000,
+   "id": "us.anthropic.claude-opus-4-5-20251101-v1:0"
+  },
+  {
+   "context": 1000000,
+   "id": "us.anthropic.claude-opus-4-6-v1"
+  },
+  {
+   "context": 1000000,
+   "id": "us.anthropic.claude-opus-4-7"
+  },
+  {
+   "context": 1000000,
+   "id": "us.anthropic.claude-opus-4-8"
+  },
+  {
+   "context": 1000000,
+   "id": "us.anthropic.claude-opus-5"
+  },
+  {
+   "context": 1000000,
+   "id": "us.anthropic.claude-opus-5-5"
+  },
+  {
+   "context": 200000,
+   "id": "us.anthropic.claude-sonnet-4-20250514-v1:0"
+  },
+  {
+   "context": 200000,
+   "id": "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
+  },
+  {
+   "context": 1000000,
+   "id": "us.anthropic.claude-sonnet-4-6"
+  },
+  {
+   "context": 1000000,
+   "id": "us.anthropic.claude-sonnet-5"
+  },
+  {
+   "context": 128000,
+   "id": "us.deepseek.r1-v1:0"
+  },
+  {
+   "context": 128000,
+   "id": "us.meta.llama3-1-70b-instruct-v1:0"
+  },
+  {
+   "context": 128000,
+   "id": "us.meta.llama3-1-8b-instruct-v1:0"
+  },
+  {
+   "context": 128000,
+   "id": "us.meta.llama3-3-70b-instruct-v1:0"
+  },
+  {
+   "context": 1000000,
+   "id": "us.meta.llama4-maverick-17b-instruct-v1:0"
+  },
+  {
+   "context": 10000000,
+   "id": "us.meta.llama4-scout-17b-instruct-v1:0"
+  },
+  {
+   "context": 128000,
+   "id": "us.mistral.pixtral-large-2502-v1:0"
+  },
+  {
+   "context": 1048576,
+   "id": "us.moonshotai.kimi-k3"
+  },
+  {
+   "context": 1050000,
+   "id": "us.openai.gpt-5.6-luna"
+  },
+  {
+   "context": 1050000,
+   "id": "us.openai.gpt-5.6-sol"
+  },
+  {
+   "context": 1050000,
+   "id": "us.openai.gpt-5.6-terra"
+  },
+  {
+   "context": 1050000,
+   "id": "us.openai.gpt-6-astra"
+  },
+  {
+   "context": 1050000,
+   "id": "us.openai.gpt-6-luna"
+  },
+  {
+   "context": 1050000,
+   "id": "us.openai.gpt-6-sol"
+  },
+  {
+   "context": 122880,
+   "id": "us.writer.palmyra-x4-v1:0"
+  },
+  {
+   "context": 1040000,
+   "id": "us.writer.palmyra-x5-v1:0"
+  },
+  {
+   "context": 500000,
+   "id": "us.xai.grok-4.6"
+  },
+  {
+   "context": 500000,
+   "id": "us.xai.grok-4.7"
+  },
+  {
+   "context": 122880,
+   "id": "writer.palmyra-x4-v1:0"
+  },
+  {
+   "context": 1040000,
+   "id": "writer.palmyra-x5-v1:0"
+  },
+  {
+   "context": 1000000,
+   "id": "xai.grok-4.3"
+  },
+  {
+   "context": 500000,
+   "id": "xai.grok-4.6"
+  },
+  {
+   "context": 202752,
+   "id": "zai.glm-4.7"
+  },
+  {
+   "context": 202752,
+   "id": "zai.glm-4.7-flash"
+  },
+  {
+   "context": 202752,
+   "id": "zai.glm-5"
+  }
+ ],
+ "schema": 1
+}

@@ -1,0 +1,47 @@
+{
+ "generated_at": 1790756014,
+ "id": "freemodel",
+ "models": [
+  {
+   "context": 1000000,
+   "id": "claude-fable-5"
+  },
+  {
+   "context": 200000,
+   "id": "claude-haiku-4-5-20251001"
+  },
+  {
+   "context": 1000000,
+   "id": "claude-opus-4-6"
+  },
+  {
+   "context": 1000000,
+   "id": "claude-opus-4-7"
+  },
+  {
+   "context": 1000000,
+   "id": "claude-opus-4-8"
+  },
+  {
+   "context": 1000000,
+   "id": "claude-sonnet-4-6"
+  },
+  {
+   "context": 400000,
+   "id": "gpt-5.3-codex"
+  },
+  {
+   "context": 1050000,
+   "id": "gpt-5.4"
+  },
+  {
+   "context": 400000,
+   "id": "gpt-5.4-mini"
+  },
+  {
+   "context": 1050000,
+   "id": "gpt-5.5"
+  }
+ ],
+ "schema": 1
+}

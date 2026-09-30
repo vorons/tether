@@ -1,0 +1,439 @@
+{
+ "generated_at": 1790756014,
+ "id": "abacus",
+ "models": [
+  {
+   "context": 204800,
+   "id": "MiniMaxAI/MiniMax-M2.7"
+  },
+  {
+   "context": 1000000,
+   "id": "MiniMaxAI/MiniMax-M3"
+  },
+  {
+   "context": 32768,
+   "id": "Qwen/QwQ-32B"
+  },
+  {
+   "context": 128000,
+   "id": "Qwen/Qwen2.5-72B-Instruct"
+  },
+  {
+   "context": 262144,
+   "id": "Qwen/Qwen3-235B-A22B-Instruct-2507"
+  },
+  {
+   "context": 131072,
+   "id": "Qwen/Qwen3-32B"
+  },
+  {
+   "context": 262144,
+   "id": "Qwen/Qwen3-Coder-480B-A35B-Instruct"
+  },
+  {
+   "context": 262144,
+   "id": "Qwen/Qwen3.6-27B"
+  },
+  {
+   "context": 200000,
+   "id": "claude-3-7-sonnet-20250219"
+  },
+  {
+   "context": 1000000,
+   "id": "claude-fable-5"
+  },
+  {
+   "context": 200000,
+   "id": "claude-haiku-4-5-20251001"
+  },
+  {
+   "context": 200000,
+   "id": "claude-opus-4-1-20250805"
+  },
+  {
+   "context": 200000,
+   "id": "claude-opus-4-20250514"
+  },
+  {
+   "context": 200000,
+   "id": "claude-opus-4-5-20251101"
+  },
+  {
+   "context": 1000000,
+   "id": "claude-opus-4-6"
+  },
+  {
+   "context": 1000000,
+   "id": "claude-opus-4-7"
+  },
+  {
+   "context": 1000000,
+   "id": "claude-opus-4-8"
+  },
+  {
+   "context": 1000000,
+   "id": "claude-opus-5"
+  },
+  {
+   "context": 200000,
+   "id": "claude-sonnet-4-20250514"
+  },
+  {
+   "context": 200000,
+   "id": "claude-sonnet-4-5-20250929"
+  },
+  {
+   "context": 1000000,
+   "id": "claude-sonnet-4-6"
+  },
+  {
+   "context": 1000000,
+   "id": "claude-sonnet-5"
+  },
+  {
+   "context": 128000,
+   "id": "deepseek-ai/DeepSeek-R1"
+  },
+  {
+   "context": 128000,
+   "id": "deepseek-ai/DeepSeek-V3.1-Terminus"
+  },
+  {
+   "context": 128000,
+   "id": "deepseek-ai/DeepSeek-V3.2"
+  },
+  {
+   "context": 1000000,
+   "id": "deepseek-ai/DeepSeek-V4-Flash"
+  },
+  {
+   "context": 1000000,
+   "id": "deepseek-ai/DeepSeek-V4-Pro"
+  },
+  {
+   "context": 128000,
+   "id": "deepseek/deepseek-v3.1"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini-2.5-flash"
+  },
+  {
+   "context": 32768,
+   "id": "gemini-2.5-flash-image"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini-2.5-pro"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini-3-flash-preview"
+  },
+  {
+   "context": 65536,
+   "id": "gemini-3-pro-image"
+  },
+  {
+   "context": 65536,
+   "id": "gemini-3-pro-image-preview"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini-3.1-flash-image"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini-3.1-flash-image-preview"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini-3.1-flash-lite"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini-3.1-flash-lite-preview"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini-3.1-pro-preview"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini-3.5-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini-3.5-flash-lite"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini-3.6-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini-3.7-flash"
+  },
+  {
+   "context": 262144,
+   "id": "google/gemma-4-31b-it"
+  },
+  {
+   "context": 1047576,
+   "id": "gpt-4.1"
+  },
+  {
+   "context": 1047576,
+   "id": "gpt-4.1-mini"
+  },
+  {
+   "context": 1047576,
+   "id": "gpt-4.1-nano"
+  },
+  {
+   "context": 128000,
+   "id": "gpt-4o"
+  },
+  {
+   "context": 128000,
+   "id": "gpt-4o-2024-11-20"
+  },
+  {
+   "context": 128000,
+   "id": "gpt-4o-mini"
+  },
+  {
+   "context": 400000,
+   "id": "gpt-5"
+  },
+  {
+   "context": 400000,
+   "id": "gpt-5-codex"
+  },
+  {
+   "context": 400000,
+   "id": "gpt-5-mini"
+  },
+  {
+   "context": 400000,
+   "id": "gpt-5-nano"
+  },
+  {
+   "context": 400000,
+   "id": "gpt-5.1"
+  },
+  {
+   "context": 400000,
+   "id": "gpt-5.1-chat-latest"
+  },
+  {
+   "context": 400000,
+   "id": "gpt-5.1-codex"
+  },
+  {
+   "context": 400000,
+   "id": "gpt-5.1-codex-max"
+  },
+  {
+   "context": 400000,
+   "id": "gpt-5.2"
+  },
+  {
+   "context": 400000,
+   "id": "gpt-5.2-chat-latest"
+  },
+  {
+   "context": 400000,
+   "id": "gpt-5.2-codex"
+  },
+  {
+   "context": 400000,
+   "id": "gpt-5.3-chat-latest"
+  },
+  {
+   "context": 400000,
+   "id": "gpt-5.3-codex"
+  },
+  {
+   "context": 400000,
+   "id": "gpt-5.3-codex-xhigh"
+  },
+  {
+   "context": 400000,
+   "id": "gpt-5.4"
+  },
+  {
+   "context": 400000,
+   "id": "gpt-5.4-mini"
+  },
+  {
+   "context": 400000,
+   "id": "gpt-5.4-nano"
+  },
+  {
+   "context": 1000000,
+   "id": "gpt-5.5"
+  },
+  {
+   "context": 1000000,
+   "id": "gpt-5.6-luna"
+  },
+  {
+   "context": 1000000,
+   "id": "gpt-5.6-sol"
+  },
+  {
+   "context": 1000000,
+   "id": "gpt-5.6-terra"
+  },
+  {
+   "context": 256000,
+   "id": "grok-4-0709"
+  },
+  {
+   "context": 2000000,
+   "id": "grok-4-1-fast-non-reasoning"
+  },
+  {
+   "context": 2000000,
+   "id": "grok-4-fast-non-reasoning"
+  },
+  {
+   "context": 1000000,
+   "id": "grok-4.3"
+  },
+  {
+   "context": 500000,
+   "id": "grok-4.5"
+  },
+  {
+   "context": 500000,
+   "id": "grok-4.6"
+  },
+  {
+   "context": 256000,
+   "id": "grok-code-fast-1"
+  },
+  {
+   "context": 256000,
+   "id": "kimi-k2-turbo-preview"
+  },
+  {
+   "context": 262144,
+   "id": "kimi-k2.5"
+  },
+  {
+   "context": 128000,
+   "id": "llama-3.3-70b-versatile"
+  },
+  {
+   "context": 1048576,
+   "id": "meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8"
+  },
+  {
+   "context": 128000,
+   "id": "meta-llama/Meta-Llama-3.1-405B-Instruct-Turbo"
+  },
+  {
+   "context": 128000,
+   "id": "meta-llama/Meta-Llama-3.1-8B-Instruct"
+  },
+  {
+   "context": 131072,
+   "id": "meta-llama/Meta-Llama-3.3-70B-Instruct"
+  },
+  {
+   "context": 1048576,
+   "id": "mimo-v2-pro"
+  },
+  {
+   "context": 262144,
+   "id": "moonshotai/Kimi-K2.6"
+  },
+  {
+   "context": 262144,
+   "id": "moonshotai/Kimi-K2.7-Code"
+  },
+  {
+   "context": 1048576,
+   "id": "moonshotai/Kimi-K3"
+  },
+  {
+   "context": 1000000,
+   "id": "muse-spark-1.1"
+  },
+  {
+   "context": 1048576,
+   "id": "muse-spark-1.2"
+  },
+  {
+   "context": 200000,
+   "id": "o3"
+  },
+  {
+   "context": 200000,
+   "id": "o3-mini"
+  },
+  {
+   "context": 200000,
+   "id": "o3-pro"
+  },
+  {
+   "context": 200000,
+   "id": "o4-mini"
+  },
+  {
+   "context": 128000,
+   "id": "openai/gpt-oss-120b"
+  },
+  {
+   "context": 128000,
+   "id": "qwen-2.5-coder-32b"
+  },
+  {
+   "context": 131072,
+   "id": "qwen3-max"
+  },
+  {
+   "context": 1000000,
+   "id": "qwen3.7-max"
+  },
+  {
+   "context": 1000000,
+   "id": "qwen3.8-max"
+  },
+  {
+   "context": 128000,
+   "id": "route-llm"
+  },
+  {
+   "context": 262144,
+   "id": "thinkingmachines/Inkling"
+  },
+  {
+   "context": 131072,
+   "id": "zai-org/GLM-4.5"
+  },
+  {
+   "context": 202752,
+   "id": "zai-org/GLM-4.6"
+  },
+  {
+   "context": 204800,
+   "id": "zai-org/GLM-4.7"
+  },
+  {
+   "context": 204800,
+   "id": "zai-org/GLM-5"
+  },
+  {
+   "context": 204800,
+   "id": "zai-org/GLM-5.1"
+  },
+  {
+   "context": 1048576,
+   "id": "zai-org/GLM-5.2"
+  }
+ ],
+ "schema": 1
+}

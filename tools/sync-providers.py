@@ -18,6 +18,7 @@ Usage:
 
 import argparse
 import json
+import os
 import re
 import sys
 import time
@@ -231,14 +232,39 @@ def main():
             print("sync-providers: ERROR %s" % f, file=sys.stderr)
         sys.exit(1)
 
+    generated_at = int(time.time())
+    out_dir = os.path.dirname(args.out)
+    if out_dir:
+        os.makedirs(out_dir, exist_ok=True)
     out = {
         "schema": SCHEMA_VERSION,
-        "generated_at": int(time.time()),
+        "generated_at": generated_at,
         "providers": providers,
     }
     with open(args.out, "w", encoding="utf-8") as f:
         json.dump(out, f, indent=1, sort_keys=True)
         f.write("\n")
+
+    # Per-provider metadata shards (offline-provider-catalog): the full
+    # models[] list per id, so clients can fetch metadata lazily for the
+    # active provider only. Committed in the same run, same generated_at.
+    # Stale shards for ids no longer present are removed.
+    shards_dir = os.path.join(os.path.dirname(args.out) or ".", "providers")
+    os.makedirs(shards_dir, exist_ok=True)
+    for pid in sorted(providers.keys()):
+        shard = {
+            "schema": SCHEMA_VERSION,
+            "generated_at": generated_at,
+            "id": pid,
+            "models": providers[pid].get("models") or [],
+        }
+        with open(os.path.join(shards_dir, pid + ".json"),
+                  "w", encoding="utf-8") as f:
+            json.dump(shard, f, indent=1, sort_keys=True)
+            f.write("\n")
+    for name in os.listdir(shards_dir):
+        if name.endswith(".json") and name[:-5] not in providers:
+            os.remove(os.path.join(shards_dir, name))
 
     print(
         "sync-providers: %d providers -> %s (skipped %d)"

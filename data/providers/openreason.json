@@ -1,0 +1,19 @@
+{
+ "generated_at": 1790756014,
+ "id": "openreason",
+ "models": [
+  {
+   "context": 1000000,
+   "id": "deepseek-ai/deepseek-v4-flash-0731"
+  },
+  {
+   "context": 262144,
+   "id": "moonshotai/kimi-k2.7-code"
+  },
+  {
+   "context": 131072,
+   "id": "openai/gpt-oss-120b"
+  }
+ ],
+ "schema": 1
+}

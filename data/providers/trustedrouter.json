@@ -1,0 +1,35 @@
+{
+ "generated_at": 1790756014,
+ "id": "trustedrouter",
+ "models": [
+  {
+   "context": 1000000,
+   "id": "trustedrouter/auto"
+  },
+  {
+   "context": 1000000,
+   "id": "trustedrouter/cheap"
+  },
+  {
+   "context": 1000000,
+   "id": "trustedrouter/e2e"
+  },
+  {
+   "context": 1000000,
+   "id": "trustedrouter/fast"
+  },
+  {
+   "context": 1000000,
+   "id": "trustedrouter/synth"
+  },
+  {
+   "context": 1000000,
+   "id": "trustedrouter/synth-code"
+  },
+  {
+   "context": 1000000,
+   "id": "trustedrouter/zdr"
+  }
+ ],
+ "schema": 1
+}

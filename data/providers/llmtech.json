@@ -1,0 +1,11 @@
+{
+ "generated_at": 1790756014,
+ "id": "llmtech",
+ "models": [
+  {
+   "context": 262144,
+   "id": "nvidia/Qwen3.8-27B-NVFP4"
+  }
+ ],
+ "schema": 1
+}

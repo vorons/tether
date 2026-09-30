@@ -1,0 +1,43 @@
+{
+ "generated_at": 1790756014,
+ "id": "qihang-ai",
+ "models": [
+  {
+   "context": 200000,
+   "id": "claude-haiku-4-5-20251001"
+  },
+  {
+   "context": 200000,
+   "id": "claude-opus-4-5-20251101"
+  },
+  {
+   "context": 200000,
+   "id": "claude-sonnet-4-5-20250929"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini-2.5-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini-3-flash-preview"
+  },
+  {
+   "context": 1000000,
+   "id": "gemini-3-pro-preview"
+  },
+  {
+   "context": 200000,
+   "id": "gpt-5-mini"
+  },
+  {
+   "context": 400000,
+   "id": "gpt-5.2"
+  },
+  {
+   "context": 400000,
+   "id": "gpt-5.2-codex"
+  }
+ ],
+ "schema": 1
+}

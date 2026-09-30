@@ -1,0 +1,39 @@
+{
+ "generated_at": 1790756014,
+ "id": "bothub",
+ "models": [
+  {
+   "context": 1000000,
+   "id": "deepseek-v4-flash-0731"
+  },
+  {
+   "context": 1000000,
+   "id": "deepseek-v4-pro-0813"
+  },
+  {
+   "context": 262144,
+   "id": "gemma-4-31b-it:free"
+  },
+  {
+   "context": 1000000,
+   "id": "glm-5.3"
+  },
+  {
+   "context": 1000000,
+   "id": "glm-5.3-flash"
+  },
+  {
+   "context": 1050000,
+   "id": "gpt-5.6-luna"
+  },
+  {
+   "context": 1048576,
+   "id": "muse-spark-1.3-contributor"
+  },
+  {
+   "context": 1000000,
+   "id": "nemotron-3-ultra-550b-a55b:free"
+  }
+ ],
+ "schema": 1
+}

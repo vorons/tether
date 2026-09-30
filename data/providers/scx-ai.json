@@ -1,0 +1,23 @@
+{
+ "generated_at": 1790756014,
+ "id": "scx-ai",
+ "models": [
+  {
+   "context": 1000000,
+   "id": "GLM-5.2"
+  },
+  {
+   "context": 196608,
+   "id": "MiniMax-M2.7"
+  },
+  {
+   "context": 1000000,
+   "id": "Qwen3.8-Max"
+  },
+  {
+   "context": 131072,
+   "id": "gpt-oss-120b"
+  }
+ ],
+ "schema": 1
+}

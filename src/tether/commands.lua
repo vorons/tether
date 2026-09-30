@@ -329,6 +329,32 @@ local function catalog_module()
     return cat
 end
 
+local function metadata_module()
+    local md = rawget(_G, "provider_metadata")
+    if not md then
+        local chunk = loadfile("src/tether/metadata.lua")
+        md = chunk and chunk() or nil
+    end
+    return md
+end
+
+-- offline-provider-catalog: the client cache is slim (routing only, no
+-- models[]). Old full-form payloads still parse; only slim is stored, so
+-- the download shrinks ~15x and old caches slim down on next refresh.
+local function slim_store(cat, tbl)
+    if not (cat and cat.slim_entry and type(tbl.providers) == "table") then
+        return tbl.providers
+    end
+    local out = {}
+    for id, e in pairs(tbl.providers) do
+        if type(id) == "string" then
+            local s = cat.slim_entry(e)
+            if s then out[id] = s end
+        end
+    end
+    return out
+end
+
 -- dynamic-provider-catalog: sync refresh for the pipeline providers file.
 -- Mirror of the models-cache discipline: fresh cache serves with zero
 -- network; otherwise one background fetch (20s cap) or, without fetch_bg,
@@ -375,7 +401,8 @@ function M.sync_providers(home, url)
             local tbl, perr = cat.parse_file(body)
             if tbl then
                 write_cache(path, { checked_at = now, schema = tbl.schema,
-                    generated_at = tbl.generated_at, providers = tbl.providers })
+                    generated_at = tbl.generated_at,
+                    providers = slim_store(cat, tbl) })
                 return "ok"
             end
             if cache.providers then return "stale", perr end
@@ -426,7 +453,7 @@ function M.poll_providers(home)
         return "settled"
     end
     write_cache(cat.cache_path(home), { checked_at = now, schema = tbl.schema,
-        generated_at = tbl.generated_at, providers = tbl.providers })
+        generated_at = tbl.generated_at, providers = slim_store(cat, tbl) })
     cat.set_overlay(nil, nil)
     cat.ensure(home)
     return "updated"
@@ -460,22 +487,62 @@ function M.boot_providers(cfg)
     return true
 end
 
--- Catalog age for UI marks: nil when no cache, else
--- { age_s, stale, text } where stale means data older than the TTL.
+-- Catalog age for UI marks: nil when neither cache nor snapshot carries
+-- a timestamp, else { age_s, stale, text, source } where stale means data
+-- older than the TTL and source is "cache" | "snapshot". With no cache the
+-- vendored snapshot age (the build age) serves so offline installs still
+-- mark where their catalog came from.
 function M.providers_age(home)
     local cat = catalog_module()
     if not cat then return nil end
     local cache = read_cache(cat.cache_path(home))
-    if type(cache.generated_at) ~= "number" then return nil end
+    local generated, source = nil, nil
+    if type(cache.generated_at) == "number" then
+        generated, source = cache.generated_at, "cache"
+    elseif cat.snapshot then
+        local _, gen = cat.snapshot()
+        if type(gen) == "number" then generated, source = gen, "snapshot" end
+    end
+    if not generated then return nil end
     local now = os.time()
-    local age = now - cache.generated_at
+    local age = now - generated
     if age < 0 then age = 0 end
     local text
     if age >= 86400 then text = math.floor(age / 86400) .. "d"
     elseif age >= 3600 then text = math.floor(age / 3600) .. "h"
     else text = math.floor(age / 60) .. "m" end
     local ttl = cat.CACHE_TTL or 12 * 3600
-    return { age_s = age, stale = age > ttl, text = text }
+    return { age_s = age, stale = age > ttl, text = text, source = source }
+end
+
+-- offline-provider-catalog: fetch-on-need trigger for lazy metadata.
+-- Called when the user opens model selection; warms the active provider's
+-- shard (background refresh or one sync attempt per the metadata
+-- discipline) so context limits are ready for compaction. Honors
+-- metadata_refresh == false (no network) and never raises. Returns true
+-- when a background fetch was spawned (poll it via M.poll_metadata).
+function M.warm_metadata(cfg)
+    local provider = (type(cfg) == "table" and cfg.provider) or nil
+    if not provider then return false end
+    local md = metadata_module()
+    if not md then return false end
+    local home = (type(cfg) == "table" and cfg._auth_home) or nil
+    local url = (type(cfg) == "table" and cfg.providers_url) or nil
+    local refresh = (type(cfg) ~= "table" or cfg.metadata_refresh ~= false)
+    local ok, _, st = pcall(md.models, provider, home, url,
+        { refresh = refresh })
+    return ok and st == "background" or false
+end
+
+-- Consume a metadata background fetch spawned by M.warm_metadata.
+-- Limits arrive silently (no UI rebuild); the poll just settles state.
+-- Returns the metadata poll status ("updated" | "waiting" | "settled").
+function M.poll_metadata(home, provider)
+    local md = metadata_module()
+    if not md then return "settled" end
+    local ok, st = pcall(md.poll, home, provider)
+    if not ok then return "settled" end
+    return st
 end
 
 -- Background fetches in flight: provider id → spawn time. list_models_all
@@ -759,17 +826,34 @@ end
 
 -- ui-facade-thinning 3.1: slash-name routing for the submit path.
 -- A built-in command runs (so /CLEAR behaves like /clear); a name that
--- resolves to a discovered skill falls through to the ordinary submit
--- path (the agent receives it as a user message); anything else keeps
--- the legacy command path. Pure: cmds is a lower-name set (facade
--- command_set), skills is a row list with .name (facade skill rows).
--- Returns "command" | "skill" | "unknown".
+-- resolves to a discovered prompt expands into a user message; a name
+-- that resolves to a discovered skill falls through to the ordinary
+-- submit path (the agent receives it as a user message); anything else
+-- keeps the legacy command path. Pure: cmds is a lower-name set (facade
+-- command_set), prompts/skills are row lists with .name (facade rows).
+-- Returns "command" | "prompt" | "skill" | "unknown".
+-- The 3-arg call resolve_slash(word, cmds, skills) predates prompts: a
+-- lone 3rd-arg list without a .prompt row is still read as skills.
 -- EXAMPLE:
 --      commands.resolve_slash("CLEAR", { clear = true }, {}) --> "command"
-function M.resolve_slash(word, cmds, skills)
+function M.resolve_slash(word, cmds, prompts, skills)
     local name = tostring(word or ""):lower()
     if cmds and cmds[name] then return "command" end
-    for _, sk in ipairs(skills or {}) do
+    local prows, srows = prompts, skills
+    if skills == nil and type(prompts) == "table" then
+        local has_prompt = false
+        for _, r in ipairs(prompts) do
+            if type(r) == "table" and r.prompt then has_prompt = true break end
+        end
+        if has_prompt then prows, srows = prompts, nil
+        else prows, srows = nil, prompts end
+    end
+    for _, p in ipairs(prows or {}) do
+        if tostring((type(p) == "table" and p.name) or ""):lower() == name then
+            return "prompt"
+        end
+    end
+    for _, sk in ipairs(srows or {}) do
         if tostring((type(sk) == "table" and sk.name) or ""):lower() == name then
             return "skill"
         end

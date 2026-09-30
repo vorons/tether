@@ -1,0 +1,167 @@
+{
+ "generated_at": 1790756014,
+ "id": "greenpt",
+ "models": [
+  {
+   "context": 1000000,
+   "id": "deepseek-v4-flash-0731"
+  },
+  {
+   "context": 1000000,
+   "id": "deepseek-v4.1-flash"
+  },
+  {
+   "context": 200000,
+   "id": "devstral-2-123b-instruct-2512"
+  },
+  {
+   "context": 40000,
+   "id": "gemma-3-27b-it"
+  },
+  {
+   "context": 262144,
+   "id": "gemma4"
+  },
+  {
+   "context": 200000,
+   "id": "glm-5.1"
+  },
+  {
+   "context": 1000000,
+   "id": "glm-5.2"
+  },
+  {
+   "context": 1000000,
+   "id": "glm-5.2-caveman"
+  },
+  {
+   "context": 1000000,
+   "id": "glm-5.2-caveman-lite"
+  },
+  {
+   "context": 1000000,
+   "id": "glm-5.2-caveman-ultra"
+  },
+  {
+   "context": 1000000,
+   "id": "glm-5.2-honey"
+  },
+  {
+   "context": 1000000,
+   "id": "glm-5.2-honey-lite"
+  },
+  {
+   "context": 1000000,
+   "id": "glm-5.2-honey-ultra"
+  },
+  {
+   "context": 1000000,
+   "id": "glm-5.2-ponytail"
+  },
+  {
+   "context": 1000000,
+   "id": "glm-5.2-ponytail-lite"
+  },
+  {
+   "context": 1000000,
+   "id": "glm-5.2-ponytail-ultra"
+  },
+  {
+   "context": 1000000,
+   "id": "glm-5.3"
+  },
+  {
+   "context": 1000000,
+   "id": "glm-5.3-flash"
+  },
+  {
+   "context": 131072,
+   "id": "gpt-oss-120b"
+  },
+  {
+   "context": 128000,
+   "id": "green-l"
+  },
+  {
+   "context": 128000,
+   "id": "green-l-raw"
+  },
+  {
+   "context": 131072,
+   "id": "green-r"
+  },
+  {
+   "context": 131072,
+   "id": "green-r-raw"
+  },
+  {
+   "context": 0,
+   "id": "green-s"
+  },
+  {
+   "context": 0,
+   "id": "green-s-pro"
+  },
+  {
+   "context": 22016,
+   "id": "holo2-30b-a3b"
+  },
+  {
+   "context": 262144,
+   "id": "kimi-k2.6"
+  },
+  {
+   "context": 262144,
+   "id": "kimi-k2.6-fast"
+  },
+  {
+   "context": 262144,
+   "id": "kimi-k2.7-code"
+  },
+  {
+   "context": 1048576,
+   "id": "kimi-k3"
+  },
+  {
+   "context": 100000,
+   "id": "llama-3.3-70b-instruct"
+  },
+  {
+   "context": 204800,
+   "id": "minimax-m2.5"
+  },
+  {
+   "context": 262144,
+   "id": "mistral-medium-3.5-128b"
+  },
+  {
+   "context": 128000,
+   "id": "mistral-small-3.2-24b-instruct-2506"
+  },
+  {
+   "context": 128000,
+   "id": "pixtral-12b-2409"
+  },
+  {
+   "context": 262144,
+   "id": "qwen3-235b-a22b-instruct-2507"
+  },
+  {
+   "context": 128000,
+   "id": "qwen3-coder-30b-a3b-instruct"
+  },
+  {
+   "context": 262144,
+   "id": "qwen3.5-397b-a17b"
+  },
+  {
+   "context": 262144,
+   "id": "qwen3.6-35b-a3b"
+  },
+  {
+   "context": 32768,
+   "id": "voxtral-small-24b-2507"
+  }
+ ],
+ "schema": 1
+}

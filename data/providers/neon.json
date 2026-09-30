@@ -1,0 +1,191 @@
+{
+ "generated_at": 1790756014,
+ "id": "neon",
+ "models": [
+  {
+   "context": 1000000,
+   "id": "claude-fable-5"
+  },
+  {
+   "context": 1000000,
+   "id": "claude-fable-5-1"
+  },
+  {
+   "context": 200000,
+   "id": "claude-haiku-4-5"
+  },
+  {
+   "context": 200000,
+   "id": "claude-opus-4-1"
+  },
+  {
+   "context": 200000,
+   "id": "claude-opus-4-5"
+  },
+  {
+   "context": 1000000,
+   "id": "claude-opus-4-6"
+  },
+  {
+   "context": 1000000,
+   "id": "claude-opus-4-7"
+  },
+  {
+   "context": 1000000,
+   "id": "claude-opus-4-8"
+  },
+  {
+   "context": 1000000,
+   "id": "claude-opus-5"
+  },
+  {
+   "context": 200000,
+   "id": "claude-sonnet-4-5"
+  },
+  {
+   "context": 1000000,
+   "id": "claude-sonnet-4-6"
+  },
+  {
+   "context": 1000000,
+   "id": "claude-sonnet-5"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini-3-1-flash-lite"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini-3-1-pro"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini-3-5-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini-3-5-flash-lite"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini-3-6-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini-3-flash"
+  },
+  {
+   "context": 131072,
+   "id": "gemma-3-12b"
+  },
+  {
+   "context": 1000000,
+   "id": "glm-5-2"
+  },
+  {
+   "context": 1048576,
+   "id": "glm-5-3-flash"
+  },
+  {
+   "context": 400000,
+   "id": "gpt-5"
+  },
+  {
+   "context": 400000,
+   "id": "gpt-5-1"
+  },
+  {
+   "context": 400000,
+   "id": "gpt-5-2"
+  },
+  {
+   "context": 400000,
+   "id": "gpt-5-3-codex"
+  },
+  {
+   "context": 1050000,
+   "id": "gpt-5-4"
+  },
+  {
+   "context": 400000,
+   "id": "gpt-5-4-mini"
+  },
+  {
+   "context": 400000,
+   "id": "gpt-5-4-nano"
+  },
+  {
+   "context": 1050000,
+   "id": "gpt-5-5"
+  },
+  {
+   "context": 1050000,
+   "id": "gpt-5-5-pro"
+  },
+  {
+   "context": 1050000,
+   "id": "gpt-5-6-luna"
+  },
+  {
+   "context": 1050000,
+   "id": "gpt-5-6-sol"
+  },
+  {
+   "context": 1050000,
+   "id": "gpt-5-6-terra"
+  },
+  {
+   "context": 400000,
+   "id": "gpt-5-mini"
+  },
+  {
+   "context": 400000,
+   "id": "gpt-5-nano"
+  },
+  {
+   "context": 1050000,
+   "id": "gpt-6-astra"
+  },
+  {
+   "context": 131072,
+   "id": "gpt-oss-120b"
+  },
+  {
+   "context": 131072,
+   "id": "gpt-oss-20b"
+  },
+  {
+   "context": 500000,
+   "id": "grok-4-6"
+  },
+  {
+   "context": 1048576,
+   "id": "inkling"
+  },
+  {
+   "context": 1048576,
+   "id": "kimi-k3"
+  },
+  {
+   "context": 1000000,
+   "id": "llama-4-maverick"
+  },
+  {
+   "context": 131072,
+   "id": "meta-llama-3-1-8b-instruct"
+  },
+  {
+   "context": 128000,
+   "id": "meta-llama-3-3-70b-instruct"
+  },
+  {
+   "context": 131072,
+   "id": "qwen3-next-80b-a3b-instruct"
+  },
+  {
+   "context": 262144,
+   "id": "qwen35-122b-a10b"
+  }
+ ],
+ "schema": 1
+}

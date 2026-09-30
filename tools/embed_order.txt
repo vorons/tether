@@ -14,6 +14,7 @@
 # before its first reader, rebuild. Never edit Makefile/main.c by hand.
 
 [embed]
+build_version build/version.lua
 app src/tether/app.lua
 ui src/tether/ui.lua
 ui_copy src/tether/ui/copy.lua
@@ -31,6 +32,7 @@ ui_complete src/tether/ui/complete.lua
 ui_themes src/tether/ui/themes.lua
 transcript src/tether/transcript.lua
 commands src/tether/commands.lua
+provider_metadata src/tether/metadata.lua
 turn src/tether/turn.lua
 config_schema src/tether/config_schema.lua
 config_auth src/tether/config_auth.lua
@@ -38,6 +40,7 @@ config src/tether/config.lua
 session src/tether/session.lua
 provider_common src/tether/providers/common.lua
 provider_catalog src/tether/providers/catalog.lua
+providers_snapshot build/providers_snapshot.lua
 provider_openai src/tether/providers/openai.lua
 provider_anthropic src/tether/providers/anthropic.lua
 provider_gemini src/tether/providers/gemini.lua
@@ -66,10 +69,14 @@ cache src/tether/cache.lua
 extensions src/tether/extensions.lua
 
 [load]
+## build_version first: version string for --version and the splash
+build_version
 ## provider_common first: session/agent resolve their JSON helpers to it
 provider_common
 ## provider_catalog next: api/config/ui resolve presets from it —
 ## must precede every module that reads it (config, ui, api)
+## providers_snapshot: vendored slim catalog the catalog merges lowest
+providers_snapshot
 provider_catalog
 ## retry: pure policy module api/agent apply (see src/tether/retry.lua)
 retry
@@ -80,6 +87,8 @@ ask
 ## confirm_policy: pure should_confirm/approve_key policy (src/tether/confirm_policy.lua)
 confirm_policy
 ## compression: pure context-compaction policy (src/tether/compression.lua)
+## metadata first: compression resolves per-model limits through it
+provider_metadata
 compression
 ## projection: read-only change preview (src/tether/projection.lua)
 projection

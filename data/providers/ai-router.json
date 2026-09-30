@@ -1,0 +1,27 @@
+{
+ "generated_at": 1790756014,
+ "id": "ai-router",
+ "models": [
+  {
+   "context": 1050000,
+   "id": "gpt-5.4"
+  },
+  {
+   "context": 1050000,
+   "id": "gpt-5.5"
+  },
+  {
+   "context": 1050000,
+   "id": "gpt-5.6-luna"
+  },
+  {
+   "context": 1050000,
+   "id": "gpt-5.6-sol"
+  },
+  {
+   "context": 1050000,
+   "id": "gpt-5.6-terra"
+  }
+ ],
+ "schema": 1
+}

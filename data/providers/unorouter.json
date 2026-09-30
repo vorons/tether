@@ -1,0 +1,99 @@
+{
+ "generated_at": 1790756014,
+ "id": "unorouter",
+ "models": [
+  {
+   "context": 200000,
+   "id": "claude-haiku-4-5-20251001"
+  },
+  {
+   "context": 1000000,
+   "id": "claude-opus-4-8"
+  },
+  {
+   "context": 1000000,
+   "id": "claude-sonnet-5"
+  },
+  {
+   "context": 1000000,
+   "id": "deepseek-v4-flash"
+  },
+  {
+   "context": 1000000,
+   "id": "deepseek-v4-flash:free"
+  },
+  {
+   "context": 1000000,
+   "id": "deepseek-v4-pro"
+  },
+  {
+   "context": 1000000,
+   "id": "deepseek-v4-pro:free"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini-3.5-flash"
+  },
+  {
+   "context": 262144,
+   "id": "gemma-4-31b-it:free"
+  },
+  {
+   "context": 131072,
+   "id": "glm-4.5-flash:free"
+  },
+  {
+   "context": 1000000,
+   "id": "glm-5.2"
+  },
+  {
+   "context": 1000000,
+   "id": "glm-5.2:free"
+  },
+  {
+   "context": 400000,
+   "id": "gpt-5.2"
+  },
+  {
+   "context": 1050000,
+   "id": "gpt-5.4"
+  },
+  {
+   "context": 1050000,
+   "id": "gpt-5.4:free"
+  },
+  {
+   "context": 1050000,
+   "id": "gpt-5.5"
+  },
+  {
+   "context": 1050000,
+   "id": "gpt-5.5:free"
+  },
+  {
+   "context": 262144,
+   "id": "kimi-k2.6"
+  },
+  {
+   "context": 204800,
+   "id": "minimax-m2.7"
+  },
+  {
+   "context": 204800,
+   "id": "minimax-m2.7:free"
+  },
+  {
+   "context": 1000000,
+   "id": "nemotron-3-ultra-550b-a55b:free"
+  },
+  {
+   "context": 262144,
+   "id": "qwen3.5-397b-a17b:free"
+  },
+  {
+   "context": 256000,
+   "id": "step-3.7-flash:free"
+  }
+ ],
+ "schema": 1
+}

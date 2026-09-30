@@ -38,3 +38,4 @@ docs/
 data/*
 !data/providers.json
 !data/overrides/
+!data/providers/

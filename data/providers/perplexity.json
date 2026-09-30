@@ -1,0 +1,23 @@
+{
+ "generated_at": 1790756014,
+ "id": "perplexity",
+ "models": [
+  {
+   "context": 128000,
+   "id": "sonar"
+  },
+  {
+   "context": 128000,
+   "id": "sonar-deep-research"
+  },
+  {
+   "context": 200000,
+   "id": "sonar-pro"
+  },
+  {
+   "context": 128000,
+   "id": "sonar-reasoning-pro"
+  }
+ ],
+ "schema": 1
+}

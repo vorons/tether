@@ -1,0 +1,419 @@
+{
+ "generated_at": 1790756014,
+ "id": "nvidia",
+ "models": [
+  {
+   "context": 128000,
+   "id": "abacusai/dracarys-llama-3.1-70b-instruct"
+  },
+  {
+   "context": 8192,
+   "id": "baai/bge-m3"
+  },
+  {
+   "context": 4096,
+   "id": "black-forest-labs/flux.1-dev"
+  },
+  {
+   "context": 40960,
+   "id": "black-forest-labs/flux_1-kontext-dev"
+  },
+  {
+   "context": 77,
+   "id": "black-forest-labs/flux_1-schnell"
+  },
+  {
+   "context": 40960,
+   "id": "black-forest-labs/flux_2-klein-4b"
+  },
+  {
+   "context": 262000,
+   "id": "bytedance/seed-oss-36b-instruct"
+  },
+  {
+   "context": 1048576,
+   "id": "deepseek-ai/deepseek-v4-flash"
+  },
+  {
+   "context": 1000000,
+   "id": "deepseek-ai/deepseek-v4-flash-0731"
+  },
+  {
+   "context": 1048576,
+   "id": "deepseek-ai/deepseek-v4-pro"
+  },
+  {
+   "context": 1000000,
+   "id": "deepseek-ai/deepseek-v4-pro-0813"
+  },
+  {
+   "context": 128000,
+   "id": "google/gemma-2-2b-it"
+  },
+  {
+   "context": 131072,
+   "id": "google/gemma-3-12b-it"
+  },
+  {
+   "context": 131072,
+   "id": "google/gemma-3-4b-it"
+  },
+  {
+   "context": 128000,
+   "id": "google/gemma-3n-e2b-it"
+  },
+  {
+   "context": 128000,
+   "id": "google/gemma-3n-e4b-it"
+  },
+  {
+   "context": 256000,
+   "id": "google/gemma-4-31b-it"
+  },
+  {
+   "context": 128000,
+   "id": "google/google-paligemma"
+  },
+  {
+   "context": 128000,
+   "id": "meta/esm2-650m"
+  },
+  {
+   "context": 128000,
+   "id": "meta/esmfold"
+  },
+  {
+   "context": 128000,
+   "id": "meta/llama-3.1-70b-instruct"
+  },
+  {
+   "context": 16000,
+   "id": "meta/llama-3.1-8b-instruct"
+  },
+  {
+   "context": 128000,
+   "id": "meta/llama-3.2-11b-vision-instruct"
+  },
+  {
+   "context": 128000,
+   "id": "meta/llama-3.2-1b-instruct"
+  },
+  {
+   "context": 32768,
+   "id": "meta/llama-3.2-3b-instruct"
+  },
+  {
+   "context": 128000,
+   "id": "meta/llama-3.2-90b-vision-instruct"
+  },
+  {
+   "context": 128000,
+   "id": "meta/llama-3.3-70b-instruct"
+  },
+  {
+   "context": 128000,
+   "id": "meta/llama-4-maverick-17b-128e-instruct"
+  },
+  {
+   "context": 128000,
+   "id": "meta/llama-guard-4-12b"
+  },
+  {
+   "context": 131072,
+   "id": "meta/muse-glimmer-30b"
+  },
+  {
+   "context": 131072,
+   "id": "microsoft/phi-4-mini-instruct"
+  },
+  {
+   "context": 128000,
+   "id": "microsoft/phi-4-multimodal-instruct"
+  },
+  {
+   "context": 204800,
+   "id": "minimaxai/minimax-m2.7"
+  },
+  {
+   "context": 1000000,
+   "id": "minimaxai/minimax-m3"
+  },
+  {
+   "context": 32768,
+   "id": "mistralai/magistral-small-2506"
+  },
+  {
+   "context": 262144,
+   "id": "mistralai/ministral-14b-instruct-2512"
+  },
+  {
+   "context": 65536,
+   "id": "mistralai/mistral-7b-instruct-v0.3"
+  },
+  {
+   "context": 262144,
+   "id": "mistralai/mistral-large-3-675b-instruct-2512"
+  },
+  {
+   "context": 131072,
+   "id": "mistralai/mistral-medium-3-instruct"
+  },
+  {
+   "context": 262144,
+   "id": "mistralai/mistral-medium-3.5-128b"
+  },
+  {
+   "context": 128000,
+   "id": "mistralai/mistral-nemotron"
+  },
+  {
+   "context": 128000,
+   "id": "mistralai/mistral-small-4-119b-2603"
+  },
+  {
+   "context": 65536,
+   "id": "mistralai/mixtral-8x22b-instruct"
+  },
+  {
+   "context": 32768,
+   "id": "mistralai/mixtral-8x7b-instruct"
+  },
+  {
+   "context": 262144,
+   "id": "moonshotai/kimi-k2.6"
+  },
+  {
+   "context": 1048576,
+   "id": "moonshotai/kimi-k3"
+  },
+  {
+   "context": 0,
+   "id": "nvidia/active-speaker-detection"
+  },
+  {
+   "context": 128000,
+   "id": "nvidia/bevformer"
+  },
+  {
+   "context": 0,
+   "id": "nvidia/cosmos-predict1-5b"
+  },
+  {
+   "context": 131072,
+   "id": "nvidia/cosmos-reason2-8b"
+  },
+  {
+   "context": 0,
+   "id": "nvidia/cosmos-transfer1-7b"
+  },
+  {
+   "context": 0,
+   "id": "nvidia/cosmos-transfer2_5-2b"
+  },
+  {
+   "context": 128000,
+   "id": "nvidia/gliner-pii"
+  },
+  {
+   "context": 128000,
+   "id": "nvidia/llama-3.1-nemotron-70b-instruct"
+  },
+  {
+   "context": 131072,
+   "id": "nvidia/llama-3.1-nemotron-nano-8b-v1"
+  },
+  {
+   "context": 32768,
+   "id": "nvidia/llama-3.1-nemotron-nano-vl-8b-v1"
+  },
+  {
+   "context": 128000,
+   "id": "nvidia/llama-3.1-nemotron-safety-guard-8b-v3"
+  },
+  {
+   "context": 128000,
+   "id": "nvidia/llama-3.1-nemotron-ultra-253b-v1"
+  },
+  {
+   "context": 131072,
+   "id": "nvidia/llama-3.3-nemotron-super-49b-v1"
+  },
+  {
+   "context": 131072,
+   "id": "nvidia/llama-3.3-nemotron-super-49b-v1.5"
+  },
+  {
+   "context": 32768,
+   "id": "nvidia/llama-3_2-nemoretriever-300m-embed-v1"
+  },
+  {
+   "context": 32768,
+   "id": "nvidia/llama-nemotron-embed-vl-1b-v2"
+  },
+  {
+   "context": 128000,
+   "id": "nvidia/llama-nemotron-rerank-vl-1b-v2"
+  },
+  {
+   "context": 0,
+   "id": "nvidia/magpie-tts-zeroshot"
+  },
+  {
+   "context": 128000,
+   "id": "nvidia/nemotron-3-content-safety"
+  },
+  {
+   "context": 131072,
+   "id": "nvidia/nemotron-3-nano-30b-a3b"
+  },
+  {
+   "context": 256000,
+   "id": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning"
+  },
+  {
+   "context": 262144,
+   "id": "nvidia/nemotron-3-super-120b-a12b"
+  },
+  {
+   "context": 1000000,
+   "id": "nvidia/nemotron-3-ultra-550b-a55b"
+  },
+  {
+   "context": 262144,
+   "id": "nvidia/nemotron-3.5-lightning-30b-a3b"
+  },
+  {
+   "context": 128000,
+   "id": "nvidia/nemotron-content-safety-reasoning-4b"
+  },
+  {
+   "context": 128000,
+   "id": "nvidia/nemotron-mini-4b-instruct"
+  },
+  {
+   "context": 128000,
+   "id": "nvidia/nemotron-nano-12b-v2-vl"
+  },
+  {
+   "context": 128000,
+   "id": "nvidia/nemotron-voicechat"
+  },
+  {
+   "context": 32768,
+   "id": "nvidia/nv-embed-v1"
+  },
+  {
+   "context": 32768,
+   "id": "nvidia/nv-embedcode-7b-v1"
+  },
+  {
+   "context": 131072,
+   "id": "nvidia/nvidia-nemotron-nano-9b-v2"
+  },
+  {
+   "context": 128000,
+   "id": "nvidia/rerank-qa-mistral-4b"
+  },
+  {
+   "context": 128000,
+   "id": "nvidia/riva-translate-4b-instruct-v1.1"
+  },
+  {
+   "context": 128000,
+   "id": "nvidia/sparsedrive"
+  },
+  {
+   "context": 128000,
+   "id": "nvidia/streampetr"
+  },
+  {
+   "context": 128000,
+   "id": "nvidia/studiovoice"
+  },
+  {
+   "context": 0,
+   "id": "nvidia/synthetic-video-detector"
+  },
+  {
+   "context": 128000,
+   "id": "nvidia/usdcode"
+  },
+  {
+   "context": 0,
+   "id": "nvidia/usdvalidate"
+  },
+  {
+   "context": 131072,
+   "id": "openai/gpt-oss-20b"
+  },
+  {
+   "context": 0,
+   "id": "openai/whisper-large-v3"
+  },
+  {
+   "context": 262144,
+   "id": "poolside/laguna-xs-2.1"
+  },
+  {
+   "context": 0,
+   "id": "qwen/qwen-image"
+  },
+  {
+   "context": 0,
+   "id": "qwen/qwen-image-edit"
+  },
+  {
+   "context": 128000,
+   "id": "qwen/qwen2.5-coder-32b-instruct"
+  },
+  {
+   "context": 262144,
+   "id": "qwen/qwen3-coder-480b-a35b-instruct"
+  },
+  {
+   "context": 262144,
+   "id": "qwen/qwen3-next-80b-a3b-instruct"
+  },
+  {
+   "context": 262144,
+   "id": "qwen/qwen3.5-122b-a10b"
+  },
+  {
+   "context": 262144,
+   "id": "qwen/qwen3.5-397b-a17b"
+  },
+  {
+   "context": 128000,
+   "id": "sarvamai/sarvam-m"
+  },
+  {
+   "context": 256000,
+   "id": "stepfun-ai/step-3.5-flash"
+  },
+  {
+   "context": 256000,
+   "id": "stepfun-ai/step-3.7-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "thinkingmachines/inkling"
+  },
+  {
+   "context": 128000,
+   "id": "upstage/solar-10.7b-instruct"
+  },
+  {
+   "context": 1000000,
+   "id": "z-ai/glm-5.2"
+  },
+  {
+   "context": 1000000,
+   "id": "z-ai/glm-5.3"
+  },
+  {
+   "context": 1000000,
+   "id": "z-ai/glm-5.3-flash"
+  }
+ ],
+ "schema": 1
+}

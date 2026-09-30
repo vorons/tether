@@ -1,0 +1,43 @@
+{
+ "generated_at": 1790756014,
+ "id": "the-grid-ai",
+ "models": [
+  {
+   "context": 1000000,
+   "id": "agent-max"
+  },
+  {
+   "context": 196608,
+   "id": "agent-prime"
+  },
+  {
+   "context": 128000,
+   "id": "agent-standard"
+  },
+  {
+   "context": 1000000,
+   "id": "code-max"
+  },
+  {
+   "context": 196608,
+   "id": "code-prime"
+  },
+  {
+   "context": 128000,
+   "id": "code-standard"
+  },
+  {
+   "context": 1000000,
+   "id": "text-max"
+  },
+  {
+   "context": 196608,
+   "id": "text-prime"
+  },
+  {
+   "context": 128000,
+   "id": "text-standard"
+  }
+ ],
+ "schema": 1
+}

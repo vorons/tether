@@ -1,0 +1,39 @@
+{
+ "generated_at": 1790756014,
+ "id": "nan",
+ "models": [
+  {
+   "context": 1000000,
+   "id": "deepseek-v4-flash"
+  },
+  {
+   "context": 262144,
+   "id": "gemma4"
+  },
+  {
+   "context": 1000000,
+   "id": "glm5.3"
+  },
+  {
+   "context": 1000000,
+   "id": "glm5.3-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "mimo-v2.6-flash"
+  },
+  {
+   "context": 8192,
+   "id": "qwen-image-2.1"
+  },
+  {
+   "context": 262144,
+   "id": "qwen3.6"
+  },
+  {
+   "context": 262144,
+   "id": "qwen3.8-flash"
+  }
+ ],
+ "schema": 1
+}

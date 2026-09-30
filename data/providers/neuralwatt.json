@@ -1,0 +1,123 @@
+{
+ "generated_at": 1790756014,
+ "id": "neuralwatt",
+ "models": [
+  {
+   "context": 1048560,
+   "id": "deepseek-v4-flash"
+  },
+  {
+   "context": 1048560,
+   "id": "deepseek-v4-flash-flex"
+  },
+  {
+   "context": 1048560,
+   "id": "deepseek-v4-flash-speed"
+  },
+  {
+   "context": 1048560,
+   "id": "deepseek-v4-pro"
+  },
+  {
+   "context": 1048560,
+   "id": "deepseek-v4.1-flash"
+  },
+  {
+   "context": 1048560,
+   "id": "deepseek-v4.1-flash-flex"
+  },
+  {
+   "context": 262128,
+   "id": "gemma-4-31b"
+  },
+  {
+   "context": 1048560,
+   "id": "glm-5.2"
+  },
+  {
+   "context": 1048560,
+   "id": "glm-5.2-fast"
+  },
+  {
+   "context": 1048560,
+   "id": "glm-5.2-flex"
+  },
+  {
+   "context": 199984,
+   "id": "glm-5.2-short"
+  },
+  {
+   "context": 199984,
+   "id": "glm-5.2-short-fast"
+  },
+  {
+   "context": 199984,
+   "id": "glm-5.2-short-fast-flex"
+  },
+  {
+   "context": 199984,
+   "id": "glm-5.2-short-flex"
+  },
+  {
+   "context": 1048560,
+   "id": "glm-5.3"
+  },
+  {
+   "context": 1048560,
+   "id": "glm-5.3-flash"
+  },
+  {
+   "context": 1048560,
+   "id": "glm-5.3-flash-flex"
+  },
+  {
+   "context": 1048560,
+   "id": "glm-5.3-flex"
+  },
+  {
+   "context": 262128,
+   "id": "kimi-k2.7-code"
+  },
+  {
+   "context": 262128,
+   "id": "kimi-k2.7-code-fast"
+  },
+  {
+   "context": 262128,
+   "id": "kimi-k2.7-code-flex"
+  },
+  {
+   "context": 1048560,
+   "id": "kimi-k3"
+  },
+  {
+   "context": 1048560,
+   "id": "kimi-k3-fast"
+  },
+  {
+   "context": 1048560,
+   "id": "kimi-k3-flex"
+  },
+  {
+   "context": 262128,
+   "id": "qwen-3.8-27b"
+  },
+  {
+   "context": 262128,
+   "id": "qwen-3.8-27b-flex"
+  },
+  {
+   "context": 131056,
+   "id": "qwen3.6-35b"
+  },
+  {
+   "context": 131056,
+   "id": "qwen3.6-35b-fast"
+  },
+  {
+   "context": 131056,
+   "id": "qwen3.6-35b-flex"
+  }
+ ],
+ "schema": 1
+}

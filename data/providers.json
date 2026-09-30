@@ -1,5 +1,5 @@
 {
- "generated_at": 1790678429,
+ "generated_at": 1790756014,
  "providers": {
   "302ai": {
    "api_key_env": [
@@ -2281,6 +2281,10 @@
      "id": "anthropic.claude-sonnet-5"
     },
     {
+     "context": 1000000,
+     "id": "anthropic.claude-sonnet-5-5"
+    },
+    {
      "context": 300000,
      "id": "apac.amazon.nova-lite-v1:0"
     },
@@ -2507,6 +2511,10 @@
     {
      "context": 500000,
      "id": "global.xai.grok-4.6"
+    },
+    {
+     "context": 500000,
+     "id": "global.xai.grok-4.7"
     },
     {
      "context": 131072,
@@ -2903,6 +2911,10 @@
     {
      "context": 500000,
      "id": "us.xai.grok-4.6"
+    },
+    {
+     "context": 500000,
+     "id": "us.xai.grok-4.7"
     },
     {
      "context": 122880,
@@ -3384,7 +3396,7 @@
     "AZURE_API_KEY"
    ],
    "base_url": "",
-   "model": "claude-sonnet-5-5",
+   "model": "gpt-6.1-sol",
    "models": [
     {
      "context": 1000000,
@@ -3623,6 +3635,10 @@
      "id": "gpt-6-sol"
     },
     {
+     "context": 1050000,
+     "id": "gpt-6.1-sol"
+    },
+    {
      "context": 400000,
      "id": "gpt-chat-latest"
     },
@@ -3767,7 +3783,7 @@
     "AZURE_COGNITIVE_SERVICES_API_KEY"
    ],
    "base_url": "",
-   "model": "claude-sonnet-5-5",
+   "model": "gpt-6.1-sol",
    "models": [
     {
      "context": 1000000,
@@ -3998,6 +4014,10 @@
      "id": "gpt-6-sol"
     },
     {
+     "context": 1050000,
+     "id": "gpt-6.1-sol"
+    },
+    {
      "context": 400000,
      "id": "gpt-chat-latest"
     },
@@ -4169,6 +4189,10 @@
     {
      "context": 1048576,
      "id": "deepseek-ai/DeepSeek-V4.1-Flash"
+    },
+    {
+     "context": 1048576,
+     "id": "deepseek-ai/DeepSeek-V4.1-Flash-Fast"
     },
     {
      "context": 262000,
@@ -5065,7 +5089,7 @@
     "CORTECS_API_KEY"
    ],
    "base_url": "https://api.cortecs.ai/v1",
-   "model": "gpt-6-sol",
+   "model": "gpt-6.1-sol",
    "models": [
     {
      "context": 65536,
@@ -5282,6 +5306,10 @@
     {
      "context": 1050000,
      "id": "gpt-6-sol"
+    },
+    {
+     "context": 1050000,
+     "id": "gpt-6.1-sol"
     },
     {
      "context": 131000,
@@ -5617,7 +5645,7 @@
     "CROSSMODEL_API_KEY"
    ],
    "base_url": "https://api.crossmodel.ai/v1",
-   "model": "xiaomi/mimo-v2.6-pro",
+   "model": "anthropic/claude-sonnet-5-5",
    "models": [
     {
      "context": 1000000,
@@ -5654,6 +5682,10 @@
     {
      "context": 1000000,
      "id": "anthropic/claude-sonnet-5"
+    },
+    {
+     "context": 1000000,
+     "id": "anthropic/claude-sonnet-5-5"
     },
     {
      "context": 1000000,
@@ -6952,7 +6984,7 @@
     "EDENAI_API_KEY"
    ],
    "base_url": "https://api.edenai.run/v3",
-   "model": "anthropic/claude-sonnet-5-5",
+   "model": "openai/gpt-6.1-sol",
    "models": [
     {
      "context": 300000,
@@ -7135,7 +7167,7 @@
      "id": "cloudflare/@cf/aisingapore/gemma-sea-lion-v4-27b-it"
     },
     {
-     "context": 1310720,
+     "context": 1048576,
      "id": "cloudflare/@cf/deepseek-ai/deepseek-v4-flash-0731"
     },
     {
@@ -7339,6 +7371,10 @@
      "id": "deepseek/deepseek-v4-pro"
     },
     {
+     "context": 131072,
+     "id": "fireworks_ai/accounts/fireworks/models/gpt-oss-120b"
+    },
+    {
      "context": 1048576,
      "id": "fireworks_ai/accounts/fireworks/models/inkling"
     },
@@ -7349,10 +7385,6 @@
     {
      "context": 1048576,
      "id": "flexai/DeepSeek-V4-Flash-0731"
-    },
-    {
-     "context": 1048576,
-     "id": "flexai/DeepSeek-V4.1-Flash"
     },
     {
      "context": 131072,
@@ -7697,6 +7729,10 @@
     {
      "context": 1050000,
      "id": "openai/gpt-6-sol"
+    },
+    {
+     "context": 1050000,
+     "id": "openai/gpt-6.1-sol"
     },
     {
      "context": 1050000,
@@ -9319,6 +9355,10 @@
     {
      "context": 1050000,
      "id": "gpt-6-sol"
+    },
+    {
+     "context": 1050000,
+     "id": "gpt-6.1-sol"
     },
     {
      "context": 500000,
@@ -12269,7 +12309,7 @@
     "KILO_API_KEY"
    ],
    "base_url": "https://api.kilo.ai/api/gateway",
-   "model": "anthropic/claude-sonnet-5.5",
+   "model": "openai/gpt-6.1-sol-pro",
    "models": [
     {
      "context": 131072,
@@ -13164,6 +13204,14 @@
      "id": "openai/gpt-6-sol-pro"
     },
     {
+     "context": 1050000,
+     "id": "openai/gpt-6.1-sol"
+    },
+    {
+     "context": 1050000,
+     "id": "openai/gpt-6.1-sol-pro"
+    },
+    {
      "context": 128000,
      "id": "openai/gpt-audio"
     },
@@ -13476,7 +13524,7 @@
      "id": "qwen/qwen3.8-2.4t-a95b"
     },
     {
-     "context": 262144,
+     "context": 1000000,
      "id": "qwen/qwen3.8-27b"
     },
     {
@@ -14031,7 +14079,7 @@
     "LLMGATEWAY_API_KEY"
    ],
    "base_url": "https://api.llmgateway.io/v1",
-   "model": "claude-sonnet-5-5",
+   "model": "gpt-6.1-sol",
    "models": [
     {
      "context": 32768,
@@ -14420,6 +14468,10 @@
     {
      "context": 1050000,
      "id": "gpt-6-sol"
+    },
+    {
+     "context": 1050000,
+     "id": "gpt-6.1-sol"
     },
     {
      "context": 131072,
@@ -14893,7 +14945,7 @@
     "LLMGATEWAY_API_KEY"
    ],
    "base_url": "https://api.llmgateway.io/v1",
-   "model": "anthropic/claude-sonnet-5-5",
+   "model": "openai/gpt-6.1-sol",
    "models": [
     {
      "context": 1000000,
@@ -15216,18 +15268,6 @@
      "id": "azure-anthropic/claude-sonnet-5"
     },
     {
-     "context": 16385,
-     "id": "azure/gpt-3.5-turbo"
-    },
-    {
-     "context": 8192,
-     "id": "azure/gpt-4"
-    },
-    {
-     "context": 128000,
-     "id": "azure/gpt-4-turbo"
-    },
-    {
      "context": 1000000,
      "id": "azure/gpt-4.1"
     },
@@ -15274,10 +15314,6 @@
     {
      "context": 400000,
      "id": "azure/gpt-5.2-codex"
-    },
-    {
-     "context": 400000,
-     "id": "azure/gpt-5.2-pro"
     },
     {
      "context": 400000,
@@ -15330,22 +15366,6 @@
     {
      "context": 131072,
      "id": "azure/gpt-oss-120b"
-    },
-    {
-     "context": 200000,
-     "id": "azure/o1"
-    },
-    {
-     "context": 200000,
-     "id": "azure/o3"
-    },
-    {
-     "context": 200000,
-     "id": "azure/o3-mini"
-    },
-    {
-     "context": 200000,
-     "id": "azure/o4-mini"
     },
     {
      "context": 1048576,
@@ -16218,6 +16238,10 @@
     {
      "context": 1050000,
      "id": "openai/gpt-6-sol"
+    },
+    {
+     "context": 1050000,
+     "id": "openai/gpt-6.1-sol"
     },
     {
      "context": 200000,
@@ -17711,7 +17735,7 @@
     "NANO_GPT_API_KEY"
    ],
    "base_url": "https://nano-gpt.com/api/v1",
-   "model": "anthropic/claude-sonnet-5.5:thinking",
+   "model": "openai/gpt-6.1-sol-pro",
    "models": [
     {
      "context": 32768,
@@ -19356,6 +19380,14 @@
     {
      "context": 1050000,
      "id": "openai/gpt-6-sol-pro"
+    },
+    {
+     "context": 1050000,
+     "id": "openai/gpt-6.1-sol"
+    },
+    {
+     "context": 1050000,
+     "id": "openai/gpt-6.1-sol-pro"
     },
     {
      "context": 1050000,
@@ -21612,7 +21644,7 @@
     "OFOX_API_KEY"
    ],
    "base_url": "https://api.ofox.ai/v1",
-   "model": "openai/gpt-6-sol",
+   "model": "anthropic/claude-sonnet-5.5",
    "models": [
     {
      "context": 1000000,
@@ -21661,6 +21693,10 @@
     {
      "context": 1000000,
      "id": "anthropic/claude-sonnet-5"
+    },
+    {
+     "context": 1000000,
+     "id": "anthropic/claude-sonnet-5.5"
     },
     {
      "context": 1000000,
@@ -22481,6 +22517,10 @@
     },
     {
      "context": 1050000,
+     "id": "gpt-6.1-sol"
+    },
+    {
+     "context": 1050000,
      "id": "gpt-daybreak-blue-latest"
     },
     {
@@ -22807,6 +22847,10 @@
     {
      "context": 1050000,
      "id": "gpt-6-sol"
+    },
+    {
+     "context": 1050000,
+     "id": "gpt-6.1-sol"
     },
     {
      "context": 500000,
@@ -23395,7 +23439,7 @@
      "id": "deepseek/deepseek-v4-flash"
     },
     {
-     "context": 1310720,
+     "context": 1048576,
      "id": "deepseek/deepseek-v4-flash-0731"
     },
     {
@@ -23863,7 +23907,7 @@
      "id": "nvidia/nemotron-3.5-content-safety:free"
     },
     {
-     "context": 1000000,
+     "context": 262144,
      "id": "nvidia/nemotron-3.5-lightning"
     },
     {
@@ -24065,6 +24109,14 @@
     {
      "context": 1050000,
      "id": "openai/gpt-6-sol-pro"
+    },
+    {
+     "context": 1050000,
+     "id": "openai/gpt-6.1-sol"
+    },
+    {
+     "context": 1050000,
+     "id": "openai/gpt-6.1-sol-pro"
     },
     {
      "context": 128000,
@@ -24635,11 +24687,11 @@
      "id": "z-ai/glm-5.2"
     },
     {
-     "context": 1310720,
+     "context": 1048576,
      "id": "z-ai/glm-5.3"
     },
     {
-     "context": 1310720,
+     "context": 1048576,
      "id": "z-ai/glm-5.3-flash"
     },
     {
@@ -24679,7 +24731,7 @@
      "id": "~deepseek/deepseek-pro-latest"
     },
     {
-     "context": 1310720,
+     "context": 1048576,
      "id": "~deepseek/deepseek-v4-flash-latest"
     },
     {
@@ -24719,11 +24771,11 @@
      "id": "~x-ai/grok-latest"
     },
     {
-     "context": 1310720,
+     "context": 1048576,
      "id": "~z-ai/glm-flash-latest"
     },
     {
-     "context": 1310720,
+     "context": 1048576,
      "id": "~z-ai/glm-latest"
     }
    ],
@@ -27335,7 +27387,7 @@
     "REQUESTY_API_KEY"
    ],
    "base_url": "https://router.requesty.ai/v1",
-   "model": "mimo-v2.6-pro",
+   "model": "gpt-6.1-sol@eu",
    "models": [
     {
      "context": 1000000,
@@ -27436,6 +27488,14 @@
     {
      "context": 1000000,
      "id": "claude-sonnet-5"
+    },
+    {
+     "context": 1000000,
+     "id": "claude-sonnet-5-5"
+    },
+    {
+     "context": 1000000,
+     "id": "claude-sonnet-5-5@eu"
     },
     {
      "context": 1000000,
@@ -27712,6 +27772,14 @@
     {
      "context": 1050000,
      "id": "gpt-6-sol@eu"
+    },
+    {
+     "context": 1050000,
+     "id": "gpt-6.1-sol"
+    },
+    {
+     "context": 1050000,
+     "id": "gpt-6.1-sol@eu"
     },
     {
      "context": 2000000,
@@ -28141,7 +28209,7 @@
     "SCALEWAY_API_KEY"
    ],
    "base_url": "https://api.scaleway.ai/v1",
-   "model": "deepseek-v4-flash-0731",
+   "model": "qwen3.8-27b",
    "models": [
     {
      "context": 8191,
@@ -28198,6 +28266,10 @@
     {
      "context": 128000,
      "id": "qwen3.6-35b-a3b"
+    },
+    {
+     "context": 262144,
+     "id": "qwen3.8-27b"
     },
     {
      "context": 0,
@@ -29206,7 +29278,7 @@
     "TEMPR_API_KEY"
    ],
    "base_url": "https://api.temprhq.io/v1",
-   "model": "zai/glm-5.3-flashx",
+   "model": "xiaomi-mimo/mimo-v2.6-pro",
    "models": [
     {
      "context": 1000000,
@@ -29263,6 +29335,22 @@
     {
      "context": 1000000,
      "id": "anthropic/claude-sonnet-5"
+    },
+    {
+     "context": 131072,
+     "id": "cerebras/gpt-oss-120b"
+    },
+    {
+     "context": 131072,
+     "id": "cerebras/qwen-3.8-27b"
+    },
+    {
+     "context": 1000000,
+     "id": "deepseek/deepseek-flash"
+    },
+    {
+     "context": 1000000,
+     "id": "deepseek/deepseek-v4-pro"
     },
     {
      "context": 1048576,
@@ -29325,6 +29413,34 @@
      "id": "google/gemma-4-31b-it"
     },
     {
+     "context": 4096,
+     "id": "groq/allam-2-7b"
+    },
+    {
+     "context": 131072,
+     "id": "groq/openai/gpt-oss-120b"
+    },
+    {
+     "context": 131072,
+     "id": "groq/openai/gpt-oss-20b"
+    },
+    {
+     "context": 131042,
+     "id": "groq/qwen/qwen3.8-27b"
+    },
+    {
+     "context": 204800,
+     "id": "minimax/MiniMax-M2.7"
+    },
+    {
+     "context": 204800,
+     "id": "minimax/MiniMax-M2.7-highspeed"
+    },
+    {
+     "context": 1048576,
+     "id": "minimax/MiniMax-M3"
+    },
+    {
      "context": 8000,
      "id": "mistral/mistral-embed"
     },
@@ -29363,6 +29479,62 @@
     {
      "context": 1000000,
      "id": "mistral/zai-glm-5-3"
+    },
+    {
+     "context": 262144,
+     "id": "moonshot/kimi-k2.6"
+    },
+    {
+     "context": 262144,
+     "id": "moonshot/kimi-k2.7-code"
+    },
+    {
+     "context": 262144,
+     "id": "moonshot/kimi-k2.7-code-highspeed"
+    },
+    {
+     "context": 1048576,
+     "id": "moonshot/kimi-k3"
+    },
+    {
+     "context": 1000000,
+     "id": "xai/grok-4.20-0309-non-reasoning"
+    },
+    {
+     "context": 1000000,
+     "id": "xai/grok-4.20-0309-reasoning"
+    },
+    {
+     "context": 1000000,
+     "id": "xai/grok-4.3"
+    },
+    {
+     "context": 500000,
+     "id": "xai/grok-4.5"
+    },
+    {
+     "context": 500000,
+     "id": "xai/grok-4.6"
+    },
+    {
+     "context": 500000,
+     "id": "xai/grok-4.7"
+    },
+    {
+     "context": 256000,
+     "id": "xai/grok-build-0.1"
+    },
+    {
+     "context": 1048576,
+     "id": "xiaomi-mimo/mimo-v2.6-flash"
+    },
+    {
+     "context": 1048576,
+     "id": "xiaomi-mimo/mimo-v2.6-pro"
+    },
+    {
+     "context": 1048576,
+     "id": "xiaomi-mimo/mimo-v2.6-pro-ultraspeed"
     },
     {
      "context": 131072,
@@ -30735,6 +30907,10 @@
     {
      "context": 1050000,
      "id": "openai-gpt-6-sol"
+    },
+    {
+     "context": 1050000,
+     "id": "openai-gpt-61-sol"
     },
     {
      "context": 128000,

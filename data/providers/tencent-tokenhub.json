@@ -1,0 +1,19 @@
+{
+ "generated_at": 1790756014,
+ "id": "tencent-tokenhub",
+ "models": [
+  {
+   "context": 256000,
+   "id": "hy3"
+  },
+  {
+   "context": 256000,
+   "id": "hy3-preview"
+  },
+  {
+   "context": 1024000,
+   "id": "hy4-preview"
+  }
+ ],
+ "schema": 1
+}

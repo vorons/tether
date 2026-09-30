@@ -1,0 +1,35 @@
+{
+ "generated_at": 1790756014,
+ "id": "aki-io",
+ "models": [
+  {
+   "context": 1048576,
+   "id": "deepseek-v4-flash-0731-284b"
+  },
+  {
+   "context": 256000,
+   "id": "gemma4-26b"
+  },
+  {
+   "context": 524288,
+   "id": "glm5.3-754b"
+  },
+  {
+   "context": 128000,
+   "id": "gpt-oss-120b"
+  },
+  {
+   "context": 262144,
+   "id": "mistral4-119b"
+  },
+  {
+   "context": 256000,
+   "id": "qwen3.6-35b"
+  },
+  {
+   "context": 262144,
+   "id": "qwen3.8-27b"
+  }
+ ],
+ "schema": 1
+}

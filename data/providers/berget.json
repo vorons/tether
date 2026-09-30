@@ -1,0 +1,31 @@
+{
+ "generated_at": 1790756014,
+ "id": "berget",
+ "models": [
+  {
+   "context": 262144,
+   "id": "Qwen/Qwen3.8-27B-FP8"
+  },
+  {
+   "context": 128000,
+   "id": "google/gemma-4-31B-it"
+  },
+  {
+   "context": 32000,
+   "id": "mistralai/Mistral-Small-3.2-24B-Instruct-2506"
+  },
+  {
+   "context": 327680,
+   "id": "moonshotai/Kimi-K3"
+  },
+  {
+   "context": 524288,
+   "id": "zai-org/GLM-5.2"
+  },
+  {
+   "context": 524288,
+   "id": "zai-org/GLM-5.3-Flash"
+  }
+ ],
+ "schema": 1
+}

@@ -100,6 +100,20 @@ $(LUA_DIR)/%.o: $(LUA_DIR)/%.c
 $(EMBED_OUT): $(LUA_MODS) tools/embed.lua build/embed_list.mk src/host/embed_mods.inc
 	@lua tools/embed.lua $(EMBED_OUT) $(EMBED_ARGS)
 
+# offline-provider-catalog: vendored slim snapshot. Built from the committed
+# data file with no network; EMBED_OUT already depends on it via LUA_MODS
+# (embed_order.txt points at the build path).
+# build/version.lua embeds the git short hash (--version, splash); "dev"
+# without .git (override with `make tether TETHER_VERSION=...`). CI always
+# fresh-clones, so the hash is current there.
+build/version.lua: tools/gen-version.lua
+	@mkdir -p build
+	@lua tools/gen-version.lua build/version.lua $(TETHER_VERSION)
+
+build/providers_snapshot.lua: data/providers.json tools/gen-snapshot.lua
+	@mkdir -p build
+	@lua tools/gen-snapshot.lua data/providers.json build/providers_snapshot.lua
+
 # test-speed: unit files run under xargs -P (bounded by NPROC, default
 # nproc) with per-file logs in build/test-logs (gitignored). Failures
 # print the file name plus a tail of its log; exit is non-zero iff any
@@ -120,7 +134,7 @@ SMOKE_FILES ?= tests/keys_tests.lua tests/compression_tests.lua \
 	tests/palette_tests.lua tests/tool_dispatch_tests.lua tests/busy_tests.lua \
 	tests/auth_flow_tests.lua tests/ask_view_tests.lua
 
-smoke:
+smoke: build/providers_snapshot.lua build/version.lua
 	@for m in $(LUA_MODS); do luac -p $$m || exit $$?; done
 	@echo "=== luac ok ==="
 	@for t in $(SMOKE_FILES); do \
@@ -150,6 +164,7 @@ test: tether
 			exit 1; \
 		fi
 	@echo "=== unit files ok ==="
+	@python3 tests/sync_providers_tests.py
 	@CTX_H=$$(mktemp -d); CTX_W=$$(mktemp -d); \
 		rm -rf "$$CTX_H" "$$CTX_W"; mkdir -p "$$CTX_H" "$$CTX_W"; \
 		HOME="$$CTX_H" TETHER_TEST_WORKSPACE="$$CTX_W" lua tests/context_tests.lua; rc=$$?; \
@@ -170,6 +185,19 @@ clean:
 	rm -f $(EMBED_OUT)
 	rm -rf build
 
+# install: build, then drop the self-contained binary on PATH. PREFIX is
+# where it lands, DESTDIR offsets the whole path for staging/packaging:
+#   sudo make install
+#   make install PREFIX=$HOME/.local
+#   make install DESTDIR=$PWD/pkg
+# Depends on `tether`, so `make release && make install` installs the
+# optimized binary without rebuilding it.
+PREFIX  ?= /usr/local
+DESTDIR ?=
+install: tether
+	@mkdir -p $(DESTDIR)$(PREFIX)/bin
+	install -m 755 tether $(DESTDIR)$(PREFIX)/bin/tether
+
 # release: maximum-optimization build for distribution. Non-portable
 # (-march=native), asserts off (-DNDEBUG), link-time optimization, stripped
 # and UPX-packed. Separate from the default build so dev iteration stays
@@ -181,4 +209,4 @@ release:
 	@upx --best --lzma tether
 	@ls -la tether
 
-.PHONY: test smoke clean release
+.PHONY: test smoke clean release install

@@ -1,0 +1,19 @@
+{
+ "generated_at": 1790756014,
+ "id": "abliteration-ai",
+ "models": [
+  {
+   "context": 150000,
+   "id": "abliterated-model"
+  },
+  {
+   "context": 1000000,
+   "id": "abliterated-model-large"
+  },
+  {
+   "context": 1000000,
+   "id": "abliterated-model-large-v2"
+  }
+ ],
+ "schema": 1
+}

@@ -1,0 +1,39 @@
+{
+ "generated_at": 1790756014,
+ "id": "tencent-coding-plan",
+ "models": [
+  {
+   "context": 202752,
+   "id": "glm-5"
+  },
+  {
+   "context": 131072,
+   "id": "hunyuan-2.0-instruct"
+  },
+  {
+   "context": 131072,
+   "id": "hunyuan-2.0-thinking"
+  },
+  {
+   "context": 131072,
+   "id": "hunyuan-t1"
+  },
+  {
+   "context": 131072,
+   "id": "hunyuan-turbos"
+  },
+  {
+   "context": 262144,
+   "id": "kimi-k2.5"
+  },
+  {
+   "context": 204800,
+   "id": "minimax-m2.5"
+  },
+  {
+   "context": 131072,
+   "id": "tc-code-latest"
+  }
+ ],
+ "schema": 1
+}

@@ -1,0 +1,23 @@
+{
+ "generated_at": 1790756014,
+ "id": "zhipuai-coding-plan",
+ "models": [
+  {
+   "context": 128000,
+   "id": "glm-4.6v"
+  },
+  {
+   "context": 1000000,
+   "id": "glm-5.3"
+  },
+  {
+   "context": 1000000,
+   "id": "glm-5.3-flash"
+  },
+  {
+   "context": 1000000,
+   "id": "glm-5.3-highspeed"
+  }
+ ],
+ "schema": 1
+}

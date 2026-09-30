@@ -1,0 +1,15 @@
+{
+ "generated_at": 1790756014,
+ "id": "moark",
+ "models": [
+  {
+   "context": 204800,
+   "id": "GLM-4.7"
+  },
+  {
+   "context": 204800,
+   "id": "MiniMax-M2.1"
+  }
+ ],
+ "schema": 1
+}

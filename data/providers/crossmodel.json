@@ -1,0 +1,275 @@
+{
+ "generated_at": 1790756014,
+ "id": "crossmodel",
+ "models": [
+  {
+   "context": 1000000,
+   "id": "anthropic/claude-fable-5"
+  },
+  {
+   "context": 1000000,
+   "id": "anthropic/claude-fable-5-1"
+  },
+  {
+   "context": 200000,
+   "id": "anthropic/claude-haiku-4-5"
+  },
+  {
+   "context": 1000000,
+   "id": "anthropic/claude-opus-4-7"
+  },
+  {
+   "context": 1000000,
+   "id": "anthropic/claude-opus-4-8"
+  },
+  {
+   "context": 1000000,
+   "id": "anthropic/claude-opus-5"
+  },
+  {
+   "context": 1000000,
+   "id": "anthropic/claude-opus-5-5"
+  },
+  {
+   "context": 1000000,
+   "id": "anthropic/claude-sonnet-4-6"
+  },
+  {
+   "context": 1000000,
+   "id": "anthropic/claude-sonnet-5"
+  },
+  {
+   "context": 1000000,
+   "id": "anthropic/claude-sonnet-5-5"
+  },
+  {
+   "context": 1000000,
+   "id": "deepseek/deepseek-v4-flash"
+  },
+  {
+   "context": 1000000,
+   "id": "deepseek/deepseek-v4-flash-vision-exp"
+  },
+  {
+   "context": 1000000,
+   "id": "deepseek/deepseek-v4-pro"
+  },
+  {
+   "context": 1000000,
+   "id": "deepseek/deepseek-v4.1-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini/gemini-2.5-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini/gemini-2.5-flash-lite"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini/gemini-2.5-pro"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini/gemini-3-flash-preview"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini/gemini-3.1-pro-preview"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini/gemini-3.5-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini/gemini-3.5-flash-lite"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini/gemini-3.6-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini/gemini-3.7-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini/gemini-3.8-flash"
+  },
+  {
+   "context": 204800,
+   "id": "minimax/minimax-m2.7"
+  },
+  {
+   "context": 1024000,
+   "id": "minimax/minimax-m3"
+  },
+  {
+   "context": 262000,
+   "id": "moonshot/kimi-k2.6"
+  },
+  {
+   "context": 262000,
+   "id": "moonshot/kimi-k2.7-code"
+  },
+  {
+   "context": 1048576,
+   "id": "moonshot/kimi-k3"
+  },
+  {
+   "context": 128000,
+   "id": "openai/gpt-4o-mini"
+  },
+  {
+   "context": 1050000,
+   "id": "openai/gpt-5.4"
+  },
+  {
+   "context": 400000,
+   "id": "openai/gpt-5.4-mini"
+  },
+  {
+   "context": 400000,
+   "id": "openai/gpt-5.4-nano"
+  },
+  {
+   "context": 1050000,
+   "id": "openai/gpt-5.5"
+  },
+  {
+   "context": 1050000,
+   "id": "openai/gpt-5.5-pro"
+  },
+  {
+   "context": 1050000,
+   "id": "openai/gpt-5.6-luna"
+  },
+  {
+   "context": 1050000,
+   "id": "openai/gpt-5.6-sol"
+  },
+  {
+   "context": 1050000,
+   "id": "openai/gpt-5.6-terra"
+  },
+  {
+   "context": 1050000,
+   "id": "openai/gpt-6-astra"
+  },
+  {
+   "context": 1050000,
+   "id": "openai/gpt-6-luna"
+  },
+  {
+   "context": 1050000,
+   "id": "openai/gpt-6-sol"
+  },
+  {
+   "context": 1000000,
+   "id": "qwen/qwen3.6-flash"
+  },
+  {
+   "context": 1000000,
+   "id": "qwen/qwen3.6-plus"
+  },
+  {
+   "context": 1000000,
+   "id": "qwen/qwen3.7-flash"
+  },
+  {
+   "context": 1000000,
+   "id": "qwen/qwen3.7-max"
+  },
+  {
+   "context": 1000000,
+   "id": "qwen/qwen3.7-plus"
+  },
+  {
+   "context": 1000000,
+   "id": "qwen/qwen3.8-flash"
+  },
+  {
+   "context": 1000000,
+   "id": "qwen/qwen3.8-max"
+  },
+  {
+   "context": 1000000,
+   "id": "qwen/qwen3.8-omni-flash"
+  },
+  {
+   "context": 262144,
+   "id": "tencent/hy3"
+  },
+  {
+   "context": 1048576,
+   "id": "tencent/hy4-preview"
+  },
+  {
+   "context": 1000000,
+   "id": "x-ai/grok-4.3"
+  },
+  {
+   "context": 500000,
+   "id": "x-ai/grok-4.5"
+  },
+  {
+   "context": 500000,
+   "id": "x-ai/grok-4.6"
+  },
+  {
+   "context": 500000,
+   "id": "x-ai/grok-4.7"
+  },
+  {
+   "context": 256000,
+   "id": "x-ai/grok-build-0.1"
+  },
+  {
+   "context": 1000000,
+   "id": "xiaomi/mimo-v2.5"
+  },
+  {
+   "context": 1000000,
+   "id": "xiaomi/mimo-v2.5-pro"
+  },
+  {
+   "context": 1048576,
+   "id": "xiaomi/mimo-v2.6-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "xiaomi/mimo-v2.6-pro"
+  },
+  {
+   "context": 200000,
+   "id": "z-ai/glm-4.7"
+  },
+  {
+   "context": 200000,
+   "id": "z-ai/glm-5"
+  },
+  {
+   "context": 200000,
+   "id": "z-ai/glm-5-turbo"
+  },
+  {
+   "context": 200000,
+   "id": "z-ai/glm-5.1"
+  },
+  {
+   "context": 1000000,
+   "id": "z-ai/glm-5.2"
+  },
+  {
+   "context": 1000000,
+   "id": "z-ai/glm-5.3"
+  },
+  {
+   "context": 1000000,
+   "id": "z-ai/glm-5.3-flash"
+  }
+ ],
+ "schema": 1
+}

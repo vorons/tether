@@ -1,0 +1,19 @@
+{
+ "generated_at": 1790756014,
+ "id": "vispark",
+ "models": [
+  {
+   "context": 1000000,
+   "id": "vispark/vision-large"
+  },
+  {
+   "context": 1000000,
+   "id": "vispark/vision-medium"
+  },
+  {
+   "context": 1000000,
+   "id": "vispark/vision-small"
+  }
+ ],
+ "schema": 1
+}

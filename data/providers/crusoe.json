@@ -1,0 +1,51 @@
+{
+ "generated_at": 1790756014,
+ "id": "crusoe",
+ "models": [
+  {
+   "context": 262144,
+   "id": "Qwen/Qwen3-235B-A22B-Instruct-2507"
+  },
+  {
+   "context": 163840,
+   "id": "deepseek-ai/DeepSeek-V3-0324"
+  },
+  {
+   "context": 262144,
+   "id": "google/gemma-4-31b-it"
+  },
+  {
+   "context": 128000,
+   "id": "meta-llama/Llama-3.3-70B-Instruct"
+  },
+  {
+   "context": 262144,
+   "id": "moonshotai/Kimi-K2.6"
+  },
+  {
+   "context": 262144,
+   "id": "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B"
+  },
+  {
+   "context": 262144,
+   "id": "nvidia/NVIDIA-Nemotron-3-Super-120B-A12B"
+  },
+  {
+   "context": 256000,
+   "id": "nvidia/Nemotron-3-Nano-Omni-Reasoning-30B-A3B"
+  },
+  {
+   "context": 131072,
+   "id": "openai/gpt-oss-120b"
+  },
+  {
+   "context": 200000,
+   "id": "zai/GLM-5.1"
+  },
+  {
+   "context": 1000000,
+   "id": "zai/GLM-5.2"
+  }
+ ],
+ "schema": 1
+}

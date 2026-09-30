@@ -1,0 +1,115 @@
+{
+ "generated_at": 1790756014,
+ "id": "cloudflare-workers-ai",
+ "models": [
+  {
+   "context": 128000,
+   "id": "@cf/aisingapore/gemma-sea-lion-v4-27b-it"
+  },
+  {
+   "context": 80000,
+   "id": "@cf/deepseek-ai/deepseek-r1-distill-qwen-32b"
+  },
+  {
+   "context": 1048576,
+   "id": "@cf/deepseek-ai/deepseek-v4-flash-0731"
+  },
+  {
+   "context": 1048576,
+   "id": "@cf/deepseek-ai/deepseek-v4-pro-0813"
+  },
+  {
+   "context": 256000,
+   "id": "@cf/google/gemma-4-26b-a4b-it"
+  },
+  {
+   "context": 131000,
+   "id": "@cf/ibm-granite/granite-4.0-h-micro"
+  },
+  {
+   "context": 32000,
+   "id": "@cf/meta/llama-3.1-8b-instruct-fp8"
+  },
+  {
+   "context": 128000,
+   "id": "@cf/meta/llama-3.2-11b-vision-instruct"
+  },
+  {
+   "context": 60000,
+   "id": "@cf/meta/llama-3.2-1b-instruct"
+  },
+  {
+   "context": 80000,
+   "id": "@cf/meta/llama-3.2-3b-instruct"
+  },
+  {
+   "context": 24000,
+   "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
+  },
+  {
+   "context": 131000,
+   "id": "@cf/meta/llama-4-scout-17b-16e-instruct"
+  },
+  {
+   "context": 131072,
+   "id": "@cf/meta/llama-guard-3-8b"
+  },
+  {
+   "context": 128000,
+   "id": "@cf/mistralai/mistral-small-3.1-24b-instruct"
+  },
+  {
+   "context": 262144,
+   "id": "@cf/moonshotai/kimi-k2.6"
+  },
+  {
+   "context": 262144,
+   "id": "@cf/moonshotai/kimi-k2.7-code"
+  },
+  {
+   "context": 256000,
+   "id": "@cf/nvidia/nemotron-3-120b-a12b"
+  },
+  {
+   "context": 128000,
+   "id": "@cf/openai/gpt-oss-120b"
+  },
+  {
+   "context": 128000,
+   "id": "@cf/openai/gpt-oss-20b"
+  },
+  {
+   "context": 32768,
+   "id": "@cf/qwen/qwen2.5-coder-32b-instruct"
+  },
+  {
+   "context": 32768,
+   "id": "@cf/qwen/qwen3-30b-a3b-fp8"
+  },
+  {
+   "context": 262144,
+   "id": "@cf/qwen/qwen3.8-27b"
+  },
+  {
+   "context": 24000,
+   "id": "@cf/qwen/qwq-32b"
+  },
+  {
+   "context": 131072,
+   "id": "@cf/zai-org/glm-4.7-flash"
+  },
+  {
+   "context": 262144,
+   "id": "@cf/zai-org/glm-5.2"
+  },
+  {
+   "context": 1048576,
+   "id": "@cf/zai-org/glm-5.3"
+  },
+  {
+   "context": 1048576,
+   "id": "@cf/zai-org/glm-5.3-flash"
+  }
+ ],
+ "schema": 1
+}

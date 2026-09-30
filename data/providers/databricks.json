@@ -1,0 +1,127 @@
+{
+ "generated_at": 1790756014,
+ "id": "databricks",
+ "models": [
+  {
+   "context": 200000,
+   "id": "databricks-claude-haiku-4-5"
+  },
+  {
+   "context": 200000,
+   "id": "databricks-claude-opus-4-1"
+  },
+  {
+   "context": 200000,
+   "id": "databricks-claude-opus-4-5"
+  },
+  {
+   "context": 1000000,
+   "id": "databricks-claude-opus-4-6"
+  },
+  {
+   "context": 1000000,
+   "id": "databricks-claude-opus-4-7"
+  },
+  {
+   "context": 200000,
+   "id": "databricks-claude-sonnet-4"
+  },
+  {
+   "context": 200000,
+   "id": "databricks-claude-sonnet-4-5"
+  },
+  {
+   "context": 1000000,
+   "id": "databricks-claude-sonnet-4-6"
+  },
+  {
+   "context": 1048576,
+   "id": "databricks-gemini-2-5-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "databricks-gemini-2-5-pro"
+  },
+  {
+   "context": 1048576,
+   "id": "databricks-gemini-3-1-flash-lite"
+  },
+  {
+   "context": 1048576,
+   "id": "databricks-gemini-3-1-pro"
+  },
+  {
+   "context": 1048576,
+   "id": "databricks-gemini-3-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "databricks-gemini-3-pro"
+  },
+  {
+   "context": 1000000,
+   "id": "databricks-glm-5-2"
+  },
+  {
+   "context": 400000,
+   "id": "databricks-gpt-5"
+  },
+  {
+   "context": 400000,
+   "id": "databricks-gpt-5-1"
+  },
+  {
+   "context": 400000,
+   "id": "databricks-gpt-5-2"
+  },
+  {
+   "context": 1050000,
+   "id": "databricks-gpt-5-4"
+  },
+  {
+   "context": 400000,
+   "id": "databricks-gpt-5-4-mini"
+  },
+  {
+   "context": 400000,
+   "id": "databricks-gpt-5-4-nano"
+  },
+  {
+   "context": 1050000,
+   "id": "databricks-gpt-5-5"
+  },
+  {
+   "context": 400000,
+   "id": "databricks-gpt-5-6-luna"
+  },
+  {
+   "context": 1050000,
+   "id": "databricks-gpt-5-6-sol"
+  },
+  {
+   "context": 1050000,
+   "id": "databricks-gpt-5-6-terra"
+  },
+  {
+   "context": 400000,
+   "id": "databricks-gpt-5-mini"
+  },
+  {
+   "context": 400000,
+   "id": "databricks-gpt-5-nano"
+  },
+  {
+   "context": 131072,
+   "id": "databricks-gpt-oss-120b"
+  },
+  {
+   "context": 131072,
+   "id": "databricks-gpt-oss-20b"
+  },
+  {
+   "context": 262144,
+   "id": "databricks-kimi-k2-7-code"
+  }
+ ],
+ "schema": 1
+}

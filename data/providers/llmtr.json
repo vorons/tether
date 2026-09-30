@@ -1,0 +1,135 @@
+{
+ "generated_at": 1790756014,
+ "id": "llmtr",
+ "models": [
+  {
+   "context": 131072,
+   "id": "gemma-4"
+  },
+  {
+   "context": 1048576,
+   "id": "google/gemini-2.5-flash-lite"
+  },
+  {
+   "context": 8192,
+   "id": "magibu-11b-v8"
+  },
+  {
+   "context": 8192,
+   "id": "medgemma-4b"
+  },
+  {
+   "context": 1048576,
+   "id": "meta/muse-spark-1.2-contributor"
+  },
+  {
+   "context": 1000000,
+   "id": "mimo/mimo-v2.5"
+  },
+  {
+   "context": 1000000,
+   "id": "mimo/mimo-v2.5-pro"
+  },
+  {
+   "context": 32000,
+   "id": "mistral/voxtral-small-latest"
+  },
+  {
+   "context": 131072,
+   "id": "muse-glimmer-30b-tr"
+  },
+  {
+   "context": 128000,
+   "id": "perplexity/sonar-deep-research"
+  },
+  {
+   "context": 262144,
+   "id": "poolside/laguna-xs-2.1"
+  },
+  {
+   "context": 65536,
+   "id": "publicai/apertus-70b-instruct"
+  },
+  {
+   "context": 65536,
+   "id": "publicai/apertus-8b-instruct"
+  },
+  {
+   "context": 1000000,
+   "id": "qwen/qwen-flash"
+  },
+  {
+   "context": 1000000,
+   "id": "qwen/qwen-plus"
+  },
+  {
+   "context": 1000000,
+   "id": "qwen/qwen3-coder-flash"
+  },
+  {
+   "context": 1000000,
+   "id": "qwen/qwen3-coder-plus"
+  },
+  {
+   "context": 256000,
+   "id": "qwen/qwen3-max"
+  },
+  {
+   "context": 256000,
+   "id": "qwen/qwen3-vl-plus"
+  },
+  {
+   "context": 256000,
+   "id": "qwen/qwen3.5-397b-a17b"
+  },
+  {
+   "context": 1000000,
+   "id": "qwen/qwen3.5-plus"
+  },
+  {
+   "context": 1000000,
+   "id": "qwen/qwen3.6-flash"
+  },
+  {
+   "context": 1000000,
+   "id": "qwen/qwen3.6-plus"
+  },
+  {
+   "context": 1000000,
+   "id": "qwen/qwen3.7-plus"
+  },
+  {
+   "context": 16384,
+   "id": "qwen3-6-35b"
+  },
+  {
+   "context": 1000000,
+   "id": "sakana/fugu-ultra"
+  },
+  {
+   "context": 262144,
+   "id": "thinkingmachines/inkling"
+  },
+  {
+   "context": 262144,
+   "id": "thinkingmachines/inkling-small"
+  },
+  {
+   "context": 40960,
+   "id": "trendyol-asure-12b"
+  },
+  {
+   "context": 65536,
+   "id": "upstage/solar-pro2"
+  },
+  {
+   "context": 131072,
+   "id": "upstage/solar-pro3"
+  },
+  {
+   "context": 524288,
+   "id": "upstage/solar-pro4"
+  }
+ ],
+ "schema": 1
+}

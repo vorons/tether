@@ -1,0 +1,39 @@
+{
+ "generated_at": 1790756014,
+ "id": "vancine",
+ "models": [
+  {
+   "context": 1048576,
+   "id": "MiniMax-M3"
+  },
+  {
+   "context": 1000000,
+   "id": "deepseek-v4.1-flash"
+  },
+  {
+   "context": 1000000,
+   "id": "glm-5.3"
+  },
+  {
+   "context": 1000000,
+   "id": "glm-5.3-flash"
+  },
+  {
+   "context": 1024000,
+   "id": "hy4-preview"
+  },
+  {
+   "context": 1048576,
+   "id": "kimi-k3"
+  },
+  {
+   "context": 1000000,
+   "id": "qwen3.8-flash"
+  },
+  {
+   "context": 1000000,
+   "id": "qwen3.8-max"
+  }
+ ],
+ "schema": 1
+}

@@ -1,0 +1,27 @@
+{
+ "generated_at": 1790756014,
+ "id": "stepfun-step-plan",
+ "models": [
+  {
+   "context": 256000,
+   "id": "step-3.5-flash"
+  },
+  {
+   "context": 256000,
+   "id": "step-3.5-flash-2603"
+  },
+  {
+   "context": 256000,
+   "id": "step-3.7-flash"
+  },
+  {
+   "context": 1000000,
+   "id": "step-5-preview"
+  },
+  {
+   "context": 256000,
+   "id": "step-router-v1"
+  }
+ ],
+ "schema": 1
+}

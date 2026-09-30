@@ -1,0 +1,91 @@
+{
+ "generated_at": 1790756014,
+ "id": "nebius",
+ "models": [
+  {
+   "context": 1048576,
+   "id": "MiniMaxAI/MiniMax-M3"
+  },
+  {
+   "context": 131072,
+   "id": "NousResearch/Hermes-4-405B"
+  },
+  {
+   "context": 262144,
+   "id": "Qwen/Qwen3-235B-A22B-Instruct-2507"
+  },
+  {
+   "context": 262144,
+   "id": "Qwen/Qwen3-30B-A3B-Instruct-2507"
+  },
+  {
+   "context": 40960,
+   "id": "Qwen/Qwen3-Embedding-8B"
+  },
+  {
+   "context": 262144,
+   "id": "Qwen/Qwen3.5-397B-A17B"
+  },
+  {
+   "context": 262144,
+   "id": "Qwen/Qwen3.8-27B"
+  },
+  {
+   "context": 1024000,
+   "id": "deepseek-ai/DeepSeek-V4-Flash-0731"
+  },
+  {
+   "context": 1048576,
+   "id": "deepseek-ai/DeepSeek-V4-Pro"
+  },
+  {
+   "context": 979000,
+   "id": "deepseek-ai/DeepSeek-V4-Pro-0813"
+  },
+  {
+   "context": 1048000,
+   "id": "deepseek-ai/DeepSeek-V4.1-Flash"
+  },
+  {
+   "context": 110000,
+   "id": "google/gemma-3-27b-it"
+  },
+  {
+   "context": 262144,
+   "id": "moonshotai/Kimi-K2.7-Code"
+  },
+  {
+   "context": 1048576,
+   "id": "moonshotai/Kimi-K3"
+  },
+  {
+   "context": 1048576,
+   "id": "nvidia/Nemotron-3-Ultra-550b-a55b"
+  },
+  {
+   "context": 1048576,
+   "id": "nvidia/Nemotron-3_5-Lightning"
+  },
+  {
+   "context": 262144,
+   "id": "nvidia/nemotron-3-super-120b-a12b"
+  },
+  {
+   "context": 131072,
+   "id": "openai/gpt-oss-120b"
+  },
+  {
+   "context": 1048576,
+   "id": "zai-org/GLM-5.2"
+  },
+  {
+   "context": 1024000,
+   "id": "zai-org/GLM-5.3"
+  },
+  {
+   "context": 1024000,
+   "id": "zai-org/GLM-5.3-Flash"
+  }
+ ],
+ "schema": 1
+}

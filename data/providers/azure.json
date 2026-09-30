@@ -1,0 +1,383 @@
+{
+ "generated_at": 1790756014,
+ "id": "azure",
+ "models": [
+  {
+   "context": 1000000,
+   "id": "claude-fable-5"
+  },
+  {
+   "context": 1000000,
+   "id": "claude-fable-5-1"
+  },
+  {
+   "context": 200000,
+   "id": "claude-haiku-4-5"
+  },
+  {
+   "context": 1000000,
+   "id": "claude-mythos-5"
+  },
+  {
+   "context": 200000,
+   "id": "claude-opus-4-1"
+  },
+  {
+   "context": 200000,
+   "id": "claude-opus-4-5"
+  },
+  {
+   "context": 1000000,
+   "id": "claude-opus-4-6"
+  },
+  {
+   "context": 1000000,
+   "id": "claude-opus-4-7"
+  },
+  {
+   "context": 1000000,
+   "id": "claude-opus-4-8"
+  },
+  {
+   "context": 1000000,
+   "id": "claude-opus-5"
+  },
+  {
+   "context": 1000000,
+   "id": "claude-opus-5-5"
+  },
+  {
+   "context": 200000,
+   "id": "claude-sonnet-4-5"
+  },
+  {
+   "context": 1000000,
+   "id": "claude-sonnet-4-6"
+  },
+  {
+   "context": 1000000,
+   "id": "claude-sonnet-5"
+  },
+  {
+   "context": 1000000,
+   "id": "claude-sonnet-5-5"
+  },
+  {
+   "context": 256000,
+   "id": "codestral-2501"
+  },
+  {
+   "context": 200000,
+   "id": "codex-mini"
+  },
+  {
+   "context": 131072,
+   "id": "cohere-command-a"
+  },
+  {
+   "context": 128000,
+   "id": "cohere-embed-v-4-0"
+  },
+  {
+   "context": 512,
+   "id": "cohere-embed-v3-english"
+  },
+  {
+   "context": 512,
+   "id": "cohere-embed-v3-multilingual"
+  },
+  {
+   "context": 163840,
+   "id": "deepseek-r1"
+  },
+  {
+   "context": 128000,
+   "id": "deepseek-v3.2"
+  },
+  {
+   "context": 128000,
+   "id": "deepseek-v3.2-speciale"
+  },
+  {
+   "context": 1000000,
+   "id": "deepseek-v4-flash"
+  },
+  {
+   "context": 1000000,
+   "id": "deepseek-v4-pro"
+  },
+  {
+   "context": 16384,
+   "id": "gpt-3.5-turbo-0125"
+  },
+  {
+   "context": 16384,
+   "id": "gpt-3.5-turbo-1106"
+  },
+  {
+   "context": 4096,
+   "id": "gpt-3.5-turbo-instruct"
+  },
+  {
+   "context": 128000,
+   "id": "gpt-4-turbo"
+  },
+  {
+   "context": 128000,
+   "id": "gpt-4-turbo-vision"
+  },
+  {
+   "context": 1047576,
+   "id": "gpt-4.1"
+  },
+  {
+   "context": 1047576,
+   "id": "gpt-4.1-mini"
+  },
+  {
+   "context": 1047576,
+   "id": "gpt-4.1-nano"
+  },
+  {
+   "context": 128000,
+   "id": "gpt-4o"
+  },
+  {
+   "context": 128000,
+   "id": "gpt-4o-mini"
+  },
+  {
+   "context": 400000,
+   "id": "gpt-5"
+  },
+  {
+   "context": 400000,
+   "id": "gpt-5-codex"
+  },
+  {
+   "context": 400000,
+   "id": "gpt-5-mini"
+  },
+  {
+   "context": 400000,
+   "id": "gpt-5-nano"
+  },
+  {
+   "context": 400000,
+   "id": "gpt-5-pro"
+  },
+  {
+   "context": 400000,
+   "id": "gpt-5.1"
+  },
+  {
+   "context": 400000,
+   "id": "gpt-5.1-codex"
+  },
+  {
+   "context": 400000,
+   "id": "gpt-5.1-codex-max"
+  },
+  {
+   "context": 400000,
+   "id": "gpt-5.1-codex-mini"
+  },
+  {
+   "context": 400000,
+   "id": "gpt-5.2"
+  },
+  {
+   "context": 400000,
+   "id": "gpt-5.2-codex"
+  },
+  {
+   "context": 400000,
+   "id": "gpt-5.3-codex"
+  },
+  {
+   "context": 1050000,
+   "id": "gpt-5.4"
+  },
+  {
+   "context": 400000,
+   "id": "gpt-5.4-mini"
+  },
+  {
+   "context": 400000,
+   "id": "gpt-5.4-nano"
+  },
+  {
+   "context": 1050000,
+   "id": "gpt-5.4-pro"
+  },
+  {
+   "context": 1050000,
+   "id": "gpt-5.5"
+  },
+  {
+   "context": 1050000,
+   "id": "gpt-5.6-luna"
+  },
+  {
+   "context": 1050000,
+   "id": "gpt-5.6-sol"
+  },
+  {
+   "context": 1050000,
+   "id": "gpt-5.6-terra"
+  },
+  {
+   "context": 1050000,
+   "id": "gpt-6-astra"
+  },
+  {
+   "context": 1050000,
+   "id": "gpt-6-luna"
+  },
+  {
+   "context": 1050000,
+   "id": "gpt-6-sol"
+  },
+  {
+   "context": 1050000,
+   "id": "gpt-6.1-sol"
+  },
+  {
+   "context": 400000,
+   "id": "gpt-chat-latest"
+  },
+  {
+   "context": 0,
+   "id": "gpt-image-1"
+  },
+  {
+   "context": 0,
+   "id": "gpt-image-1.5"
+  },
+  {
+   "context": 0,
+   "id": "gpt-image-2"
+  },
+  {
+   "context": 0,
+   "id": "gpt-image-2.5-flare"
+  },
+  {
+   "context": 0,
+   "id": "gpt-image-2.5-sunburst"
+  },
+  {
+   "context": 128000,
+   "id": "grok-4-1-fast-non-reasoning"
+  },
+  {
+   "context": 128000,
+   "id": "grok-4-1-fast-reasoning"
+  },
+  {
+   "context": 262000,
+   "id": "grok-4-20-non-reasoning"
+  },
+  {
+   "context": 262000,
+   "id": "grok-4-20-reasoning"
+  },
+  {
+   "context": 200000,
+   "id": "grok-4.6"
+  },
+  {
+   "context": 262144,
+   "id": "kimi-k2.5"
+  },
+  {
+   "context": 262144,
+   "id": "kimi-k2.6"
+  },
+  {
+   "context": 262144,
+   "id": "kimi-k2.7-code"
+  },
+  {
+   "context": 128000,
+   "id": "llama-3.3-70b-instruct"
+  },
+  {
+   "context": 1000000,
+   "id": "llama-4-maverick-17b-128e-instruct-fp8"
+  },
+  {
+   "context": 128000,
+   "id": "llama-4-scout-17b-16e-instruct"
+  },
+  {
+   "context": 128000,
+   "id": "ministral-3b"
+  },
+  {
+   "context": 128000,
+   "id": "mistral-medium-2505"
+  },
+  {
+   "context": 128000,
+   "id": "mistral-small-2503"
+  },
+  {
+   "context": 200000,
+   "id": "model-router"
+  },
+  {
+   "context": 200000,
+   "id": "o1"
+  },
+  {
+   "context": 200000,
+   "id": "o3"
+  },
+  {
+   "context": 200000,
+   "id": "o3-mini"
+  },
+  {
+   "context": 200000,
+   "id": "o4-mini"
+  },
+  {
+   "context": 128000,
+   "id": "phi-4"
+  },
+  {
+   "context": 128000,
+   "id": "phi-4-mini"
+  },
+  {
+   "context": 128000,
+   "id": "phi-4-mini-reasoning"
+  },
+  {
+   "context": 128000,
+   "id": "phi-4-multimodal"
+  },
+  {
+   "context": 32000,
+   "id": "phi-4-reasoning"
+  },
+  {
+   "context": 32000,
+   "id": "phi-4-reasoning-plus"
+  },
+  {
+   "context": 8192,
+   "id": "text-embedding-3-large"
+  },
+  {
+   "context": 8192,
+   "id": "text-embedding-3-small"
+  },
+  {
+   "context": 8192,
+   "id": "text-embedding-ada-002"
+  }
+ ],
+ "schema": 1
+}

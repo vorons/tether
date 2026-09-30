@@ -1,0 +1,19 @@
+{
+ "generated_at": 1790756014,
+ "id": "klokintegration",
+ "models": [
+  {
+   "context": 200000,
+   "id": "Kloker"
+  },
+  {
+   "context": 200000,
+   "id": "Kloker-Integration-Architect"
+  },
+  {
+   "context": 200000,
+   "id": "Kloker-Integration-Developer"
+  }
+ ],
+ "schema": 1
+}

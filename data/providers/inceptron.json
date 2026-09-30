@@ -1,0 +1,23 @@
+{
+ "generated_at": 1790756014,
+ "id": "inceptron",
+ "models": [
+  {
+   "context": 1048576,
+   "id": "deepseek-ai/DeepSeek-V4-Flash-0731"
+  },
+  {
+   "context": 262144,
+   "id": "moonshotai/Kimi-K2.6"
+  },
+  {
+   "context": 262144,
+   "id": "moonshotai/Kimi-K2.7-Code"
+  },
+  {
+   "context": 1048576,
+   "id": "zai-org/GLM-5.2"
+  }
+ ],
+ "schema": 1
+}

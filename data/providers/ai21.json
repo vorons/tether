@@ -1,0 +1,15 @@
+{
+ "generated_at": 1790756014,
+ "id": "ai21",
+ "models": [
+  {
+   "context": 256000,
+   "id": "jamba-large"
+  },
+  {
+   "context": 256000,
+   "id": "jamba-mini"
+  }
+ ],
+ "schema": 1
+}

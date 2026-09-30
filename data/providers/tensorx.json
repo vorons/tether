@@ -1,0 +1,107 @@
+{
+ "generated_at": 1790756014,
+ "id": "tensorx",
+ "models": [
+  {
+   "context": 164000,
+   "id": "deepseek/deepseek-r1-0528"
+  },
+  {
+   "context": 163840,
+   "id": "deepseek/deepseek-v3.2"
+  },
+  {
+   "context": 1048576,
+   "id": "deepseek/deepseek-v4-flash-0731"
+  },
+  {
+   "context": 1048576,
+   "id": "deepseek/deepseek-v4-pro"
+  },
+  {
+   "context": 1048576,
+   "id": "deepseek/deepseek-v4-pro-0813"
+  },
+  {
+   "context": 1048576,
+   "id": "deepseek/deepseek-v4.1-flash"
+  },
+  {
+   "context": 196608,
+   "id": "minimax/minimax-m2.5"
+  },
+  {
+   "context": 1048576,
+   "id": "minimax/minimax-m3"
+  },
+  {
+   "context": 262144,
+   "id": "moonshotai/kimi-k2.5"
+  },
+  {
+   "context": 262144,
+   "id": "moonshotai/kimi-k2.6"
+  },
+  {
+   "context": 262144,
+   "id": "moonshotai/kimi-k2.7-code"
+  },
+  {
+   "context": 1048576,
+   "id": "moonshotai/kimi-k3"
+  },
+  {
+   "context": 131000,
+   "id": "qwen/qwen3-235b-a22b-2507"
+  },
+  {
+   "context": 262144,
+   "id": "qwen/qwen3.5-122b-a10b"
+  },
+  {
+   "context": 262144,
+   "id": "qwen/qwen3.5-9b"
+  },
+  {
+   "context": 262144,
+   "id": "qwen/qwen3.8-2.4t-a95b"
+  },
+  {
+   "context": 262144,
+   "id": "qwen/qwen3.8-27b"
+  },
+  {
+   "context": 262144,
+   "id": "qwen/qwen3.8-flash-next"
+  },
+  {
+   "context": 202752,
+   "id": "z-ai/glm-5"
+  },
+  {
+   "context": 202752,
+   "id": "z-ai/glm-5-turbo"
+  },
+  {
+   "context": 202752,
+   "id": "z-ai/glm-5.1"
+  },
+  {
+   "context": 1048576,
+   "id": "z-ai/glm-5.2"
+  },
+  {
+   "context": 1048576,
+   "id": "z-ai/glm-5.3"
+  },
+  {
+   "context": 1048576,
+   "id": "z-ai/glm-5.3-flash"
+  },
+  {
+   "context": 202752,
+   "id": "z-ai/glm-5v-turbo"
+  }
+ ],
+ "schema": 1
+}

@@ -1,0 +1,15 @@
+{
+ "generated_at": 1790756014,
+ "id": "infer",
+ "models": [
+  {
+   "context": 271999,
+   "id": "infer/gpt-5.6-sol:official"
+  },
+  {
+   "context": 271999,
+   "id": "infer/gpt-6-astra:official"
+  }
+ ],
+ "schema": 1
+}

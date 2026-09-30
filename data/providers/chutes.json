@@ -1,0 +1,63 @@
+{
+ "generated_at": 1790756014,
+ "id": "chutes",
+ "models": [
+  {
+   "context": 131072,
+   "id": "Nemotron-3-Nano-Omni-30B-TEE"
+  },
+  {
+   "context": 262144,
+   "id": "Qwen/Qwen3-235B-A22B-Thinking-2507-TEE"
+  },
+  {
+   "context": 40960,
+   "id": "Qwen/Qwen3-32B-TEE"
+  },
+  {
+   "context": 262144,
+   "id": "Qwen/Qwen3.5-397B-A17B-TEE"
+  },
+  {
+   "context": 262144,
+   "id": "Qwen/Qwen3.6-27B-TEE"
+  },
+  {
+   "context": 262144,
+   "id": "Qwen/Qwen3.8-27B-TEE"
+  },
+  {
+   "context": 131072,
+   "id": "deepseek-ai/DeepSeek-V3.2-TEE"
+  },
+  {
+   "context": 1048576,
+   "id": "deepseek-ai/DeepSeek-V4-Flash-0731-TEE"
+  },
+  {
+   "context": 131072,
+   "id": "google/gemma-4-31B-turbo-TEE"
+  },
+  {
+   "context": 262144,
+   "id": "moonshotai/Kimi-K2.6-TEE"
+  },
+  {
+   "context": 1048576,
+   "id": "moonshotai/Kimi-K3-TEE"
+  },
+  {
+   "context": 131072,
+   "id": "unsloth/Mistral-Nemo-Instruct-2407-TEE"
+  },
+  {
+   "context": 202752,
+   "id": "zai-org/GLM-5.1-TEE"
+  },
+  {
+   "context": 1048576,
+   "id": "zai-org/GLM-5.2-TEE"
+  }
+ ],
+ "schema": 1
+}

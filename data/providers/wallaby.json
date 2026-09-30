@@ -1,0 +1,11 @@
+{
+ "generated_at": 1790756014,
+ "id": "wallaby",
+ "models": [
+  {
+   "context": 1048576,
+   "id": "moonshotai/kimi-k3"
+  }
+ ],
+ "schema": 1
+}

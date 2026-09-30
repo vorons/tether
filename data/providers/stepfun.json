@@ -1,0 +1,43 @@
+{
+ "generated_at": 1790756014,
+ "id": "stepfun",
+ "models": [
+  {
+   "context": 32768,
+   "id": "step-1-32k"
+  },
+  {
+   "context": 16384,
+   "id": "step-2-16k"
+  },
+  {
+   "context": 256000,
+   "id": "step-3.5-flash"
+  },
+  {
+   "context": 256000,
+   "id": "step-3.5-flash-2603"
+  },
+  {
+   "context": 256000,
+   "id": "step-3.7-flash"
+  },
+  {
+   "context": 1000000,
+   "id": "step-5-preview"
+  },
+  {
+   "context": 0,
+   "id": "step-tts-2"
+  },
+  {
+   "context": 0,
+   "id": "stepaudio-2.5-asr"
+  },
+  {
+   "context": 0,
+   "id": "stepaudio-2.5-tts"
+  }
+ ],
+ "schema": 1
+}

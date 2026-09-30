@@ -1,0 +1,15 @@
+{
+ "generated_at": 1790756014,
+ "id": "blueclaw",
+ "models": [
+  {
+   "context": 131072,
+   "id": "Qwen/Qwen3.6-35B-A3B-FP8"
+  },
+  {
+   "context": 196608,
+   "id": "Qwen3.6-27B"
+  }
+ ],
+ "schema": 1
+}

@@ -1,0 +1,107 @@
+{
+ "generated_at": 1790756014,
+ "id": "snowflake-cortex",
+ "models": [
+  {
+   "context": 1000000,
+   "id": "claude-fable-5"
+  },
+  {
+   "context": 200000,
+   "id": "claude-haiku-4-5"
+  },
+  {
+   "context": 200000,
+   "id": "claude-opus-4-5"
+  },
+  {
+   "context": 1000000,
+   "id": "claude-opus-4-6"
+  },
+  {
+   "context": 1000000,
+   "id": "claude-opus-4-7"
+  },
+  {
+   "context": 1000000,
+   "id": "claude-opus-4-8"
+  },
+  {
+   "context": 1000000,
+   "id": "claude-opus-5"
+  },
+  {
+   "context": 200000,
+   "id": "claude-sonnet-4-5"
+  },
+  {
+   "context": 1000000,
+   "id": "claude-sonnet-4-6"
+  },
+  {
+   "context": 1000000,
+   "id": "claude-sonnet-5"
+  },
+  {
+   "context": 128000,
+   "id": "deepseek-r1"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini-3.1-pro"
+  },
+  {
+   "context": 262144,
+   "id": "mistral-large2"
+  },
+  {
+   "context": 128000,
+   "id": "openai-gpt-4.1"
+  },
+  {
+   "context": 272000,
+   "id": "openai-gpt-5"
+  },
+  {
+   "context": 272000,
+   "id": "openai-gpt-5-mini"
+  },
+  {
+   "context": 272000,
+   "id": "openai-gpt-5-nano"
+  },
+  {
+   "context": 272000,
+   "id": "openai-gpt-5.1"
+  },
+  {
+   "context": 400000,
+   "id": "openai-gpt-5.2"
+  },
+  {
+   "context": 1050000,
+   "id": "openai-gpt-5.4"
+  },
+  {
+   "context": 1050000,
+   "id": "openai-gpt-5.5"
+  },
+  {
+   "context": 1050000,
+   "id": "openai-gpt-5.6-luna"
+  },
+  {
+   "context": 1050000,
+   "id": "openai-gpt-5.6-sol"
+  },
+  {
+   "context": 1050000,
+   "id": "openai-gpt-5.6-terra"
+  },
+  {
+   "context": 128000,
+   "id": "snowflake-llama3.3-70b"
+  }
+ ],
+ "schema": 1
+}

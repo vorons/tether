@@ -1,0 +1,23 @@
+{
+ "generated_at": 1790756014,
+ "id": "modal",
+ "models": [
+  {
+   "context": 1010000,
+   "id": "Qwen/Qwen3.8-2.4T-A95B"
+  },
+  {
+   "context": 1048576,
+   "id": "moonshotai/Kimi-K3"
+  },
+  {
+   "context": 1048576,
+   "id": "thinkingmachines/Inkling-NVFP4"
+  },
+  {
+   "context": 1000000,
+   "id": "zai-org/GLM-5.3-Flash"
+  }
+ ],
+ "schema": 1
+}
