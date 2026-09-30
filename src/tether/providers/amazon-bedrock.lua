@@ -65,6 +65,15 @@ function M.stream_url(cfg, model, _api_key)
         .. "/model/" .. common.url_encode(model or "") .. "/converse"
 end
 
+-- audit H4: declared before `sigv4` because it is a lexical local there — as a
+-- later definition it read nil inside sigv4, so every request signed from
+-- stored AWS credentials raised instead of sending.
+local function amzdate_now()
+    local t = os.date("!*t")
+    return string.format("%04d%02d%02dT%02d%02d%02dZ",
+        t.year, t.month, t.day, t.hour, t.min, t.sec)
+end
+
 -- SigV4. Pure Lua over common.sha256hex/hmac_sha256_raw; verified against
 -- the AWS SigV4 test-suite vectors (see tests). `service` is "bedrock" in
 -- prod; the parameter exists so the stock vectors (service "service")
@@ -121,12 +130,6 @@ function M._sign(key, secret, session, region, service, method, url, body,
                  has_ct, amzdate)
     return sigv4(key, secret, session, region, service, method, url, body,
         has_ct, amzdate)
-end
-
-local function amzdate_now()
-    local t = os.date("!*t")
-    return string.format("%04d%02d%02dT%02d%02d%02dZ",
-        t.year, t.month, t.day, t.hour, t.min, t.sec)
 end
 
 local function signed_lines(creds, region, method, url, body, has_ct)

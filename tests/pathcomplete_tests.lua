@@ -919,6 +919,42 @@ do
   print("T167 bedrock adapter: OK")
 end
 
+-- T320 (audit H4): the default-timestamp path of SigV4 must resolve. `amzdate_now`
+-- used to be a local declared after `sigv4`, so a request signed from stored AWS
+-- keys raised "attempt to call a nil value" before the transport ran. The
+-- existing vectors pass an explicit date and never covered this.
+do
+  local orig_auth = _G.auth
+  _G.auth = { aws_creds = function()
+      return { mode = "sigv4", key = "AKID", secret = "SECRET", session = nil }
+  end }
+  local bedrock = assert(loadfile("src/tether/providers/amazon-bedrock.lua"))()
+  local ctx = {
+    url = "https://bedrock-runtime.us-east-1.amazonaws.com/model/m/converse",
+    body = '{"messages":[]}',
+    cfg = { provider = "amazon-bedrock" },
+  }
+  local ok, lines = pcall(bedrock.header_lines, nil, ctx)
+  _G.auth = orig_auth
+  assert_true(ok, "T320 signing with stored keys does not raise")
+  assert_true(type(lines) == "table", "T320 header_lines returns a list")
+  local authz, amz
+  for _, line in ipairs(lines or {}) do
+    if line:find("^Authorization: ") then authz = line end
+    if line:find("^x%-amz%-date: ") then amz = line end
+  end
+  assert_notnil(authz, "T320 the Authorization header is present")
+  assert_true(authz:find("AWS4%-HMAC%-SHA256 Credential=AKID/", 1) ~= nil,
+    "T320 the credential pair is the stored key")
+  assert_notnil(amz, "T320 the x-amz-date header is present")
+  local stamp = amz:match("^x%-amz%-date: (%S+)$")
+  assert_true(stamp ~= nil and stamp:match("^%d%d%d%d%d%d%d%dT%d%d%d%d%d%dZ$") ~= nil,
+    "T320 the default timestamp is a real amzdate")
+  assert_true(os.date("!%Y%m%d") == stamp:sub(1, 8),
+    "T320 the default timestamp is today, UTC")
+  print("T320 bedrock default timestamp: OK")
+end
+
 -- T168: Tier-B adapters resolve + emit canonical events on canned streams
 do
   local api = assert(loadfile("src/tether/api.lua"))()
