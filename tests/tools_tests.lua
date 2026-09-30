@@ -363,6 +363,101 @@ do
   print("T322-T323 malformed tool arguments degrade: OK")
 end
 
+-- T324/T325/T326 (audit H6): `run` bounds what it reads back and what the model
+-- can ask for. An oversized capture is cut at max_output_bytes with the shared
+-- truncation marker; a timeout with no integer representation (or above the
+-- ceiling) is clamped instead of failing `string.format("%d", …)`.
+do
+  local orig = _G.tether
+  local ws = "/tmp/tether_t324_ws"
+  os.execute("rm -rf " .. ws .. " && mkdir -p " .. ws)
+  local MARKER = "\n…(truncated)"
+  _G.tether = host_mock{ getcwd = function() return ws end,
+                realpath = function(p) return (p:gsub("/+$", "")) end,
+                exec = function(cmd)
+                  local ok, how, code = os.execute(cmd)
+                  if ok then return true, 0 end
+                  if how == "exit" then return false, code end
+                  return false, 1
+                end }
+  local tools = assert(loadfile("src/tether/tools.lua"))()
+
+  local capped = tools.run({ command = "head -c 5000 /dev/zero | tr '\\0' 'x'",
+    timeout = 5 }, { workspace = ws,
+    tools = { run_shell = { max_output_bytes = 100 } } })
+  assert_notnil(capped, "T324 an oversized capture still returns")
+  assert_eq(capped.truncated, true, "T324 the result says the output was capped")
+  assert_eq(#capped.output, 100 + #MARKER, "T324 the body is the cap plus the marker")
+  assert_eq(capped.output:sub(-#MARKER), MARKER, "T324 the marker is the shared one")
+  assert_eq(capped.exit_code, 0, "T324 the real exit code survives the cap")
+
+  local small = tools.run({ command = "printf ok", timeout = 5 }, { workspace = ws })
+  assert_eq(small.output, "ok", "T324 a small output is untouched")
+  assert_eq(small.truncated, false, "T324 and is not marked truncated")
+
+  -- timeout clamp: the composed command is what matters, so inspect it
+  local seen
+  _G.tether = host_mock{ getcwd = function() return ws end,
+                realpath = function(p) return (p:gsub("/+$", "")) end,
+                exec = function(cmd) seen = cmd; return true, 0 end }
+  local function clamped(args, cfg)
+    local r = tools.run(args, cfg)
+    assert_notnil(r, "T325 the call returns a result")
+    return tonumber(seen:match("timeout (%-?%d+)"))
+  end
+  local wide = { workspace = ws, tools = { run_shell = { timeout = 30, max_timeout = 60 } } }
+  assert_eq(clamped({ command = "true", timeout = 999999 }, wide), 60,
+    "T325 a timeout above the ceiling is clamped to it")
+  assert_eq(clamped({ command = "true", timeout = 1e308 }, wide), 60,
+    "T325 an astronomical timeout is clamped, not an error")
+  assert_eq(clamped({ command = "true", timeout = math.huge }, wide), 30,
+    "T325 an infinite timeout falls back to the configured default")
+  assert_eq(clamped({ command = "true", timeout = "abc" }, wide), 30,
+    "T325 a non-numeric timeout falls back to the configured default")
+  assert_eq(clamped({ command = "true", timeout = 7 }, wide), 7,
+    "T325 a sane timeout passes through")
+  assert_eq(clamped({ command = "true", timeout = 0 }, wide), 1,
+    "T325 a zero timeout keeps the one-second floor")
+  -- no tools table at all (a hand-built cfg): the built-in ceiling applies
+  assert_eq(clamped({ command = "true", timeout = 1e308 }, { workspace = ws }), 1800,
+    "T325 the default ceiling applies without a config table")
+  _G.tether = orig
+  os.execute("rm -rf " .. ws)
+  print("T324-T325 run output capped, timeout clamped: OK")
+end
+
+-- T326 (audit H6): the two limits are defaults a fresh install resolves, a config
+-- written before they existed keeps them, and a malformed value falls back.
+do
+  local config = assert(loadfile("src/tether/config.lua"))()
+  local home = "/tmp/tether_t326_home"
+  os.execute("rm -rf " .. home)
+  assert(host_fs.mkdirp(home .. "/.tether"))
+  local function write_cfg(name, body)
+    local p = home .. "/.tether/" .. name
+    local f = assert(io.open(p, "w")); f:write(body); f:close()
+    return p
+  end
+  local fresh = config.load(home .. "/.tether/no-such-config.lua", home)
+  assert_eq(fresh.tools.run_shell.timeout, 120, "T326 the default timeout")
+  assert_eq(fresh.tools.run_shell.max_output_bytes, 1048576, "T326 the default cap")
+  assert_eq(fresh.tools.run_shell.max_timeout, 1800, "T326 the default ceiling")
+
+  local old = config.load(write_cfg("old.lua",
+    "return { tools = { run_shell = { timeout = 5 } } }\n"), home)
+  assert_eq(old.tools.run_shell.timeout, 5, "T326 an old override still applies")
+  assert_eq(old.tools.run_shell.max_output_bytes, 1048576, "T326 pre-key config keeps the cap")
+  assert_eq(old.tools.run_shell.max_timeout, 1800, "T326 pre-key config keeps the ceiling")
+
+  local bad = config.load(write_cfg("bad.lua",
+    "return { tools = { run_shell = { max_timeout = \"later\", max_output_bytes = {} } } }\n"),
+    home)
+  assert_eq(bad.tools.run_shell.max_timeout, 1800, "T326 a malformed ceiling falls back")
+  assert_eq(bad.tools.run_shell.max_output_bytes, 1048576, "T326 a malformed cap falls back")
+  os.execute("rm -rf " .. home)
+  print("T326 run_shell limits defaults: OK")
+end
+
 -- T113 (1.4/1.5/2.2): `list`, `glob` and `grep` run on the in-process
 -- primitives (readdir/stat/krep_search) with their documented record shapes:
 -- workspace-relative paths, glob's recursive walk plus 500-file cap and `**`

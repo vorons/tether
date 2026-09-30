@@ -118,7 +118,12 @@ local function default_config()
             block_gap = 1, -- 6.x: blank rows before top-level transcript entities; 0 = compact
             path_completion = true, -- 4.3: Tab completes workspace path tokens
         },
-        tools = { run_shell = { timeout = 120 } },
+        -- audit H6: run's ceiling and output cap. A model-supplied timeout is
+        -- clamped to max_timeout; captured output is read up to
+        -- max_output_bytes and marked truncated past it.
+        tools = { run_shell = {
+            timeout = 120, max_output_bytes = 1048576, max_timeout = 1800,
+        } },
         -- prompt-cache: in-agent cache markers + observability.
         -- enabled=false restores today's bodies exactly (no markers).
         cache = {
@@ -315,7 +320,7 @@ M.BOOTSTRAP_COMMENTS = {
     context = "context window budget and compaction thresholds",
     retry = "backoff policy for failed requests",
     ui = "interface: theme, wrap, mouse, keyboard, palette, footer",
-    tools = "tool timeouts",
+    tools = "tool run_shell limits: timeout, max_timeout ceiling, max_output_bytes cap",
     subagents = "subagent child runs: max_parallel, timeout, max_depth",
     system_prompt = "nil = built-in prompt (inline text or /path/to/file)",
     skills_dirs = "nil = default discovery set",

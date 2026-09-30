@@ -268,6 +268,24 @@ function M.load(path, home)
         if legacy then cfg.retry.max_attempts = legacy end
     end
 
+    -- audit H6: the run_shell limits are numbers or nothing. A non-numeric (or
+    -- absent, in a config written before the keys existed) value falls back to
+    -- its default without failing the session, so `run` always gets a usable
+    -- ceiling and output cap.
+    if type(cfg.tools) ~= "table" then
+        cfg.tools = config_schema.default_config().tools
+    else
+        local def_shell = config_schema.default_config().tools.run_shell
+        if type(cfg.tools.run_shell) ~= "table" then
+            cfg.tools.run_shell = def_shell
+        else
+            for k, dv in pairs(def_shell) do
+                local n = tonumber(cfg.tools.run_shell[k])
+                cfg.tools.run_shell[k] = (n and n > 0) and math.floor(n) or dv
+            end
+        end
+    end
+
     -- fix-audit-findings 2.1: merge the persisted [A] always patterns so a
     -- permanent approval survives a restart (written by agent.persist_auto_approve).
     local persisted = M.load_auto_approve(home or os.getenv("HOME"))

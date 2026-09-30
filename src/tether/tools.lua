@@ -600,9 +600,18 @@ function M.run(args, cfg)
         return nil, "missing or malformed command argument"
     end
     -- 3.7: the model may send a string/float timeout; coerce before %d.
+    -- audit H6: clamp it to the configured ceiling too — `string.format("%d", …)`
+    -- refuses a value with no integer representation (1e308, inf, nan), so an
+    -- absurd timeout used to fail the call, and an unbounded one held the turn.
+    local limits = (c and c.tools and c.tools.run_shell) or {}
+    local ceiling = math.floor(tonumber(limits.max_timeout) or 1800)
     local timeout_val = tonumber(args.timeout)
-        or (c and c.tools and c.tools.run_shell and tonumber(c.tools.run_shell.timeout))
-        or 120
+        or tonumber(limits.timeout) or 120
+    if timeout_val ~= timeout_val or timeout_val == math.huge
+        or timeout_val == -math.huge then
+        timeout_val = tonumber(limits.timeout) or 120
+    end
+    if timeout_val > ceiling then timeout_val = ceiling end
     if timeout_val < 1 then timeout_val = 1 end
     timeout_val = math.floor(timeout_val)
     local cwd = args.cwd and resolve(args.cwd, c) or current_workspace(c)
@@ -620,12 +629,21 @@ function M.run(args, cfg)
     local ok, exit_code = tether.exec(cmd)
     local elapsed = now_ms() - start_ms
 
-    local f = io.open(outfile, "r")
-    local output = f and f:read("*a") or ""
+    -- audit H6: read at most the cap plus one byte, so a chatty command cannot
+    -- make the tool hold its whole output in memory; the extra byte is the
+    -- truncation test and never reaches the result.
+    local cap = math.floor(tonumber(limits.max_output_bytes) or 1048576)
+    local f = io.open(outfile, "rb")
+    local output = (f and f:read(cap + 1)) or ""
     if f then f:close() end
     os.remove(outfile)
+    local truncated = #output > cap
+    if truncated then
+        output = output:sub(1, cap) .. "\n…(truncated)"
+    end
 
-    return { output = output, exit_code = exit_code or (ok and 0 or 1), elapsed_ms = elapsed }
+    return { output = output, exit_code = exit_code or (ok and 0 or 1),
+             elapsed_ms = elapsed, truncated = truncated }
 end
 
 return M
