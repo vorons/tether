@@ -150,6 +150,23 @@ local common = _G.provider_common
     end)()
 local cache_mod = common and common.require_cache and common.require_cache()
 
+-- audit M4: the one place a provider error body turns into text, so the error
+-- banner, the transcript row, the journal and the debug log all read the same
+-- string. The budget stays generous (a 200-char cut once truncated a 400
+-- mid-JSON) but the cut is byte-based and glyph-safe, every control byte --
+-- escape sequences included, which a %s+ run leaves standing -- becomes a
+-- space, and auth.redact strips credential material before it escapes.
+local function error_snippet(body)
+    local flat = common.utf8_prefix(body, 2000):gsub("%c+", " "):gsub("%s+", " ")
+    local a = rawget(_G, "auth")
+    if not a then
+        local chunk = loadfile("src/tether/auth.lua")
+        a = chunk and chunk()
+    end
+    if a and a.redact then return a.redact(flat) end
+    return flat
+end
+
 -- Extract a Retry-After / retry_after value from the body, if present.
 local function extract_retry_after(body)
     if not body then return nil end
@@ -625,7 +642,7 @@ local function http_request(cfg, api_key, messages, on_event, opts)
         -- while the transcript and the error banner clip on their own.
         local status = tonumber(body:match('"status"[%s]*:[%s]*(%d+)'))
             or tonumber(body:match('"code"[%s]*:[%s]*"?([%d]+)"?'))
-        local snippet = body:sub(1, 2000):gsub("%s+", " ")
+        local snippet = error_snippet(body)
         local text = "http " .. tostring(status or "?") .. ": " .. snippet
         return false, retry.failure(retry.classify(text, status), text, status,
             extract_retry_after(body))

@@ -149,6 +149,53 @@ do
   print("T330 SSE frames parse without the space: OK")
 end
 
+-- T331 (audit M4): the provider error body turns into ONE bounded,
+-- control-free, redacted string at api.lua; the banner, transcript, journal
+-- and debug log all read that string.
+do
+  local orig_tether = _G.tether
+  local api_mod = assert(loadfile("src/tether/api.lua"))()
+  local function failure_message(body)
+    _G.tether = host_mock{
+      http_stream = function(_, _, _, _, on_line)
+        on_line(body)
+        return true
+      end,
+      http_get = function() return nil, "not used" end,
+      sleep = function() end,
+    }
+    local ok, failure = api_mod.stream({ provider = "openai", base_url = "http://x",
+      model = "m" }, "key", { { role = "user", content = "hi" } }, function() end)
+    _G.tether = orig_tether
+    assert_true(not ok, "T331 the body fails the attempt")
+    return failure.message
+  end
+
+  -- an escape sequence and a NUL in the body never reach the terminal
+  local ctrl = failure_message('{"error":{"message":"\27[31m boom\0 done","status":400}}')
+  assert_eq(ctrl:find("%c"), nil, "T331 no control byte survives the snippet")
+  assert_true(ctrl:find("http 400:", 1, true) == 1, "T331 the status still leads")
+
+  -- credential material is redacted before the snippet escapes this layer
+  local key = failure_message('{"error":{"message":"bad","status":401,'
+      .. '"api_key":"sk-secret-leak-123"}}')
+  assert_true(key:find("sk-secret-leak-123", 1, true) == nil, "T331 an api_key is redacted")
+  assert_true(key:find('"api_key":"***"', 1, true) ~= nil, "T331 the field still reads redacted")
+  local bearer = failure_message('{"error":{"message":"Bearer sk-another-secret",'
+      .. '"status":403}}')
+  assert_true(bearer:find("sk-another-secret", 1, true) == nil, "T331 a bearer token is redacted")
+
+  -- the 2000-byte budget stays, but the cut lands on a glyph boundary
+  local boundary = string.rep("a", 1999) .. "П" .. "tail"
+  local cut = failure_message(boundary)
+  assert_notnil(utf8.len(cut), "T331 the cut keeps valid UTF-8")
+  assert_true(#cut >= 2000, "T331 the generous budget is kept")
+  assert_true(cut:find("tail", 1, true) == nil, "T331 the body is still bounded")
+  assert_true(failure_message(string.rep("b", 400)):find("http ?:", 1, true) == 1,
+      "T331 a statusless body still reads http ?:")
+  print("T331 error snippet is bounded, control-free, redacted: OK")
+end
+
 -- T180: audit fixes — extra_headers mechanism (catalog + user override, CRLF guard)
 do
   local api = assert(loadfile("src/tether/api.lua"))()
