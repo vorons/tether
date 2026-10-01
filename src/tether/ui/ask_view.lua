@@ -116,7 +116,11 @@ local function render(a, width, P)
     end
     local progress = #a.questions > 1
         and string.format(" (%d/%d)", a.qidx, #a.questions) or ""
-    out[#out + 1] = P.cyan("? ") .. (q.question or "") .. P.dim(progress)
+    -- M11: the header row is clipped to the width like the confirm rows
+    -- below, cutting the question text so the position marker survives.
+    local qtext = P.clip(q.question or "",
+        math.max(inner - P.vlen(progress), 1))
+    out[#out + 1] = P.cyan("? ") .. qtext .. P.dim(progress)
     if q.description and q.description ~= "" then
         for _, l in ipairs(P.md(q.description, inner)) do
             out[#out + 1] = "  " .. l
@@ -130,11 +134,16 @@ local function render(a, width, P)
         local row = {}
         -- multi keeps its square markers so the toggled state stays visible;
         -- single renders a clean numbered list (the accent cursor marks position)
-        if q.multi then
-            row[#row + 1] = ask_selected(answer, opt.label) and "[x] " or "[ ] "
-        end
-        row[#row + 1] = i .. ". " .. opt.label
-        if q.recommended == i then row[#row + 1] = P.dim("  (recommended)") end
+        -- M11: the label text is clipped before composing, so the numbering,
+        -- the marker and the (recommended) suffix always survive the width.
+        local marker = (q.multi
+            and (ask_selected(answer, opt.label) and "[x] " or "[ ] ")) or ""
+        local num = i .. ". "
+        local rec = (q.recommended == i) and "  (recommended)" or ""
+        local label = P.clip(opt.label or "",
+            math.max(inner - P.vlen(marker .. num) - P.vlen(rec), 1))
+        row[#row + 1] = marker .. num .. label
+        if rec ~= "" then row[#row + 1] = P.dim(rec) end
         local active = (i == a.sel and a.mode == "list")
         local text = "  " .. table.concat(row)
         out[#out + 1] = active and P.accent(text) or text

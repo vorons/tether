@@ -90,6 +90,61 @@ do
   print("TAV2 ask block spacing: OK")
 end
 
+-- T344 (audit M11): question and option rows fit the terminal width — real
+-- wrap/vlen, no stubs. A 120-char question and overlong labels at width 80
+-- stay one row each; numbering, marker and (recommended) survive the cut.
+do
+  local av = assert(loadfile("src/tether/ui/ask_view.lua"))()
+  local copy = assert(loadfile("src/tether/ui/copy.lua"))()
+  local askm = assert(loadfile("src/tether/ask.lua"))()
+  local ui = dofile("src/tether/ui.lua")
+  local P = {
+    copy = copy,
+    clip = function(s, w) if ui.vlen(s) <= w then return s end return ui.trunc(s, w) end,
+    wrap = function(s, w) return ui.wrap_lines(s, w) end,
+    vlen = ui.vlen,
+    md = function(text, w) return ui.md_render(text, w) end,
+    hint = function(pairs, w) return ui.hint_paint(pairs, w) end,
+    caret = function() return ui.caret_glyph() end,
+    accent = function(s) return "\27[1m" .. s .. "\27[0m" end,
+    cyan = function(s) return "\27[36m" .. s .. "\27[0m" end,
+    dim = function(s) return "\27[2m" .. s .. "\27[0m" end,
+    muted = function(s) return "\27[90m" .. s .. "\27[0m" end,
+    role = function(_, s) return s end,
+    freeform = askm.FREEFORM_LABEL,
+  }
+  local a = {
+    questions = { { question = string.rep("Q", 120), multi = true,
+      options = { { label = string.rep("L", 100) }, { label = "short" } },
+      recommended = 1 } },
+    qidx = 1, answers = { { selected = {}, other = "", notes = {} } },
+    sel = 1, mode = "list", phase = "questions",
+  }
+  local rows = av.render(a, 80, P)
+  for i, r in ipairs(rows) do
+    assert_true(ui.vlen(r) <= 80, "T344 row " .. i .. " fits 80 columns")
+  end
+  local header, opt1 = rows[2], nil
+  for _, r in ipairs(rows) do
+    if r:find("1%. ", 1) ~= nil then opt1 = r break end
+  end
+  assert_notnil(opt1, "T344 first option row keeps its numbering")
+  assert_true(header:find(string.rep("Q", 10), 1, true) ~= nil,
+    "T344 the long question is cut, not dropped")
+  assert_true(opt1:find("[ ] ", 1, true) ~= nil, "T344 the marker survives")
+  assert_true(opt1:find("(recommended)", 1, true) ~= nil,
+    "T344 the recommended marker survives")
+  -- multi-question position marker survives the cut too
+  a.questions[2] = { question = "second?", options = { { label = "x" } } }
+  local rows2 = av.render(a, 80, P)
+  assert_true(rows2[2]:find("(1/2)", 1, true) ~= nil,
+    "T344 the position marker survives")
+  for i, r in ipairs(rows2) do
+    assert_true(ui.vlen(r) <= 80, "T344 multi row " .. i .. " fits 80 columns")
+  end
+  print("T344 ask rows fit the width: OK")
+end
+
 if failed > 0 then
     os.exit(1)
 end
