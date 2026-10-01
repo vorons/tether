@@ -129,10 +129,20 @@ local function parse_args()
                 opts.resume = true
             end
         elseif a == "--workspace" or a == "-w" then
-            opts.workspace = args[i + 1]
+            -- M16: a flag never swallows another flag as its value (the same
+            -- ^%- guard --resume/--print already carry).
+            local v = args[i + 1]
+            if type(v) ~= "string" or v == "" or v:match("^%-") then
+                error("--workspace needs a value", 0)
+            end
+            opts.workspace = v
             i = i + 1
         elseif a == "--model" or a == "-m" then
-            opts.model = args[i + 1]
+            local v = args[i + 1]
+            if type(v) ~= "string" or v == "" or v:match("^%-") then
+                error("--model needs a value", 0)
+            end
+            opts.model = v
             i = i + 1
         elseif a == "--print" or a == "-p" then
             opts.print_mode = true
@@ -162,6 +172,12 @@ local function parse_args()
         elseif a == "--version" or a == "-v" then
             version = true
             return opts
+        elseif a:match("^%-") then
+            -- M16: an unknown flag is an error, not a silent session with
+            -- the remaining defaults. Raised (not os.exit) so the test seam
+            -- observes the refusal; M.run reports it and exits non-zero.
+            -- Tokens without a dash keep today's meaning.
+            error("unknown flag: " .. a, 0)
         end
         i = i + 1
     end
@@ -187,7 +203,9 @@ function M._parse_args(argv)
     local ok, opts = pcall(parse_args)
     arg = keep
     if ok then return opts end
-    return nil
+    -- M16: surface the refusal reason as a second return (nil-first stays
+    -- compatible with T240 callers).
+    return nil, opts
 end
 
 -- extension-system: top-level management verbs (design §7, flat per user

@@ -489,6 +489,30 @@ do
   print("T240 resume takes an optional session id: OK")
 end
 
+-- T348 (audit M16): flags are validated. An unknown flag is refused, -w/-m
+-- never swallow another flag as their value, and a trailing valueless flag
+-- is reported — each without starting a session.
+do
+  local app = assert(loadfile("src/tether/app.lua"))()
+  local o, err = app._parse_args({ "--frobnicate" })
+  assert_eq(o, nil, "T348 unknown flag parses to nothing")
+  assert_true((err or ""):find("--frobnicate", 1, true) ~= nil,
+    "T348 unknown flag reported")
+  local o2, err2 = app._parse_args({ "-w", "--model", "gpt" })
+  assert_eq(o2, nil, "T348 -w refuses a flag as its value")
+  assert_true((err2 or ""):find("--workspace", 1, true) ~= nil,
+    "T348 missing workspace value reported")
+  local o3, err3 = app._parse_args({ "-m" })
+  assert_eq(o3, nil, "T348 trailing -m parses to nothing")
+  assert_true((err3 or ""):find("--model", 1, true) ~= nil,
+    "T348 missing model value reported")
+  -- valid spellings keep working, including the positional --print prompt
+  local ok = app._parse_args({ "-w", "/ws", "--print", "summarize this" })
+  assert_eq(ok.workspace, "/ws", "T348 good -w value kept")
+  assert_eq(ok.print_prompt, "summarize this", "T348 positional prompt kept")
+  print("T348 command-line flags are validated: OK")
+end
+
 -- T241: sequel plumbing. validate keeps resume; spawn mints the child
 -- journal (sequel reuses the given one); the child command carries
 -- --resume after the prompt slot; results report the session id.
