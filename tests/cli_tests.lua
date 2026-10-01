@@ -513,6 +513,35 @@ do
   print("T348 command-line flags are validated: OK")
 end
 
+-- T349 (audit M17): a workspace that does not exist is reported, not run.
+do
+  local app = assert(loadfile("src/tether/app.lua"))()
+  local orig = _G.tether
+  -- realpath fails: refused, naming the path
+  _G.tether = host_mock({ realpath = function() return nil end })
+  local cfg = { workspace = "/definitely-not-a-real-ws-xyz" }
+  local ok, bad = app.resolve_workspace(cfg)
+  assert_eq(ok, nil, "T349 unresolvable workspace refused")
+  assert_eq(bad, "/definitely-not-a-real-ws-xyz", "T349 refusal names the path")
+  -- realpath ok but not a directory: refused too
+  _G.tether = host_mock({
+    realpath = function(p) return p end,
+    stat = function() return { mtime = 0, size = 1, is_dir = false } end,
+  })
+  local cfg2 = { workspace = "/tmp/definitely-a-file" }
+  assert_eq(app.resolve_workspace(cfg2), nil, "T349 a file is not a workspace")
+  -- a real directory resolves (symlinks expand through realpath)
+  _G.tether = host_mock({
+    realpath = function(p) return (p:gsub("link$", "target")) end,
+    stat = function() return { mtime = 0, size = 0, is_dir = true } end,
+  })
+  local cfg3 = { workspace = "/ws/link" }
+  assert_true(app.resolve_workspace(cfg3), "T349 a directory resolves")
+  assert_eq(cfg3.workspace, "/ws/target", "T349 symlinks resolve")
+  _G.tether = orig
+  print("T349 missing workspace is reported: OK")
+end
+
 -- T241: sequel plumbing. validate keeps resume; spawn mints the child
 -- journal (sequel reuses the given one); the child command carries
 -- --resume after the prompt slot; results report the session id.

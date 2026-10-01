@@ -195,6 +195,21 @@ function M._print_prompt_error(prompt)
     return nil
 end
 
+-- M17: one workspace resolver that can fail. realpath expands symlinks, so
+-- a symlinked workspace keeps resolving; a path realpath cannot resolve
+-- (the host pushes false), or one that is not a directory, stops startup
+-- with a naming message instead of a session in which every tool call fails
+-- or asks for confirmation. Returns true, or nil + the offending path.
+function M.resolve_workspace(cfg)
+    local ws = cfg.workspace or tether.getcwd()
+    local rp = tether.realpath(ws)
+    if not rp then return nil, ws end
+    local st = tether.stat and tether.stat(rp) or nil
+    if not st or not st.is_dir then return nil, ws end
+    cfg.workspace = rp
+    return true
+end
+
 -- Test seam for the CLI parser (T240): parse a given argv instead of the
 -- process-global `arg` (mirrors the M._print_prompt_error precedent).
 function M._parse_args(argv)
@@ -391,9 +406,12 @@ local function run_inner()
         -- degrades such a call to an error tool result instead of parking.
         cfg.non_interactive = true
         -- Design §14: workspace defaults to cwd; -w overrides (tools read cfg.workspace)
-        if not cfg.workspace then cfg.workspace = tether.getcwd() end
-        local rp = tether.realpath(cfg.workspace)
-        if rp then cfg.workspace = rp end
+        local ok_ws, bad_ws = M.resolve_workspace(cfg)
+        if not ok_ws then
+            io.stderr:write("tether: workspace does not exist: "
+                .. tostring(bad_ws) .. "\n")
+            os.exit(1)
+        end
         -- extension-system: tools/commands/prompt/hooks must be registered
         -- before the turn composes its prompt and dispatches tool calls.
         M.boot_extensions(cfg)
@@ -504,9 +522,12 @@ local function run_inner()
     end
     cfg.debug = opts.debug
     -- Design §7: workspace = cwd unless -w; realpath with symlinks expanded
-    if not cfg.workspace then cfg.workspace = tether.getcwd() end
-    local rp = tether.realpath(cfg.workspace)
-    if rp then cfg.workspace = rp end
+    local ok_ws, bad_ws = M.resolve_workspace(cfg)
+    if not ok_ws then
+        io.stderr:write("tether: workspace does not exist: "
+            .. tostring(bad_ws) .. "\n")
+        os.exit(1)
+    end
     -- tui-stderr-guard: from here until the TUI owns the screen, pre-TUI
     -- diagnostics go to the session log (banner-bound ones collected).
     M._early_stderr_sink(cfg)

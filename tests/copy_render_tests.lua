@@ -866,6 +866,9 @@ do
   local log = {}
   _G.arg = { "--print", "hello" }
   _G.tether = host_mock{ getcwd = function() return "/ws" end, realpath = function(p) return p end,
+                -- M17: the harness fakes cwd/realpath, so the directory check
+                -- gets the same fake (host_fs.stat would probe the real /ws).
+                stat = function() return { mtime = 0, size = 0, is_dir = true } end,
                 is_tty = function() return false end }
   _G.config = { load = function() return { context = {} } end, api_key = function() return "k" end }
   -- providers gate is orthogonal here (its own tests: T198); stub it open.
