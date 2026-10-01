@@ -1158,6 +1158,35 @@ do
   print("T342 tool args are not answer text: OK")
 end
 
+-- T345 (audit M13): an unknown cfg.provider warns on stderr and resolves
+-- the default wire — a typo no longer silently becomes someone else's
+-- base_url with no trace.
+do
+  local catfix = assert(loadfile("src/tether/providers/catalog.lua"))()
+  catfix.set_overlay({
+    ["llama-cpp"] = { wire = "openai", base_url = "http://127.0.0.1:8080/v1",
+      api_key_env = "LLAMA_API_KEY", model = "", _source = "test" },
+  }, { generated_at = 0 })
+  local orig_catalog = _G.provider_catalog
+  _G.provider_catalog = catfix
+  local api = assert(loadfile("src/tether/api.lua"))()
+  local err = {}
+  local real_stderr = io.stderr
+  io.stderr = { write = function(_, s)
+    err[#err + 1] = tostring(s)
+    return true
+  end }
+  local name = api._provider_of({ provider = "azure" })
+  local again = api._provider_of({ provider = "azure" })
+  io.stderr = real_stderr
+  _G.provider_catalog = orig_catalog
+  assert_eq(name, "llama-cpp", "T345 unknown resolves the default wire")
+  assert_eq(again, "llama-cpp", "T345 the fallback is stable")
+  assert_eq(#err, 1, "T345 warned once per process")
+  assert_true(err[1]:find("azure", 1, true) ~= nil, "T345 stderr names the value")
+  print("T345 unknown provider warns: OK")
+end
+
 -- T51: dispatcher — unknown provider falls back, per-provider streams work
 do
   -- dynamic-provider-catalog: the binary ships a thin bootstrap (no cloud

@@ -36,11 +36,18 @@ local function load_module(spec)
     return nil
 end
 
--- Unknown provider ids fall back to "openai" silently: library code must
--- never write to the terminal mid-TUI (one stray line over the alt-screen
--- persists past diff repaints), and the configured id stays visible in the
--- footer's provider cell for diagnosis.
-local function warn_unknown() end
+-- Unknown provider ids fall back to the default wire with a one-line stderr
+-- note naming the value (spec api-client:13, config:238), once per process
+-- per value. A single write (not per request) keeps retries quiet, and it is
+-- safe pre-TUI: stderr reaches the session log only once the TUI owns the
+-- screen, while the configured id stays visible in the footer for diagnosis.
+local warned_unknown = {}
+local function warn_unknown(name)
+    if warned_unknown[name] then return end
+    warned_unknown[name] = true
+    io.stderr:write("tether: unknown provider \"" .. tostring(name)
+        .. "\", using default\n")
+end
 
 -- audit H1: a first line with SSE framing means the response was a stream even
 -- when the adapter found no event in it (keep-alive comments, a lone `data:
