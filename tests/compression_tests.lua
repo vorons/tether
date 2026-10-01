@@ -45,6 +45,34 @@ do
   print("TCMP compression direct: OK")
 end
 
+-- T339 (audit M6): the token estimate counts tool payloads. Assistant turns
+-- are stored hash-form {tool_calls, text} (agent.lua); the old array walk
+-- read that shape as zero, so a tool-heavy history estimated ~12x low and
+-- compaction never fired before the provider's 400.
+do
+  local comp = assert(loadfile("src/tether/compression.lua"))()
+  local payload = string.rep("a", 4800)
+  local args = '{"command":"' .. payload .. '"}'
+  local hash_hist = { { role = "assistant", content = { tool_calls = {
+    { id = "c1", type = "function",
+      ["function"] = { name = "run", arguments = args } },
+  }, text = "" } } }
+  local est = comp.estimate_tokens(hash_hist)
+  local real = (#args + #"run") / 4
+  assert_true(est >= real * 0.9, "T339 hash-form tool payload counts")
+  assert_true(est < real * 1.5, "T339 the estimate stays length/4")
+  -- the legacy bare-list shape keeps its old count
+  local list_hist = { { role = "assistant", content = {
+    { id = "c1", type = "function",
+      ["function"] = { name = "run", arguments = args } },
+  } } }
+  assert_eq(comp.estimate_tokens(list_hist), est, "T339 bare-list parity")
+  -- and plain text is untouched
+  assert_eq(comp.estimate_tokens({ { role = "user", content = "hi" } }), 1,
+    "T339 short text still ceils to one")
+  print("T339 token estimate counts tool payloads: OK")
+end
+
 do
   -- anchor-prune-fix 1.1: pinning tests for anchor_trim_prefix.
   -- Verified against the current guard before any edit: identical paths

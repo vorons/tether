@@ -76,14 +76,29 @@ function M.budget_max_tokens(cfg)
     return catalog_max_tokens(cfg) or M.FALLBACK_MAX_TOKENS
 end
 
+-- Audit M6: assistant turns with tool calls are stored
+-- hash-form {tool_calls, text} (agent.lua), which the old array walk read as
+-- zero — a tool-heavy history estimated ~12x low and compaction never fired
+-- before the provider's 400. Read them through the same accessors the anchor
+-- builder uses, so names and argument text count in whatever stored shape.
+-- forward: defined beside the anchor builder below, used by the estimate.
+local anchor_text, anchor_tool_calls
+
 local function estimate_tokens(history)
     local total = 0
     for _, m in ipairs(history) do
         local c = m.content
-        if type(c) == "string" then total = total + #c / 4
-        elseif type(c) == "table" then
-            for _, tc in ipairs(c) do
-                total = total + #(tc["function"] and (tc["function"].arguments or "") or "") / 4
+        total = total + #anchor_text(c) / 4
+        for _, tc in ipairs(anchor_tool_calls(c)) do
+            if type(tc) == "table" then
+                local fn = tc["function"] or tc.fn or {}
+                total = total + #(fn.name or "") / 4
+                local args = fn.arguments
+                if type(args) == "string" then
+                    total = total + #args / 4
+                elseif type(args) == "table" then
+                    total = total + #common.json_encode(args) / 4
+                end
             end
         end
     end
@@ -222,7 +237,7 @@ local function anchor_snippet(text, max)
     return line
 end
 
-local function anchor_text(content)
+anchor_text = function(content)
     if type(content) == "string" then return content end
     if type(content) == "table" and type(content.text) == "string" then
         return content.text
@@ -230,7 +245,7 @@ local function anchor_text(content)
     return ""
 end
 
-local function anchor_tool_calls(content)
+anchor_tool_calls = function(content)
     local out = {}
     if type(content) ~= "table" then return out end
     local list = content.tool_calls
