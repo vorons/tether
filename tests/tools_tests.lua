@@ -1303,6 +1303,60 @@ do
   print("T-missing-paths nonexistent paths resolve + write: OK")
 end
 
+-- T354 (audit L3): the write temp file is unpredictable and never follows
+-- a pre-existing path. A planted symlink at the predicted temp name must
+-- be skipped (reservation), not written through.
+do
+  local orig_tether = _G.tether
+  local saved_random, saved_time = math.random, os.time
+  local ws = "/tmp/tether_t354_ws"
+  os.execute("rm -rf " .. ws .. " && mkdir -p " .. ws)
+  _G.tether = host_mock{ getcwd = function() return ws end,
+    realpath = function(p) return p end,
+    monotonic_ms = function() return 1000 end }
+  local tools = assert(loadfile("src/tether/tools.lua"))()
+  -- uniqueness across reservations
+  local seen = {}
+  for i = 1, 50 do
+    local n = assert(tools._fresh_tmp(ws .. "/f.lua"))
+    assert_true(not seen[n], "T354 temp names never repeat")
+    seen[n] = true
+  end
+  -- deterministic prediction, then plant a symlink at that name
+  math.random = function() return 7 end
+  os.time = function() return 1700000000 end
+  local predicted = assert(tools._fresh_tmp(ws .. "/f.lua"))
+  local victim = ws .. "/victim.txt"
+  local vf = assert(io.open(victim, "w"))
+  vf:write("orig")
+  vf:close()
+  os.execute("ln -s " .. victim .. " " .. predicted)
+  local again = assert(tools._fresh_tmp(ws .. "/f.lua"))
+  assert_true(again ~= predicted, "T354 planted temp name is skipped")
+  -- end to end: the write lands in the target, never through the link
+  local res, err = tools.write({ path = "f.lua", content = "hello-t354" },
+    { workspace = ws })
+  assert_notnil(res, "T354 write succeeds past a planted temp: " .. tostring(err))
+  local t = assert(io.open(ws .. "/f.lua", "r"))
+  assert_eq(t:read("*a"), "hello-t354", "T354 content lands in the target")
+  t:close()
+  local v = assert(io.open(victim, "r"))
+  assert_eq(v:read("*a"), "orig", "T354 planted symlink never followed")
+  v:close()
+  local leftovers = {}
+  local planted_base = predicted:match("[^/]+$")
+  for _, name in ipairs(_G.tether.readdir(ws)) do
+    if name:find(".tmp.", 1, true) and name ~= planted_base then
+      leftovers[#leftovers + 1] = name
+    end
+  end
+  assert_eq(#leftovers, 0, "T354 no temp files left behind")
+  math.random, os.time = saved_random, saved_time
+  _G.tether = orig_tether
+  os.execute("rm -rf " .. ws)
+  print("T354 exclusive temp reservation: OK")
+end
+
 if failed > 0 then
     os.exit(1)
 end

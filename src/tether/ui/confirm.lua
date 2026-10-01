@@ -14,7 +14,7 @@
 --      take (bag, deps, ...) like the busy-pump handlers: bag is the state
 --      (S.confirmation/confirmation_sel/error_banner/cfg/api_key), deps is
 --      the impure edge { turn, agent, on_event, sync, paint, bump, settle,
---      note, layout, content_width, ensure, row_text, digits }.
+--      note, layout, content_width, ensure, row_text, wrap, digits }.
 --      Moved verbatim from ui.lua (Phase D 4.2); the facade keeps thin
 --      proxies so call sites and M.* seams keep working, and the 2.2 key
 --      table keeps owning the keyboard.
@@ -50,8 +50,14 @@ local function menu_rows(c, sel, width, P)
     co[#co + 1] = (c.question or "Allow this action?")
     co[#co + 1] = ""
     for i, opt in ipairs(c.options or {}) do
-        local t = "  " .. opt
-        co[#co + 1] = (i == sel) and P.rev(t) or t
+        -- L11: an option longer than the width wraps (narrow terminal),
+        -- so it occupies as many visual rows as the same wrap the
+        -- hit-test below counts — never an assumed single row.
+        local lines = P.wrap("  " .. opt, width)
+        if #lines == 0 then lines = { "  " .. opt } end
+        for _, l in ipairs(lines) do
+            co[#co + 1] = (i == sel) and P.rev(l) or l
+        end
     end
     co[#co + 1] = ""
     co[#co + 1] = "  " .. P.hint(P.confirm_hint)
@@ -158,8 +164,23 @@ local function handle_confirmation_key(bag, deps, k)
             local cw = deps.content_width(L.w)
             local total = deps.ensure(cw)
             -- options are the last block lines except the trailing
-            -- confirm-menu-redesign blank + hint rows (2 lines)
-            local above = total - #c.options - 2
+            -- confirm-menu-redesign blank + hint rows (2 lines).
+            -- L11: each option takes as many visual rows as menu_rows
+            -- gave it (same wrap, same width) — one row per option
+            -- drifts the anchor as soon as a label wraps. Heights are
+            -- computed inline (no nested function) so the T4.1 ownership
+            -- audit keeps attributing these writes to handle_confirmation_key.
+            local heights = {}
+            for _, opt in ipairs(c.options) do
+                local h = 1
+                if deps.wrap then
+                    local lines = deps.wrap("  " .. opt, cw) or {}
+                    if #lines > 0 then h = #lines end
+                end
+                heights[#heights + 1] = h
+            end
+            local above = total - 2
+            for _, h in ipairs(heights) do above = above - h end
             -- k.row is a SCREEN row; map it to a transcript line index the
             -- same way the tool-row click below does (mixing screen rows with
             -- line indices picked the wrong option, i.e. the wrong verdict).
@@ -170,14 +191,17 @@ local function handle_confirmation_key(bag, deps, k)
             if k.row and k.row >= L.transcript_row
                 and k.row <= L.transcript_row + L.transcript_h - 1 then
                 local idx = top + (k.row - L.transcript_row)
-                local text = (idx >= above + 1 and idx <= total)
-                    and deps.row_text(idx, cw) or ""
-                for i, opt in ipairs(c.options) do
-                    if text:find(opt:sub(1, 10), 1, true) then
+                -- span-based pick: the click lands anywhere inside the
+                -- option's own visual rows (first or continuation), so a
+                -- wrapped label still resolves to its option.
+                local first = above + 1
+                for i, h in ipairs(heights) do
+                    if idx >= first and idx < first + h then
                         bag.confirmation_sel = i
                         resolve_confirmation(bag, deps, DECISIONS[i] or "deny")
                         break
                     end
+                    first = first + h
                 end
             end
         end

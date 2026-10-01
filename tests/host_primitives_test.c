@@ -2417,6 +2417,173 @@ static void test_stderr_redirect(lua_State *L)
     unlink(path);
 }
 
+/* T360 (audit L13): truthful exec status, accurate mkdirp errors,
+   colon-safe krep parsing. */
+static void test_audit_low_l13(lua_State *L)
+{
+    /* exec propagates the real status: failure is never success. */
+    lua_getglobal(L, "tether");
+    lua_getfield(L, -1, "exec");
+    lua_remove(L, -2);
+    lua_pushstring(L, "exit 3");
+    if (lua_pcall(L, 1, 2, 0) != LUA_OK) {
+        report_lua_error(L, "exec(exit 3)");
+    } else {
+        check(lua_toboolean(L, -2) == 0, "T360 failing command is not ok");
+        check(lua_tointeger(L, -1) == 3, "T360 failing exit code propagates");
+        lua_pop(L, 2);
+    }
+    lua_getglobal(L, "tether");
+    lua_getfield(L, -1, "exec");
+    lua_remove(L, -2);
+    lua_pushstring(L, "true");
+    if (lua_pcall(L, 1, 2, 0) != LUA_OK) {
+        report_lua_error(L, "exec(true)");
+    } else {
+        check(lua_toboolean(L, -2) == 1, "T360 succeeding command is ok");
+        check(lua_tointeger(L, -1) == 0, "T360 zero exit propagates");
+        lua_pop(L, 2);
+    }
+
+    /* mkdirp on an existing *file* names the real cause, not a stale errno. */
+    char ldir[256], lfile[300];
+    snprintf(ldir, sizeof(ldir), "/tmp/tether_l13_test_%d", (int)getpid());
+    snprintf(lfile, sizeof(lfile), "%s/plain.txt", ldir);
+    char cmd[600];
+    snprintf(cmd, sizeof(cmd), "rm -rf %s", ldir);
+    if (system(cmd) != 0) { /* nothing to clean */ }
+    if (mkdir(ldir, 0777) != 0) {
+        failures++;
+        fprintf(stderr, "FAIL: T360 fixture setup\n");
+        return;
+    }
+    write_str(lfile, "x");
+    lua_getglobal(L, "tether");
+    lua_getfield(L, -1, "mkdirp");
+    lua_remove(L, -2);
+    lua_pushstring(L, lfile);
+    if (lua_pcall(L, 1, 2, 0) != LUA_OK) {
+        report_lua_error(L, "mkdirp(file)");
+    } else {
+        check(lua_isnil(L, -2), "T360 mkdirp rejects a path that is a file");
+        const char *err = lua_tostring(L, -1);
+        check(err != NULL && strcmp(err, "not a directory") == 0,
+              "T360 mkdirp on a file says not a directory");
+        lua_pop(L, 2);
+    }
+
+    /* krep_parse_line: the LAST ':digits:' boundary is the line number, so
+       a filename holding a colon round-trips instead of leaking into text. */
+    {
+        char line[] = "a:1:b:2:c";
+        char *path = NULL, *text = NULL;
+        long lineno = 0;
+        check(krep_parse_line(line, &path, &lineno, &text) == 1,
+              "T360 colon filename parses");
+        check(path != NULL && strcmp(path, "a:1:b") == 0,
+              "T360 colon filename keeps its full path");
+        check(lineno == 2, "T360 colon filename keeps its line");
+        check(text != NULL && strcmp(text, "c") == 0,
+              "T360 colon filename keeps its text");
+    }
+    {
+        char line[] = "f.lua:10:hello: world";
+        char *path = NULL, *text = NULL;
+        long lineno = 0;
+        check(krep_parse_line(line, &path, &lineno, &text) == 1,
+              "T360 plain record parses");
+        check(path != NULL && strcmp(path, "f.lua") == 0,
+              "T360 plain record keeps its path");
+        check(lineno == 10, "T360 plain record keeps its line");
+        check(text != NULL && strcmp(text, "hello: world") == 0,
+              "T360 plain record keeps colons in text");
+    }
+
+    /* T360 follow-up (verify W1): write_excl creates atomically — a
+       pre-existing path (or a symlink plant) fails instead of being
+       followed or truncated. */
+    {
+        char wdir[256], wtarget[300], wlink[300];
+        snprintf(wdir, sizeof(wdir), "/tmp/tether_wexcl_test_%d", (int)getpid());
+        snprintf(wtarget, sizeof(wtarget), "%s/target.txt", wdir);
+        snprintf(wlink, sizeof(wlink), "%s/link.txt", wdir);
+        snprintf(cmd, sizeof(cmd), "rm -rf %s", wdir);
+        if (system(cmd) != 0) { /* nothing to clean */ }
+        if (mkdir(wdir, 0777) != 0) {
+            failures++;
+            fprintf(stderr, "FAIL: T360 write_excl fixture setup\n");
+        } else {
+            /* happy path: creates with content */
+            lua_getglobal(L, "tether");
+            lua_getfield(L, -1, "write_excl");
+            lua_remove(L, -2);
+            lua_pushstring(L, wtarget);
+            lua_pushstring(L, "secret-bytes");
+            if (lua_pcall(L, 2, 2, 0) != LUA_OK) {
+                report_lua_error(L, "write_excl(create)");
+            } else {
+                check(lua_toboolean(L, -2) == 1, "T360 write_excl creates");
+                lua_pop(L, 2);
+                FILE *rf = fopen(wtarget, "r");
+                char rbuf[64] = {0};
+                size_t rn = rf ? fread(rbuf, 1, sizeof(rbuf) - 1, rf) : 0;
+                if (rf) fclose(rf);
+                check(rn == 12 && memcmp(rbuf, "secret-bytes", 12) == 0,
+                      "T360 write_excl lands the bytes");
+                struct stat wst;
+                check(stat(wtarget, &wst) == 0 && (wst.st_mode & 0777) == 0600,
+                      "T360 write_excl file is 0600");
+            }
+            /* existing path: refuse, leave untouched */
+            lua_getglobal(L, "tether");
+            lua_getfield(L, -1, "write_excl");
+            lua_remove(L, -2);
+            lua_pushstring(L, wtarget);
+            lua_pushstring(L, "evil-bytes!!");
+            if (lua_pcall(L, 2, 2, 0) != LUA_OK) {
+                report_lua_error(L, "write_excl(existing)");
+            } else {
+                check(lua_isnil(L, -2), "T360 write_excl refuses an existing path");
+                lua_pop(L, 2);
+                FILE *rf = fopen(wtarget, "r");
+                char rbuf[64] = {0};
+                size_t rn = rf ? fread(rbuf, 1, sizeof(rbuf) - 1, rf) : 0;
+                if (rf) fclose(rf);
+                check(rn == 12 && memcmp(rbuf, "secret-bytes", 12) == 0,
+                      "T360 existing target untouched");
+            }
+            /* symlink plant: refuse, never follow */
+            char scmd[700];
+            snprintf(scmd, sizeof(scmd), "ln -s %s %s", wtarget, wlink);
+            if (system(scmd) != 0) {
+                failures++;
+                fprintf(stderr, "FAIL: T360 symlink plant setup\n");
+            } else {
+                lua_getglobal(L, "tether");
+                lua_getfield(L, -1, "write_excl");
+                lua_remove(L, -2);
+                lua_pushstring(L, wlink);
+                lua_pushstring(L, "evil-bytes!!");
+                if (lua_pcall(L, 2, 2, 0) != LUA_OK) {
+                    report_lua_error(L, "write_excl(symlink)");
+                } else {
+                    check(lua_isnil(L, -2), "T360 write_excl refuses a symlink plant");
+                    lua_pop(L, 2);
+                    FILE *rf = fopen(wtarget, "r");
+                    char rbuf[64] = {0};
+                    size_t rn = rf ? fread(rbuf, 1, sizeof(rbuf) - 1, rf) : 0;
+                    if (rf) fclose(rf);
+                    check(rn == 12 && memcmp(rbuf, "secret-bytes", 12) == 0,
+                          "T360 symlink plant never followed");
+                }
+            }
+        }
+    }
+
+    snprintf(cmd, sizeof(cmd), "rm -rf %s", ldir);
+    if (system(cmd) != 0) { /* best effort */ }
+}
+
 int main(void)
 {
     char dir[256], nested[512], f1[512], f2[512];
@@ -2565,6 +2732,7 @@ int main(void)
     test_exec_bg_argv(L);
     test_oauth_wait(L);
     test_stderr_redirect(L);
+    test_audit_low_l13(L);
 
     lua_close(L);
 

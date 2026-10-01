@@ -433,13 +433,19 @@ static int l_exec(lua_State *L)
         _exit(127);
     }
     int st = 0;
+    /* L13: a waitpid failure used to leave st at its zero init, so a lost
+       child reported success (exit 0). Track the reap explicitly: only a
+       confirmed wait may produce an exit status. */
+    int reaped = 0;
     struct timespec ts;
     ts.tv_sec = 0;
     ts.tv_nsec = (long)SPINNER_QUANTUM_MS * 1000L * 1000L;
     for (;;) {
         pid_t w = waitpid(pid, &st, WNOHANG);
-        if (w == pid)
+        if (w == pid) {
+            reaped = 1;
             break;
+        }
         if (w < 0 && errno != EINTR)
             break; /* lost child: report through the status below */
         nanosleep(&ts, NULL);
@@ -449,7 +455,11 @@ static int l_exec(lua_State *L)
             int i;
             for (i = 0; i < 12; i++) {
                 pid_t g = waitpid(pid, &st, WNOHANG);
-                if (g == pid || (g < 0 && errno != EINTR))
+                if (g == pid) {
+                    reaped = 1;
+                    break;
+                }
+                if (g < 0 && errno != EINTR)
                     break;
                 struct timespec grace;
                 grace.tv_sec = 0;
@@ -458,11 +468,22 @@ static int l_exec(lua_State *L)
             }
             if (i == 12) {
                 kill(-pid, SIGKILL);
-                while (waitpid(pid, &st, 0) < 0 && errno == EINTR) { }
+                pid_t k;
+                do {
+                    k = waitpid(pid, &st, 0);
+                } while (k < 0 && errno == EINTR);
+                if (k == pid)
+                    reaped = 1;
             }
             break;
         }
         spinner_tick_call(L);
+    }
+    if (!reaped) {
+        /* the child was lost (or never waited): never report success */
+        lua_pushboolean(L, 0);
+        lua_pushinteger(L, 127);
+        return 2;
     }
     int exit_code = WIFEXITED(st) ? WEXITSTATUS(st) : 127;
     lua_pushboolean(L, exit_code == 0);
@@ -569,16 +590,72 @@ static int l_mkdirp(lua_State *L)
         }
     }
 
-    /* the final component must resolve to a directory, not a file */
+    /* the final component must resolve to a directory, not a file.
+       L13: read errno only from the failing call. stat() succeeding on a
+       non-directory used to report a stale strerror instead of the real
+       cause, so split the two failures. */
     struct stat st;
-    if (stat(buf, &st) != 0 || !S_ISDIR(st.st_mode)) {
+    if (stat(buf, &st) != 0) {
         int e = errno;
         free(buf);
         lua_pushnil(L);
-        lua_pushstring(L, e != 0 ? strerror(e) : "not a directory");
+        lua_pushstring(L, strerror(e));
+        return 2;
+    }
+    if (!S_ISDIR(st.st_mode)) {
+        free(buf);
+        lua_pushnil(L);
+        lua_pushstring(L, "not a directory");
         return 2;
     }
     free(buf);
+    lua_pushboolean(L, 1);
+    return 1;
+}
+
+/* tether.write_excl(path, content) -> true | nil, err
+   Audit L3 follow-up: create-and-write in one atomic step
+   (O_WRONLY|O_CREAT|O_EXCL, mode 0600). A path another user pre-created
+   or symlinked — including one planted between a Lua stat check and this
+   call — fails with EEXIST instead of being followed or truncated. Short
+   writes loop to completion; any failure unlinks the partial file so a
+   retry never trips over our own leftover. Plain Lua has no O_EXCL, which
+   is why the guessed-name scheme it replaces could not close that window
+   (same reason header/body temp files go through mkstemp). */
+static int l_write_excl(lua_State *L)
+{
+    const char *path = luaL_checkstring(L, 1);
+    size_t len;
+    const char *s = luaL_checklstring(L, 2, &len);
+    int fd = open(path, O_WRONLY | O_CREAT | O_EXCL, 0600);
+    if (fd < 0) {
+        lua_pushnil(L);
+        lua_pushstring(L, strerror(errno));
+        return 2;
+    }
+    size_t done = 0;
+    int werr = 0;
+    while (done < len) {
+        ssize_t w = write(fd, s + done, len - done);
+        if (w < 0) {
+            if (errno == EINTR) continue;
+            werr = errno;
+            break;
+        }
+        done += (size_t)w;
+    }
+    /* open() applies the umask; pin the mode to exactly 0600 after. */
+    if (werr == 0 && fchmod(fd, 0600) != 0)
+        werr = errno;
+    int cerr = 0;
+    if (close(fd) != 0 && werr == 0)
+        cerr = errno;
+    if (werr != 0 || cerr != 0) {
+        unlink(path);
+        lua_pushnil(L);
+        lua_pushstring(L, strerror(werr != 0 ? werr : cerr));
+        return 2;
+    }
     lua_pushboolean(L, 1);
     return 1;
 }
@@ -681,21 +758,31 @@ static int l_stat(lua_State *L)
 /* --- krep recursive search --- */
 
 /* Split one captured krep record ("path:lineno:text") in place.
-   Returns 1 on success. The first ':' followed by a digit run and another ':'
-   wins, which is the same rule the previous rg/grep parser used. */
+   Returns 1 on success. L13: the LAST ':digits:' boundary wins, so a file
+   whose name itself holds a colon (or colon+digits) round-trips: the first
+   match used to stop at the filename's own colon run and glue the rest of
+   the path into the match text. A ':digits:' run inside the match text
+   itself stays ambiguous (unresolvable without escaping) and resolves to
+   the later field — the common no-colon case has exactly one candidate
+   and is unaffected. */
 static int krep_parse_line(char *line, char **path, long *lineno, char **text)
 {
+    char *best_c = NULL, *best_end = NULL;
     for (char *c = line; (c = strchr(c, ':')) != NULL; c++) {
         char *digits = c + 1;
         if (!isdigit((unsigned char)*digits)) continue;
         char *end = digits;
         while (isdigit((unsigned char)*end)) end++;
         if (*end != ':') continue;
-        *c = '\0';
-        *end = '\0';
+        best_c = c;
+        best_end = end;
+    }
+    if (best_c != NULL) {
+        *best_c = '\0';
+        *best_end = '\0';
         *path = line;
-        *lineno = strtol(digits, NULL, 10);
-        *text = end + 1;
+        *lineno = strtol(best_c + 1, NULL, 10);
+        *text = best_end + 1;
         return 1;
     }
     return 0;
@@ -3250,6 +3337,7 @@ static luaL_Reg tether_api[] = {
     {"stderr_to_file", l_stderr_to_file},
     {"stderr_restore", l_stderr_restore},
     {"fchmod",      l_fchmod},
+    {"write_excl",  l_write_excl},
     {"readdir",     l_readdir},
     {"stat",        l_stat},
     {"krep_search", l_krep_search},

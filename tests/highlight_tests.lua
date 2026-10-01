@@ -20,6 +20,29 @@ do
   print("THL ui_highlight direct: OK")
 end
 
+-- T351 (audit L2): `[[\"']{3}$` never matched in Lua (`{3}` is literal),
+-- so python triple-quotes never opened. Literal comparison opens them.
+do
+  local hl = assert(loadfile("src/tether/ui/highlight.lua"))()
+  local toks = hl.tokenize('"""hello', "python", {})
+  assert_eq(toks[1].kind, "string", "T351 triple-double opens a string")
+  local st = {}
+  hl.tokenize('"""hello', "python", st)
+  assert_notnil(st.str, "T351 unterminated triple-quote keeps state")
+  local toks2 = hl.tokenize("world", "python", st)
+  assert_eq(toks2[1].kind, "string", "T351 string continues on the next line")
+  local toks3 = hl.tokenize("x = '''v'''", "python", {})
+  local seen_string = false
+  for _, t in ipairs(toks3) do
+    if t.kind == "string" then seen_string = true end
+  end
+  assert_true(seen_string, "T351 triple-single opens a string")
+  local st_lua = {}
+  hl.tokenize('"""x', "lua", st_lua)
+  assert_eq(st_lua.str, nil, "T351 lua sets no triple-quote state")
+  print("T351 python triple-quote highlighting: OK")
+end
+
 if failed > 0 then
     os.exit(1)
 end

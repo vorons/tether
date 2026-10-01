@@ -40,7 +40,7 @@ M.CANCELLED_TEXT = "cancelled (Esc)"
 local function truncate(s, max)
     if type(s) ~= "string" then return nil end
     if #s <= max then return s end
-    return s:sub(1, max) .. M.TRUNCATION
+    return common.utf8_prefix(s, max) .. M.TRUNCATION
 end
 
 -- Usable = a string with at least one non-space character.

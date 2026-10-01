@@ -31,6 +31,10 @@ local function session_dir()
     return M._session_dir or SESSION_DIR
 end
 
+local function history_file()
+    return M._history_file or HISTORY_FILE
+end
+
 local function ensure_dir()
     -- 1.3: in-process mkdir -p via the C host (no shell invocation).
     tether.mkdirp(session_dir())
@@ -286,6 +290,31 @@ function M.resume(id)
     return messages
 end
 
+-- Audit L6: history.jsonl is append-only without a bound. Rotation keeps
+-- the file bounded: when the entry count or byte size exceeds the limit,
+-- the oldest entries are dropped and only the newest window is kept.
+-- Row shape ({ts, workspace, text}) is untouched, so Up/Down recall and
+-- resume keep working across a rotation.
+M.HISTORY_MAX_ENTRIES = 1000
+M.HISTORY_KEEP_ENTRIES = 500
+M.HISTORY_MAX_BYTES = 256 * 1024
+
+local function rotate_history(path)
+    local f = io.open(path, "r")
+    if not f then return end
+    local lines = {}
+    for line in f:lines() do lines[#lines + 1] = line end
+    f:close()
+    local size = 0
+    for _, ln in ipairs(lines) do size = size + #ln + 1 end
+    if #lines <= M.HISTORY_MAX_ENTRIES and size <= M.HISTORY_MAX_BYTES then return end
+    local from = math.max(1, #lines - M.HISTORY_KEEP_ENTRIES + 1)
+    local w = io.open(path, "w")
+    if not w then return end
+    for i = from, #lines do w:write(lines[i], "\n") end
+    w:close()
+end
+
 function M.add_history(text, workspace)
     ensure_dir()
     local event = {
@@ -293,10 +322,12 @@ function M.add_history(text, workspace)
         workspace = workspace,
         text = text,
     }
-    local f = io.open(HISTORY_FILE, "a")
+    local path = history_file()
+    local f = io.open(path, "a")
     if f then
         f:write(json_encode(event) .. "\n")
         f:close()
+        rotate_history(path)
     end
 end
 

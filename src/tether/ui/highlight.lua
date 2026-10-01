@@ -73,7 +73,7 @@ local function tokenize(line, lang, state)
         local c = line:sub(i, i)
         local closed, j, q
         -- open/continue triple-quoted string (python)
-        if L.triple and (state.str or line:sub(i, i + 2):match("^[[\"']{3}$")) then
+        if L.triple and (state.str or line:sub(i, i + 2) == '"""' or line:sub(i, i + 2) == "'''") then
             local tri = state.str or line:sub(i, i + 2)
             local start = state.str and i or i + 3
             local cclose = line:find(tri, start, true)

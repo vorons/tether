@@ -205,6 +205,21 @@ do
   print("T4.1 S-mutation ownership: OK")
 end
 
+-- T353 (audit L12): kitty functional codes 57312..57343 are keys, never
+-- text (old range `code < 57344` inserted them into the input).
+do
+  local keys = assert(loadfile("src/tether/ui/keys.lua"))()
+  for _, code in ipairs({ 57312, 57320, 57343 }) do
+    local k = keys.decode_modified_key(code, {})
+    assert_true(k.kind ~= "text", "T353 kitty code " .. code .. " is not text")
+  end
+  local edge = keys.decode_modified_key(57311, {})
+  assert_eq(edge.kind, "text", "T353 code 57311 still inserts text")
+  local csi = keys.decode_csi_u("57320;1")
+  assert_true(csi.kind ~= "text", "T353 kitty CSI-u code is not text")
+  print("T353 kitty functional keys never enter text: OK")
+end
+
 if failed > 0 then
     os.exit(1)
 end

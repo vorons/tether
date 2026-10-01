@@ -2828,15 +2828,28 @@ local function render_transcript(L)
     if res.top_changed then
         if res.shift_seq then
             frame_put(res.shift_seq)
-            -- the shift physically moved row contents: forget every
-            -- cached row inside the region so the diff repaints the
-            -- freshly exposed lines (and only them)
+            -- L8: the shift moved row contents inside the region, so move
+            -- the row cache with them: only the newly exposed rows need a
+            -- repaint. (Clearing the whole region here made the fast path
+            -- dead — every scroll repainted fully.)
+            local d = res.shift or 0
+            local top_row = L.transcript_row
+            local bottom_row = L.transcript_row + L.transcript_h - 1
+            if d > 0 then
+                -- contents moved up: screen row r now shows old r+d.
+                for r = top_row, bottom_row do S.screen[r] = S.screen[r + d] end
+                for r = bottom_row - d + 1, bottom_row do S.screen[r] = nil end
+            elseif d < 0 then
+                -- contents moved down: screen row r now shows old r+d.
+                for r = bottom_row, top_row, -1 do S.screen[r] = S.screen[r + d] end
+                for r = top_row, top_row - d - 1 do S.screen[r] = nil end
+            else
+                for r = top_row, bottom_row do S.screen[r] = nil end
+            end
+        else
             for r = L.transcript_row, L.transcript_row + L.transcript_h - 1 do
                 S.screen[r] = nil
             end
-        end
-        for r = L.transcript_row, L.transcript_row + L.transcript_h - 1 do
-            S.screen[r] = nil
         end
         S.last_transcript_top = res.last_top
         S.last_transcript_w = res.last_w
@@ -3428,11 +3441,15 @@ slash_callbacks.resume = function(bag, cmd, rest)
             -- session ts is ISO ("2026-09-24T10:00:00"): show the clock time,
             -- not the year prefix sub(1,5) used to show ("2026-" on every row).
             local ts = (f.ts and f.ts:match("T(%d%d:%d%d)")) or "…"
+            local first = f.first_line or ""
+            local pc = M._provider_common
+            if pc and pc.utf8_prefix then first = pc.utf8_prefix(first, 40)
+            else first = first:sub(1, 40) end
             items[#items + 1] = {
                 label = string.format("%s · %s · %s",
                     ts,
                     (f.id and f.id:sub(1, 8)) or "…",
-                    (f.first_line or ""):sub(1, 40)),
+                    first),
                 id = f.id,
             }
         end
@@ -3545,7 +3562,7 @@ local handle_key
 -- OWN: S._logout_confirm <- logout_ask_confirm, logout_confirm_back, logout_close
 -- OWN: S._logout_sel <- logout_ask_confirm, logout_confirm_back, logout_close
 -- OWN: S.completion <- path_complete_tab, completion_cancel, completion_commit, picker_close, token_refilter, mention_open, on_palette_path
--- OWN: S.completion.* <- path_complete_tab, token_refilter, on_palette_mention, on_palette_path
+-- OWN: S.completion.* <- path_complete_tab, token_refilter, on_palette_mention, on_palette_path, on_mouse
 -- Out of scope (owned elsewhere): S.login_secret/login_provider/login_flow
 -- (ui_auth begin/cancel/submit/poll_tick), S.confirmation.detail (read by
 -- resolve_confirmation), S.history (input history), S._models_bg/_models_err
@@ -3789,7 +3806,11 @@ local function run_bang(s)
     local exit_n = res.exit_code or 0
     local out = res.output or ""
     -- same bound as the run tool's UI body
-    if #out > 16 * 1024 then out = out:sub(1, 16 * 1024) .. "\n…(truncated)" end
+    if #out > 16 * 1024 then
+        local pc = M._provider_common
+        out = (pc and pc.utf8_prefix and pc.utf8_prefix(out, 16 * 1024)
+            or out:sub(1, 16 * 1024)) .. "\n…(truncated)"
+    end
     local elapsed = res.elapsed_ms
     local summary = "exit " .. tostring(exit_n)
         .. (elapsed and (", " .. (elapsed < 1000 and (elapsed .. " ms")
@@ -3928,6 +3949,7 @@ function M._confirm_deps()
         content_width = M._content_width,
         ensure = ensure_index,
         row_text = row_text,
+        wrap = M.wrap_lines,
         digits = CONFIRM_DIGITS,
     }
 end
@@ -4421,7 +4443,8 @@ on_login_secret = function(bag, k)
     end
     if k.kind == "backspace" then
         local s = S.login_secret.buf or ""
-        S.login_secret.buf = s:sub(1, math.max(0, #s - 1))
+        local ok, prev = pcall(utf8.offset, s, -1)
+        S.login_secret.buf = (ok and prev and s:sub(1, prev - 1)) or s:sub(1, math.max(0, #s - 1))
         return
     end
     if k.kind == "text" then
@@ -4466,12 +4489,21 @@ on_mouse = function(bag, k)
                 -- 2.5: hit-test through the window offset; the indicator row
                 -- selects nothing; palette-hints: neither the blank nor the
                 -- hint row does (they occupy the region's last two rows).
-                local win, off = M._palette.window(L.h, #S.palette_items, S.palette_sel)
-                local last = math.min(L.palette_row + win,
+                -- L10: test the painted (clamped) window, not the raw one —
+                -- the region may shrink it and the query row takes one more.
+                local has_query = (S.palette_mode == "model" or S.palette_mode == "login"
+                        or S.palette_mode == "logout") and (S.palette_query or "") ~= ""
+                local paint_win, off = M._palette.paint_window(
+                    L.h, #S.palette_items, S.palette_sel, L.palette_h, has_query)
+                local last = math.min(L.palette_row + paint_win,
                     L.palette_row + L.palette_h - 2)
                 if k.row <= last then
-                    local it = S.palette_items[off + (k.row - L.palette_row) - 1]
+                    local hit = off + (k.row - L.palette_row) - 1
+                    local it = (hit >= 1 and hit <= #S.palette_items)
+                        and S.palette_items[hit] or nil
                     if it then
+                        S.palette_sel = hit
+                        if S.completion then S.completion.sel = hit end
                         if it.skill or it.prompt then
                             palette_pick_skill(it)
                         elseif it.cmd then
@@ -4522,11 +4554,19 @@ on_mouse = function(bag, k)
                             S.palette_sel = 1
                             S._in_think_palette = nil
                             pick.think(it.label)
+                        elseif S.palette_mode == "path" and it.label then
+                            -- L10: a click applies the file candidate exactly
+                            -- as Enter does (token splice, prefix kept).
+                            M._complete.completion_apply(S, it.label)
+                            M._picker_close()
+                        elseif S.palette_mode == "mention" and it.label then
+                            -- L10: a click accepts the mention under it.
+                            M._mention_accept()
                         end
                     end
                     return
                 end
-                if k.row == L.palette_row + win + 1 then return end -- indicator row
+                if k.row == L.palette_row + paint_win + 1 then return end -- indicator row
             end
             -- 3.4: a left click toggles the tool entry under the pointer, but
             -- only where the mouse mode actually delivers transcript clicks.

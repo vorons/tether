@@ -87,6 +87,18 @@ local function window(h, n, sel)
 end
 M.window = window
 
+local function paint_window(h, n, sel, palette_h, has_query)
+    -- L10: the entry rows the painter actually fills — the hit-test must
+    -- use this clamped window, not the raw `window()` count (the region
+    -- may shrink it, and the query row takes one more).
+    local win, off = window(h, n, sel)
+    local room = math.max(0, (palette_h or 0) - 2)
+    local paint_win = math.min(win, room - (has_query and 1 or 0))
+    if paint_win < 0 then paint_win = 0 end
+    return paint_win, off, room
+end
+M.paint_window = paint_window
+
 local function indicator(q, n, sel, paint_win, truncated, copy)
     if q ~= "" then
         local txt = copy.query_prefix .. q
@@ -128,7 +140,9 @@ local function render(slice, L, P)
     -- it, plus a dim pos/total row when the list overflows it.
     local n = #items
     local sel = slice.sel or 1
-    local win, off = window(L.h or 24, n, sel)
+    -- L10: one clamp for paint and hit-test (see paint_window above).
+    local paint_win, off, room = paint_window(L.h or 24, n, sel,
+        L.palette_h or 0, q ~= "")
     -- the blank+hint pair anchors to the region bottom — hint on the last
     -- reserved row, blank one above, footer flush under it. Entries and the
     -- indicator/query row keep the top-flush layout inside the rows above
@@ -137,9 +151,6 @@ local function render(slice, L, P)
     local palette_row = L.palette_row or 1
     local palette_h = L.palette_h or 0
     local hint_row = palette_row + palette_h
-    local room = math.max(0, hint_row - 2 - palette_row)
-    local paint_win = math.min(win, room - (q ~= "" and 1 or 0))
-    if paint_win < 0 then paint_win = 0 end
     local cw = slice.content_width or 80
     local g = slice.gutter or ""
     local trunc = P.trunc or function(s) return s end

@@ -1986,6 +1986,44 @@ do
   print("T3.1 slash dispatch table: OK")
 end
 
+-- T358b (audit L10): a click on a path/mention candidate applies it through
+-- the same splice as Enter/Tab — the typed prefix survives, the palette
+-- closes. Clicks the second row to prove the hit maps to the row it hit.
+do
+  local uim, S = run_ui_with({ 17 }, {
+    agent = { turn = function() return true end, get_history = function() return {} end },
+  })
+  -- path branch
+  S.input = "cat fi"
+  S.cursor = 6
+  S.completion = { start = 5, original = "fi", tail = "" }
+  S.palette_active = true
+  S.palette_mode = "path"
+  S.palette_items = { { label = "file1.txt", desc = "" },
+                      { label = "file2.txt", desc = "" } }
+  S.palette_sel = 1
+  local L = uim._layout()
+  uim._handle_key({ kind = "mouse", name = "press",
+    row = L.palette_row + 2, col = 5, button = 0 })
+  assert_eq(S.input, "cat file2.txt", "T358b click applies the hit file")
+  assert_true(S.palette_active == false, "T358b click closes the palette")
+  -- mention branch
+  S.input = "@al"
+  S.cursor = 3
+  S.completion = { start = 1, mention = true }
+  S.palette_active = true
+  S.palette_mode = "mention"
+  S.palette_items = { { label = "alice", desc = "" },
+                      { label = "alex", desc = "" } }
+  S.palette_sel = 1
+  L = uim._layout()
+  uim._handle_key({ kind = "mouse", name = "press",
+    row = L.palette_row + 2, col = 5, button = 0 })
+  assert_eq(S.input, "@alex", "T358b click accepts the hit mention")
+  assert_true(S.palette_active == false, "T358b mention click closes")
+  print("T358b completion click applies the hit candidate: OK")
+end
+
 
 if failed > 0 then
     os.exit(1)

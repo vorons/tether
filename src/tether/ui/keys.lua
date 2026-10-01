@@ -97,8 +97,11 @@ local function decode_modified_key(code, mods)
         return { kind = "ctrl", code = c, shift = mods.shift, alt = mods.alt }
     end
     if mods.alt and code >= 32 then return { kind = "alt", code = code } end
-    -- No modifiers: only terminals reporting every key (flag 8) send text here
-    if code >= 32 and code < 57344 then return { kind = "text", char = utf8.char(code) } end
+    -- No modifiers: only terminals reporting every key (flag 8) send text here.
+    -- Kitty functional codes (57312..57343) are keys, never text.
+    if code >= 32 and code < 57344 and not (code >= 57312 and code <= 57343) then
+        return { kind = "text", char = utf8.char(code) }
+    end
     return { kind = "special", name = "unknown" }
 end
 M.decode_modified_key = decode_modified_key

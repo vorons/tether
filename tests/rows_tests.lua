@@ -1870,6 +1870,61 @@ do
   print("T4.2c confirm menu diff highlight: OK")
 end
 
+-- T359 (audit L11): a wrapped option label still resolves to its option.
+-- At width 20 the second label wraps to two visual rows; a click on its
+-- continuation row must pick option 2 (old math: one row per option plus a
+-- prefix match on the clicked text — the click fell through silently).
+do
+  local cf = assert(loadfile("src/tether/ui/confirm.lua"))()
+  local function wrap_stub(s, w)
+    local out = {}
+    s = tostring(s)
+    while #s > w do
+      out[#out + 1] = s:sub(1, w)
+      s = s:sub(w + 1)
+    end
+    out[#out + 1] = s
+    return out
+  end
+  local P = { yellow = function(s) return s end, rev = function(s) return "R" .. s end,
+    wrap = wrap_stub, hint = function() return "HINT" end, confirm_hint = {} }
+  local cw = 20
+  local c = { label = "run?", question = "Allow?",
+    options = { "allow once", "allow for this whole very long session" },
+    detail = { id = "c1", name = "run" } }
+  local rows = cf.menu_rows(c, 1, cw, P)
+  -- option 2 wraps: the block is taller than options+2
+  assert_true(#rows > 2 + 2 + 2, "T359 long label wraps to extra rows")
+  local decided = {}
+  local L = { transcript_row = 5, transcript_h = 20, w = 80 }
+  local deps = {
+    turn = { confirm = function(id, decision) decided[#decided + 1] = decision
+               return true end,
+             continue = function() return true end },
+    agent = {},
+    layout = function() return L end,
+    content_width = function() return cw end,
+    ensure = function() return #rows end,
+    row_text = function(idx) return rows[idx] or "" end,
+    wrap = wrap_stub,
+    sync = function() end, bump = function() end, settle = function() end,
+    note = function() end,
+    digits = { [1] = "allow", [2] = "session" },
+  }
+  -- continuation row of option 2 = its second visual row
+  local opt1_h = #wrap_stub("  allow once", cw)
+  local opt2_first = (#rows - 2) - (#wrap_stub("  " .. c.options[2], cw)) + 1
+  local click_row = L.transcript_row + (opt2_first + 1 - 1) -- second visual row
+  local bag = { confirmation = c, confirmation_sel = 1, scroll = 0,
+    user_scrolled = false, h = 24 }
+  cf.handle_confirmation_key(bag, deps,
+    { kind = "mouse", name = "press", row = click_row })
+  assert_eq(bag.confirmation, nil, "T359 continuation click resolves")
+  assert_eq(decided[1], "session", "T359 continuation click picks option 2")
+  assert_eq(opt1_h, 1, "T359 short label stays one row")
+  print("T359 wrapped confirmation label resolves: OK")
+end
+
 -- streaming-repaint-budget 3.1: wall-clock budgets for streaming repaints.
 -- Realistic multi-line model output (NOT single-line floods — those defeat
 -- line-based incrementality by construction, see ui.lua md_cached).

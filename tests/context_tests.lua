@@ -27,17 +27,24 @@ local function write_file(path, content)
     f:close()
 end
 
+-- Every shell path goes through single quotes (defined before any use):
+-- word splitting on a space in the path would turn one `rm -rf` into
+-- several, and metacharacters would execute.
+local function sq(p)
+    return "'" .. tostring(p):gsub("'", "'\\''") .. "'"
+end
+
 -- Build an isolated HOME so tests don't touch the real one, and a scratch
 -- workspace. context.lua reads os.getenv("HOME") at call time.
 local function setup_sandbox(prefix)
     local home = os.tmpname()
     os.remove(home)
-    os.execute("mkdir -p " .. home)
+    os.execute("mkdir -p " .. sq(home))
     local ws = os.tmpname()
     os.remove(ws)
-    os.execute("mkdir -p " .. ws)
-    os.execute("mkdir -p " .. ws .. "/.tether/skills " .. ws .. "/.agents/skills")
-    os.execute("mkdir -p " .. home .. "/.tether/skills " .. home .. "/.agents/skills")
+    os.execute("mkdir -p " .. sq(ws))
+    os.execute("mkdir -p " .. sq(ws .. "/.tether/skills") .. " " .. sq(ws .. "/.agents/skills"))
+    os.execute("mkdir -p " .. sq(home .. "/.tether/skills") .. " " .. sq(home .. "/.agents/skills"))
     -- point HOME at the sandbox
     _ENV.HOME = home
     -- os.getenv is fixed for the process; use a shim via `env` override is not
@@ -59,20 +66,19 @@ assert(HOME and WS, "context_tests: run with HOME=<sandbox> TETHER_TEST_WORKSPAC
 
 -- reset_sandbox() runs `rm -rf`, so a non-sandbox HOME would delete the real
 -- ~/.tether/skills and ~/.agents/skills. Refuse anything that is not a fresh
--- directory under the system temp root (mktemp -d in the Makefile).
+-- directory under the system temp root (mktemp -d in the Makefile). L7: the
+-- prefix check alone passes a hostile `HOME="/tmp/x; touch PWNED; echo "`,
+-- so the charset is restricted too — metacharacters never reach the shell.
 local TMPROOT = (os.getenv("TMPDIR") or "/tmp"):gsub("/+$", "") .. "/"
 local function in_sandbox(p)
+    if type(p) ~= "string" then return false end
+    if not p:match("^[A-Za-z0-9%-%._/]+$") then return false end
+    if p:find("%.%.", 1, true) then return false end
     return #p > #TMPROOT and p:sub(1, #TMPROOT) == TMPROOT
 end
 assert(in_sandbox(HOME) and in_sandbox(WS),
     "context_tests: HOME and TETHER_TEST_WORKSPACE must live under " .. TMPROOT
     .. " (rm -rf sandbox guard)")
-
--- Every path goes through single quotes: word splitting on a space in the path
--- would turn one `rm -rf` into several, and metacharacters would execute.
-local function sq(p)
-    return "'" .. tostring(p):gsub("'", "'\\''") .. "'"
-end
 
 local function reset_sandbox()
     -- wipe skill + agents files
@@ -213,7 +219,7 @@ end
 do
     reset_sandbox()
     -- workspace .tether/skills has a skill
-    os.execute("mkdir -p " .. WS .. "/.tether/skills/deploy")
+    os.execute("mkdir -p " .. sq(WS .. "/.tether/skills/deploy"))
     write_file(WS .. "/.tether/skills/deploy/SKILL.md",
                "---\nname: deploy\ndescription: Ship the app\n---\n# Deploy\n")
 
@@ -234,7 +240,7 @@ do
     reset_sandbox()
     local custom = os.tmpname()
     os.remove(custom)
-    os.execute("mkdir -p " .. custom .. "/only-skill")
+    os.execute("mkdir -p " .. sq(custom .. "/only-skill"))
     write_file(custom .. "/only-skill/SKILL.md", "---\nname: only\ndescription: custom dir\n---\n")
 
     local skills = ctx.discover_skills({ skills_dirs = { custom } }, WS)
@@ -242,20 +248,20 @@ do
     assert_eq(skills[1].name, "only", "T10 name")
 
     -- skills_dirs replacing defaults: ensure default ws skill is NOT included
-    os.execute("mkdir -p " .. WS .. "/.tether/skills/extra")
+    os.execute("mkdir -p " .. sq(WS .. "/.tether/skills/extra"))
     write_file(WS .. "/.tether/skills/extra/SKILL.md", "---\nname: extra\n---\n")
     local skills2 = ctx.discover_skills({ skills_dirs = { custom } }, WS)
     assert_eq(#skills2, 1, "T11 skills_dirs excludes default dirs")
     assert_eq(skills2[1].name, "only", "T11 only custom")
 
-    os.execute("rm -rf " .. custom)
+    os.execute("rm -rf " .. sq(custom))
     print("T10/T11 skills_dirs: OK")
 end
 
 -- ============ 5. first-wins collision ============
 do
     reset_sandbox()
-    os.execute("mkdir -p " .. HOME .. "/.tether/skills/dup " .. WS .. "/.tether/skills/dup")
+    os.execute("mkdir -p " .. sq(HOME .. "/.tether/skills/dup") .. " " .. sq(WS .. "/.tether/skills/dup"))
     write_file(HOME .. "/.tether/skills/dup/SKILL.md", "---\nname: dup\ndescription: from home\n---\n")
     write_file(WS .. "/.tether/skills/dup/SKILL.md", "---\nname: dup\ndescription: from ws\n---\n")
 
@@ -276,7 +282,7 @@ do
     reset_sandbox()
     write_file(HOME .. "/.tether/AGENTS.md", "home-rules")
     write_file(WS .. "/AGENTS.md", "ws-rules")
-    os.execute("mkdir -p " .. WS .. "/.tether/skills/deploy")
+    os.execute("mkdir -p " .. sq(WS .. "/.tether/skills/deploy"))
     write_file(WS .. "/.tether/skills/deploy/SKILL.md",
                "---\nname: deploy\ndescription: Ship the app\n---\n# Deploy\n")
 
@@ -298,7 +304,7 @@ end
 do
     reset_sandbox()
     write_file(WS .. "/AGENTS.md", "ws-rules")
-    os.execute("mkdir -p " .. WS .. "/.tether/skills/deploy")
+    os.execute("mkdir -p " .. sq(WS .. "/.tether/skills/deploy"))
     write_file(WS .. "/.tether/skills/deploy/SKILL.md", "---\nname: deploy\ndescription: d\n---\n")
 
     local prompt = ctx.compose({ system_prompt = "CUSTOM BASE" }, { workspace = WS })
@@ -354,7 +360,7 @@ end
 do
     reset_sandbox()
     -- remove all default skill dirs entirely
-    os.execute("rm -rf " .. HOME .. "/.tether " .. WS .. "/.tether " .. HOME .. "/.agents " .. WS .. "/.agents")
+    os.execute("rm -rf " .. sq(HOME .. "/.tether") .. " " .. sq(WS .. "/.tether") .. " " .. sq(HOME .. "/.agents") .. " " .. sq(WS .. "/.agents"))
     local skills = ctx.discover_skills({}, WS)
     assert_eq(#skills, 0, "T17 no default dirs -> no skills")
     print("T17 no default dirs: OK")

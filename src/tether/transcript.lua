@@ -661,16 +661,19 @@ function M.render_viewport(slice, L, P)
     -- subset/superset reuse guard + region-size guard live in P's
     -- scroll_shift_seq (returns "" when unusable).
     local top_changed = slice.last_transcript_top ~= top
-    local shift_seq = nil
+    local shift_seq, shift = nil, 0
     if top_changed and slice.last_transcript_top
         and slice.last_transcript_w == cw
         and not slice.alt_screen then
         local old_top = slice.last_transcript_top
-        local delta = old_top - top -- >0: content moved up (scroll down)
+        -- L8: positive delta = viewport moved toward newer rows, so the
+        -- region contents move UP (SU); negative = toward older rows,
+        -- contents move DOWN (SD). The old sign was backwards.
+        local delta = top - old_top
         if delta ~= 0 and P.scroll_shift_seq then
             local seq = P.scroll_shift_seq(L.h, L.transcript_row,
                 (L.transcript_row or 1) + th - 1, delta)
-            if seq ~= "" then shift_seq = seq end
+            if seq ~= "" then shift_seq, shift = seq, delta end
         end
     end
     -- live tail — the caret while deltas are still streaming. Applied at
@@ -722,7 +725,7 @@ function M.render_viewport(slice, L, P)
         last_transcript_h = th,
         total = total, top = top, bottom = bottom,
         visible_lo = lo, visible_hi = hi,
-        top_changed = top_changed, shift_seq = shift_seq,
+        top_changed = top_changed, shift_seq = shift_seq, shift = shift,
     }
 end
 

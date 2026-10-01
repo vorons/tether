@@ -570,6 +570,10 @@ do
     monotonic_ms = function() return 1000 end,
   }
   local sub = assert(loadfile("src/tether/subagent.lua"))()
+  local function has_task_in_argv(a, task)
+    for _, v in ipairs(a) do if v == task then return true end end
+    return false
+  end
   local cfg = { workspace = "/tmp/ws", model = "m",
     subagents = { max_parallel = 4, timeout = 600, max_depth = 1 } }
   local it = assert(sub.validate_item({ task = "go", resume = "abc" }, {}, cfg))
@@ -582,9 +586,10 @@ do
   local pi1 = nil
   for i, v in ipairs(a1) do if v == "--print" then pi1 = i end end
   assert_notnil(pi1, "T241 child argv has --print")
-  assert_eq(a1[pi1 + 1], "go", "T241 prompt glued to --print")
-  assert_eq(a1[pi1 + 2], "--resume", "T241 resume flag after the prompt")
-  assert_eq(a1[pi1 + 3], "childsid1", "T241 child resumes the minted journal")
+  assert_eq(a1[pi1 + 1], "--resume", "T241 resume flag follows --print (task rides stdin)")
+  assert_eq(a1[pi1 + 2], "childsid1", "T241 child resumes the minted journal")
+  assert_true(not has_task_in_argv(a1), "T241 task never appears in argv")
+  assert_eq(spawns[1].opts.stdin.pipe, "go", "T241 task rides piped stdin")
   assert_eq(spawns[1].opts.env.TETHER_WORKSPACE, "/tmp/ws", "T241 workspace in child env")
   local jid = rec.jobs[1].id
   assert_eq(sub._running[jid].item.sid, "childsid1", "T241 item carries sid")
@@ -596,9 +601,10 @@ do
   local pi2 = nil
   for i, v in ipairs(a2) do if v == "--print" then pi2 = i end end
   assert_notnil(pi2, "T241 sequel argv has --print")
-  assert_eq(a2[pi2 + 1], "again", "T241 sequel prompt glued to --print")
-  assert_eq(a2[pi2 + 2], "--resume", "T241 sequel resume flag after the prompt")
-  assert_eq(a2[pi2 + 3], "abc", "T241 sequel resumes the given journal")
+  assert_true(not has_task_in_argv(a2), "T241 sequel task never appears in argv")
+  assert_eq(a2[pi2 + 1], "--resume", "T241 sequel resume flag follows --print")
+  assert_eq(a2[pi2 + 2], "abc", "T241 sequel resumes the given journal")
+  assert_eq(spawns[2].opts.stdin.pipe, "again", "T241 sequel task rides piped stdin")
   sub.cancel_all("over")
   -- results report the session
   local fuller = { status = "ok", exit_code = 0, output = "hi",
@@ -628,27 +634,30 @@ do
   print("T242 debug propagates to child: OK")
 end
 
--- T243: argv-branch children detach stdin. A bg-group child sharing the
--- parent's terminal stops at SIGTTOU in init_termios (State T, zero
--- output) — </dev/null keeps isatty false. The pipe branch (leading
--- dash) must keep its stdin pipe: no redirect there.
+-- T243 (audit L5): the task never rides argv — every child gets piped
+-- stdin, so `ps` never shows task text. A bg-group child sharing the
+-- parent's terminal would stop at SIGTTOU in init_termios, so the pipe
+-- (not the terminal) is the child's stdin in all cases.
 do
   local sub = assert(loadfile("src/tether/subagent.lua"))()
-  local _, opts = sub.build_command(
+  local argv, opts = sub.build_command(
     { task = "go", cwd = "/ws", timeout = 5, sid = "s1" }, {})
-  assert_eq(opts.stdin, "null",
-    "T243 argv child detaches stdin")
+  assert_eq(type(opts.stdin), "table",
+    "T243 plain task goes through the pipe")
+  assert_eq(opts.stdin.pipe, "go",
+    "T243 pipe carries the exact task bytes")
+  for _, v in ipairs(argv) do
+    assert_true(v ~= "go", "T243 task never appears in argv")
+  end
+  assert_eq(argv[#argv - 1], "--resume",
+    "T243 argv ends at the resume flag, task rides stdin")
+  assert_eq(argv[#argv], "s1",
+    "T243 argv keeps the resume session")
   local pargv, popts = sub.build_command(
     { task = "- go", cwd = "/ws", timeout = 5, sid = "s1" }, {})
-  assert_eq(type(popts.stdin), "table",
-    "T243 leading-dash task still goes through the pipe")
   assert_eq(popts.stdin.pipe, "- go",
-    "T243 pipe carries the exact task bytes")
-  assert_eq(pargv[#pargv - 1], "--resume",
-    "T243 pipe branch argv ends at the resume flag, task rides stdin")
-  assert_eq(pargv[#pargv], "s1",
-    "T243 pipe branch keeps the resume session")
-  print("T243 bg child detaches stdin: OK")
+    "T243 leading-dash task still arrives byte-exact")
+  print("T243 task rides stdin, never argv: OK")
 end
 
 -- === M7 regression suite (recreated) + M8 TDD tests =========================
@@ -1040,7 +1049,7 @@ with_modules(base_env, function(mods)
         { "●", "*" }, { "⚙", "[t]" }, { "›", ">" }, { "✗", "[x]" }, { "✓", "[ok]" }, { "✻", "*" },
         { "↻", "[r]" }, { "⏹", "[x]" }, { "⚠", "!" }, { "▸", ">" }, { "▾", "v" },
         { "┌", "+" }, { "┐", "+" }, { "└", "+" }, { "┘", "+" }, { "─", "-" },
-        { "│", "|" }, { "•", "-" }, { "…", "..." }, { "▓", "#" }, { "░", "-" },
+        { "│", "|" }, { "•", "*" }, { "…", "..." }, { "▓", "#" }, { "░", "-" },
         { "↑", "^" }, { "↓", "v" }, { "←", "<" }, { "→", ">" },
         -- pi-style 1.2: scroll-label glyphs the box rules carry
         { "↑ 3 more", "^ 3 more" }, { "↓ 2 more", "v 2 more" },
@@ -1392,6 +1401,18 @@ with_modules(base_env, function(mods)
     -- bottom = 50-10=40; visible rows 21..40; below = 50-40 = 10
     assert_eq(n, 10, "T34 hidden-below count")
 end)
+
+-- T352 (audit L9): the glyph map holds one ["•"] entry — the duplicate key
+-- (shadowed "-", dead "*") is gone, so ASCII render is deterministic.
+do
+  local themes = assert(loadfile("src/tether/ui/themes.lua"))()
+  assert_eq(themes.GLYPH_MAP["•"], "*", "T352 bullet maps once")
+  local src = assert(io.open("src/tether/ui/themes.lua", "r")):read("*a")
+  local _, dupes = src:gsub('%["•"%]', "")
+  assert_eq(dupes, 1, "T352 single bullet key in source")
+  assert_eq(themes.to_ascii("•"), "*", "T352 ascii bullet is stable")
+  print("T352 glyph map dedup: OK")
+end
 
 
 if failed > 0 then

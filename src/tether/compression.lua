@@ -178,7 +178,7 @@ local function truncation_body(old)
     for _, m in ipairs(old) do
         local c = m.content
         if type(c) == "string" then
-            parts[#parts + 1] = m.role .. ": " .. (c:sub(1, 200) .. (c:len() > 200 and "…" or ""))
+            parts[#parts + 1] = m.role .. ": " .. (common.utf8_prefix(c, 200) .. (#c > 200 and "…" or ""))
         end
     end
     return table.concat(parts, "\n")
@@ -233,7 +233,7 @@ end
 local function anchor_snippet(text, max)
     max = max or M.ANCHOR_GOAL_MAX
     local line = tostring(text or ""):gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", "")
-    if #line > max then return line:sub(1, max - 1) .. "…" end
+    if #line > max then return common.utf8_prefix(line, max - 1) .. "…" end
     return line
 end
 

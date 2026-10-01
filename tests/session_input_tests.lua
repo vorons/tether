@@ -371,7 +371,8 @@ do
   local pi = nil
   for i, a in ipairs(argv) do if a == "--print" then pi = i end end
   assert_notnil(pi, "T224 argv print mode")
-  assert_eq(argv[pi + 1], "fix it", "T224 task glued to --print")
+  assert_eq(argv[pi + 1], nil, "T224 task never follows --print in argv (L5 stdin transport)")
+  assert_eq(opts.stdin.pipe, "fix it", "T224 task rides piped stdin")
   assert_eq(opts.env.TETHER_SUBAGENT_DEPTH, "1", "T224 opts carries depth+1")
   local mi = nil
   for i, a in ipairs(argv) do if a == "--model" then mi = i end end
@@ -379,7 +380,6 @@ do
   assert_eq(argv[mi + 1], "m", "T224 argv carries model value")
   assert_eq(opts.cwd, "/ws", "T224 opts carries cwd")
   assert_true(opts.outfile ~= nil and opts.outfile ~= "", "T224 opts reserves an outfile")
-  assert_eq(opts.stdin, "null", "T224 argv child detaches stdin")
   local argv2, opts2 = sub.build_command(
     { task = "- review the diff", cwd = "/ws", timeout = 5 }, ctx)
   assert_eq(type(opts2.stdin), "table",
@@ -387,7 +387,7 @@ do
   assert_eq(opts2.stdin.pipe, "- review the diff",
     "T224 pipe carries the exact task bytes")
   assert_eq(argv2[#argv2], "--print",
-    "T224 pipe branch keeps nothing after --print")
+    "T224 argv ends at --print, task rides stdin")
   -- wait_task: done path with a mocked host
   local polls = 0
   _G.tether = {
@@ -499,16 +499,13 @@ do
   print("T230 subagent child binary resolution: OK")
 end
 
--- T231: the task must ride glued to --print (`--print <task>` adjacent).
--- parse_args takes the prompt from the slot right after --print unless it
--- starts with `-`; with `--print -w ... <task>` the task lands on an
--- unknown positional and is silently dropped — the child then blocks on
--- inherited stdin (hang) or exits "requires a prompt argument".
+-- T231 (audit L5): the task rides piped stdin, never argv — `ps` stays
+-- clean. Flags precede --print; nothing task-shaped follows it.
 do
   local orig_tether = _G.tether
   _G.tether = {}
   local sub = assert(loadfile("src/tether/subagent.lua"))()
-  local argv = sub.build_command(
+  local argv, opts = sub.build_command(
     { task = "fix it", model = "m", cwd = "/ws", timeout = 5 }, {})
   local pi, wi = nil, nil
   for i, a in ipairs(argv) do
@@ -516,18 +513,69 @@ do
     if a == "-w" then wi = i end
   end
   assert_notnil(pi, "T231 argv has --print")
-  assert_eq(argv[pi + 1], "fix it",
-    "T231 task immediately follows --print")
+  assert_eq(argv[pi + 1], nil, "T231 no task follows --print (stdin transport)")
+  assert_eq(opts.stdin.pipe, "fix it", "T231 stdin carries the exact task")
   assert_true(wi ~= nil and pi ~= nil and wi < pi,
     "T231 flags precede --print")
-  local argv2 = sub.build_command(
+  local argv2, opts2 = sub.build_command(
     { task = "fix it", cwd = "/ws", timeout = 5 }, {})
   local pi2 = nil
   for i, a in ipairs(argv2) do if a == "--print" then pi2 = i end end
-  assert_eq(argv2[pi2 + 1], "fix it",
-    "T231 task glued without optional flags too")
+  assert_eq(argv2[#argv2], "--print",
+    "T231 argv ends at --print without optional flags too")
+  assert_eq(opts2.stdin.pipe, "fix it",
+    "T231 stdin carries the task without optional flags too")
   _G.tether = orig_tether
-  print("T231 subagent task rides with --print: OK")
+  print("T231 subagent task rides stdin, never argv: OK")
+end
+
+-- T355 (audit L5): a hostile task (shell metacharacters, newlines, leading
+-- dash, ps-visible secrets) never appears in argv — it rides piped stdin
+-- byte-exact, with or without a resume sequel.
+do
+  local orig_tether = _G.tether
+  _G.tether = {}
+  local sub = assert(loadfile("src/tether/subagent.lua"))()
+  local nasty = "rm -rf ~; $(reboot) `id`\n-second line 'quoted' \"hi\""
+  local argv, opts = sub.build_command(
+    { task = nasty, cwd = "/ws", timeout = 5, sid = "s9" }, {})
+  for _, v in ipairs(argv) do
+    assert_true(v ~= nasty and not v:find("reboot", 1, true),
+      "T355 task text never appears in argv")
+  end
+  assert_eq(type(opts.stdin), "table", "T355 stdin is piped")
+  assert_eq(opts.stdin.pipe, nasty, "T355 pipe carries exact task bytes")
+  assert_eq(argv[#argv - 1], "--resume", "T355 resume follows --print")
+  assert_eq(argv[#argv], "s9", "T355 sequel session kept")
+  _G.tether = orig_tether
+  print("T355 hostile task rides stdin, never argv: OK")
+end
+
+-- T356 (audit L6): history.jsonl stays bounded — over the entry limit the
+-- oldest rows drop, the newest survive with their {ts, workspace, text}
+-- shape intact.
+do
+  local orig_tether, orig_common = _G.tether, _G.provider_common
+  _G.tether = host_mock{ getcwd = function() return "/tmp" end }
+  _G.provider_common = assert(loadfile("src/tether/providers/common.lua"))()
+  local sess = assert(loadfile("src/tether/session.lua"))()
+  local dir = "/tmp/tether_t356_history"
+  os.execute("rm -rf " .. dir .. " && mkdir -p " .. dir)
+  sess._history_file = dir .. "/history.jsonl"
+  sess.HISTORY_MAX_ENTRIES = 10
+  sess.HISTORY_KEEP_ENTRIES = 4
+  for i = 1, 12 do sess.add_history("task-" .. i, "/ws") end
+  local rows = {}
+  for line in io.lines(dir .. "/history.jsonl") do rows[#rows + 1] = line end
+  assert_true(#rows <= 10, "T356 history stays within the entry bound")
+  local last = _G.provider_common.json_decode(rows[#rows])
+  assert_eq(last.text, "task-12", "T356 newest entry survives rotation")
+  assert_eq(last.workspace, "/ws", "T356 row shape intact after rotation")
+  local first = _G.provider_common.json_decode(rows[1])
+  assert_true(first.text ~= "task-1", "T356 oldest entries dropped")
+  _G.tether, _G.provider_common = orig_tether, orig_common
+  os.execute("rm -rf " .. dir)
+  print("T356 bounded history rotation: OK")
 end
 
 -- T232: bg spawn returns pending without blocking. run_call_bg validates

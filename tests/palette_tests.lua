@@ -62,6 +62,47 @@ do
   print("T1.2 ui_palette.render module: OK")
 end
 
+-- T358 (audit L10): the click hit-test uses the painted (clamped) window,
+-- not the raw one — paint_window is the single clamp both sides share, so
+-- a shrunk region or a query row cannot misroute a click. Entry rows the
+-- painter emits exactly fill it.
+do
+  local pal = assert(loadfile("src/tether/ui/palette.lua"))()
+  local P = { trunc = function(s) return s end, vlen = function(s) return #s end,
+    dim = function(s) return s end, accent = function(s) return s end,
+    rule = function() return "RULE" end, hint = function() return "HINT" end }
+  local function entry_rows(slice, L)
+    local n = 0
+    for _, r in ipairs(pal.render(slice, L, P)) do
+      if r[1] > (L.palette_row or 1) and r[2]:find("file", 1, true) then n = n + 1 end
+    end
+    return n
+  end
+  local items = {}
+  for i = 1, 20 do items[#items + 1] = { label = "file" .. i .. ".txt", desc = "" } end
+  -- roomy region: full window of 8
+  local pw, off = pal.paint_window(24, 20, 1, 24, false)
+  assert_eq(pw, 8, "T358 roomy region paints the full window")
+  -- shrunk region: clamped to room
+  local pw2 = pal.paint_window(24, 20, 1, 6, false)
+  assert_eq(pw2, 4, "T358 shrunk region clamps the window")
+  -- query row takes one more when the region is tight
+  local pw3 = pal.paint_window(24, 20, 1, 10, true)
+  assert_eq(pw3, 7, "T358 query row shrinks the window by one")
+  -- the painter fills exactly paint_window entry rows
+  local L = { h = 24, palette_row = 10, palette_h = 6, separator_row = 17 }
+  local slice = { active = true, items = items, sel = 1, mode = "path",
+    query = nil, truncated = false, hints = {}, copy = {},
+    content_width = 78, gutter = " " }
+  assert_eq(entry_rows(slice, L), pw2, "T358 painted entries fill the clamp")
+  -- click mapping: row palette_row+i hits items[off+i-1]
+  local pw4, off4 = pal.paint_window(24, 20, 1, 24, false)
+  assert_eq(off4, 1, "T358 first window starts at item 1")
+  local hit = off4 + 3 - 1
+  assert_eq(items[hit].label, "file3.txt", "T358 third painted row is the third item")
+  print("T358 completion hit-test uses the painted window: OK")
+end
+
 if failed > 0 then
     os.exit(1)
 end

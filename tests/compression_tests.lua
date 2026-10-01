@@ -147,6 +147,33 @@ do
   print("TCMP metadata chain: OK")
 end
 
+-- T350 (audit L1): summary truncation cuts on glyph boundaries, never
+-- mid-sequence. 199 ASCII bytes + "ж" puts byte 200 inside a 2-byte glyph.
+do
+  local comp = assert(loadfile("src/tether/compression.lua"))()
+  local cyrillic = string.char(0xD0, 0xB6) -- "ж" in UTF-8
+  local body = string.rep("x", 199) .. cyrillic .. string.rep("y", 50)
+  local out = comp.truncation_body({ { role = "user", content = body } })
+  assert_true(utf8.len(out) ~= nil, "T350 summary excerpt stays valid UTF-8")
+  assert_true(out:find("…", 1, true) ~= nil, "T350 cut still marked")
+  local excerpt = out:match("^user: (.-)…$")
+  assert_notnil(excerpt, "T350 excerpt shape")
+  assert_eq(#excerpt, 199, "T350 cut backs off the split glyph")
+  -- short content passes through untouched, no marker.
+  local plain = comp.truncation_body({ { role = "user", content = "hi" } })
+  assert_eq(plain, "user: hi", "T350 short content untouched")
+  -- anchor goal snippet (extract_anchors -> anchor_snippet) is glyph-safe
+  -- too: a Cyrillic run crossing the 140-byte goal cut must not split.
+  -- The 12-byte head makes the cut land mid-glyph (139-12 is odd).
+  local a = comp.extract_anchors({ { role = "user",
+    content = "please fix! " .. string.rep(string.char(0xD0, 0xB6), 100) } })
+  assert_notnil(a.goal, "T350 anchor goal extracted")
+  assert_true(utf8.len(a.goal) ~= nil, "T350 anchor goal stays valid UTF-8")
+  assert_true(a.goal:find("fix", 1, true) ~= nil,
+    "T350 anchor goal keeps its head")
+  print("T350 glyph-safe summary truncation: OK")
+end
+
 if failed > 0 then
     os.exit(1)
 end

@@ -1,8 +1,9 @@
 -- tether subagent — child agent runs for the `subagent` tool (config-less v1).
 --
 -- A task forks `tether --print` as a background child (direct argv spawn
--- via exec_bg_argv — no intermediate shell, so the task text reaches the
--- child byte-exact); the call blocks in the orchestrator's poll loop until
+-- via exec_bg_argv — no intermediate shell; the task text rides piped
+-- stdin, never argv, so it reaches the child byte-exact and stays out of
+-- `ps`); the call blocks in the orchestrator's poll loop until
 -- every task completes.
 -- Globals resolve late (embedded runtime / test stubs): bare `tools` and
 -- `tether` at call time, like agent.lua does.
@@ -141,17 +142,16 @@ function M.normalize_call(args)
 end
 
 -- Build the spawn spec for one validated item. Returns argv, opts.
--- argv is the child command line element-wise: flags first,
--- `--print <task>` last (parse_args takes the prompt from the slot right
--- after --print, so anything between them would swallow the slot and drop
--- the task onto a dead positional). A task starting with `-` rides piped
--- stdin instead (parse_args would eat a leading dash as a flag). opts is
--- {cwd, env, outfile, stdin} for exec_bg_argv: stdin is "null" on the argv
--- branch (off the terminal — a bg-group child sharing the parent's tty
--- stops at SIGTTOU in init_termios, so isatty must stay false) or
--- {pipe = task bytes} on the leading-dash branch (keeps its stdin pipe
--- by design). No shell quoting anywhere on this path: every element
--- travels as its own argv entry.
+-- The task NEVER travels in argv (visible in `ps`): it always rides piped
+-- stdin (`--print` with no prompt argument reads piped stdin in the child,
+-- see app.lua). argv ends at `--print` plus the `--resume` pair when the
+-- item continues a journal. opts is {cwd, env, outfile, stdin} for
+-- exec_bg_argv with stdin always {pipe = task bytes} (keeps its stdin pipe
+-- by design; a bg-group child sharing the parent's tty would stop at
+-- SIGTTOU in init_termios, so /dev/null-or-pipe keeps isatty false). No
+-- shell quoting anywhere on this path: every element travels as its own
+-- argv entry, and the task bytes arrive byte-exact whatever they contain
+-- (quotes, newlines, leading dashes).
 -- The outfile is reserved before spawn: os.tmpname() with LUA_USE_POSIX
 -- is mkstemp — created exclusively, 0600, unguessable.
 function M.build_command(item, ctx)
@@ -196,26 +196,16 @@ function M.build_command(item, ctx)
     -- (cache.resolve_key) reuses the key when its prompt matches and
     -- derives one when it diverged. Absent key = nothing to inherit.
     for k, v in pairs(cache_inherit_env(ctx)) do env[k] = v end
-    -- the child continues this journal (fresh or sequel): the flag rides
-    -- after the prompt slot so parse_args keeps --print glued to the task.
+    -- the child continues this journal (fresh or sequel).
     local function with_resume()
         if is_nonempty_str(item.sid) then
             argv[#argv + 1] = "--resume"
             argv[#argv + 1] = item.sid
         end
     end
-    local stdin
-    if item.task:match("^%-") then
-        with_resume()
-        stdin = { pipe = item.task }
-    else
-        argv[#argv + 1] = item.task
-        with_resume()
-        -- stdin off the terminal: a bg-group child sharing the parent's
-        -- tty stops at SIGTTOU in init_termios (State T, zero output).
-        -- With /dev/null isatty is false and no read can block.
-        stdin = "null"
-    end
+    with_resume()
+    -- L5: the task always rides piped stdin, never argv (ps-clean).
+    local stdin = { pipe = item.task }
     return argv, { cwd = item.cwd, env = env, outfile = outfile, stdin = stdin }
 end
 

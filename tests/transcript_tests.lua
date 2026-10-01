@@ -1464,6 +1464,39 @@ do
   print("T1.1 render_viewport module: OK")
 end
 
+-- T357 (audit L8): the scroll-region shift moves content the right way —
+-- new tail rows shift UP (SU), and the viewport reports a positive shift.
+-- The old sign sent SD for tail growth (content visibly jumped down).
+do
+  local tr = assert(loadfile("src/tether/transcript.lua"))()
+  local regions = assert(loadfile("src/tether/ui/regions.lua"))()
+  tr.configure({ render = function(e, w) return { (e.text or e.role or "?") } end,
+    cache_bound = function() return 4096 end })
+  local lines = {}
+  for i = 1, 12 do lines[#lines + 1] = { role = "user", text = "line" .. i } end
+  tr.reset(lines)
+  local L = { w = 80, h = 24, transcript_row = 5, transcript_h = 4 }
+  local P = { trunc = function(s) return s end, caret = function() return "" end,
+    scroll_shift_seq = regions.scroll_shift_seq }
+  local base = { content_width = 78, gutter = " ", scroll = 0,
+    user_scrolled = false, streaming = false, palette_active = false,
+    confirmation = nil, ask = nil, login_secret = nil, alt_screen = false }
+  local r1 = tr.render_viewport(base, L, P)
+  for i = 13, 14 do tr.append({ role = "user", text = "line" .. i }) end
+  tr.bump() -- structural change: new tail rows join the index
+  base.last_transcript_top = r1.last_top
+  base.last_transcript_w = r1.last_w
+  local r2 = tr.render_viewport(base, L, P)
+  assert_notnil(r2.shift_seq, "T357 tail growth emits a shift sequence")
+  assert_true((r2.shift or 0) > 0, "T357 newer rows shift content up")
+  assert_true(r2.shift_seq:find("S", 1, true) ~= nil, "T357 content-up uses SU")
+  assert_true(regions.scroll_shift_seq(24, 5, 8, 2):find("2S", 1, true) ~= nil,
+    "T357 positive shift scrolls up")
+  assert_true(regions.scroll_shift_seq(24, 5, 8, -2):find("2T", 1, true) ~= nil,
+    "T357 negative shift scrolls down")
+  print("T357 scroll-region direction: OK")
+end
+
 -- scroll-render-budget 2.1: page-step scroll budget with the REAL
 -- render_entry (close-without-code verdict — this test pins the measured
 -- 1.8ms/step against the 8ms budget so future renderer changes cannot

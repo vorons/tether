@@ -3,4 +3,4 @@
 
  v9.9-test
 type filter  ↑↓ select  enter run  tab insert  esc close
-^v > - - |
+^v > * - |

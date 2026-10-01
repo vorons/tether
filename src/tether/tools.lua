@@ -421,6 +421,26 @@ end
 -- a directory (rename fails with EISDIR) and an unwritable directory all used
 -- to be reported as success, so the model believed an edit had landed when the
 -- file still held its old bytes. On any failure the temp file is removed.
+-- Audit L3: the sibling temp file must be unpredictable AND never follow a
+-- pre-existing path (symlink plant in a shared dir). Two layers: the
+-- reservation below keeps names unguessable and skips planted ones, and
+-- tether.write_excl creates+writes atomically (O_CREAT|O_EXCL), so even a
+-- path planted between the stat check and the create fails instead of
+-- being followed. Plain-Lua runtimes without the host primitive keep the
+-- reservation + io.open fallback.
+local function fresh_tmp(path)
+    local now = tether.monotonic_ms and tether.monotonic_ms() or 0
+    for _ = 1, 10 do
+        local tmp = string.format("%s.tmp.%d.%d.%06d", path,
+            os.time(), now, math.random(0, 999999))
+        local st = tether.stat and tether.stat(tmp) or nil
+        if not st then return tmp end
+        now = now + 1
+    end
+    return nil, "cannot reserve temp file"
+end
+M._fresh_tmp = fresh_tmp -- test seam (T354 plants the predicted name)
+
 local function atomic_write(path, content)
     local dir = path:match("^(.*)/[^/]*$")
     if dir and dir ~= "" then
@@ -430,14 +450,20 @@ local function atomic_write(path, content)
         if tether.mkdirp then pcall(tether.mkdirp, dir)
         else os.execute("mkdir -p " .. sq(dir)) end
     end
-    local tmp = path .. ".tmp." .. math.random(100000, 999999)
-    local f = io.open(tmp, "w")
-    if not f then return nil, "cannot open temp file" end
-    local wok, werr = f:write(content)
-    local cok, cerr = f:close()
-    if not wok or not cok then
-        os.remove(tmp)
-        return nil, werr or cerr or "write failed"
+    local tmp, terr = fresh_tmp(path)
+    if not tmp then return nil, terr or "cannot reserve temp file" end
+    if tether.write_excl then
+        local ok, err = tether.write_excl(tmp, content)
+        if not ok then return nil, err or "cannot write temp file" end
+    else
+        local f = io.open(tmp, "w")
+        if not f then return nil, "cannot open temp file" end
+        local wok, werr = f:write(content)
+        local cok, cerr = f:close()
+        if not wok or not cok then
+            os.remove(tmp)
+            return nil, werr or cerr or "write failed"
+        end
     end
     local ronk, rerr = os.rename(tmp, path)
     if not ronk then
