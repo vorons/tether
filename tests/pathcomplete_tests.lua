@@ -125,14 +125,16 @@ do
     assert_eq(S.palette_mode, "command", "T74 Esc: mode reset to 'command'")
   end
 
-  -- 4.2e: Enter on the path palette applies the selected path + space.
+  -- 4.2e: Enter on the path palette splices the selected path into the token
+  -- and closes (audit M10 moved it off `S.input = label .. " "`, which rewrote
+  -- the whole line; T332 below pins the prefix-preserving splice).
   do
     local ui_mod, S = run_and_state({ 102, 105, 17 }, true)
     ui_mod._path_complete_tab()               -- open, sel=1
     ui_mod._handle_key({ kind = "tab" })      -- cycle, sel=2, input="file2.txt"
-    ui_mod._handle_key({ kind = "enter" })    -- commit, input="file2.txt "
+    ui_mod._handle_key({ kind = "enter" })    -- apply + close
     S = ui_mod._get_state()
-    assert_eq(S.input, "file2.txt ", "T74 Enter: selected path applied + space")
+    assert_eq(S.input, "file2.txt", "T74 Enter: selected path applied in place")
     assert_eq(S.completion, nil, "T74 Enter: completion state cleared")
   end
 
@@ -1488,6 +1490,53 @@ do
   assert_eq(p2.kind, "text", "T171 byte after paste decoded separately")
   assert_eq(p2.char, "Z", "T171 trailing byte intact")
   print("T171 bracketed paste terminator: OK")
+end
+
+-- T332 (audit M10): Enter in the path palette splices the highlighted row
+-- into the token exactly like Tab does, and never submits the input.
+do
+  local ui_mod, S = run_and_state({ 99, 97, 116, 32, 102, 105, 17 }, true) -- "cat fi"
+  assert_eq(S.input, "cat fi", "T332 fixture: a prefix and a typed token")
+  ui_mod._path_complete_tab()
+  S = ui_mod._get_state()
+  assert_eq(S.input, "cat file1.txt", "T332 Tab: only the token was replaced")
+  ui_mod._handle_key({ kind = "tab" })      -- cycle to the second candidate
+  ui_mod._handle_key({ kind = "enter" })    -- apply it and close
+  S = ui_mod._get_state()
+  assert_eq(S.input, "cat file2.txt", "T332 Enter leaves the typed prefix standing")
+  assert_eq(S.cursor, #S.input, "T332 Enter: the cursor sits after the applied text")
+  assert_eq(S.completion, nil, "T332 Enter: the cycle session is closed")
+  assert_eq(S.palette_active, false, "T332 Enter: the palette is closed")
+  assert_eq(S.palette_mode, "command", "T332 Enter: the palette mode is reset")
+  print("T332 palette Enter splices into the token: OK")
+end
+
+-- T333 (audit M10): with the path palette open, printable keys and Backspace
+-- reach the token instead of being swallowed, and the list re-filters.
+do
+  local ui_mod, S = run_and_state({ 99, 97, 116, 32, 102, 105, 17 }, true) -- "cat fi"
+  ui_mod._path_complete_tab()               -- "cat file1.txt", two candidates
+  ui_mod._handle_key({ kind = "backspace" })
+  S = ui_mod._get_state()
+  assert_eq(S.input, "cat file1.tx", "T333 Backspace edits the token")
+  assert_eq(S.palette_active, true, "T333 the palette stays open while it edits")
+  assert_eq(S.palette_mode, "path", "T333 and it is still the path palette")
+  assert_eq(#S.palette_items, 1, "T333 the list re-filtered to one candidate")
+  ui_mod._handle_key({ kind = "text", char = "2" })
+  S = ui_mod._get_state()
+  assert_eq(S.input, "cat file1.tx2", "T333 a printable key reaches the input")
+  assert_eq(S.palette_active, false, "T333 with no candidate the palette hides")
+  assert_notnil(S.completion, "T333 the session survives, so typing can reopen it")
+  ui_mod._handle_key({ kind = "backspace" })
+  S = ui_mod._get_state()
+  assert_eq(S.palette_active, true, "T333 the next character reopens the palette")
+  assert_eq(#S.palette_items, 1, "T333 with the candidates it re-listed")
+  for _ = 1, #"file1.tx" do ui_mod._handle_key({ kind = "backspace" }) end
+  S = ui_mod._get_state()
+  assert_eq(S.input, "cat ", "T333 erasing walks the token away character by character")
+  assert_eq(S.palette_active, false, "T333 past the token start the palette closes")
+  assert_eq(S.completion, nil, "T333 and the cycle session goes with it")
+  print("T333 keys reach the token while the palette is open: OK")
 end
 
 if failed > 0 then

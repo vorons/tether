@@ -9,7 +9,7 @@
 --      the T4.1 scan; the facade keeps thin M.* seams tests drive.
 -- OUT: module table { completion_token, completion_apply,
 --      path_complete_tab, completion_cancel, completion_commit,
---      at_token_start, picker_close, mention_refilter, mention_open,
+--      at_token_start, picker_close, token_refilter, mention_open,
 --      mention_accept }.
 --      No S, no globals, no terminal I/O.
 -- EXAMPLE:
@@ -150,14 +150,21 @@ local function picker_close(bag)
 end
 M.picker_close = picker_close
 
--- Re-rank the token against the walk the session already did. The cache key
--- (scoped directory + hidden rule) is what tools.path_complete compares, so a
--- keystroke that only extends the fuzzy remainder costs no filesystem work.
-local function mention_refilter(bag, deps)
+-- Re-rank the token against the walk the session already did, whichever
+-- trigger opened it. The cache key (scoped directory + hidden rule) is what
+-- tools.path_complete compares, so a keystroke that only extends the fuzzy
+-- remainder costs no filesystem work. For a `@` session the palette closes
+-- once the token loses its `@`; for a Tab session the typed token becomes the
+-- baseline Esc restores, so the user's own keystrokes are never undone.
+local function token_refilter(bag, deps)
     local comp = bag.completion
-    if not comp or not comp.mention then return end
+    if not comp then return end
     local tok, token_pos = completion_token(bag, deps)
-    if not tok or tok:sub(1, 1) ~= "@" then
+    if not tok or tok == "" then
+        picker_close(bag)
+        return
+    end
+    if comp.mention and tok:sub(1, 1) ~= "@" then
         picker_close(bag)
         return
     end
@@ -167,6 +174,10 @@ local function mention_refilter(bag, deps)
         return
     end
     comp.start = token_pos
+    if not comp.mention then
+        comp.original = tok
+        comp.tail = bag.input:sub(token_pos + #tok)
+    end
     local r = tools_mod.path_complete(tok, { workspace = bag.workspace }, comp.cache)
     local cands = (r and r.candidates) or {}
     comp.items = cands
@@ -186,16 +197,16 @@ local function mention_refilter(bag, deps)
         return
     end
     bag.palette_active = true
-    bag.palette_mode = "mention"
+    bag.palette_mode = comp.mention and "mention" or "path"
 end
-M.mention_refilter = mention_refilter
+M.token_refilter = token_refilter
 
 local function mention_open(bag, deps)
     if bag.cfg and bag.cfg.ui and bag.cfg.ui.path_completion == false then return end
     local tok, token_pos = completion_token(bag, deps)
     if not tok or tok:sub(1, 1) ~= "@" then return end
     bag.completion = { start = token_pos, mention = true }
-    mention_refilter(bag, deps)
+    token_refilter(bag, deps)
 end
 M.mention_open = mention_open
 

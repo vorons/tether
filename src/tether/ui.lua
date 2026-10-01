@@ -1690,8 +1690,8 @@ function M._picker_close()
     return M._complete.picker_close(S)
 end
 
-function M._mention_refilter()
-    return M._complete.mention_refilter(S, M._complete_deps())
+function M._token_refilter()
+    return M._complete.token_refilter(S, M._complete_deps())
 end
 
 function M._mention_open()
@@ -1752,6 +1752,17 @@ local function input_backspace()
     S.input = S.input:sub(1, prev - 1) .. S.input:sub(S.cursor + 1)
     S.cursor = prev - 1
     palette_sync()
+end
+
+-- audit M10: a picker filter is text, not bytes. The same character walk
+-- input_backspace does, over the query string, so a Cyrillic filter never
+-- leaves half a glyph behind in the painted row.
+local function palette_query_backspace()
+    local q = S.palette_query or ""
+    if q == "" then return end
+    local ok, prev = pcall(utf8.offset, q, -1)
+    S.palette_query = q:sub(1, ok and prev and (prev - 1) or (#q - 1))
+    M._palette_apply_query()
 end
 
 local function input_delete()
@@ -3517,11 +3528,11 @@ local handle_key
 -- OWN: S.ask.* <- handle_agent_event, ask_answer, ask_toggle, ask_advance, handle_ask_key
 -- OWN: S.confirmation <- handle_agent_event, resolve_confirmation
 -- OWN: S.confirmation_sel <- handle_agent_event, handle_confirmation_key, resolve_confirmation
--- OWN: S.palette_active <- palette_sync, palette_hide, path_complete_tab, completion_cancel, completion_commit, picker_close, mention_refilter, mention_open, on_mouse, on_palette_copy, on_palette_resume, close_resume_palette, on_palette_model, close_model_palette, on_palette_think, close_think_palette, on_palette_login, close_login_palette, on_palette_logout, on_palette_mention, on_slash_copy, on_slash_model, on_slash_resume, on_slash_think, on_slash_login, on_slash_logout, begin, cancel, submit, login_command, logout_command, logout_close, M._poll_models_bg
--- OWN: S.palette_mode <- palette_sync, path_complete_tab, completion_cancel, completion_commit, picker_close, mention_refilter, on_mouse, on_palette_copy, on_palette_resume, close_resume_palette, on_palette_model, close_model_palette, on_palette_think, close_think_palette, on_palette_login, close_login_palette, on_palette_logout, on_slash_copy, on_slash_model, on_slash_resume, on_slash_think, on_slash_login, on_slash_logout, begin, cancel, submit, login_command, logout_command, logout_close, logout_ask_confirm, logout_confirm_back, M._poll_models_bg
--- OWN: S.palette_items <- palette_sync, palette_hide, M._palette_apply_query, path_complete_tab, completion_cancel, completion_commit, picker_close, mention_refilter, on_mouse, on_palette_copy, on_palette_resume, close_resume_palette, on_palette_model, close_model_palette, on_palette_think, close_think_palette, on_palette_login, close_login_palette, on_palette_logout, on_slash_copy, on_slash_model, on_slash_resume, on_slash_think, on_slash_login, on_slash_logout, begin, cancel, submit, login_command, logout_command, logout_close, logout_ask_confirm
--- OWN: S.palette_sel <- palette_sync, palette_hide, M._palette_apply_query, path_complete_tab, completion_cancel, completion_commit, picker_close, mention_refilter, on_mouse, on_palette_copy, on_palette_resume, close_resume_palette, on_palette_model, close_model_palette, on_palette_think, close_think_palette, on_palette_login, close_login_palette, on_palette_logout, on_palette_logout_confirm, on_palette_mention, on_palette_path, on_palette_command, on_slash_copy, on_slash_model, on_slash_resume, on_slash_think, on_slash_login, on_slash_logout, begin, cancel, submit, login_command, logout_command, logout_close, logout_ask_confirm, logout_confirm_back, M._poll_models_bg
--- OWN: S.palette_query <- on_mouse, on_slash_model, on_palette_model, close_model_palette, on_palette_login, close_login_palette, on_palette_logout, login_command, logout_command, logout_close
+-- OWN: S.palette_active <- palette_sync, palette_hide, path_complete_tab, completion_cancel, completion_commit, picker_close, token_refilter, mention_open, on_mouse, on_palette_copy, on_palette_resume, close_resume_palette, on_palette_model, close_model_palette, on_palette_think, close_think_palette, on_palette_login, close_login_palette, on_palette_logout, on_palette_mention, on_slash_copy, on_slash_model, on_slash_resume, on_slash_think, on_slash_login, on_slash_logout, begin, cancel, submit, login_command, logout_command, logout_close, M._poll_models_bg
+-- OWN: S.palette_mode <- palette_sync, path_complete_tab, completion_cancel, completion_commit, picker_close, token_refilter, on_mouse, on_palette_copy, on_palette_resume, close_resume_palette, on_palette_model, close_model_palette, on_palette_think, close_think_palette, on_palette_login, close_login_palette, on_palette_logout, on_slash_copy, on_slash_model, on_slash_resume, on_slash_think, on_slash_login, on_slash_logout, begin, cancel, submit, login_command, logout_command, logout_close, logout_ask_confirm, logout_confirm_back, M._poll_models_bg
+-- OWN: S.palette_items <- palette_sync, palette_hide, M._palette_apply_query, path_complete_tab, completion_cancel, completion_commit, picker_close, token_refilter, on_mouse, on_palette_copy, on_palette_resume, close_resume_palette, on_palette_model, close_model_palette, on_palette_think, close_think_palette, on_palette_login, close_login_palette, on_palette_logout, on_slash_copy, on_slash_model, on_slash_resume, on_slash_think, on_slash_login, on_slash_logout, begin, cancel, submit, login_command, logout_command, logout_close, logout_ask_confirm
+-- OWN: S.palette_sel <- palette_sync, palette_hide, M._palette_apply_query, path_complete_tab, completion_cancel, completion_commit, picker_close, token_refilter, on_mouse, on_palette_copy, on_palette_resume, close_resume_palette, on_palette_model, close_model_palette, on_palette_think, close_think_palette, on_palette_login, close_login_palette, on_palette_logout, on_palette_logout_confirm, on_palette_mention, on_palette_path, on_palette_command, on_slash_copy, on_slash_model, on_slash_resume, on_slash_think, on_slash_login, on_slash_logout, begin, cancel, submit, login_command, logout_command, logout_close, logout_ask_confirm, logout_confirm_back, M._poll_models_bg
+-- OWN: S.palette_query <- on_mouse, on_slash_model, on_palette_model, close_model_palette, on_palette_login, close_login_palette, on_palette_logout, login_command, logout_command, logout_close, palette_query_backspace
 -- OWN: S.palette_skills <- palette_sync, palette_hide
 -- OWN: S.palette_prompts <- palette_sync, palette_hide
 -- OWN: S._palette_all <- on_mouse, on_slash_model, close_model_palette, close_login_palette, login_command, logout_command, logout_close, M._poll_models_bg
@@ -3533,8 +3544,8 @@ local handle_key
 -- OWN: S._in_logout_palette <- logout_close, logout_command
 -- OWN: S._logout_confirm <- logout_ask_confirm, logout_confirm_back, logout_close
 -- OWN: S._logout_sel <- logout_ask_confirm, logout_confirm_back, logout_close
--- OWN: S.completion <- path_complete_tab, completion_cancel, completion_commit, picker_close, mention_refilter, mention_open, on_palette_path
--- OWN: S.completion.* <- path_complete_tab, mention_refilter, on_palette_mention, on_palette_path
+-- OWN: S.completion <- path_complete_tab, completion_cancel, completion_commit, picker_close, token_refilter, mention_open, on_palette_path
+-- OWN: S.completion.* <- path_complete_tab, token_refilter, on_palette_mention, on_palette_path
 -- Out of scope (owned elsewhere): S.login_secret/login_provider/login_flow
 -- (ui_auth begin/cancel/submit/poll_tick), S.confirmation.detail (read by
 -- resolve_confirmation), S.history (input history), S._models_bg/_models_err
@@ -4685,8 +4696,7 @@ on_palette_model = function(bag, k)
                 M._palette_apply_query()
                 return
             elseif k.kind == "backspace" then
-                S.palette_query = (S.palette_query or ""):sub(1, math.max(0, #(S.palette_query or "") - 1))
-                M._palette_apply_query()
+                palette_query_backspace()
                 return
             elseif k.kind == "paste" then
                 S.palette_query = (S.palette_query or "") .. (k.text or "")
@@ -4770,8 +4780,7 @@ on_palette_login = function(bag, k)
                 M._palette_apply_query()
                 return
             elseif k.kind == "backspace" then
-                S.palette_query = (S.palette_query or ""):sub(1, math.max(0, #(S.palette_query or "") - 1))
-                M._palette_apply_query()
+                palette_query_backspace()
                 return
             elseif k.kind == "paste" then
                 S.palette_query = (S.palette_query or "") .. (k.text or "")
@@ -4811,8 +4820,7 @@ on_palette_logout = function(bag, k)
                 M._palette_apply_query()
                 return
             elseif k.kind == "backspace" then
-                S.palette_query = (S.palette_query or ""):sub(1, math.max(0, #(S.palette_query or "") - 1))
-                M._palette_apply_query()
+                palette_query_backspace()
                 return
             elseif k.kind == "paste" then
                 S.palette_query = (S.palette_query or "") .. (k.text or "")
@@ -4883,7 +4891,7 @@ on_palette_mention = function(bag, k)
                 if k.name == "left" or k.name == "right" or k.name == "home"
                     or k.name == "end" or k.name == "delete" then
                     handle_special(k)
-                    M._mention_refilter()
+                    M._token_refilter()
                 end
                 return
             elseif k.kind == "enter" then
@@ -4894,15 +4902,15 @@ on_palette_mention = function(bag, k)
                 return
             elseif k.kind == "text" then
                 input_insert(k.char)
-                M._mention_refilter()
+                M._token_refilter()
                 return
             elseif k.kind == "backspace" then
                 input_backspace()
-                M._mention_refilter()
+                M._token_refilter()
                 return
             elseif k.kind == "paste" then
                 input_insert(k.text or "")
-                M._mention_refilter()
+                M._token_refilter()
                 return
             end
             return
@@ -4910,8 +4918,8 @@ end
 
 on_palette_path = function(bag, k)
             -- 4.2/4.3: path palette — Tab cycles, Esc restores the token as
-            -- typed, Enter commits the selected path; text/backspace keep the
-            -- applied text, clear the cycle state, and fall through below.
+            -- typed, Enter applies the highlighted row and closes; printable
+            -- keys and Backspace edit the token and re-filter the list.
             if k.kind == "tab" then
                 local comp = S.completion or {}
                 local n = #S.palette_items
@@ -4928,10 +4936,24 @@ on_palette_path = function(bag, k)
             elseif k.kind == "enter" then
                 local it = S.palette_items[S.palette_sel]
                 if it then
-                    S.input = it.label .. " "
-                    S.cursor = #S.input
-                    M._complete.completion_commit(S, M._complete_deps())
+                    -- audit M10: apply into the token exactly as Tab does. The
+                    -- old `S.input = it.label .. " "` rewrote the whole line and
+                    -- erased the `cat ` prefix the user typed.
+                    M._complete.completion_apply(S, it.label)
+                    M._picker_close()
                 end
+                return
+            elseif k.kind == "text" then
+                input_insert(k.char)
+                M._token_refilter()
+                return
+            elseif k.kind == "backspace" then
+                input_backspace()
+                M._token_refilter()
+                return
+            elseif k.kind == "paste" then
+                input_insert(k.text or "")
+                M._token_refilter()
                 return
             elseif k.kind == "special" then
                 local n = #(S.completion and S.completion.items or S.palette_items)
@@ -4943,10 +4965,8 @@ on_palette_path = function(bag, k)
                 if S.completion then S.completion.sel = S.palette_sel end
                 return
             end
-            -- text/backspace in the path palette: keep the applied text,
-            -- clear the cycle state; re-run palette_sync() so the command
-            -- palette reopens if the user typed /, otherwise the palette
-            -- stays closed. No fall-through (would double-fire input_insert).
+            -- any other key: keep the applied text and clear the cycle state;
+            -- re-run palette_sync() so the command palette reopens if needed.
             M._complete.completion_commit(S, M._complete_deps())
             palette_sync()
 end
@@ -5032,8 +5052,8 @@ on_normal = function(bag, k)
         input_insert(k.char)
         if trigger then
             M._mention_open()
-        elseif S.completion and S.completion.mention then
-            M._mention_refilter()
+        elseif S.completion then
+            M._token_refilter()
         end
     elseif k.kind == "enter" then
         if S.busy and not S.confirmation and not S.ask then
@@ -5049,7 +5069,7 @@ on_normal = function(bag, k)
         end
     elseif k.kind == "backspace" then
         input_backspace()
-        if S.completion and S.completion.mention then M._mention_refilter() end
+        if S.completion then M._token_refilter() end
     elseif k.kind == "esc" then
         if S.busy and ((S.steer_queue and #S.steer_queue > 0)
             or (S.followup_queue and #S.followup_queue > 0)) then

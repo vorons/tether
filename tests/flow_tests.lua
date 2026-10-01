@@ -1701,6 +1701,46 @@ do
   print("T218 modal palette fuzzy search: OK")
 end
 
+-- T334 (audit M10): a palette filter is text, not bytes. Backspace cut one
+-- BYTE off the query, so erasing a Cyrillic filter left half a glyph in the
+-- query row the palette paints.
+do
+  local strip = function(s) return (s:gsub("\27%[[0-9;?%*]*[a-zA-Z]", "")) end
+  local orig_commands = _G.commands
+  _G.commands = {
+    list_sessions = function() return {} end,
+    resume = function() return nil end,
+    new = function() return "new-sid" end,
+    list_models = function()
+      return {
+        { id = "модель-4o", name = "Модель 4o" },
+        { id = "gpt-4o", name = "GPT-4o" },
+      }
+    end,
+    compact = function() return "", "noop" end,
+  }
+  local uim, S = run_ui_with({ 17 }, {
+    agent = { turn = function() return true end, get_history = function() return {} end },
+  })
+  uim._execute_command("model")
+  for ch in ("мод"):gmatch(utf8.charpattern) do
+    uim._handle_key({ kind = "text", char = ch })
+  end
+  assert_eq(S.palette_query, "мод", "T334 every typed character lands whole")
+  assert_eq(#S.palette_items, 1, "T334 the Cyrillic filter matches the Cyrillic row")
+  uim._handle_key({ kind = "backspace" })
+  assert_eq(S.palette_query, "мо", "T334 Backspace removes a character, not a byte")
+  assert_notnil(utf8.len(S.palette_query), "T334 the filter stays valid UTF-8")
+  uim._paint(true)
+  local L = uim._layout()
+  local win = uim._palette.window(S.h, #S.palette_items, S.palette_sel)
+  local row = strip(uim._row(L.palette_row + win + 1))
+  assert_notnil(utf8.len(row), "T334 the painted query row stays valid UTF-8")
+  assert_true(row:find("> мо", 1, true) ~= nil, "T334 the row shows what is left of the filter")
+  _G.commands = orig_commands
+  print("T334 palette filter backspaces by character: OK")
+end
+
 -- T176: non-ASCII input (e.g. Russian) must not crash the TUI.
 -- Regression: decode_first_byte emitted one "text" event per BYTE, splitting
 -- multibyte UTF-8 into invalid fragments; S.input became invalid UTF-8 and
