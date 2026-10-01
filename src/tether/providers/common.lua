@@ -265,7 +265,44 @@ function M.json_decode(s)
             return nil
         end
     end
-    return parse_value()
+    -- the end position rides along as a second return (existing single-value
+    -- callers are unaffected): a caller that needs the whole input decoded
+    -- rejects the value when trailing non-space bytes remain. The decoder
+    -- itself stays lenient — provider bodies legitimately arrive truncated.
+    local value = parse_value()
+    return value, pos
+end
+
+-- Strict form: the input must decode to one COMPLETE value. The lenient
+-- decoder above consumes a truncated tail as if it were complete (an
+-- unterminated string returns what was read, an unclosed object returns the
+-- keys parsed so far), so full consumption alone cannot tell a crash-cut
+-- line from a whole one. The brace scan below closes that gap: every `{`/`[`
+-- opened outside strings must be closed, and the line must not end inside
+-- a string. The journal reader uses this; provider bodies stay lenient.
+function M.json_decode_exact(s)
+    if type(s) ~= "string" then return nil end
+    local obj, pos = M.json_decode(s)
+    if type(obj) ~= "table" then return nil end
+    if type(pos) ~= "number" or s:sub(pos):match("^%s*$") == nil then
+        return nil
+    end
+    local depth, in_str, esc = 0, false, false
+    for i = 1, #s do
+        local ch = s:sub(i, i)
+        if in_str then
+            if esc then esc = false
+            elseif ch == "\\" then esc = true
+            elseif ch == '"' then in_str = false end
+        elseif ch == '"' then in_str = true
+        elseif ch == "{" or ch == "[" then depth = depth + 1
+        elseif ch == "}" or ch == "]" then
+            depth = depth - 1
+            if depth < 0 then return nil end
+        end
+    end
+    if in_str or depth ~= 0 then return nil end
+    return obj
 end
 
 -- Canonical static tool schema (OpenAI function format). Anthropic/Gemini

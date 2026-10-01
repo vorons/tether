@@ -161,6 +161,41 @@ do
   print("T106b latest skips empty sessions: OK")
 end
 
+-- T338 (audit M5): a journal line cut mid-object by a crash is skipped, never
+-- replayed as a truncated event. The lenient decoder used to return the
+-- partial table (which loses `type` and resurfaces as a typeless ghost).
+do
+  local orig = _G.tether
+  _G.tether = host_mock{}
+  local session = assert(loadfile("src/tether/session.lua"))()
+  local dir = "/tmp/tether_t338_sessions"
+  os.execute("rm -rf " .. dir .. " && mkdir -p " .. dir)
+  session._session_dir = dir
+  local h = assert(io.open(dir .. "/cut.jsonl", "w"))
+  h:write('{"ts":"2026-01-01T00:00:00","type":"session_start","meta":{"workspace":"/ws","model":"m"}}\n')
+  h:write('{"ts":"2026-01-01T00:00:01","type":"message","role":"user","content":"hi"}\n')
+  h:write('{"content":"IMPORTANT hello","role":"assistant","ts":"2026-01-01T00:00:02","type":"mess')
+  h:close()
+  local events = session.read("cut")
+  assert_eq(#events, 2, "T338 the cut line contributes no event")
+  local messages = session.resume("cut")
+  assert_notnil(messages, "T338 the session still resumes")
+  assert_eq(#messages, 1, "T338 history holds only the complete events")
+  assert_eq(messages[1].content, "hi", "T338 no partial content reaches the model")
+  for _, m in ipairs(messages) do
+    assert_true((m.content or ""):find("IMPORTANT", 1, true) == nil,
+      "T338 the truncated tail is lost, not replayed")
+  end
+  -- the picker agrees: the session lists on its complete head alone
+  local files = session.session_files("/ws")
+  assert_eq(#files, 1, "T338 the cut session still lists")
+  assert_eq(files[1].first_line, "hi", "T338 the picker reads the same head")
+  session._session_dir = nil
+  _G.tether = orig
+  os.execute("rm -rf " .. dir)
+  print("T338 truncated journal lines are skipped: OK")
+end
+
 -- T107 (1.2): assistant text survives alongside tool_calls in encoding.
 do
   local openai = assert(loadfile("src/tether/providers/openai.lua"))()

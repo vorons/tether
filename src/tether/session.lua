@@ -10,7 +10,7 @@ local common = _G.provider_common
         return chunk and chunk()
     end)()
 assert(common, "session: cannot load provider_common")
-local json_decode = common.json_decode
+local json_decode_exact = common.json_decode_exact
 -- Encoding used to live here as a private copy. It escaped only
 -- \ " \n \r \t and rendered a numeric table key as `[3]`, so a journal line
 -- could hold a raw control byte or a Lua-shaped (non-JSON) key and the line
@@ -64,13 +64,22 @@ local function append_event(id, event)
     return true
 end
 
+-- M5: a journal line counts only when it decodes to one COMPLETE event. A
+-- line cut mid-object by a crash used to decode into a partial table (which
+-- loses `type` — json_encode sorts keys, so it sorts last — and resurfaces
+-- downstream as a typeless ghost); now it is skipped. The picker probes
+-- below use the same rule, so both readers agree on a truncated fixture.
+local function decode_line(line)
+    return json_decode_exact(line)
+end
+
 local function read_events(id)
     local path = session_path(id)
     local f = io.open(path, "r")
     if not f then return {} end
     local events = {}
     for line in f:lines() do
-        local obj = json_decode(line)
+        local obj = decode_line(line)
         if obj then events[#events + 1] = obj end
     end
     f:close()
@@ -98,7 +107,7 @@ local function head_events(path)
     f:close()
     chunk = chunk:match("^(.*)\n") or ""
     for line in chunk:gmatch("[^\n]+") do
-        local obj = json_decode(line)
+        local obj = decode_line(line)
         if obj then events[#events + 1] = obj end
     end
     return events
@@ -118,7 +127,7 @@ local function tail_event(path)
     if skip > 0 then chunk = chunk:sub((chunk:find("\n", 1, true) or 0) + 1) end
     local last
     for line in chunk:gmatch("[^\n]+") do
-        local obj = json_decode(line)
+        local obj = decode_line(line)
         if obj then last = obj end
     end
     return last
