@@ -1,5 +1,5 @@
 {
- "generated_at": 1790764141,
+ "generated_at": 1790852196,
  "id": "gmicloud",
  "models": [
   {
@@ -13,6 +13,14 @@
   {
    "context": 1000000,
    "id": "Qwen/Qwen3.7-Max"
+  },
+  {
+   "context": 1048575,
+   "id": "Qwen/Qwen3.8-Flash"
+  },
+  {
+   "context": 262144,
+   "id": "Qwen/Qwen3.8-Max"
   },
   {
    "context": 409600,

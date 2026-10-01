@@ -1,5 +1,5 @@
 {
- "generated_at": 1790764141,
+ "generated_at": 1790852196,
  "id": "digitalocean",
  "models": [
   {
@@ -29,10 +29,6 @@
   {
    "context": 200000,
    "id": "anthropic-claude-4.1-opus"
-  },
-  {
-   "context": 200000,
-   "id": "anthropic-claude-4.5-haiku"
   },
   {
    "context": 200000,
@@ -329,6 +325,10 @@
   {
    "context": 1050000,
    "id": "openai-gpt-5.6-terra"
+  },
+  {
+   "context": 1050000,
+   "id": "openai-gpt-6-1-sol"
   },
   {
    "context": 1050000,

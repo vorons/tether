@@ -1,5 +1,5 @@
 {
- "generated_at": 1790764141,
+ "generated_at": 1790852196,
  "id": "kilo",
  "models": [
   {
@@ -207,7 +207,7 @@
    "id": "deepseek/deepseek-v3.2-exp"
   },
   {
-   "context": 1048576,
+   "context": 1024000,
    "id": "deepseek/deepseek-v4-flash"
   },
   {
@@ -447,7 +447,7 @@
    "id": "meta-llama/llama-3.2-3b-instruct"
   },
   {
-   "context": 131072,
+   "context": 65536,
    "id": "meta-llama/llama-3.3-70b-instruct"
   },
   {
@@ -1063,7 +1063,7 @@
    "id": "qwen/qwen3-235b-a22b-thinking-2507"
   },
   {
-   "context": 131072,
+   "context": 40960,
    "id": "qwen/qwen3-30b-a3b"
   },
   {
@@ -1487,7 +1487,7 @@
    "id": "z-ai/glm-5.2"
   },
   {
-   "context": 1048575,
+   "context": 1048576,
    "id": "z-ai/glm-5.3"
   },
   {

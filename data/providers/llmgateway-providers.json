@@ -1,5 +1,5 @@
 {
- "generated_at": 1790764141,
+ "generated_at": 1790852196,
  "id": "llmgateway-providers",
  "models": [
   {
@@ -555,10 +555,6 @@
    "id": "consensusprotocol/Qwen3.8-27B"
   },
   {
-   "context": 524288,
-   "id": "consensusprotocol/deepseek-v4-flash"
-  },
-  {
    "context": 1048576,
    "id": "consensusprotocol/deepseek-v4.1-flash"
   },
@@ -597,10 +593,6 @@
   {
    "context": 262144,
    "id": "deepinfra/gemma-4-31b-it"
-  },
-  {
-   "context": 198000,
-   "id": "deepinfra/glm-5.1"
   },
   {
    "context": 131072,
@@ -653,10 +645,6 @@
   {
    "context": 262144,
    "id": "deepinfra/qwen3.8-2.4t-a95b"
-  },
-  {
-   "context": 262144,
-   "id": "deepinfra/step-3.7-flash"
   },
   {
    "context": 1050000,

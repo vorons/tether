@@ -1,12 +1,12 @@
 {
- "generated_at": 1790764141,
+ "generated_at": 1790852196,
  "providers": {
   "302ai": {
    "api_key_env": [
     "302AI_API_KEY"
    ],
    "base_url": "https://api.302.ai/v1",
-   "model": "gpt-6-sol",
+   "model": "claude-sonnet-5-5",
    "models": [
     {
      "context": 1000000,
@@ -103,6 +103,10 @@
     {
      "context": 1000000,
      "id": "claude-sonnet-5"
+    },
+    {
+     "context": 1000000,
+     "id": "claude-sonnet-5-5"
     },
     {
      "context": 1000000,
@@ -2210,7 +2214,7 @@
     "AWS_BEARER_TOKEN_BEDROCK"
    ],
    "base_url": "",
-   "model": "global.anthropic.claude-sonnet-5-5",
+   "model": "us.openai.gpt-6.1-sol",
    "models": [
     {
      "context": 1000000,
@@ -2509,6 +2513,10 @@
      "id": "global.openai.gpt-6-sol"
     },
     {
+     "context": 1050000,
+     "id": "global.openai.gpt-6.1-sol"
+    },
+    {
      "context": 500000,
      "id": "global.xai.grok-4.6"
     },
@@ -2709,6 +2717,10 @@
      "id": "openai.gpt-6-sol"
     },
     {
+     "context": 1050000,
+     "id": "openai.gpt-6.1-sol"
+    },
+    {
      "context": 131072,
      "id": "openai.gpt-oss-120b"
     },
@@ -2899,6 +2911,10 @@
     {
      "context": 1050000,
      "id": "us.openai.gpt-6-sol"
+    },
+    {
+     "context": 1050000,
+     "id": "us.openai.gpt-6.1-sol"
     },
     {
      "context": 122880,
@@ -5212,7 +5228,7 @@
      "id": "gemma-4-26b-a4b-it"
     },
     {
-     "context": 262144,
+     "context": 262000,
      "id": "gemma-4-31b-it"
     },
     {
@@ -5366,10 +5382,6 @@
     {
      "context": 196000,
      "id": "minimax-m2.5"
-    },
-    {
-     "context": 196608,
-     "id": "minimax-m2.7"
     },
     {
      "context": 1048576,
@@ -6341,7 +6353,7 @@
      "id": "google/gemma-4-E4B-it"
     },
     {
-     "context": 131072,
+     "context": 65536,
      "id": "meta-llama/Llama-3.3-70B-Instruct-Turbo"
     },
     {
@@ -6474,7 +6486,7 @@
     "DIGITALOCEAN_ACCESS_TOKEN"
    ],
    "base_url": "https://inference.do-ai.run/v1",
-   "model": "anthropic-claude-sonnet-5.5",
+   "model": "openai-gpt-6-1-sol",
    "models": [
     {
      "context": 32768,
@@ -6503,10 +6515,6 @@
     {
      "context": 200000,
      "id": "anthropic-claude-4.1-opus"
-    },
-    {
-     "context": 200000,
-     "id": "anthropic-claude-4.5-haiku"
     },
     {
      "context": 200000,
@@ -6803,6 +6811,10 @@
     {
      "context": 1050000,
      "id": "openai-gpt-5.6-terra"
+    },
+    {
+     "context": 1050000,
+     "id": "openai-gpt-6-1-sol"
     },
     {
      "context": 1050000,
@@ -7291,7 +7303,7 @@
      "id": "deepinfra/meta-llama/Llama-3.2-11B-Vision-Instruct"
     },
     {
-     "context": 131072,
+     "context": 65536,
      "id": "deepinfra/meta-llama/Llama-3.3-70B-Instruct"
     },
     {
@@ -9396,7 +9408,7 @@
     "GMICLOUD_API_KEY"
    ],
    "base_url": "https://api.gmi-serving.com/v1",
-   "model": "zai-org/GLM-5.2-FP8",
+   "model": "Qwen/Qwen3.8-Flash",
    "models": [
     {
      "context": 196608,
@@ -9409,6 +9421,14 @@
     {
      "context": 1000000,
      "id": "Qwen/Qwen3.7-Max"
+    },
+    {
+     "context": 1048575,
+     "id": "Qwen/Qwen3.8-Flash"
+    },
+    {
+     "context": 262144,
+     "id": "Qwen/Qwen3.8-Max"
     },
     {
      "context": 409600,
@@ -12516,7 +12536,7 @@
      "id": "deepseek/deepseek-v3.2-exp"
     },
     {
-     "context": 1048576,
+     "context": 1024000,
      "id": "deepseek/deepseek-v4-flash"
     },
     {
@@ -12756,7 +12776,7 @@
      "id": "meta-llama/llama-3.2-3b-instruct"
     },
     {
-     "context": 131072,
+     "context": 65536,
      "id": "meta-llama/llama-3.3-70b-instruct"
     },
     {
@@ -13372,7 +13392,7 @@
      "id": "qwen/qwen3-235b-a22b-thinking-2507"
     },
     {
-     "context": 131072,
+     "context": 40960,
      "id": "qwen/qwen3-30b-a3b"
     },
     {
@@ -13796,7 +13816,7 @@
      "id": "z-ai/glm-5.2"
     },
     {
-     "context": 1048575,
+     "context": 1048576,
      "id": "z-ai/glm-5.3"
     },
     {
@@ -15500,10 +15520,6 @@
      "id": "consensusprotocol/Qwen3.8-27B"
     },
     {
-     "context": 524288,
-     "id": "consensusprotocol/deepseek-v4-flash"
-    },
-    {
      "context": 1048576,
      "id": "consensusprotocol/deepseek-v4.1-flash"
     },
@@ -15542,10 +15558,6 @@
     {
      "context": 262144,
      "id": "deepinfra/gemma-4-31b-it"
-    },
-    {
-     "context": 198000,
-     "id": "deepinfra/glm-5.1"
     },
     {
      "context": 131072,
@@ -15598,10 +15610,6 @@
     {
      "context": 262144,
      "id": "deepinfra/qwen3.8-2.4t-a95b"
-    },
-    {
-     "context": 262144,
-     "id": "deepinfra/step-3.7-flash"
     },
     {
      "context": 1050000,
@@ -18878,6 +18886,10 @@
      "id": "inclusionai/ling-3.0-flash:thinking"
     },
     {
+     "context": 262144,
+     "id": "inclusionai/ling-3.1-flash"
+    },
+    {
      "context": 128000,
      "id": "inference-net/schematron-v2-small"
     },
@@ -21644,7 +21656,7 @@
     "OFOX_API_KEY"
    ],
    "base_url": "https://api.ofox.ai/v1",
-   "model": "anthropic/claude-sonnet-5.5",
+   "model": "openai/gpt-6.1-sol",
    "models": [
     {
      "context": 1000000,
@@ -22029,6 +22041,10 @@
     {
      "context": 1050000,
      "id": "openai/gpt-6-sol"
+    },
+    {
+     "context": 1050000,
+     "id": "openai/gpt-6.1-sol"
     },
     {
      "context": 1000000,
@@ -31083,7 +31099,7 @@
     "VIVGRID_API_KEY"
    ],
    "base_url": "https://api.vivgrid.com/v1",
-   "model": "gpt-6-sol",
+   "model": "gpt-6.1-sol",
    "models": [
     {
      "context": 1000000,
@@ -31104,6 +31120,10 @@
     {
      "context": 1000000,
      "id": "claude-sonnet-5"
+    },
+    {
+     "context": 1000000,
+     "id": "claude-sonnet-5-5"
     },
     {
      "context": 128000,
@@ -31212,6 +31232,10 @@
     {
      "context": 1050000,
      "id": "gpt-6-sol"
+    },
+    {
+     "context": 1050000,
+     "id": "gpt-6.1-sol"
     },
     {
      "context": 1000000,
@@ -31353,47 +31377,67 @@
     "VULTR_API_KEY"
    ],
    "base_url": "https://api.vultrinference.com/v1",
-   "model": "zai-org/GLM-5.2-FP8",
+   "model": "mimo-v2.6-pro-rl",
    "models": [
     {
-     "context": 204800,
-     "id": "MiniMaxAI/MiniMax-M2.7"
-    },
-    {
-     "context": 262144,
-     "id": "Qwen/Qwen3.5-397B-A17B"
-    },
-    {
-     "context": 262144,
-     "id": "Qwen/Qwen3.6-27B"
+     "context": 1048576,
+     "id": "deepseek-v4-flash-0731"
     },
     {
      "context": 1048576,
-     "id": "XiaomiMiMo/MiMo-V2.5-Pro"
+     "id": "deepseek-v4.1-flash"
     },
     {
-     "context": 1000000,
-     "id": "deepseek-ai/DeepSeek-V4-Flash"
+     "context": 1048576,
+     "id": "glm-5.2"
     },
     {
-     "context": 262144,
-     "id": "moonshotai/Kimi-K2.6"
+     "context": 1048576,
+     "id": "glm-5.3"
+    },
+    {
+     "context": 1048576,
+     "id": "glm-5.3-flash"
+    },
+    {
+     "context": 202752,
+     "id": "glm-5.x-menthol"
+    },
+    {
+     "context": 1048576,
+     "id": "laguna-s-2.1"
+    },
+    {
+     "context": 1048576,
+     "id": "mimo-v2.6-flash-rl"
+    },
+    {
+     "context": 1048576,
+     "id": "mimo-v2.6-pro-rl"
+    },
+    {
+     "context": 524288,
+     "id": "minimax-m3"
     },
     {
      "context": 131072,
-     "id": "nvidia/DeepSeek-V3.2-NVFP4"
+     "id": "muse-glimmer-30b"
     },
     {
      "context": 262144,
-     "id": "nvidia/Nemotron-3-Nano-Omni-30B-A3B-Reasoning-BF16"
+     "id": "nemotron-3-nano-omni-30b-a3b-reasoning"
+    },
+    {
+     "context": 131072,
+     "id": "nemotron-3.5-content-safety"
     },
     {
      "context": 262144,
-     "id": "nvidia/Nemotron-Cascade-2-30B-A3B"
+     "id": "qwen3.8-27b"
     },
     {
-     "context": 393216,
-     "id": "zai-org/GLM-5.2-FP8"
+     "context": 262144,
+     "id": "qwen3.8-flash-next"
     }
    ],
    "wire": "openai"

@@ -1,5 +1,5 @@
 {
- "generated_at": 1790764141,
+ "generated_at": 1790852196,
  "id": "edenai",
  "models": [
   {
@@ -307,7 +307,7 @@
    "id": "deepinfra/meta-llama/Llama-3.2-11B-Vision-Instruct"
   },
   {
-   "context": 131072,
+   "context": 65536,
    "id": "deepinfra/meta-llama/Llama-3.3-70B-Instruct"
   },
   {

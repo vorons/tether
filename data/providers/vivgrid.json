@@ -1,5 +1,5 @@
 {
- "generated_at": 1790764141,
+ "generated_at": 1790852196,
  "id": "vivgrid",
  "models": [
   {
@@ -21,6 +21,10 @@
   {
    "context": 1000000,
    "id": "claude-sonnet-5"
+  },
+  {
+   "context": 1000000,
+   "id": "claude-sonnet-5-5"
   },
   {
    "context": 128000,
@@ -129,6 +133,10 @@
   {
    "context": 1050000,
    "id": "gpt-6-sol"
+  },
+  {
+   "context": 1050000,
+   "id": "gpt-6.1-sol"
   },
   {
    "context": 1000000,
