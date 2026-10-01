@@ -232,6 +232,24 @@ do
   assert_eq(#freed, 1, "T3.4 unused listener freed again")
   assert_true((bag.login_flow.authorize_url or ""):find("localhost%3A7777", 1, true) ~= nil,
     "T3.4 override URI in the authorize link")
+  -- T337 (audit M3): a code callback with no recorded state is a mismatch.
+  -- The old check only compared when flow.state was a non-empty string, so
+  -- a flow that recorded nothing silently granted whatever arrived.
+  freed = {}
+  stored = { access_token = "at-cb" }
+  exchanged = nil
+  bag = { cfg = oauth_cfg() }
+  auth.begin(bag, deps, "radius")
+  bag.login_flow.state = nil
+  step_ret = { "code", "authcode-9", "state-abc" }
+  assert_eq(auth.poll_tick(bag, deps), "pending", "T337 no recorded state pends")
+  assert_eq(bag.error_banner, copy.errors.oauth_state_mismatch,
+    "T337 no recorded state bannered")
+  assert_eq(exchanged, nil, "T337 no recorded state exchanges nothing")
+  assert_eq(stored.access_token, "at-cb", "T337 no recorded state stores nothing")
+  assert_notnil(bag.login_secret, "T337 prompt stays open for paste")
+  print("T337 callback with no recorded state is rejected: OK")
+
   -- no host support degrades to paste-only with no channel
   freed = {}
   bag = { cfg = oauth_cfg() }

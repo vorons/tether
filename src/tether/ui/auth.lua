@@ -227,8 +227,8 @@ local function callback_tick(bag, deps, errors)
     local flow = bag.login_flow
     if type(code) ~= "string" or code == ""
         or flow == nil
-        or (type(flow.state) == "string" and flow.state ~= ""
-            and state ~= flow.state) then
+        or type(flow.state) ~= "string" or flow.state == ""
+        or state ~= flow.state then
         bag.error_banner = errors.oauth_state_mismatch
         drop_wait(nil)
         return "pending"
