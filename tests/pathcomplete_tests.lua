@@ -983,7 +983,7 @@ do
   local vcfg = { model = "m", _auth_style = "bearer", provider_env = {
     GOOGLE_CLOUD_PROJECT = "p", GOOGLE_CLOUD_LOCATION = "l" } }
   assert_eq(vertex.stream_url(vcfg, "m", "tok"),
-    "https://l-aiplatform.googleapis.com/v1/projects/p/locations/l/publishers/google/models/m:streamGenerateContent",
+    "https://l-aiplatform.googleapis.com/v1/projects/p/locations/l/publishers/google/models/m:streamGenerateContent?alt=sse",
     "T168 vertex bearer URL has no key")
   -- vertex SSE delegates to the gemini wire
   vertex.reset_stream()

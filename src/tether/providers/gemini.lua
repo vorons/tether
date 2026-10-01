@@ -140,16 +140,19 @@ end
 
 local function stream_path(cfg, model)
     return string.format("%s/v1beta/models/%s:streamGenerateContent",
-        (cfg.base_url or ""), (model or ""))
+        (cfg.base_url or ""), common.url_encode(model or ""))
 end
 
+-- M8: the stream asks for SSE framing (?alt=sse) so deltas arrive while the
+-- model answers instead of one body at the end; model and key are encoded.
 function M.stream_url(cfg, model, api_key)
-    return stream_path(cfg, model) .. "?key=" .. (api_key or "")
+    return stream_path(cfg, model) .. "?alt=sse&key=" .. common.url_encode(api_key or "")
 end
 
 function M.rest_url(cfg, model, api_key)
     return string.format("%s/v1beta/models/%s:generateContent?key=%s",
-        (cfg.base_url or ""), (model or ""), (api_key or ""))
+        (cfg.base_url or ""), common.url_encode(model or ""),
+        common.url_encode(api_key or ""))
 end
 
 function M.header_lines(_api_key)
@@ -157,7 +160,7 @@ function M.header_lines(_api_key)
 end
 
 function M.models_url(cfg, api_key)
-    return (cfg.base_url or "") .. "/v1beta/models?key=" .. (api_key or "")
+    return (cfg.base_url or "") .. "/v1beta/models?key=" .. common.url_encode(api_key or "")
 end
 
 function M.models_headers(_api_key)
@@ -210,13 +213,23 @@ end
 local function emit_response(payload, on_event)
     if not payload:find('"candidates"', 1, true) then return false end
     local any = false
-    -- text parts (skip the functionCall neighbourhood by matching per-part)
-    for _, text in ipairs(common.json_strings(payload, "text")) do
-        if text ~= "" then
-            text = json_unescape(text)
-            if text ~= "" then
-                on_event({ type = "text_delta", text = text })
-                any = true
+    -- answer text only: walk candidates[].content.parts[].text, so a
+    -- functionCall part whose args carry a field named `text` never
+    -- surfaces as answer text (M8). Decoded values arrive unescaped.
+    local decoded = common.json_decode(payload)
+    local cands = type(decoded) == "table" and decoded.candidates or nil
+    if type(cands) == "table" then
+        for _, cand in ipairs(cands) do
+            local content = type(cand) == "table" and cand.content or nil
+            local parts = type(content) == "table" and content.parts or nil
+            if type(parts) == "table" then
+                for _, part in ipairs(parts) do
+                    local text = type(part) == "table" and part.text or nil
+                    if type(text) == "string" and text ~= "" then
+                        on_event({ type = "text_delta", text = text })
+                        any = true
+                    end
+                end
             end
         end
     end

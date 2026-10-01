@@ -11,6 +11,11 @@ local gemini = (_G.provider_gemini)
         and loadfile("src/tether/providers/gemini.lua")())
 assert(gemini, "google-vertex: cannot load provider_gemini")
 
+local common = (_G.provider_common)
+    or (loadfile("src/tether/providers/common.lua")
+        and loadfile("src/tether/providers/common.lua")())
+assert(common, "google-vertex: cannot load provider_common")
+
 local function provider_table(cfg)
     return (type(cfg) == "table" and type(cfg.providers) == "table"
         and type(cfg.providers["google-vertex"]) == "table")
@@ -54,9 +59,11 @@ end
 function M.stream_url(cfg, model, api_key)
     local ep = endpoint(cfg)
     if not ep then return "" end
-    local url = ep .. "/" .. (model or "") .. ":streamGenerateContent"
+    -- M8: SSE framing on the wire, model and key encoded like the gemini URL.
+    local url = ep .. "/" .. common.url_encode(model or "")
+        .. ":streamGenerateContent?alt=sse"
     if not is_bearer(cfg) and api_key and api_key ~= "" then
-        url = url .. "?key=" .. api_key
+        url = url .. "&key=" .. common.url_encode(api_key)
     end
     return url
 end

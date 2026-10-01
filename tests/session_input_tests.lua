@@ -1013,7 +1013,9 @@ do
     { role = "system", content = "sys" },
     { role = "user", content = "read it" },
     { role = "assistant", content = { tool_calls = { { id = "toolu_9", type = "function",
-        ["function"] = { name = "read", arguments = '{\\"path\\":\\"f.lua\\"}' } } } } },
+        -- M2: history stores DECODED arguments (agent.lua unescapes at echo
+        -- time), so the encoder splices them verbatim — no second unescape.
+        ["function"] = { name = "read", arguments = '{"path":"f.lua"}' } } } } },
     { role = "tool", tool_call_id = "toolu_9", content = "5 x" },
   }
   local abody = anthropic.build_request(hist, "claude-x", 1024)
@@ -1089,6 +1091,71 @@ do
     end
   end)
   print("T50 provider mapping: OK")
+end
+
+-- T340/T341/T342 (audit M8): Gemini streams, encodes, and extracts text.
+do
+  local gemini = assert(loadfile("src/tether/providers/gemini.lua"))()
+  local vertex = assert(loadfile("src/tether/providers/google-vertex.lua"))()
+  -- T340: the stream asks for SSE framing, so deltas arrive per line.
+  local url = gemini.stream_url({ base_url = "https://gen.example" },
+    "gemini-2.5-flash", "k")
+  assert_true(url:find("streamGenerateContent?alt=sse&key=k", 1, true) ~= nil,
+    "T340 gemini stream asks for SSE")
+  local vcfg = { model = "m", _auth_style = "bearer", provider_env = {
+    GOOGLE_CLOUD_PROJECT = "p", GOOGLE_CLOUD_LOCATION = "l" } }
+  assert_true(vertex.stream_url(vcfg, "m", "tok"):find(
+    "streamGenerateContent?alt=sse", 1, true) ~= nil,
+    "T340 vertex stream asks for SSE")
+  gemini.reset_stream()
+  local evs = {}
+  local function gon(ev) evs[#evs + 1] = ev end
+  gemini.parse_sse_line(
+    'data: {"candidates":[{"content":{"parts":[{"text":"a"}],"role":"model"}}]}', gon)
+  assert_eq(#evs, 1, "T340 first delta arrives on its own line")
+  assert_eq(evs[1].text, "a", "T340 first delta text")
+  gemini.parse_sse_line(
+    'data: {"candidates":[{"content":{"parts":[{"text":"b"}],"role":"model"}}]}', gon)
+  assert_eq(#evs, 2, "T340 second delta streams, not one end body")
+  assert_eq(evs[2].text, "b", "T340 second delta text")
+  print("T340 Gemini stream asks for SSE: OK")
+
+  -- T341: model and key are URL-encoded, not pasted raw.
+  local enc = gemini.stream_url({ base_url = "https://gen.example" },
+    "my model/v2", "a b+c")
+  assert_true(enc:find("my%20model%2Fv2", 1, true) ~= nil,
+    "T341 model segment encoded")
+  assert_true(enc:find("key=a%20b%2Bc", 1, true) ~= nil,
+    "T341 key query encoded")
+  assert_true(enc:find(" ", 1, true) == nil, "T341 no raw blanks survive")
+  print("T341 Gemini URL values are encoded: OK")
+
+  -- T342: a functionCall arg named `text` is not answer text.
+  gemini.reset_stream()
+  local cevs = {}
+  gemini.parse_sse_line('data: {"candidates":[{"content":{"parts":'
+    .. '[{"functionCall":{"name":"write","args":{"text":"should not surface",'
+    .. '"path":"a"}}}],"role":"model"}}]}',
+    function(ev) cevs[#cevs + 1] = ev end)
+  local saw_text, saw_call = 0, 0
+  for _, ev in ipairs(cevs) do
+    if ev.type == "text_delta" then saw_text = saw_text + 1 end
+    if ev.type == "tool_call_start" then
+      saw_call = saw_call + 1
+      assert_eq(ev.name, "write", "T342 the call still starts")
+    end
+  end
+  assert_eq(saw_text, 0, "T342 arg text never becomes answer text")
+  assert_eq(saw_call, 1, "T342 the call still reaches the agent")
+  -- escaped answer text still decodes once through the walk
+  gemini.reset_stream()
+  local tevs = {}
+  gemini.parse_sse_line(
+    'data: {"candidates":[{"content":{"parts":[{"text":"a\\nb"}],"role":"model"}}]}',
+    function(ev) tevs[#tevs + 1] = ev end)
+  assert_eq(#tevs, 1, "T342 escaped text still emits")
+  assert_eq(tevs[1].text, "a\nb", "T342 escaped text decodes once")
+  print("T342 tool args are not answer text: OK")
 end
 
 -- T51: dispatcher — unknown provider falls back, per-provider streams work
