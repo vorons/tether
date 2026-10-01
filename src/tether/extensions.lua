@@ -634,6 +634,18 @@ local function sq(s)
     return "'" .. tostring(s):gsub("'", "'\\''") .. "'"
 end
 
+-- Both management verbs build paths and shell commands by concatenation, so the
+-- name they act on has to be a single safe segment: without a slash, and not
+-- made only of dots. That keeps '<extensions dir>/..' from ever being formed.
+local function valid_name(name)
+    if type(name) ~= "string" or name == "" then return nil, "bad extension name" end
+    if name:find("/", 1, true) or name:find("\\", 1, true) then
+        return nil, "bad extension name: " .. name
+    end
+    if name:match("^%.+$") then return nil, "bad extension name: " .. name end
+    return name
+end
+
 -- Shell seam: tether.exec in the binary, os.execute fallback. Tests stub it.
 function M._exec(cmd)
     local th = rawget(_G, "tether")
@@ -724,6 +736,8 @@ function M.install(source, home)
         probe:close()
     end
     local dest_dir = dir .. "/" .. name
+    local n_ok, n_err = valid_name(name)
+    if not n_ok then return nil, n_err end
     local ok, mkdir_err = mkdirp(dest_dir)
     if not ok then return nil, mkdir_err end
     local dest = dest_dir .. "/" .. name .. ".lua"
@@ -737,9 +751,8 @@ end
 
 -- Remove one extension directory. Only that directory is touched.
 function M.remove(name, home)
-    if type(name) ~= "string" or name == "" or name:find("/", 1, true) then
-        return nil, "bad extension name"
-    end
+    local n_ok, n_err = valid_name(name)
+    if not n_ok then return nil, n_err end
     local dir = M.extensions_dir(home) .. "/" .. name
     local probe = io.open(dir .. "/" .. name .. ".lua", "r")
     if not probe then return nil, "no such extension: " .. name end

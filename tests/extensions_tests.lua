@@ -1213,6 +1213,62 @@ return { name = "cb", api_version = 1,
     print("6.x extension execution ctx + journal: OK")
 end
 
+-- T329 (audit M1): a name that traverses is refused by both verbs, and no
+-- removal command is ever formed for it. With name = "..", remove() probed
+-- '<extensions dir>/../...lua' and then ran 'rm -rf <extensions dir>/..' —
+-- i.e. the directory holding auth.json, sessions and logs.
+do
+    _G.tether = host_mock({})
+    local home = tmp_home()
+    write_file(home .. "/.tether/extensions/keep/keep.lua",
+        "return { name = \"keep\", api_version = 1 }")
+    write_file(home .. "/auth.json", "secret")
+    local src = tmp_home()
+    write_file(src .. "/evil/evil.lua", "return { name = \"evil\", api_version = 1 }\n")
+    local ext = fresh_ext()
+    local cmds = {}
+    ext._exec = function(cmd) cmds[#cmds + 1] = cmd; return true, 0 end
+
+    for _, bad in ipairs({ "..", ".", "a/b", "a\\b" }) do
+        local ok, err = ext.remove(bad, home)
+        assert_eq(ok, nil, "T329 remove refuses " .. bad)
+        assert_true(tostring(err):find("bad extension name", 1, true) ~= nil,
+            "T329 remove names the offending value")
+    end
+    assert_eq(table.concat(cmds, " |"):find("rm -rf", 1, true), nil,
+        "T329 no removal command is formed for a traversing name")
+    assert_notnil(io.open(home .. "/auth.json", "r"),
+        "T329 the parent directory keeps its files")
+    assert_notnil(io.open(home .. "/.tether/extensions/keep/keep.lua", "r"),
+        "T329 the sibling extension is untouched")
+
+    -- an install whose derived name escapes: refused, nothing written outside
+    local res, err = ext.install(src .. "/evil/..", home)
+    assert_eq(res, nil, "T329 install refuses a name that escapes the extensions dir")
+    assert_true(tostring(err):find("bad extension name", 1, true) ~= nil,
+        "T329 install reports the invalid name")
+    assert_eq(io.open(home .. "/.tether/...lua", "r"), nil,
+        "T329 nothing was written outside the extensions directory")
+    res = ext.install(src .. "/evil", home)
+    assert_eq(res, "evil", "T329 an ordinary name still installs")
+    assert_notnil(io.open(home .. "/.tether/extensions/evil/evil.lua", "r"),
+        "T329 the ordinary install landed inside the extensions dir")
+
+    -- the escape artifact from an older build does not license rm -rf either
+    write_file(home .. "/.tether/...lua", "left behind by an escaped install")
+    local ok, rerr = ext.remove("..", home)
+    assert_eq(ok, nil, "T329 remove(\"..\") stays refused when the probe file exists")
+    assert_true(tostring(rerr):find("bad extension name", 1, true) ~= nil,
+        "T329 the refusal is the name, not a missing extension")
+    assert_eq(table.concat(cmds, " |"):find("rm -rf", 1, true), nil,
+        "T329 still no removal command")
+    assert_notnil(io.open(home .. "/auth.json", "r"), "T329 the home directory survived")
+
+    os.execute("rm -rf '" .. home .. "'")
+    os.execute("rm -rf '" .. src .. "'")
+    print("T329 extension name validation: OK")
+end
+
 if failed > 0 then
     print("FAILURES: " .. tostring(failed))
     os.exit(1)
