@@ -46,19 +46,19 @@ local STOP_REASONS = {
     tool_use = "tool_calls", refusal = "other",
 }
 
--- Raw argument fragments are still-JSON-escaped: one unescape restores the
--- JSON object for splicing. Anything that is not an object degrades to {}
--- instead of breaking the request envelope structurally.
+-- History already stores transport-DECODED arguments (agent.lua unescapes
+-- once when echoing the call), so the encoder splices them verbatim: a
+-- second unescape of a quoted value produces invalid JSON. Anything that
+-- is not an object degrades to {} instead of breaking the envelope.
 local function clean_args(raw)
     if not raw or raw == "" then return "{}" end
-    local unesc = json_unescape(raw)
-    if unesc:match("^%s*{.*}%s*$") then return unesc end
+    if raw:match("^%s*{.*}%s*$") then return raw end
     return "{}"
 end
 
 -- History (OpenAI shape, as stored by agent.lua) -> Anthropic JSON body.
--- arguments in history are RAW (still-JSON-escaped) fragments: exactly one
--- unescape here turns them back into valid JSON, spliced as `input` verbatim.
+-- arguments in history are DECODED (transport unescaped once at echo time):
+-- no decode happens here, the stored text is spliced as `input` verbatim.
 --
 -- plan (prompt-cache, optional): { sys_texts[], sys_head (idx or nil),
 -- sys_end, tools, last_msg, ttl }. Without it the legacy string-form body

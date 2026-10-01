@@ -196,6 +196,41 @@ do
   print("T331 error snippet is bounded, control-free, redacted: OK")
 end
 
+-- T336 (audit M2): stored tool-call arguments encode exactly once. History
+-- holds DECODED arguments (agent.lua unescapes at echo time), so the
+-- Anthropic encoder must splice them verbatim: a second unescape turns
+-- {"command":"echo \"hi\""} into {"command":"echo "hi""} and the provider
+-- answers "arguments must be valid JSON".
+do
+  local anthropic_p = assert(loadfile("src/tether/providers/anthropic.lua"))()
+  local common = assert(loadfile("src/tether/providers/common.lua"))()
+  local function assistant_msg(args)
+    return { role = "assistant", content = { tool_calls = {
+      { id = "call_1", type = "function",
+        ["function"] = { name = "run", arguments = args } },
+    }, text = "" } }
+  end
+  local decoded = '{"command":"echo \\"hi\\""}'
+  local _, msgs = anthropic_p.convert_messages(
+    { { role = "user", content = "run it" }, assistant_msg(decoded) })
+  assert_true(msgs:find('"input":{"command":"echo \\"hi\\""}', 1, true) ~= nil,
+    "T336 quoted arguments survive the encode verbatim")
+  local parsed = common.json_decode(msgs)
+  assert_notnil(parsed, "T336 the emitted messages parse as JSON")
+  local input = parsed[2].content[1].input
+  assert_eq(input.command, 'echo "hi"', "T336 the round-tripped command is intact")
+
+  local _, empty_msgs = anthropic_p.convert_messages(
+    { assistant_msg("") })
+  assert_true(empty_msgs:find('"input":{}', 1, true) ~= nil,
+    "T336 empty arguments encode as {}")
+  local _, absent_msgs = anthropic_p.convert_messages(
+    { assistant_msg(nil) })
+  assert_true(absent_msgs:find('"input":{}', 1, true) ~= nil,
+    "T336 absent arguments encode as {}")
+  print("T336 stored tool-call arguments encode exactly once: OK")
+end
+
 -- T180: audit fixes — extra_headers mechanism (catalog + user override, CRLF guard)
 do
   local api = assert(loadfile("src/tether/api.lua"))()
