@@ -111,8 +111,8 @@ function M.build_request(messages, model, _max_tokens)
 end
 
 function M.parse_sse_line(line, on_event)
-    if line:sub(1, 6) ~= "data: " then return end
-    local payload = line:sub(7)
+    local payload = common.sse_payload(line)
+    if not payload then return end
     if payload == "[DONE]" then
         on_event({ type = "done", reason = "other" })
         return

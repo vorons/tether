@@ -84,6 +84,17 @@ function M.json_string(s, key)
     return found[1]
 end
 
+-- SSE payload of one line, or nil when the line carries none. The field name
+-- is `data:` and the spec allows the space after the colon to be absent, so
+-- both `data: {...}` and `data:{...}` are frames — gateways and OpenAI-compatible
+-- servers write the second form (audit M7). `event:`, `id:`, `retry:` and
+-- comment lines are not payloads. Surrounding whitespace (including the \r of a
+-- CRLF stream) is trimmed, so a terminator compares cleanly.
+function M.sse_payload(line)
+    if type(line) ~= "string" or line:sub(1, 5) ~= "data:" then return nil end
+    return (line:sub(6):gsub("^%s+", ""):gsub("%s+$", ""))
+end
+
 -- Cut a UTF-8 string to at most n BYTES without splitting a glyph: a raw
 -- :sub(1, n) can end mid-sequence, and strict providers 400 a body that is not
 -- valid UTF-8. n is a byte budget, not a display width (see ui.fit_cols).

@@ -268,8 +268,8 @@ end
 -- Event types: message_start / content_block_start / content_block_delta /
 -- content_block_stop / message_delta / message_stop / error / ping.
 local function parse_sse_line(line, on_event)
-    if line:sub(1, 6) ~= "data: " then return end
-    local payload = line:sub(7)
+    local payload = common.sse_payload(line)
+    if not payload then return end
     if payload == "[DONE]" then
         on_event({ type = "done", reason = S.stop_reason or "other" })
         return

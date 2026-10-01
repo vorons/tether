@@ -95,6 +95,60 @@ do
   print("T179 empty deltas are silent: OK")
 end
 
+-- T330 (audit M7): the space after `data:` is optional. Each wire used to
+-- filter with sub(1, 6) ~= "data: ", so a provider emitting `data:{...}`
+-- delivered a stream that parsed into nothing at all.
+do
+  local openai_p = assert(loadfile("src/tether/providers/openai.lua"))()
+  local anthropic_p = assert(loadfile("src/tether/providers/anthropic.lua"))()
+  local gemini_p = assert(loadfile("src/tether/providers/gemini.lua"))()
+  local codex_p = assert(loadfile("src/tether/providers/openai-codex.lua"))()
+  local common = assert(loadfile("src/tether/providers/common.lua"))()
+  local function collect(mod, line)
+    local evs = {}
+    mod.parse_sse_line(line, function(ev) evs[#evs + 1] = ev end)
+    return evs
+  end
+  local function kinds(mod, line)
+    local out = {}
+    for _, ev in ipairs(collect(mod, line)) do
+      out[#out + 1] = (ev.type or "?") .. "/" .. tostring(ev.text or "")
+    end
+    return table.concat(out, ",")
+  end
+
+  assert_eq(common.sse_payload('data:{"a":1}'), '{"a":1}', "T330 no-space payload")
+  assert_eq(common.sse_payload('data: {"a":1}'), '{"a":1}', "T330 spaced payload")
+  assert_eq(common.sse_payload('data:{"a":1}   '), '{"a":1}', "T330 trailing blanks trimmed")
+  assert_eq(common.sse_payload("event: message_start"), nil, "T330 event field is no payload")
+  assert_eq(common.sse_payload(": keepalive"), nil, "T330 comment is no payload")
+  assert_eq(common.sse_payload("id: 7"), nil, "T330 id field is no payload")
+  assert_eq(common.sse_payload("data"), nil, "T330 bare field name is no payload")
+  assert_eq(common.sse_payload(nil), nil, "T330 nil line is no payload")
+
+  local frames = {
+    { openai_p, '{"choices":[{"index":0,"delta":{"content":"Hi!"}}]}', "text_delta/Hi!" },
+    { anthropic_p,
+      '{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hey"}}',
+      "text_delta/Hey" },
+    { gemini_p,
+      '{"candidates":[{"content":{"parts":[{"text":"Hola"}],"role":"model"}}]}',
+      "text_delta/Hola" },
+    { codex_p, '{"type":"response.output_text.delta","output_index":0,"delta":"Yo"}',
+      "text_delta/Yo" },
+  }
+  for _, f in ipairs(frames) do
+    assert_eq(kinds(f[1], "data:" .. f[2]), f[3], "T330 frame without the space flows")
+    assert_eq(kinds(f[1], "data: " .. f[2]), f[3], "T330 same frame spaced is identical")
+    assert_eq(#collect(f[1], "event: ping"), 0, "T330 an event field yields nothing")
+    assert_eq(#collect(f[1], "data:   " .. f[2]), 1, "T330 extra blanks stay one event")
+    local done = collect(f[1], "data:[DONE]")
+    assert_eq(#done, 1, "T330 unspaced sentinel ends the stream")
+    assert_eq(done[1].type, "done", "T330 unspaced sentinel is a done event")
+  end
+  print("T330 SSE frames parse without the space: OK")
+end
+
 -- T180: audit fixes — extra_headers mechanism (catalog + user override, CRLF guard)
 do
   local api = assert(loadfile("src/tether/api.lua"))()

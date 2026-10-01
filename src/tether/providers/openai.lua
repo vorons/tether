@@ -170,8 +170,8 @@ end
 -- Extract the choices[0].delta / finish_reason from an SSE chunk without a full
 -- JSON parser: locate "choices" and scan the first array element heuristically.
 local function parse_sse_line(line, on_event)
-    if line:sub(1, 6) ~= "data: " then return end
-    local payload = line:sub(7)
+    local payload = common.sse_payload(line)
+    if not payload then return end
     if payload == "[DONE]" then
         on_event({ type = "done", reason = S.stop_reason or "other" })
         return
