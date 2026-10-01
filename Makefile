@@ -112,10 +112,14 @@ $(EMBED_OUT): $(LUA_MODS) tools/embed.lua build/embed_list.mk src/host/embed_mod
 # (embed_order.txt points at the build path).
 # build/version.lua embeds the git short hash (--version, splash); "dev"
 # without .git (override with `make tether TETHER_VERSION=...`). CI always
-# fresh-clones, so the hash is current there.
-build/version.lua: tools/gen-version.lua
+# fresh-clones, so the hash is current there. FORCE: HEAD moves without
+# touching any prerequisite, so the hash is re-resolved every build (the
+# generator keeps the mtime when unchanged, so no rebuild cascade).
+build/version.lua: tools/gen-version.lua FORCE
 	@mkdir -p build
 	@lua tools/gen-version.lua build/version.lua $(TETHER_VERSION)
+
+FORCE:
 
 build/providers_snapshot.lua: data/providers.json tools/gen-snapshot.lua
 	@mkdir -p build

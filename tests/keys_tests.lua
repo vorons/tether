@@ -220,6 +220,49 @@ do
   print("T353 kitty functional keys never enter text: OK")
 end
 
+-- T361: a truncated SGR wheel (terminator dropped by the 256B pending queue
+-- during a scroll burst) followed by a fresh wheel must not leak the fresh
+-- tail ("[<64;...M") as text into the input. The stale prefix is corrupt
+-- (its terminator is gone), so a fresh ESC mid-sequence restarts decode.
+do
+  local keys = assert(loadfile("src/tether/ui/keys.lua"))()
+  local trunc = { 27, 91, 60, 54, 52, 59, 52, 48, 59, 51, 49 } -- ESC[<64;40;31, no M
+  local full = { 27, 91, 60, 54, 52, 59, 52, 48, 59, 51, 49, 77 } -- ESC[<64;40;31M
+  local stream = {}
+  for _, x in ipairs(trunc) do stream[#stream + 1] = x end
+  for _, x in ipairs(full) do stream[#stream + 1] = x end
+  local pos = 0
+  local bag = { _byte_stash = {}, _paint_clock = function() return 0 end }
+  _G.tether = host_mock({
+    read_char_nb = function()
+      pos = pos + 1
+      if pos > #stream then return nil end
+      return stream[pos]
+    end,
+    read_char = function()
+      pos = pos + 1
+      if pos > #stream then return nil end
+      return stream[pos]
+    end,
+  })
+  local evs = {}
+  while true do
+    local k = keys.read_key_nb(bag)
+    if not k then break end
+    evs[#evs + 1] = k
+    if #evs > 10 then break end
+  end
+  local texts = 0
+  local mice = 0
+  for _, k in ipairs(evs) do
+    if k.kind == "text" then texts = texts + 1 end
+    if k.kind == "mouse" and k.name == "scroll_up" then mice = mice + 1 end
+  end
+  assert_eq(texts, 0, "T361 truncated wheel + fresh wheel leaks no text")
+  assert_eq(mice, 1, "T361 the fresh wheel still scrolls")
+  print("T361 truncated SGR resyncs on fresh ESC: OK")
+end
+
 if failed > 0 then
     os.exit(1)
 end

@@ -235,6 +235,14 @@ local function decode_first_byte(bag, c, nb)
             local b3 = nb_read()
             if b3 == nil then return incomplete() end
             local c3 = b3 & 0xFF
+            if c3 == 27 then
+                -- A fresh ESC inside a sequence: the stale prefix lost its
+                -- tail (the 256B pending queue truncates scroll bursts), so
+                -- it can never complete. Drop it and restart at the ESC —
+                -- otherwise the fresh ESC dies as "unknown" and its tail
+                -- ("[<64;...M") decodes as text into the input.
+                return decode_first_byte(bag, c3, nb)
+            end
             -- digits, ';', ':', '<', '>': ':' carries kitty alternate-key
             -- sub-fields, so it must not terminate the sequence
             if (c3 >= 48 and c3 <= 57) or c3 == 58 or c3 == 59 or c3 == 60 or c3 == 62 then
