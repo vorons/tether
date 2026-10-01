@@ -5207,6 +5207,12 @@ function M.run(app_cfg)
         end
     end
 
+    -- M12: raw mode belongs to the session that uses it, so the TUI asks the
+    -- host for it here instead of the process asking for every argv. Failing
+    -- (a pipe on stdin) leaves the terminal as the shell left it. Absent
+    -- seam (plain-Lua test host) is the same no-op.
+    if tether.terminal_enter then tether.terminal_enter() end
+
     -- M8/R8: mouse tracking is emitted dynamically on state transitions
     -- (mouse_update_tracking in the main loop), not statically at startup.
     -- T48: alt-screen on by default (fullscreen TUI; shell scrollback no

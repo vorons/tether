@@ -298,9 +298,15 @@ static void setup_signal_handlers(void)
        so shell tools keep their exit codes. */
 }
 
+/* Raw mode is the TUI's to request (spec host: raw mode setup and restore):
+   `--version`, `--print` and the management verbs call nothing here, so they
+   never take the terminal away from the user. Idempotent — the saved
+   termios is kept, so a second call cannot overwrite it with raw settings
+   and unwinding would then restore the wrong state. */
 static int init_termios(void)
 {
     struct termios raw;
+    if (termios_active) return 0;
     if (tcgetattr(STDIN_FILENO, &orig_termios) == -1)
         return -1;
     raw = orig_termios;
@@ -314,6 +320,21 @@ static int init_termios(void)
         return -1;
     termios_active = 1;
     return 0;
+}
+
+/* tether.terminal_enter() -> true | nil, err
+   Called by ui.run when an interactive session actually starts. A pipe or
+   file on stdin has no termios to save: it returns an error and leaves the
+   terminal alone, which is what the piped-EOF path already expects. */
+static int l_terminal_enter(lua_State *L)
+{
+    if (init_termios() != 0) {
+        lua_pushnil(L);
+        lua_pushstring(L, strerror(errno));
+        return 2;
+    }
+    lua_pushboolean(L, 1);
+    return 1;
 }
 
 /* --- tether.* API exposed to Lua --- */
@@ -3257,6 +3278,7 @@ static luaL_Reg tether_api[] = {
     {"quit_requested",  l_quit_requested},
     {"clear_abort",   l_clear_abort},
     {"detect_kb_protocol", l_detect_kb_protocol},
+    {"terminal_enter",  l_terminal_enter},
     {"monotonic_ms",  l_monotonic_ms},
     {NULL, NULL}
 };
@@ -3306,20 +3328,15 @@ static int load_module(lua_State *L, const char *src, const char *name)
 
 int main(int argc, char **argv)
 {
-    int interactive = isatty(STDIN_FILENO) == 1;
-
     /* Install signal handling in every mode: SIGINT/SIGTERM restore the
        terminal (no-op when raw mode was never enabled) and exit cleanly.
        SIGWINCH only matters for the TUI. */
     setup_signal_handlers();
-
-    if (interactive) {
-        if (init_termios() != 0) {
-            perror("tcsetattr");
-            return 1;
-        }
-        atexit(restore_termios);
-    }
+    /* Raw mode is entered by the TUI through tether.terminal_enter(), not
+       here, so a --version/--print/management run never touches termios.
+       The unwind hook is registered in every mode; restore_termios() is a
+       no-op while termios_active is 0. */
+    atexit(restore_termios);
 
     lua_State *L = luaL_newstate();
     if (!L) {
