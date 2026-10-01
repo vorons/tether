@@ -196,6 +196,77 @@ do
   print("T331 error snippet is bounded, control-free, redacted: OK")
 end
 
+-- T346 (audit M14): the request body file is private before its content —
+-- fchmod lands ahead of the first write, and a refused mode fails the
+-- request instead of sending a world-readable body.
+do
+  local api_mod = assert(loadfile("src/tether/api.lua"))()
+  local order = {}
+  local real_open = io.open
+  local function watch_open(path, mode)
+    local f = real_open(path, mode)
+    if f and type(path) == "string" and path:sub(-5) == ".body" then
+      order[#order + 1] = "open:" .. tostring(mode)
+      local wrapped = {}
+      setmetatable(wrapped, { __index = function(_, k)
+        if k == "write" then
+          return function(_, ...)
+            order[#order + 1] = "write"
+            return f:write(...)
+          end
+        elseif k == "close" then
+          return function() return f:close() end
+        end
+        return f[k]
+      end })
+      return wrapped
+    end
+    return f
+  end
+  local orig_tether = _G.tether
+  local function run_stream(fchmod_body)
+    order = {}
+    _G.tether = host_mock{
+      fchmod = function(path, _mode)
+        if type(path) == "string" and path:sub(-5) == ".body" then
+          order[#order + 1] = "fchmod"
+          return fchmod_body
+        end
+        return true
+      end,
+      http_stream = function(_, _, _, _, on_line)
+        on_line('data: {"choices":[{"delta":{"content":"hi"}}]}')
+        return true
+      end,
+      http_get = function() return nil, "not used" end,
+      sleep = function() end,
+    }
+    io.open = watch_open
+    local ok, failure = api_mod.stream({ provider = "openai", base_url = "http://x",
+      model = "m" }, "key", { { role = "user", content = "hi" } }, function() end)
+    _G.tether = orig_tether
+    io.open = real_open
+    return ok, failure
+  end
+  assert_true(run_stream(true), "T346 the request succeeds")
+  local fi, wi
+  for i, e in ipairs(order) do
+    if e == "fchmod" then fi = fi or i end
+    if e == "write" then wi = wi or i end
+  end
+  assert_notnil(fi, "T346 fchmod ran on the body path")
+  assert_notnil(wi, "T346 the body was written")
+  assert_true(fi < wi, "T346 the mode lands before the first byte")
+  local ok2, failure2 = run_stream(false)
+  assert_true(not ok2, "T346 a refused mode fails the request")
+  assert_true(tostring(failure2 and failure2.message or failure2):find(
+    "lock down", 1, true) ~= nil, "T346 the failure names the lockdown")
+  for _, e in ipairs(order) do
+    assert_true(e ~= "write", "T346 nothing is written when the mode fails")
+  end
+  print("T346 body file is private before its content: OK")
+end
+
 -- T336 (audit M2): stored tool-call arguments encode exactly once. History
 -- holds DECODED arguments (agent.lua unescapes at echo time), so the
 -- Anthropic encoder must splice them verbatim: a second unescape turns

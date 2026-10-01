@@ -481,13 +481,22 @@ local function http_request(cfg, api_key, messages, on_event, opts)
         return false, retry.failure("permanent", "cannot write auth header file")
     end
 
-    -- request body via stdin to avoid quoting issues entirely; written 0600
-    -- (audit: a 0644 draft body is world-readable in /tmp for its lifetime)
+    -- request body via stdin to avoid quoting issues entirely. The file is
+    -- locked to 0600 BEFORE the first byte lands (the header file's order
+    -- above): io.open creates 0644 under the usual umask, and the body
+    -- carries workspace content — a 0644 draft would be world-readable in
+    -- /tmp for its lifetime. A refused mode fails the request outright.
     local bfile = hfile .. ".body"
     local bf = io.open(bfile, "w")
     if not bf then
         os.remove(hfile)
         return false, retry.failure("permanent", "cannot write request body file")
+    end
+    if not tether.fchmod or not tether.fchmod(bfile, HEADER_FILE_MODE) then
+        bf:close()
+        os.remove(hfile)
+        os.remove(bfile)
+        return false, retry.failure("permanent", "cannot lock down request body file")
     end
     bf:write(req)
     bf:close()
@@ -500,11 +509,6 @@ local function http_request(cfg, api_key, messages, on_event, opts)
             if df then df:write(req); df:close() end
         end
     end)
-    if not tether.fchmod or not tether.fchmod(bfile, HEADER_FILE_MODE) then
-        os.remove(hfile)
-        os.remove(bfile)
-        return false, retry.failure("permanent", "cannot lock down request body file")
-    end
 
     if P.reset_stream then P.reset_stream() end
 
