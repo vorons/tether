@@ -763,6 +763,8 @@ end
 function M.reset_retry_state()
     M.retry_state = retry.new_state()
     M.retry_state.iterations = 0
+    -- M15: the once-per-turn auth-refresh latch lives on the per-turn state.
+    M.retry_state.auth_refreshed = false
     return M.retry_state
 end
 
@@ -1019,11 +1021,18 @@ local function run_answer_segments(cfg, api_key, on_event, state, max_iterations
             end
         else
             -- A failed attempt contributes nothing to the conversation.
-            -- add-provider-login: one refresh on classified auth failure when
-            -- a stored refresh_token exists — runs before permanent stop so
-            -- a 401 never dead-ends before the token can be renewed.
-            local should_auth_refresh = false
-            if failure and failure.kind == "permanent" then
+            local verdict = retry.verdict(p, state, failure)
+            -- M15: one auth refresh per turn, under the verdict's discipline.
+            -- A classified auth failure with a stored refresh token gets a
+            -- single refresh before the stop branch can end the turn — but
+            -- only while the attempt cap leaves room, and the refreshed
+            -- retry takes the schedule's backoff like any other retry (never
+            -- a free immediate retry). A later auth failure in the same turn
+            -- stops without refreshing again, so a dead refresh token costs
+            -- one backed-off retry and the turn ends with a single error.
+            if verdict.action ~= "retry" and not state.auth_refreshed
+                and failure and failure.kind == "permanent"
+                and not (p.max_attempts and state.attempt >= p.max_attempts) then
                 local auth_mod = rawget(_G, "auth")
                 if not auth_mod then
                     local chunk = loadfile("src/tether/auth.lua")
@@ -1037,39 +1046,34 @@ local function run_answer_segments(cfg, api_key, on_event, state, max_iterations
                     if type(entry) == "table" and type(entry.refresh_token) == "string"
                         and entry.refresh_token ~= "" then
                         entry.provider = provider
-                        local post = auth_mod._post_json
-                        if auth_mod.refresh_token(provider, entry, post, os.time()) then
+                        -- latched on attempt, not on success: at most one
+                        -- refresh request per turn whatever the outcome.
+                        state.auth_refreshed = true
+                        if auth_mod.refresh_token(provider, entry,
+                            auth_mod._post_json, os.time()) then
                             auth_mod.save(home, store)
-                            should_auth_refresh = true
-                            -- new key for the immediate retry of this attempt
+                            -- new key for the backed-off retry below
                             api_key = entry.access_token
-                        else
-                            if on_event then
-                                on_event({
-                                    type = "error",
-                                    kind = "permanent",
-                                    message = (failure.message or "auth failed")
-                                        .. " — run /login to refresh credentials",
-                                })
-                            end
-                            collapse_partial_answer(cfg, pending, merged)
-                            return false, failure
                         end
                     end
                 end
-            end
-            local verdict = retry.verdict(p, state, failure)
-            if should_auth_refresh then
-                -- refresh already renewed the token: retry this attempt once
-                -- without consuming a user-visible backoff wait
-                state.attempt = state.attempt + 1
-                goto continue_attempt
+                if state.auth_refreshed then
+                    verdict = { action = "retry",
+                                delay = retry.wait(p, state.attempt),
+                                kind = failure.kind, reason = failure.reason }
+                end
             end
             if verdict.action ~= "retry" then
                 collapse_partial_answer(cfg, pending, merged)
                 if on_event then
+                    local message = retry.terminal_message(failure, state.attempt)
+                    if state.auth_refreshed and failure
+                        and failure.kind == "permanent" then
+                        message = (failure.message or "auth failed")
+                            .. " — run /login to refresh credentials"
+                    end
                     on_event({ type = "error", kind = failure and failure.kind,
-                               message = retry.terminal_message(failure, state.attempt) })
+                               message = message })
                 end
                 return false, failure
             end

@@ -267,6 +267,95 @@ do
   print("T346 body file is private before its content: OK")
 end
 
+-- T347 (audit M15): auth refresh respects the retry verdict. A rejecting
+-- refresh token costs one backed-off retry and a single error — not a
+-- hammer loop — and a renewed token still saves the turn.
+do
+  local retry = assert(loadfile("src/tether/retry.lua"))()
+  local ws = os.tmpname()
+  os.remove(ws)
+  assert(host_fs.mkdirp(ws))
+  local orig_tether, orig_tools = _G.tether, _G.tools
+  local orig_session, orig_config = _G.session, _G.config
+  local orig_api, orig_auth = _G.api, _G.auth
+  local sleeps, streams, refreshes = {}, {}, {}
+  local fail401 = retry.failure("permanent", "http 401: unauthorized", 401)
+  _G.tether = host_mock({
+    getcwd = function() return ws end,
+    realpath = function(p) return p end,
+    exec = function() return true, 0 end,
+    monotonic_ms = function() return 0 end,
+    sleep = function(s) sleeps[#sleeps + 1] = s end,
+  })
+  _G.tools = assert(loadfile("src/tether/tools.lua"))()
+  _G.session = { append = function() end }
+  _G.config = { get_system_prompt = function() return nil end }
+  _G.extensions = nil
+  local mode = "reject"
+  _G.api = {
+    stream = function(_, _, _, on_event)
+      streams[#streams + 1] = true
+      if mode == "renew" and #streams == 2 then
+        on_event({ type = "text_delta", text = "back" })
+        on_event({ type = "done", reason = "stop" })
+        return true, nil
+      end
+      return false, fail401
+    end,
+  }
+  _G.auth = {
+    load = function() return { openai = {
+      kind = "oauth", access_token = "old", refresh_token = "rt-dead",
+      refresh_url = "https://example/token" } } end,
+    save = function() return true end,
+    _post_json = function() return nil, "rejected" end,
+    refresh_token = function()
+      refreshes[#refreshes + 1] = true
+      return mode == "renew"
+    end,
+  }
+  local agent = assert(loadfile("src/tether/agent.lua"))()
+  local function run_turn()
+    agent.clear()
+    agent.reset_retry_state()
+    sleeps, streams, refreshes = {}, {}, {}
+    local evs = {}
+    local ok = agent.turn({ workspace = ws, provider = "openai",
+      retry = { base_delay_ms = 10, max_delay_ms = 100 } },
+      "", "hi", function(ev) evs[#evs + 1] = ev end)
+    return ok, evs
+  end
+  -- rejecting refresh: backoff ran, one refresh, one error, then stop
+  mode = "reject"
+  local ok, evs = run_turn()
+  assert_true(not ok, "T347 dead refresh ends the turn failed")
+  assert_eq(#streams, 2, "T347 the failed refresh costs one retry")
+  assert_eq(#refreshes, 1, "T347 at most one refresh request")
+  assert_true(#sleeps >= 1 and (sleeps[1] or 0) > 0, "T347 the backoff ran")
+  local errors = {}
+  for _, ev in ipairs(evs) do
+    if ev.type == "error" then errors[#errors + 1] = ev end
+  end
+  assert_eq(#errors, 1, "T347 the turn ends with one error")
+  assert_true(errors[1].message:find("/login", 1, true) ~= nil,
+    "T347 the error suggests /login")
+  -- renewing refresh: the backed-off retry uses the new token, no error
+  mode = "renew"
+  local ok2, evs2 = run_turn()
+  assert_true(ok2, "T347 a renewed token saves the turn")
+  assert_eq(#refreshes, 1, "T347 success still refreshes once")
+  assert_true(#sleeps >= 1 and (sleeps[1] or 0) > 0,
+    "T347 the refreshed retry waits too")
+  for _, ev in ipairs(evs2) do
+    assert_true(ev.type ~= "error", "T347 no error event on rescue")
+  end
+  _G.tether, _G.tools = orig_tether, orig_tools
+  _G.session, _G.config = orig_session, orig_config
+  _G.api, _G.auth = orig_api, orig_auth
+  os.execute("rm -rf '" .. ws .. "'")
+  print("T347 refresh respects the retry verdict: OK")
+end
+
 -- T336 (audit M2): stored tool-call arguments encode exactly once. History
 -- holds DECODED arguments (agent.lua unescapes at echo time), so the
 -- Anthropic encoder must splice them verbatim: a second unescape turns
