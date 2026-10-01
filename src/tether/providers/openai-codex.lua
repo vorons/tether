@@ -149,7 +149,8 @@ function M.parse_sse_line(line, on_event)
         local input = tonumber(payload:match('"input_tokens"[%s]*:[%s]*(%d+)')) or 0
         local output = tonumber(payload:match('"output_tokens"[%s]*:[%s]*(%d+)')) or 0
         on_event({ type = "usage",
-            usage = { used = input + output, input = input, output = output } })
+            usage = { used = input + output,
+                      prompt_tokens = input, completion_tokens = output } })
         on_event({ type = "done", reason = "stop" })
     elseif etype == "response.incomplete" then
         local reason = payload:match('"reason"[%s]*:[%s]*"([^"]+)"') or ""

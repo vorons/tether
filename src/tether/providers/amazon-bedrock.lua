@@ -294,8 +294,8 @@ function M.handle_non_sse(body, on_event)
     on_event({ type = "usage",
         usage = { used = (tonumber(usage.inputTokens) or 0)
                         + (tonumber(usage.outputTokens) or 0),
-                  input = tonumber(usage.inputTokens) or 0,
-                  output = tonumber(usage.outputTokens) or 0 } })
+                  prompt_tokens = tonumber(usage.inputTokens) or 0,
+                  completion_tokens = tonumber(usage.outputTokens) or 0 } })
     local reason = STOP_REASONS[out.stopReason] or "other"
     on_event({ type = "done", reason = reason })
     return true

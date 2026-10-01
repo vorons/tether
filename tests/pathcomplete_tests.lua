@@ -1033,6 +1033,59 @@ do
   print("T168 tier-B adapters: OK")
 end
 
+-- T343 (audit M9): usage events carry canonical raw fields. The Codex and
+-- Bedrock wires used to emit `input`/`output`, which neither the footer nor
+-- the cache record reads — both showed zero for those providers.
+do
+  local codex = assert(loadfile("src/tether/providers/openai-codex.lua"))()
+  local bedrock = assert(loadfile("src/tether/providers/amazon-bedrock.lua"))()
+  local cache = assert(loadfile("src/tether/cache.lua"))()
+  -- Codex-shaped usage
+  codex.reset_stream()
+  local cevs = {}
+  codex.parse_sse_line('data: {"type":"response.completed","response":{"status":"completed",'
+    .. '"usage":{"input_tokens":10,"output_tokens":5}}}',
+    function(ev) cevs[#cevs + 1] = ev end)
+  local cusage
+  for _, ev in ipairs(cevs) do
+    if ev.type == "usage" then cusage = ev.usage end
+  end
+  assert_notnil(cusage, "T343 codex usage emitted")
+  assert_eq(cusage.used, 15, "T343 codex used sums")
+  assert_eq(cusage.prompt_tokens, 10, "T343 codex prompt_tokens")
+  assert_eq(cusage.completion_tokens, 5, "T343 codex completion_tokens")
+  -- Bedrock-shaped usage
+  bedrock.reset_stream()
+  local bevs = {}
+  assert_true(bedrock.handle_non_sse(
+    '{"output":{"message":{"role":"assistant","content":[{"text":"hi"}]}},'
+    .. '"usage":{"inputTokens":7,"outputTokens":3}}',
+    function(ev) bevs[#bevs + 1] = ev end), "T343 bedrock consumed")
+  local busage
+  for _, ev in ipairs(bevs) do
+    if ev.type == "usage" then busage = ev.usage end
+  end
+  assert_notnil(busage, "T343 bedrock usage emitted")
+  assert_eq(busage.used, 10, "T343 bedrock used sums")
+  assert_eq(busage.prompt_tokens, 7, "T343 bedrock prompt_tokens")
+  assert_eq(busage.completion_tokens, 3, "T343 bedrock completion_tokens")
+  -- the footer reads non-zero from both shapes
+  local uimod = run_ui_with({ 17 }, {})
+  local S = uimod._get_state()
+  uimod._handle_agent_event({ type = "usage", usage = cusage })
+  assert_eq(S.tokens_in, 10, "T343 footer reads codex prompt_tokens")
+  assert_eq(S.tokens_out, 5, "T343 footer reads codex completion_tokens")
+  uimod._handle_agent_event({ type = "usage", usage = busage })
+  assert_eq(S.tokens_in, 17, "T343 footer accumulates bedrock")
+  assert_eq(S.tokens_out, 8, "T343 footer accumulates bedrock")
+  -- and so does the cache record
+  assert_eq(cache.usage_record({ usage = cusage }).input_tokens, 10,
+    "T343 cache reads codex prompt_tokens")
+  assert_eq(cache.usage_record({ usage = busage }).input_tokens, 7,
+    "T343 cache reads bedrock prompt_tokens")
+  print("T343 canonical usage fields: OK")
+end
+
 -- T169: model-list cache (instant fresh hit, stale refresh ≤5s, fallback)
 do
   -- dynamic-provider-catalog: curated openai static comes from the overlay.
