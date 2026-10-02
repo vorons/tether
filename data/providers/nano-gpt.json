@@ -1,5 +1,5 @@
 {
- "generated_at": 1790852196,
+ "generated_at": 1790936984,
  "id": "nano-gpt",
  "models": [
   {
@@ -265,10 +265,6 @@
   {
    "context": 262144,
    "id": "TEE/qwen3.8-27b"
-  },
-  {
-   "context": 262144,
-   "id": "TEE/qwen3.8-27b-uncensored"
   },
   {
    "context": 128000,
@@ -2137,6 +2133,10 @@
   {
    "context": 262144,
    "id": "unbiased/pareto"
+  },
+  {
+   "context": 1048576,
+   "id": "unbiased/pareto-26.10-preview"
   },
   {
    "context": 6144,

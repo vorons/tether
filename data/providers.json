@@ -1,5 +1,5 @@
 {
- "generated_at": 1790852196,
+ "generated_at": 1790936984,
  "providers": {
   "302ai": {
    "api_key_env": [
@@ -1127,7 +1127,7 @@
     "AIAND_API_KEY"
    ],
    "base_url": "https://api.aiand.com/v1",
-   "model": "zai-org/glm-5.3",
+   "model": "deepseek-ai/deepseek-v4.1-flash",
    "models": [
     {
      "context": 1048576,
@@ -1136,6 +1136,10 @@
     {
      "context": 1048576,
      "id": "deepseek-ai/deepseek-v4-pro"
+    },
+    {
+     "context": 1048576,
+     "id": "deepseek-ai/deepseek-v4.1-flash"
     },
     {
      "context": 262144,
@@ -1172,6 +1176,10 @@
     {
      "context": 1048576,
      "id": "zai-org/glm-5.3"
+    },
+    {
+     "context": 1048550,
+     "id": "zai-org/glm-5.3-flash"
     }
    ],
    "wire": "openai"
@@ -5074,6 +5082,26 @@
     {
      "context": 256000,
      "id": "north-mini-code-1-0"
+    },
+    {
+     "context": 32768,
+     "id": "north-small-translate-09-2026"
+    },
+    {
+     "context": 8000,
+     "id": "tiny-aya-earth"
+    },
+    {
+     "context": 8000,
+     "id": "tiny-aya-fire"
+    },
+    {
+     "context": 8000,
+     "id": "tiny-aya-global"
+    },
+    {
+     "context": 8000,
+     "id": "tiny-aya-water"
     }
    ],
    "wire": "openai"
@@ -6353,7 +6381,7 @@
      "id": "google/gemma-4-E4B-it"
     },
     {
-     "context": 65536,
+     "context": 131072,
      "id": "meta-llama/Llama-3.3-70B-Instruct-Turbo"
     },
     {
@@ -7303,7 +7331,7 @@
      "id": "deepinfra/meta-llama/Llama-3.2-11B-Vision-Instruct"
     },
     {
-     "context": 65536,
+     "context": 131072,
      "id": "deepinfra/meta-llama/Llama-3.3-70B-Instruct"
     },
     {
@@ -7925,6 +7953,18 @@
     {
      "context": 128000,
      "id": "scaleway/llama-3.3-70b-instruct"
+    },
+    {
+     "context": 1000000,
+     "id": "tencent/deepseek-v4-pro-0813"
+    },
+    {
+     "context": 256000,
+     "id": "tencent/hy3"
+    },
+    {
+     "context": 1000000,
+     "id": "tencent/hy4-preview"
     },
     {
      "context": 1048576,
@@ -12329,7 +12369,7 @@
     "KILO_API_KEY"
    ],
    "base_url": "https://api.kilo.ai/api/gateway",
-   "model": "openai/gpt-6.1-sol-pro",
+   "model": "unbiased/pareto-26.10-preview",
    "models": [
     {
      "context": 131072,
@@ -12441,6 +12481,10 @@
     },
     {
      "context": 262144,
+     "id": "apodex/apodex-1.1-mini:free"
+    },
+    {
+     "context": 262144,
      "id": "arcee-ai/trinity-large-thinking"
     },
     {
@@ -12508,7 +12552,7 @@
      "id": "deepseek/deepseek-chat"
     },
     {
-     "context": 163840,
+     "context": 128000,
      "id": "deepseek/deepseek-chat-v3-0324"
     },
     {
@@ -12776,7 +12820,7 @@
      "id": "meta-llama/llama-3.2-3b-instruct"
     },
     {
-     "context": 65536,
+     "context": 131072,
      "id": "meta-llama/llama-3.3-70b-instruct"
     },
     {
@@ -13004,7 +13048,7 @@
      "id": "nvidia/nemotron-3-super-120b-a12b:free"
     },
     {
-     "context": 202800,
+     "context": 262144,
      "id": "nvidia/nemotron-3-ultra-550b-a55b"
     },
     {
@@ -13396,7 +13440,7 @@
      "id": "qwen/qwen3-30b-a3b"
     },
     {
-     "context": 128000,
+     "context": 262144,
      "id": "qwen/qwen3-30b-a3b-instruct-2507"
     },
     {
@@ -13702,6 +13746,10 @@
     {
      "context": 262144,
      "id": "unbiased/pareto"
+    },
+    {
+     "context": 1048576,
+     "id": "unbiased/pareto-26.10-preview"
     },
     {
      "context": 6144,
@@ -14102,7 +14150,7 @@
    "model": "gpt-6.1-sol",
    "models": [
     {
-     "context": 32768,
+     "context": 262000,
      "id": "Qwen3.8-27B"
     },
     {
@@ -14814,7 +14862,7 @@
      "id": "qwen3-coder-480b-a35b-instruct"
     },
     {
-     "context": 1000000,
+     "context": 997952,
      "id": "qwen3-coder-flash"
     },
     {
@@ -14878,7 +14926,7 @@
      "id": "qwen3.6-35b-a3b"
     },
     {
-     "context": 1000000,
+     "context": 983616,
      "id": "qwen3.6-flash"
     },
     {
@@ -14886,11 +14934,11 @@
      "id": "qwen3.6-max-preview"
     },
     {
-     "context": 1000000,
+     "context": 983616,
      "id": "qwen3.6-plus"
     },
     {
-     "context": 1000000,
+     "context": 983616,
      "id": "qwen3.7-flash"
     },
     {
@@ -14898,7 +14946,7 @@
      "id": "qwen3.7-max"
     },
     {
-     "context": 1000000,
+     "context": 983616,
      "id": "qwen3.7-plus"
     },
     {
@@ -15024,7 +15072,7 @@
      "id": "alibaba/qwen-plus-latest"
     },
     {
-     "context": 1000000,
+     "context": 997952,
      "id": "alibaba/qwen3-coder-flash"
     },
     {
@@ -15060,7 +15108,7 @@
      "id": "alibaba/qwen3.6-35b-a3b"
     },
     {
-     "context": 1000000,
+     "context": 983616,
      "id": "alibaba/qwen3.6-flash"
     },
     {
@@ -15068,27 +15116,27 @@
      "id": "alibaba/qwen3.6-max-preview"
     },
     {
-     "context": 1000000,
+     "context": 983616,
      "id": "alibaba/qwen3.6-plus"
     },
     {
-     "context": 1000000,
+     "context": 983616,
      "id": "alibaba/qwen3.7-flash"
     },
     {
-     "context": 1000000,
+     "context": 983616,
      "id": "alibaba/qwen3.7-max"
     },
     {
-     "context": 1000000,
+     "context": 983616,
      "id": "alibaba/qwen3.7-plus"
     },
     {
-     "context": 1000000,
+     "context": 983616,
      "id": "alibaba/qwen3.8-flash"
     },
     {
-     "context": 1000000,
+     "context": 983616,
      "id": "alibaba/qwen3.8-max"
     },
     {
@@ -15516,8 +15564,12 @@
      "id": "cerebras/qwen3-235b-a22b-instruct-2507"
     },
     {
-     "context": 32768,
+     "context": 262000,
      "id": "consensusprotocol/Qwen3.8-27B"
+    },
+    {
+     "context": 524288,
+     "id": "consensusprotocol/deepseek-v4-flash"
     },
     {
      "context": 1048576,
@@ -15532,7 +15584,7 @@
      "id": "consensusprotocol/glm-5.3-flash"
     },
     {
-     "context": 65536,
+     "context": 128000,
      "id": "consensusprotocol/gpt-oss-20b"
     },
     {
@@ -17743,7 +17795,7 @@
     "NANO_GPT_API_KEY"
    ],
    "base_url": "https://nano-gpt.com/api/v1",
-   "model": "openai/gpt-6.1-sol-pro",
+   "model": "unbiased/pareto-26.10-preview",
    "models": [
     {
      "context": 32768,
@@ -18008,10 +18060,6 @@
     {
      "context": 262144,
      "id": "TEE/qwen3.8-27b"
-    },
-    {
-     "context": 262144,
-     "id": "TEE/qwen3.8-27b-uncensored"
     },
     {
      "context": 128000,
@@ -19882,6 +19930,10 @@
      "id": "unbiased/pareto"
     },
     {
+     "context": 1048576,
+     "id": "unbiased/pareto-26.10-preview"
+    },
+    {
      "context": 6144,
      "id": "undi95/remm-slerp-l2-13b"
     },
@@ -21235,6 +21287,14 @@
      "id": "deepseek-ai/deepseek-v4-pro-0813"
     },
     {
+     "context": 1000000,
+     "id": "deepseek-ai/deepseek-v4.1-flash"
+    },
+    {
+     "context": 250000,
+     "id": "google/diffusiongemma-26b-a4b-it"
+    },
+    {
      "context": 128000,
      "id": "google/gemma-2-2b-it"
     },
@@ -21465,6 +21525,10 @@
     {
      "context": 1000000,
      "id": "nvidia/nemotron-3-ultra-550b-a55b"
+    },
+    {
+     "context": 128000,
+     "id": "nvidia/nemotron-3.5-content-safety"
     },
     {
      "context": 262144,
@@ -22706,6 +22770,10 @@
     },
     {
      "context": 1048576,
+     "id": "fledge-alpha-free"
+    },
+    {
+     "context": 1048576,
      "id": "gemini-3-flash"
     },
     {
@@ -23353,6 +23421,10 @@
     {
      "context": 1000000,
      "id": "anthropic/claude-sonnet-5.5"
+    },
+    {
+     "context": 262144,
+     "id": "apodex/apodex-1.1-mini:free"
     },
     {
      "context": 262144,
@@ -24589,6 +24661,10 @@
     {
      "context": 262144,
      "id": "unbiased/pareto"
+    },
+    {
+     "context": 1048576,
+     "id": "unbiased/pareto-26.10-preview"
     },
     {
      "context": 6144,
@@ -29985,10 +30061,6 @@
      "id": "Qwen/Qwen3.7-Max"
     },
     {
-     "context": 163840,
-     "id": "deepcogito/cogito-v2-1-671b"
-    },
-    {
      "context": 163839,
      "id": "deepseek-ai/DeepSeek-R1"
     },
@@ -30005,10 +30077,6 @@
      "id": "deepseek-ai/DeepSeek-V4-Flash-0731"
     },
     {
-     "context": 512000,
-     "id": "deepseek-ai/DeepSeek-V4-Pro"
-    },
-    {
      "context": 1048576,
      "id": "deepseek-ai/DeepSeek-V4-Pro-0813"
     },
@@ -30021,20 +30089,8 @@
      "id": "essentialai/Rnj-1-Instruct"
     },
     {
-     "context": 32768,
-     "id": "google/gemma-3n-E4B-it"
-    },
-    {
-     "context": 262144,
-     "id": "google/gemma-4-31B-it"
-    },
-    {
      "context": 131072,
      "id": "meta-llama/Llama-3.3-70B-Instruct-Turbo"
-    },
-    {
-     "context": 8192,
-     "id": "meta-llama/Meta-Llama-3-8B-Instruct-Lite"
     },
     {
      "context": 1048576,
@@ -30047,14 +30103,6 @@
     {
      "context": 131072,
      "id": "openai/gpt-oss-120b"
-    },
-    {
-     "context": 131072,
-     "id": "openai/gpt-oss-20b"
-    },
-    {
-     "context": 32000,
-     "id": "pearl-ai/gemma-4-31b-it"
     },
     {
      "context": 524288,
@@ -30139,10 +30187,6 @@
      "id": "Qwen/Qwen3.7-Max"
     },
     {
-     "context": 163840,
-     "id": "deepcogito/cogito-v2-1-671b"
-    },
-    {
      "context": 163839,
      "id": "deepseek-ai/DeepSeek-R1"
     },
@@ -30159,10 +30203,6 @@
      "id": "deepseek-ai/DeepSeek-V4-Flash-0731"
     },
     {
-     "context": 512000,
-     "id": "deepseek-ai/DeepSeek-V4-Pro"
-    },
-    {
      "context": 1048576,
      "id": "deepseek-ai/DeepSeek-V4-Pro-0813"
     },
@@ -30175,20 +30215,8 @@
      "id": "essentialai/Rnj-1-Instruct"
     },
     {
-     "context": 32768,
-     "id": "google/gemma-3n-E4B-it"
-    },
-    {
-     "context": 262144,
-     "id": "google/gemma-4-31B-it"
-    },
-    {
      "context": 131072,
      "id": "meta-llama/Llama-3.3-70B-Instruct-Turbo"
-    },
-    {
-     "context": 8192,
-     "id": "meta-llama/Meta-Llama-3-8B-Instruct-Lite"
     },
     {
      "context": 1048576,
@@ -30201,14 +30229,6 @@
     {
      "context": 131072,
      "id": "openai/gpt-oss-120b"
-    },
-    {
-     "context": 131072,
-     "id": "openai/gpt-oss-20b"
-    },
-    {
-     "context": 32000,
-     "id": "pearl-ai/gemma-4-31b-it"
     },
     {
      "context": 524288,
@@ -30600,6 +30620,10 @@
    "base_url": "https://api.venice.ai/api/v1",
    "model": "venice-uncensored-1-2",
    "models": [
+    {
+     "context": 1000000,
+     "id": "abliteration-abliterated-model-large-v2"
+    },
     {
      "context": 128000,
      "id": "aion-labs-aion-3-0"

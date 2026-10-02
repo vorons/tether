@@ -1,5 +1,5 @@
 {
- "generated_at": 1790852196,
+ "generated_at": 1790936984,
  "id": "cohere",
  "models": [
   {
@@ -57,6 +57,26 @@
   {
    "context": 256000,
    "id": "north-mini-code-1-0"
+  },
+  {
+   "context": 32768,
+   "id": "north-small-translate-09-2026"
+  },
+  {
+   "context": 8000,
+   "id": "tiny-aya-earth"
+  },
+  {
+   "context": 8000,
+   "id": "tiny-aya-fire"
+  },
+  {
+   "context": 8000,
+   "id": "tiny-aya-global"
+  },
+  {
+   "context": 8000,
+   "id": "tiny-aya-water"
   }
  ],
  "schema": 1

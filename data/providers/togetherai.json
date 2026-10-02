@@ -1,5 +1,5 @@
 {
- "generated_at": 1790852196,
+ "generated_at": 1790936984,
  "id": "togetherai",
  "models": [
   {
@@ -51,10 +51,6 @@
    "id": "Qwen/Qwen3.7-Max"
   },
   {
-   "context": 163840,
-   "id": "deepcogito/cogito-v2-1-671b"
-  },
-  {
    "context": 163839,
    "id": "deepseek-ai/DeepSeek-R1"
   },
@@ -71,10 +67,6 @@
    "id": "deepseek-ai/DeepSeek-V4-Flash-0731"
   },
   {
-   "context": 512000,
-   "id": "deepseek-ai/DeepSeek-V4-Pro"
-  },
-  {
    "context": 1048576,
    "id": "deepseek-ai/DeepSeek-V4-Pro-0813"
   },
@@ -87,20 +79,8 @@
    "id": "essentialai/Rnj-1-Instruct"
   },
   {
-   "context": 32768,
-   "id": "google/gemma-3n-E4B-it"
-  },
-  {
-   "context": 262144,
-   "id": "google/gemma-4-31B-it"
-  },
-  {
    "context": 131072,
    "id": "meta-llama/Llama-3.3-70B-Instruct-Turbo"
-  },
-  {
-   "context": 8192,
-   "id": "meta-llama/Meta-Llama-3-8B-Instruct-Lite"
   },
   {
    "context": 1048576,
@@ -113,14 +93,6 @@
   {
    "context": 131072,
    "id": "openai/gpt-oss-120b"
-  },
-  {
-   "context": 131072,
-   "id": "openai/gpt-oss-20b"
-  },
-  {
-   "context": 32000,
-   "id": "pearl-ai/gemma-4-31b-it"
   },
   {
    "context": 524288,

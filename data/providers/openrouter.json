@@ -1,5 +1,5 @@
 {
- "generated_at": 1790852196,
+ "generated_at": 1790936984,
  "id": "openrouter",
  "models": [
   {
@@ -109,6 +109,10 @@
   {
    "context": 1000000,
    "id": "anthropic/claude-sonnet-5.5"
+  },
+  {
+   "context": 262144,
+   "id": "apodex/apodex-1.1-mini:free"
   },
   {
    "context": 262144,
@@ -1345,6 +1349,10 @@
   {
    "context": 262144,
    "id": "unbiased/pareto"
+  },
+  {
+   "context": 1048576,
+   "id": "unbiased/pareto-26.10-preview"
   },
   {
    "context": 6144,
