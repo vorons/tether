@@ -1,5 +1,5 @@
 {
- "generated_at": 1790936984,
+ "generated_at": 1791021096,
  "id": "crossmodel",
  "models": [
   {
@@ -165,6 +165,10 @@
   {
    "context": 1050000,
    "id": "openai/gpt-6-sol"
+  },
+  {
+   "context": 1050000,
+   "id": "openai/gpt-6.1-sol"
   },
   {
    "context": 1000000,

@@ -1,5 +1,5 @@
 {
- "generated_at": 1790936984,
+ "generated_at": 1791021096,
  "id": "amazon-bedrock",
  "models": [
   {
@@ -333,6 +333,18 @@
   {
    "context": 131072,
    "id": "google.gemma-4-e2b"
+  },
+  {
+   "context": 200000,
+   "id": "in.anthropic.claude-haiku-4-5-20251001-v1:0"
+  },
+  {
+   "context": 1000000,
+   "id": "in.anthropic.claude-opus-5"
+  },
+  {
+   "context": 1000000,
+   "id": "in.anthropic.claude-sonnet-5"
   },
   {
    "context": 1050000,

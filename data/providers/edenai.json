@@ -1,5 +1,5 @@
 {
- "generated_at": 1790936984,
+ "generated_at": 1791021096,
  "id": "edenai",
  "models": [
   {
@@ -403,12 +403,8 @@
    "id": "flexai/DeepSeek-V4-Flash-0731"
   },
   {
-   "context": 131072,
-   "id": "flexai/Muse-Glimmer-30B"
-  },
-  {
-   "context": 262144,
-   "id": "flexai/Step-3.7-Flash"
+   "context": 1048576,
+   "id": "flexai/DeepSeek-V4.1-Flash"
   },
   {
    "context": 131072,
@@ -489,6 +485,10 @@
   {
    "context": 1048576,
    "id": "google/gemini-pro-latest"
+  },
+  {
+   "context": 131072,
+   "id": "greenference/gpt-oss-20b"
   },
   {
    "context": 131072,
@@ -941,6 +941,10 @@
   {
    "context": 1000000,
    "id": "tencent/hy4-preview"
+  },
+  {
+   "context": 1000000,
+   "id": "tencent/step-5-preview"
   },
   {
    "context": 1048576,

@@ -1,5 +1,5 @@
 {
- "generated_at": 1790936984,
+ "generated_at": 1791021096,
  "id": "opencode",
  "models": [
   {
@@ -333,6 +333,10 @@
   {
    "context": 262144,
    "id": "ling-3.0-tiny-free"
+  },
+  {
+   "context": 262144,
+   "id": "ling-3.1-flash-free"
   },
   {
    "context": 1000000,

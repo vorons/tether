@@ -1,5 +1,5 @@
 {
- "generated_at": 1790936984,
+ "generated_at": 1791021096,
  "id": "synthetic",
  "models": [
   {
@@ -37,6 +37,10 @@
   {
    "context": 524288,
    "id": "hf:zai-org/GLM-5.2"
+  },
+  {
+   "context": 524288,
+   "id": "hf:zai-org/GLM-5.3"
   },
   {
    "context": 524288,

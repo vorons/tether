@@ -1,5 +1,5 @@
 {
- "generated_at": 1790936984,
+ "generated_at": 1791021096,
  "id": "llmgateway",
  "models": [
   {
@@ -447,7 +447,7 @@
    "id": "grok-4-6"
   },
   {
-   "context": 500000,
+   "context": 524288,
    "id": "grok-4-7"
   },
   {

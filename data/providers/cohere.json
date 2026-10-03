@@ -1,5 +1,5 @@
 {
- "generated_at": 1790936984,
+ "generated_at": 1791021096,
  "id": "cohere",
  "models": [
   {
@@ -7,16 +7,8 @@
    "id": "c4ai-aya-expanse-32b"
   },
   {
-   "context": 8000,
-   "id": "c4ai-aya-expanse-8b"
-  },
-  {
    "context": 16000,
    "id": "c4ai-aya-vision-32b"
-  },
-  {
-   "context": 16000,
-   "id": "c4ai-aya-vision-8b"
   },
   {
    "context": 256000,

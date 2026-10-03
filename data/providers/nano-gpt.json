@@ -1,5 +1,5 @@
 {
- "generated_at": 1790936984,
+ "generated_at": 1791021096,
  "id": "nano-gpt",
  "models": [
   {
@@ -1157,10 +1157,6 @@
   {
    "context": 131072,
    "id": "kimi-k2-instruct-fast"
-  },
-  {
-   "context": 200000,
-   "id": "kitani/clover-1-150b"
   },
   {
    "context": 32768,

@@ -1,5 +1,5 @@
 {
- "generated_at": 1790936984,
+ "generated_at": 1791021096,
  "id": "llmgateway-providers",
  "models": [
   {
@@ -235,6 +235,10 @@
    "id": "aws-bedrock/claude-opus-5"
   },
   {
+   "context": 1000000,
+   "id": "aws-bedrock/claude-opus-5-5"
+  },
+  {
    "context": 200000,
    "id": "aws-bedrock/claude-sonnet-4-5"
   },
@@ -252,11 +256,23 @@
   },
   {
    "context": 1000000,
+   "id": "aws-bedrock/claude-sonnet-5-5"
+  },
+  {
+   "context": 1000000,
    "id": "aws-bedrock/grok-4-3"
   },
   {
    "context": 500000,
    "id": "aws-bedrock/grok-4-6"
+  },
+  {
+   "context": 524288,
+   "id": "aws-bedrock/grok-4-7"
+  },
+  {
+   "context": 1048576,
+   "id": "aws-bedrock/kimi-k3"
   },
   {
    "context": 128000,
@@ -304,6 +320,10 @@
   },
   {
    "context": 1000000,
+   "id": "azure-anthropic/claude-fable-5-1"
+  },
+  {
+   "context": 1000000,
    "id": "azure-anthropic/claude-opus-4-6"
   },
   {
@@ -320,7 +340,15 @@
   },
   {
    "context": 1000000,
+   "id": "azure-anthropic/claude-opus-5-5"
+  },
+  {
+   "context": 1000000,
    "id": "azure-anthropic/claude-sonnet-5"
+  },
+  {
+   "context": 1000000,
+   "id": "azure-anthropic/claude-sonnet-5-5"
   },
   {
    "context": 1000000,
@@ -417,6 +445,10 @@
   {
    "context": 1050000,
    "id": "azure/gpt-6-sol"
+  },
+  {
+   "context": 1050000,
+   "id": "azure/gpt-6.1-sol"
   },
   {
    "context": 131072,

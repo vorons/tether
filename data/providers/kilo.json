@@ -1,5 +1,5 @@
 {
- "generated_at": 1790936984,
+ "generated_at": 1791021096,
  "id": "kilo",
  "models": [
   {
@@ -199,7 +199,7 @@
    "id": "deepseek/deepseek-r1-0528"
   },
   {
-   "context": 131072,
+   "context": 163840,
    "id": "deepseek/deepseek-v3.1-terminus"
   },
   {
@@ -389,6 +389,10 @@
   {
    "context": 262144,
    "id": "inclusionai/ling-3.0-flash-vl"
+  },
+  {
+   "context": 262144,
+   "id": "inclusionai/ling-3.1-flash"
   },
   {
    "context": 128000,
@@ -1071,7 +1075,7 @@
    "id": "qwen/qwen3-30b-a3b"
   },
   {
-   "context": 262144,
+   "context": 128000,
    "id": "qwen/qwen3-30b-a3b-instruct-2507"
   },
   {
@@ -1119,7 +1123,7 @@
    "id": "qwen/qwen3-next-80b-a3b-instruct"
   },
   {
-   "context": 262144,
+   "context": 131072,
    "id": "qwen/qwen3-next-80b-a3b-thinking"
   },
   {

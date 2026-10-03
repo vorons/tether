@@ -1,5 +1,5 @@
 {
- "generated_at": 1790936984,
+ "generated_at": 1791021096,
  "id": "openrouter",
  "models": [
   {
@@ -397,6 +397,10 @@
   {
    "context": 262144,
    "id": "inclusionai/ling-3.0-flash-vl"
+  },
+  {
+   "context": 262144,
+   "id": "inclusionai/ling-3.1-flash"
   },
   {
    "context": 128000,

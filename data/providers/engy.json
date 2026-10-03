@@ -1,0 +1,39 @@
+{
+ "generated_at": 1791021096,
+ "id": "engy",
+ "models": [
+  {
+   "context": 1048576,
+   "id": "deepseek-v4-flash-0731"
+  },
+  {
+   "context": 327680,
+   "id": "deepseek-v4.1-flash"
+  },
+  {
+   "context": 262144,
+   "id": "glm-5.2"
+  },
+  {
+   "context": 327680,
+   "id": "glm-5.3"
+  },
+  {
+   "context": 262144,
+   "id": "glm-5.3-flash"
+  },
+  {
+   "context": 1113088,
+   "id": "kimi-k3"
+  },
+  {
+   "context": 208192,
+   "id": "qwen3.6-35b-a3b"
+  },
+  {
+   "context": 1001536,
+   "id": "qwen3.8-27b"
+  }
+ ],
+ "schema": 1
+}
