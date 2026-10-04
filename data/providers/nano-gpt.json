@@ -1,5 +1,5 @@
 {
- "generated_at": 1791021096,
+ "generated_at": 1791110061,
  "id": "nano-gpt",
  "models": [
   {
@@ -2057,6 +2057,10 @@
   {
    "context": 1000000,
    "id": "sakana/fugu-ultra-v1.1"
+  },
+  {
+   "context": 262144,
+   "id": "sakana/sakana-namazu"
   },
   {
    "context": 131072,

@@ -1,5 +1,5 @@
 {
- "generated_at": 1791021096,
+ "generated_at": 1791110061,
  "providers": {
   "302ai": {
    "api_key_env": [
@@ -2429,6 +2429,10 @@
      "id": "eu.anthropic.claude-sonnet-5"
     },
     {
+     "context": 1000000,
+     "id": "eu.anthropic.claude-sonnet-5-5"
+    },
+    {
      "context": 128000,
      "id": "eu.mistral.pixtral-large-2502-v1:0"
     },
@@ -2875,6 +2879,10 @@
     {
      "context": 1000000,
      "id": "us.anthropic.claude-sonnet-5"
+    },
+    {
+     "context": 1000000,
+     "id": "us.anthropic.claude-sonnet-5-5"
     },
     {
      "context": 128000,
@@ -7437,6 +7445,10 @@
     {
      "context": 1048576,
      "id": "flexai/DeepSeek-V4.1-Flash"
+    },
+    {
+     "context": 262144,
+     "id": "flexai/Step-3.7-Flash"
     },
     {
      "context": 131072,
@@ -12606,7 +12618,7 @@
      "id": "deepseek/deepseek-chat"
     },
     {
-     "context": 128000,
+     "context": 163840,
      "id": "deepseek/deepseek-chat-v3-0324"
     },
     {
@@ -12634,7 +12646,7 @@
      "id": "deepseek/deepseek-v3.2-exp"
     },
     {
-     "context": 1024000,
+     "context": 1048576,
      "id": "deepseek/deepseek-v4-flash"
     },
     {
@@ -19944,6 +19956,10 @@
      "id": "sakana/fugu-ultra-v1.1"
     },
     {
+     "context": 262144,
+     "id": "sakana/sakana-namazu"
+    },
+    {
      "context": 131072,
      "id": "sarvam-105b"
     },
@@ -20524,7 +20540,7 @@
     "NEON_AI_GATEWAY_TOKEN"
    ],
    "base_url": "{NEON_AI_GATEWAY_BASE_URL}/v1",
-   "model": "gpt-6-astra",
+   "model": "claude-opus-5-5",
    "models": [
     {
      "context": 1000000,
@@ -20561,6 +20577,10 @@
     {
      "context": 1000000,
      "id": "claude-opus-5"
+    },
+    {
+     "context": 1000000,
+     "id": "claude-opus-5-5"
     },
     {
      "context": 200000,
@@ -30498,6 +30518,10 @@
     },
     {
      "context": 1048576,
+     "id": "umans-glm-5.3"
+    },
+    {
+     "context": 1048576,
      "id": "umans-glm-5.3-flash"
     },
     {
@@ -30529,6 +30553,10 @@
     {
      "context": 262144,
      "id": "umans-flash"
+    },
+    {
+     "context": 1048576,
+     "id": "umans-glm-5.3"
     },
     {
      "context": 1048576,

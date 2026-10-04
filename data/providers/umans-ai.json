@@ -1,5 +1,5 @@
 {
- "generated_at": 1791021096,
+ "generated_at": 1791110061,
  "id": "umans-ai",
  "models": [
   {
@@ -17,6 +17,10 @@
   {
    "context": 262144,
    "id": "umans-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "umans-glm-5.3"
   },
   {
    "context": 1048576,
