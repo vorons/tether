@@ -1,5 +1,5 @@
 {
- "generated_at": 1791110061,
+ "generated_at": 1791199646,
  "id": "llmgateway-providers",
  "models": [
   {
@@ -877,6 +877,10 @@
   {
    "context": 128000,
    "id": "inference.net/llama-3.2-11b-instruct"
+  },
+  {
+   "context": 1000000,
+   "id": "luminal/deepseek-v4.1-flash"
   },
   {
    "context": 1048576,

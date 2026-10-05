@@ -1,5 +1,5 @@
 {
- "generated_at": 1791110061,
+ "generated_at": 1791199646,
  "id": "kilo",
  "models": [
   {
@@ -183,7 +183,7 @@
    "id": "deepseek/deepseek-chat"
   },
   {
-   "context": 163840,
+   "context": 128000,
    "id": "deepseek/deepseek-chat-v3-0324"
   },
   {

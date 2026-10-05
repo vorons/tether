@@ -1,5 +1,5 @@
 {
- "generated_at": 1791110061,
+ "generated_at": 1791199646,
  "providers": {
   "302ai": {
    "api_key_env": [
@@ -4382,15 +4382,11 @@
     "BLUECLAW_API_KEY"
    ],
    "base_url": "https://openai.blueclaw.network/v1",
-   "model": "Qwen3.6-27B",
+   "model": "Qwen3.8-27B",
    "models": [
     {
      "context": 131072,
-     "id": "Qwen/Qwen3.6-35B-A3B-FP8"
-    },
-    {
-     "context": 196608,
-     "id": "Qwen3.6-27B"
+     "id": "Qwen3.8-27B"
     }
    ],
    "wire": "openai"
@@ -5127,7 +5123,15 @@
    "models": [
     {
      "context": 1048576,
+     "id": "deepseek-v4.1-flash-fast"
+    },
+    {
+     "context": 1048576,
      "id": "deepseek-v4.1-flash-fast-fp4"
+    },
+    {
+     "context": 1048576,
+     "id": "glm-5.3-fast"
     },
     {
      "context": 1048576,
@@ -5200,10 +5204,6 @@
      "id": "codestral-2508"
     },
     {
-     "context": 164000,
-     "id": "deepseek-r1-0528"
-    },
-    {
      "context": 163840,
      "id": "deepseek-v3.2"
     },
@@ -5212,7 +5212,7 @@
      "id": "deepseek-v4-flash-0731"
     },
     {
-     "context": 1048576,
+     "context": 1000000,
      "id": "deepseek-v4-pro"
     },
     {
@@ -5277,14 +5277,6 @@
     },
     {
      "context": 202752,
-     "id": "glm-5"
-    },
-    {
-     "context": 202752,
-     "id": "glm-5-turbo"
-    },
-    {
-     "context": 202752,
      "id": "glm-5.1"
     },
     {
@@ -5298,10 +5290,6 @@
     {
      "context": 1048576,
      "id": "glm-5.3-flash"
-    },
-    {
-     "context": 202752,
-     "id": "glm-5v-turbo"
     },
     {
      "context": 1047576,
@@ -5384,11 +5372,7 @@
      "id": "hermes-4-405b"
     },
     {
-     "context": 262144,
-     "id": "kimi-k2.5"
-    },
-    {
-     "context": 262144,
+     "context": 256000,
      "id": "kimi-k2.6"
     },
     {
@@ -5540,15 +5524,11 @@
      "id": "qwen3-vl-235b-a22b"
     },
     {
-     "context": 262144,
-     "id": "qwen3.5-122b-a10b"
-    },
-    {
      "context": 262000,
      "id": "qwen3.5-397b-a17b"
     },
     {
-     "context": 262144,
+     "context": 262000,
      "id": "qwen3.5-9b"
     },
     {
@@ -7531,7 +7511,7 @@
      "id": "google/gemini-pro-latest"
     },
     {
-     "context": 131072,
+     "context": 32768,
      "id": "greenference/gpt-oss-20b"
     },
     {
@@ -12618,7 +12598,7 @@
      "id": "deepseek/deepseek-chat"
     },
     {
-     "context": 163840,
+     "context": 128000,
      "id": "deepseek/deepseek-chat-v3-0324"
     },
     {
@@ -15962,6 +15942,10 @@
      "id": "inference.net/llama-3.2-11b-instruct"
     },
     {
+     "context": 1000000,
+     "id": "luminal/deepseek-v4.1-flash"
+    },
+    {
      "context": 1048576,
      "id": "meta-contributor/muse-spark-1.2-contributor"
     },
@@ -17897,7 +17881,7 @@
     "NANO_GPT_API_KEY"
    ],
    "base_url": "https://nano-gpt.com/api/v1",
-   "model": "unbiased/pareto-26.10-preview",
+   "model": "z-ai/glm-5.3-flash-apex-abliterated",
    "models": [
     {
      "context": 32768,
@@ -20266,6 +20250,14 @@
     {
      "context": 1048576,
      "id": "z-ai/glm-5.3-flash"
+    },
+    {
+     "context": 1048576,
+     "id": "z-ai/glm-5.3-flash-apex"
+    },
+    {
+     "context": 1048576,
+     "id": "z-ai/glm-5.3-flash-apex-abliterated"
     },
     {
      "context": 1048576,
@@ -29374,15 +29366,15 @@
     "SUBCONSCIOUS_API_KEY"
    ],
    "base_url": "https://api.subconscious.dev/v1",
-   "model": "subconscious/glm-5.2",
+   "model": "subconscious/deepseek-v4.1-flash-marathon",
    "models": [
     {
-     "context": 1000000,
-     "id": "subconscious/glm-5.2"
+     "context": 5000000,
+     "id": "subconscious/deepseek-v4.1-flash-marathon"
     },
     {
-     "context": 8192,
-     "id": "subconscious/tim-qwen3.6-27b"
+     "context": 5000000,
+     "id": "subconscious/glm-5.3-marathon"
     }
    ],
    "wire": "anthropic"

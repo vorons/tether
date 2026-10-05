@@ -1,10 +1,18 @@
 {
- "generated_at": 1791110061,
+ "generated_at": 1791199646,
  "id": "coralbricks",
  "models": [
   {
    "context": 1048576,
+   "id": "deepseek-v4.1-flash-fast"
+  },
+  {
+   "context": 1048576,
    "id": "deepseek-v4.1-flash-fast-fp4"
+  },
+  {
+   "context": 1048576,
+   "id": "glm-5.3-fast"
   },
   {
    "context": 1048576,

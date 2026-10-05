@@ -1,5 +1,5 @@
 {
- "generated_at": 1791110061,
+ "generated_at": 1791199646,
  "id": "nano-gpt",
  "models": [
   {
@@ -2369,6 +2369,14 @@
   {
    "context": 1048576,
    "id": "z-ai/glm-5.3-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "z-ai/glm-5.3-flash-apex"
+  },
+  {
+   "context": 1048576,
+   "id": "z-ai/glm-5.3-flash-apex-abliterated"
   },
   {
    "context": 1048576,

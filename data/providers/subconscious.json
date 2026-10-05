@@ -1,14 +1,14 @@
 {
- "generated_at": 1791110061,
+ "generated_at": 1791199646,
  "id": "subconscious",
  "models": [
   {
-   "context": 1000000,
-   "id": "subconscious/glm-5.2"
+   "context": 5000000,
+   "id": "subconscious/deepseek-v4.1-flash-marathon"
   },
   {
-   "context": 8192,
-   "id": "subconscious/tim-qwen3.6-27b"
+   "context": 5000000,
+   "id": "subconscious/glm-5.3-marathon"
   }
  ],
  "schema": 1
