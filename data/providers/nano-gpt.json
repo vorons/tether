@@ -1,5 +1,5 @@
 {
- "generated_at": 1791199646,
+ "generated_at": 1791285337,
  "id": "nano-gpt",
  "models": [
   {
@@ -1984,7 +1984,15 @@
   },
   {
    "context": 262144,
+   "id": "qwen/qwen3.8-27b-antislop"
+  },
+  {
+   "context": 262144,
    "id": "qwen/qwen3.8-27b-cybersecurity"
+  },
+  {
+   "context": 262144,
+   "id": "qwen/qwen3.8-27b-darkidol"
   },
   {
    "context": 524288,
@@ -1992,7 +2000,23 @@
   },
   {
    "context": 262144,
+   "id": "qwen/qwen3.8-27b-fimi"
+  },
+  {
+   "context": 262144,
    "id": "qwen/qwen3.8-27b-hemmingway"
+  },
+  {
+   "context": 262144,
+   "id": "qwen/qwen3.8-27b-kimiko"
+  },
+  {
+   "context": 262144,
+   "id": "qwen/qwen3.8-27b-kiwen"
+  },
+  {
+   "context": 262144,
+   "id": "qwen/qwen3.8-27b-novelist"
   },
   {
    "context": 524288,
@@ -2005,6 +2029,14 @@
   {
    "context": 524288,
    "id": "qwen/qwen3.8-27b-queen"
+  },
+  {
+   "context": 262144,
+   "id": "qwen/qwen3.8-27b-swift"
+  },
+  {
+   "context": 262144,
+   "id": "qwen/qwen3.8-27b-synthia"
   },
   {
    "context": 524288,
@@ -2057,10 +2089,6 @@
   {
    "context": 1000000,
    "id": "sakana/fugu-ultra-v1.1"
-  },
-  {
-   "context": 262144,
-   "id": "sakana/sakana-namazu"
   },
   {
    "context": 131072,

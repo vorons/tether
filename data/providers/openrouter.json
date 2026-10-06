@@ -1,5 +1,5 @@
 {
- "generated_at": 1791199646,
+ "generated_at": 1791285337,
  "id": "openrouter",
  "models": [
   {
@@ -1219,10 +1219,6 @@
    "id": "qwen/qwen3.8-27b"
   },
   {
-   "context": 262144,
-   "id": "qwen/qwen3.8-27b:free"
-  },
-  {
    "context": 1000000,
    "id": "qwen/qwen3.8-flash"
   },
@@ -1281,10 +1277,6 @@
   {
    "context": 131072,
    "id": "sao10k/l3.3-euryale-70b"
-  },
-  {
-   "context": 1000000,
-   "id": "stealth/space-bunny-alpha"
   },
   {
    "context": 262144,

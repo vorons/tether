@@ -1,10 +1,10 @@
 {
- "generated_at": 1791199646,
+ "generated_at": 1791285337,
  "id": "aki-io",
  "models": [
   {
    "context": 1048576,
-   "id": "deepseek-v4-flash-0731-284b"
+   "id": "deepseek-v4.1-flash-552b"
   },
   {
    "context": 256000,

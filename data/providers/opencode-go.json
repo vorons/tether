@@ -1,5 +1,5 @@
 {
- "generated_at": 1791199646,
+ "generated_at": 1791285337,
  "id": "opencode-go",
  "models": [
   {
@@ -129,6 +129,10 @@
   {
    "context": 1000000,
    "id": "qwen3.8-max"
+  },
+  {
+   "context": 1048576,
+   "id": "space-bunny"
   },
   {
    "context": 1048576,
