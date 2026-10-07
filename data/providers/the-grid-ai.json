@@ -1,5 +1,5 @@
 {
- "generated_at": 1791285337,
+ "generated_at": 1791371030,
  "id": "the-grid-ai",
  "models": [
   {
@@ -15,6 +15,14 @@
    "id": "agent-standard"
   },
   {
+   "context": 262144,
+   "id": "bytedance-pro-latest"
+  },
+  {
+   "context": 1000000,
+   "id": "claude-opus-latest"
+  },
+  {
    "context": 1000000,
    "id": "code-max"
   },
@@ -25,6 +33,26 @@
   {
    "context": 128000,
    "id": "code-standard"
+  },
+  {
+   "context": 1000000,
+   "id": "deepseek-pro-latest"
+  },
+  {
+   "context": 1000000,
+   "id": "gemini-pro-latest"
+  },
+  {
+   "context": 1000000,
+   "id": "glm-latest"
+  },
+  {
+   "context": 1000000,
+   "id": "gpt-sol-latest"
+  },
+  {
+   "context": 1000000,
+   "id": "minimax-latest"
   },
   {
    "context": 1000000,

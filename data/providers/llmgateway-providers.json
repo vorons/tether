@@ -1,5 +1,5 @@
 {
- "generated_at": 1791285337,
+ "generated_at": 1791371030,
  "id": "llmgateway-providers",
  "models": [
   {
@@ -728,6 +728,10 @@
   },
   {
    "context": 1048576,
+   "id": "entrim/deepseek-v4.1-flash"
+  },
+  {
+   "context": 1048576,
    "id": "fireworks/deepseek-v4-flash"
   },
   {
@@ -967,6 +971,10 @@
    "id": "mistral/mistral-large-2512"
   },
   {
+   "context": 1000000,
+   "id": "mistral/mistral-large-4"
+  },
+  {
    "context": 128000,
    "id": "mistral/mistral-large-latest"
   },
@@ -1085,6 +1093,10 @@
   {
    "context": 262144,
    "id": "novita/ling-3.0-flash"
+  },
+  {
+   "context": 262144,
+   "id": "novita/ling-3.1-flash"
   },
   {
    "context": 8192,
@@ -1411,6 +1423,10 @@
    "id": "sakana/fugu-ultra-v2.0"
   },
   {
+   "context": 1048576,
+   "id": "sciforium/deepseek-v4.1-flash"
+  },
+  {
    "context": 1000000,
    "id": "scx-ai-gp/deepseek-v4.1-flash"
   },
@@ -1425,6 +1441,10 @@
   {
    "context": 1000000,
    "id": "scx-ai-gp/glm-5.3"
+  },
+  {
+   "context": 1000000,
+   "id": "scx-ai-gp/glm-5.3-fast"
   },
   {
    "context": 1048576,

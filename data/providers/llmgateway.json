@@ -1,5 +1,5 @@
 {
- "generated_at": 1791285337,
+ "generated_at": 1791371030,
  "id": "llmgateway",
  "models": [
   {
@@ -249,6 +249,10 @@
   {
    "context": 1048576,
    "id": "glm-5.3"
+  },
+  {
+   "context": 1000000,
+   "id": "glm-5.3-fast"
   },
   {
    "context": 1048576,
@@ -511,6 +515,10 @@
    "id": "ling-3.0-flash-vl"
   },
   {
+   "context": 262144,
+   "id": "ling-3.1-flash"
+  },
+  {
    "context": 8192,
    "id": "llama-3-70b-instruct"
   },
@@ -605,6 +613,10 @@
   {
    "context": 262144,
    "id": "mistral-large-2512"
+  },
+  {
+   "context": 1000000,
+   "id": "mistral-large-4"
   },
   {
    "context": 128000,

@@ -1,5 +1,5 @@
 {
- "generated_at": 1791285337,
+ "generated_at": 1791371030,
  "id": "nano-gpt",
  "models": [
   {
@@ -1327,6 +1327,10 @@
    "id": "mistralai/mistral-large"
   },
   {
+   "context": 524288,
+   "id": "mistralai/mistral-large-4"
+  },
+  {
    "context": 131072,
    "id": "mistralai/mistral-medium-3"
   },
@@ -2113,10 +2117,6 @@
   {
    "context": 32768,
    "id": "soob3123/amoral-gemma3-27B-v2"
-  },
-  {
-   "context": 1000000,
-   "id": "stealth/space-bunny-alpha"
   },
   {
    "context": 262144,

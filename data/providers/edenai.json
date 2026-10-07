@@ -1,5 +1,5 @@
 {
- "generated_at": 1791285337,
+ "generated_at": 1791371030,
  "id": "edenai",
  "models": [
   {
@@ -417,6 +417,14 @@
   {
    "context": 131072,
    "id": "flexai/gpt-oss-20b"
+  },
+  {
+   "context": 1048576,
+   "id": "google/deep-research-max-preview-04-2026"
+  },
+  {
+   "context": 1048576,
+   "id": "google/deep-research-preview-04-2026"
   },
   {
    "context": 32768,

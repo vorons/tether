@@ -1,5 +1,5 @@
 {
- "generated_at": 1791285337,
+ "generated_at": 1791371030,
  "id": "openrouter",
  "models": [
   {
@@ -323,6 +323,10 @@
    "id": "google/gemini-3.8-flash"
   },
   {
+   "context": 65536,
+   "id": "google/gemini-nano-banana-2.1"
+  },
+  {
    "context": 8192,
    "id": "google/gemma-2-27b-it"
   },
@@ -409,10 +413,6 @@
   {
    "context": 128000,
    "id": "inference-net/schematron-v2-turbo"
-  },
-  {
-   "context": 262144,
-   "id": "kwaipilot/kat-coder-pro-v2.5"
   },
   {
    "context": 65536,
@@ -553,6 +553,10 @@
   {
    "context": 262144,
    "id": "mistralai/mistral-large-2512"
+  },
+  {
+   "context": 524288,
+   "id": "mistralai/mistral-large-4-0"
   },
   {
    "context": 131072,

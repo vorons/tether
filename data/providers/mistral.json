@@ -1,5 +1,5 @@
 {
- "generated_at": 1791285337,
+ "generated_at": 1791371030,
  "id": "mistral",
  "models": [
   {
@@ -39,11 +39,11 @@
    "id": "magistral-medium-latest"
   },
   {
-   "context": 128000,
+   "context": 131072,
    "id": "ministral-3b-latest"
   },
   {
-   "context": 128000,
+   "context": 262144,
    "id": "ministral-8b-latest"
   },
   {
@@ -57,6 +57,10 @@
   {
    "context": 262144,
    "id": "mistral-large-2512"
+  },
+  {
+   "context": 524288,
+   "id": "mistral-large-4"
   },
   {
    "context": 262144,
@@ -87,11 +91,11 @@
    "id": "mistral-small-2506"
   },
   {
-   "context": 256000,
+   "context": 262144,
    "id": "mistral-small-2603"
   },
   {
-   "context": 256000,
+   "context": 262144,
    "id": "mistral-small-latest"
   },
   {
@@ -127,15 +131,15 @@
    "id": "voxtral-mini-tts-latest"
   },
   {
-   "context": 32000,
+   "context": 32768,
    "id": "voxtral-small-latest"
   },
   {
-   "context": 1000000,
+   "context": 1048576,
    "id": "zai-glm-5-2"
   },
   {
-   "context": 1000000,
+   "context": 1048576,
    "id": "zai-glm-5-3"
   }
  ],

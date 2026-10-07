@@ -1,5 +1,5 @@
 {
- "generated_at": 1791285337,
+ "generated_at": 1791371030,
  "id": "amazon-bedrock",
  "models": [
   {
@@ -313,6 +313,10 @@
   {
    "context": 500000,
    "id": "global.xai.grok-4.7"
+  },
+  {
+   "context": 1000000,
+   "id": "global.zai.glm-5.3"
   },
   {
    "context": 131072,
@@ -737,6 +741,10 @@
   {
    "context": 500000,
    "id": "us.xai.grok-4.7"
+  },
+  {
+   "context": 1000000,
+   "id": "us.zai.glm-5.3"
   },
   {
    "context": 122880,

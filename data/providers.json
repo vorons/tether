@@ -1,5 +1,5 @@
 {
- "generated_at": 1791285337,
+ "generated_at": 1791371030,
  "providers": {
   "302ai": {
    "api_key_env": [
@@ -2537,6 +2537,10 @@
      "id": "global.xai.grok-4.7"
     },
     {
+     "context": 1000000,
+     "id": "global.zai.glm-5.3"
+    },
+    {
      "context": 131072,
      "id": "google.gemma-3-12b-it"
     },
@@ -2959,6 +2963,10 @@
     {
      "context": 500000,
      "id": "us.xai.grok-4.7"
+    },
+    {
+     "context": 1000000,
+     "id": "us.zai.glm-5.3"
     },
     {
      "context": 122880,
@@ -7437,6 +7445,14 @@
     {
      "context": 131072,
      "id": "flexai/gpt-oss-20b"
+    },
+    {
+     "context": 1048576,
+     "id": "google/deep-research-max-preview-04-2026"
+    },
+    {
+     "context": 1048576,
+     "id": "google/deep-research-preview-04-2026"
     },
     {
      "context": 32768,
@@ -12419,7 +12435,7 @@
     "KILO_API_KEY"
    ],
    "base_url": "https://api.kilo.ai/api/gateway",
-   "model": "inclusionai/ling-3.1-flash",
+   "model": "mistralai/mistral-large-4-0",
    "models": [
     {
      "context": 131072,
@@ -12528,10 +12544,6 @@
     {
      "context": 1000000,
      "id": "anthropic/claude-sonnet-5.5"
-    },
-    {
-     "context": 262144,
-     "id": "apodex/apodex-1.1-mini:free"
     },
     {
      "context": 262144,
@@ -12742,6 +12754,10 @@
      "id": "google/gemini-3.8-flash"
     },
     {
+     "context": 65536,
+     "id": "google/gemini-nano-banana-2.1"
+    },
+    {
      "context": 8192,
      "id": "google/gemma-2-27b-it"
     },
@@ -12840,10 +12856,6 @@
     {
      "context": 262144,
      "id": "kilo-auto/small"
-    },
-    {
-     "context": 262144,
-     "id": "kwaipilot/kat-coder-pro-v2.5"
     },
     {
      "context": 65536,
@@ -12984,6 +12996,10 @@
     {
      "context": 262144,
      "id": "mistralai/mistral-large-2512"
+    },
+    {
+     "context": 524288,
+     "id": "mistralai/mistral-large-4-0"
     },
     {
      "context": 131072,
@@ -13494,7 +13510,7 @@
      "id": "qwen/qwen3-30b-a3b"
     },
     {
-     "context": 262144,
+     "context": 128000,
      "id": "qwen/qwen3-30b-a3b-instruct-2507"
     },
     {
@@ -13902,7 +13918,7 @@
      "id": "z-ai/glm-5-turbo"
     },
     {
-     "context": 202752,
+     "context": 200000,
      "id": "z-ai/glm-5.1"
     },
     {
@@ -14193,7 +14209,7 @@
     "LLMGATEWAY_API_KEY"
    ],
    "base_url": "https://api.llmgateway.io/v1",
-   "model": "gpt-6.1-sol",
+   "model": "mistral-large-4",
    "models": [
     {
      "context": 262000,
@@ -14442,6 +14458,10 @@
     {
      "context": 1048576,
      "id": "glm-5.3"
+    },
+    {
+     "context": 1000000,
+     "id": "glm-5.3-fast"
     },
     {
      "context": 1048576,
@@ -14704,6 +14724,10 @@
      "id": "ling-3.0-flash-vl"
     },
     {
+     "context": 262144,
+     "id": "ling-3.1-flash"
+    },
+    {
      "context": 8192,
      "id": "llama-3-70b-instruct"
     },
@@ -14798,6 +14822,10 @@
     {
      "context": 262144,
      "id": "mistral-large-2512"
+    },
+    {
+     "context": 1000000,
+     "id": "mistral-large-4"
     },
     {
      "context": 128000,
@@ -15059,7 +15087,7 @@
     "LLMGATEWAY_API_KEY"
    ],
    "base_url": "https://api.llmgateway.io/v1",
-   "model": "openai/gpt-6.1-sol",
+   "model": "mistral/mistral-large-4",
    "models": [
     {
      "context": 1000000,
@@ -15787,6 +15815,10 @@
     },
     {
      "context": 1048576,
+     "id": "entrim/deepseek-v4.1-flash"
+    },
+    {
+     "context": 1048576,
      "id": "fireworks/deepseek-v4-flash"
     },
     {
@@ -16026,6 +16058,10 @@
      "id": "mistral/mistral-large-2512"
     },
     {
+     "context": 1000000,
+     "id": "mistral/mistral-large-4"
+    },
+    {
      "context": 128000,
      "id": "mistral/mistral-large-latest"
     },
@@ -16144,6 +16180,10 @@
     {
      "context": 262144,
      "id": "novita/ling-3.0-flash"
+    },
+    {
+     "context": 262144,
+     "id": "novita/ling-3.1-flash"
     },
     {
      "context": 8192,
@@ -16470,6 +16510,10 @@
      "id": "sakana/fugu-ultra-v2.0"
     },
     {
+     "context": 1048576,
+     "id": "sciforium/deepseek-v4.1-flash"
+    },
+    {
      "context": 1000000,
      "id": "scx-ai-gp/deepseek-v4.1-flash"
     },
@@ -16484,6 +16528,10 @@
     {
      "context": 1000000,
      "id": "scx-ai-gp/glm-5.3"
+    },
+    {
+     "context": 1000000,
+     "id": "scx-ai-gp/glm-5.3-fast"
     },
     {
      "context": 1048576,
@@ -17426,11 +17474,11 @@
      "id": "magistral-medium-latest"
     },
     {
-     "context": 128000,
+     "context": 131072,
      "id": "ministral-3b-latest"
     },
     {
-     "context": 128000,
+     "context": 262144,
      "id": "ministral-8b-latest"
     },
     {
@@ -17444,6 +17492,10 @@
     {
      "context": 262144,
      "id": "mistral-large-2512"
+    },
+    {
+     "context": 524288,
+     "id": "mistral-large-4"
     },
     {
      "context": 262144,
@@ -17474,11 +17526,11 @@
      "id": "mistral-small-2506"
     },
     {
-     "context": 256000,
+     "context": 262144,
      "id": "mistral-small-2603"
     },
     {
-     "context": 256000,
+     "context": 262144,
      "id": "mistral-small-latest"
     },
     {
@@ -17514,15 +17566,15 @@
      "id": "voxtral-mini-tts-latest"
     },
     {
-     "context": 32000,
+     "context": 32768,
      "id": "voxtral-small-latest"
     },
     {
-     "context": 1000000,
+     "context": 1048576,
      "id": "zai-glm-5-2"
     },
     {
-     "context": 1000000,
+     "context": 1048576,
      "id": "zai-glm-5-3"
     }
    ],
@@ -17877,7 +17929,7 @@
     "NANO_GPT_API_KEY"
    ],
    "base_url": "https://nano-gpt.com/api/v1",
-   "model": "z-ai/glm-5.3-flash-apex-abliterated",
+   "model": "mistralai/mistral-large-4",
    "models": [
     {
      "context": 32768,
@@ -19204,6 +19256,10 @@
      "id": "mistralai/mistral-large"
     },
     {
+     "context": 524288,
+     "id": "mistralai/mistral-large-4"
+    },
+    {
      "context": 131072,
      "id": "mistralai/mistral-medium-3"
     },
@@ -19990,10 +20046,6 @@
     {
      "context": 32768,
      "id": "soob3123/amoral-gemma3-27B-v2"
-    },
-    {
-     "context": 1000000,
-     "id": "stealth/space-bunny-alpha"
     },
     {
      "context": 262144,
@@ -22892,6 +22944,10 @@
     },
     {
      "context": 1048576,
+     "id": "exo-free"
+    },
+    {
+     "context": 1048576,
      "id": "fledge-alpha-free"
     },
     {
@@ -23193,6 +23249,10 @@
     {
      "context": 200000,
      "id": "minimax-m3-free"
+    },
+    {
+     "context": 524288,
+     "id": "mistral-large-4"
     },
     {
      "context": 1048576,
@@ -23765,6 +23825,10 @@
      "id": "google/gemini-3.8-flash"
     },
     {
+     "context": 65536,
+     "id": "google/gemini-nano-banana-2.1"
+    },
+    {
      "context": 8192,
      "id": "google/gemma-2-27b-it"
     },
@@ -23851,10 +23915,6 @@
     {
      "context": 128000,
      "id": "inference-net/schematron-v2-turbo"
-    },
-    {
-     "context": 262144,
-     "id": "kwaipilot/kat-coder-pro-v2.5"
     },
     {
      "context": 65536,
@@ -23995,6 +24055,10 @@
     {
      "context": 262144,
      "id": "mistralai/mistral-large-2512"
+    },
+    {
+     "context": 524288,
+     "id": "mistralai/mistral-large-4-0"
     },
     {
      "context": 131072,
@@ -27605,7 +27669,7 @@
     "REQUESTY_API_KEY"
    ],
    "base_url": "https://router.requesty.ai/v1",
-   "model": "gpt-6.1-sol@eu",
+   "model": "mistral-large-4@eu",
    "models": [
     {
      "context": 1000000,
@@ -28122,6 +28186,14 @@
     {
      "context": 1048576,
      "id": "minimax-m3@eu"
+    },
+    {
+     "context": 1000000,
+     "id": "mistral-large-4"
+    },
+    {
+     "context": 1000000,
+     "id": "mistral-large-4@eu"
     },
     {
      "context": 262144,
@@ -30034,7 +30106,7 @@
     "THEGRID_API_KEY"
    ],
    "base_url": "https://api.thegrid.ai/v1",
-   "model": "code-max",
+   "model": "claude-opus-latest",
    "models": [
     {
      "context": 1000000,
@@ -30049,6 +30121,14 @@
      "id": "agent-standard"
     },
     {
+     "context": 262144,
+     "id": "bytedance-pro-latest"
+    },
+    {
+     "context": 1000000,
+     "id": "claude-opus-latest"
+    },
+    {
      "context": 1000000,
      "id": "code-max"
     },
@@ -30059,6 +30139,26 @@
     {
      "context": 128000,
      "id": "code-standard"
+    },
+    {
+     "context": 1000000,
+     "id": "deepseek-pro-latest"
+    },
+    {
+     "context": 1000000,
+     "id": "gemini-pro-latest"
+    },
+    {
+     "context": 1000000,
+     "id": "glm-latest"
+    },
+    {
+     "context": 1000000,
+     "id": "gpt-sol-latest"
+    },
+    {
+     "context": 1000000,
+     "id": "minimax-latest"
     },
     {
      "context": 1000000,
