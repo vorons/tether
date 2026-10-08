@@ -1,5 +1,5 @@
 {
- "generated_at": 1791371030,
+ "generated_at": 1791458480,
  "id": "llmgateway-providers",
  "models": [
   {
@@ -147,6 +147,10 @@
    "id": "anthropic/claude-haiku-4-5-20251001"
   },
   {
+   "context": 1000000,
+   "id": "anthropic/claude-haiku-5-5"
+  },
+  {
    "context": 200000,
    "id": "anthropic/claude-opus-4-5-20251101"
   },
@@ -209,6 +213,10 @@
   {
    "context": 200000,
    "id": "aws-bedrock/claude-haiku-4-5-20251001"
+  },
+  {
+   "context": 1000000,
+   "id": "aws-bedrock/claude-haiku-5-5"
   },
   {
    "context": 200000,
@@ -635,10 +643,6 @@
    "id": "deepinfra/granite-4.2-8b"
   },
   {
-   "context": 262144,
-   "id": "deepinfra/hy3"
-  },
-  {
    "context": 524288,
    "id": "deepinfra/inkling"
   },
@@ -729,6 +733,10 @@
   {
    "context": 1048576,
    "id": "entrim/deepseek-v4.1-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "entrim/glm-5.3-flash"
   },
   {
    "context": 1048576,

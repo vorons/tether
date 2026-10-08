@@ -1,5 +1,5 @@
 {
- "generated_at": 1791371030,
+ "generated_at": 1791458480,
  "id": "kilo",
  "models": [
   {
@@ -61,6 +61,10 @@
   {
    "context": 200000,
    "id": "anthropic/claude-haiku-4.5"
+  },
+  {
+   "context": 1000000,
+   "id": "anthropic/claude-haiku-5.5"
   },
   {
    "context": 200000,
@@ -199,7 +203,7 @@
    "id": "deepseek/deepseek-v3.1-terminus"
   },
   {
-   "context": 131072,
+   "context": 163840,
    "id": "deepseek/deepseek-v3.2"
   },
   {
@@ -1119,7 +1123,7 @@
    "id": "qwen/qwen3-max-thinking"
   },
   {
-   "context": 262144,
+   "context": 131072,
    "id": "qwen/qwen3-next-80b-a3b-instruct"
   },
   {
@@ -1219,7 +1223,7 @@
    "id": "qwen/qwen3.7-plus"
   },
   {
-   "context": 1000000,
+   "context": 1048576,
    "id": "qwen/qwen3.8-2.4t-a95b"
   },
   {
@@ -1515,7 +1519,7 @@
    "id": "~anthropic/claude-fable-latest"
   },
   {
-   "context": 200000,
+   "context": 1000000,
    "id": "~anthropic/claude-haiku-latest"
   },
   {

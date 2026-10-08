@@ -1,5 +1,5 @@
 {
- "generated_at": 1791371030,
+ "generated_at": 1791458480,
  "id": "nano-gpt",
  "models": [
   {
@@ -411,7 +411,11 @@
    "id": "anthropic/claude-haiku-4.5:thinking"
   },
   {
-   "context": 200000,
+   "context": 1000000,
+   "id": "anthropic/claude-haiku-5.5"
+  },
+  {
+   "context": 1000000,
    "id": "anthropic/claude-haiku-latest"
   },
   {
@@ -703,11 +707,19 @@
    "id": "deepseek/deepseek-v4-flash"
   },
   {
-   "context": 1000000,
+   "context": 1048576,
+   "id": "deepseek/deepseek-v4-flash-0423"
+  },
+  {
+   "context": 1048576,
+   "id": "deepseek/deepseek-v4-flash-0423:thinking"
+  },
+  {
+   "context": 1048576,
    "id": "deepseek/deepseek-v4-flash-0731"
   },
   {
-   "context": 1000000,
+   "context": 1048576,
    "id": "deepseek/deepseek-v4-flash-0731:thinking"
   },
   {
@@ -760,14 +772,6 @@
   },
   {
    "context": 256000,
-   "id": "doubao-seed-1-6-250615"
-  },
-  {
-   "context": 256000,
-   "id": "doubao-seed-1-6-flash-250615"
-  },
-  {
-   "context": 256000,
    "id": "doubao-seed-2-0-code-preview-260215"
   },
   {
@@ -793,10 +797,6 @@
   {
    "context": 119000,
    "id": "ernie-5.1:thinking"
-  },
-  {
-   "context": 64000,
-   "id": "ernie-x1.1-preview"
   },
   {
    "context": 8192,
@@ -1399,19 +1399,19 @@
    "id": "moonshotai/kimi-k2-thinking"
   },
   {
-   "context": 256000,
+   "context": 262144,
    "id": "moonshotai/kimi-k2.5"
   },
   {
-   "context": 256000,
+   "context": 262144,
    "id": "moonshotai/kimi-k2.5:thinking"
   },
   {
-   "context": 256000,
+   "context": 262144,
    "id": "moonshotai/kimi-k2.6"
   },
   {
-   "context": 256000,
+   "context": 262144,
    "id": "moonshotai/kimi-k2.6:thinking"
   },
   {
@@ -1675,7 +1675,7 @@
    "id": "openai/gpt-oss-120b"
   },
   {
-   "context": 128000,
+   "context": 131072,
    "id": "openai/gpt-oss-20b"
   },
   {
@@ -1871,11 +1871,11 @@
    "id": "qwen/qwen3-vl-235b-a22b-thinking"
   },
   {
-   "context": 131072,
+   "context": 262144,
    "id": "qwen/qwen3.5-122b-a10b"
   },
   {
-   "context": 131072,
+   "context": 262144,
    "id": "qwen/qwen3.5-122b-a10b:thinking"
   },
   {
@@ -1895,15 +1895,15 @@
    "id": "qwen/qwen3.5-35b-a3b:thinking"
   },
   {
-   "context": 258048,
+   "context": 262144,
    "id": "qwen/qwen3.5-397b-a17b"
   },
   {
-   "context": 258048,
+   "context": 262144,
    "id": "qwen/qwen3.5-397b-a17b:thinking"
   },
   {
-   "context": 256000,
+   "context": 262144,
    "id": "qwen/qwen3.5-9b"
   },
   {
@@ -1931,11 +1931,11 @@
    "id": "qwen/qwen3.5-plus:thinking"
   },
   {
-   "context": 260096,
+   "context": 262144,
    "id": "qwen/qwen3.6-27b"
   },
   {
-   "context": 260096,
+   "context": 262144,
    "id": "qwen/qwen3.6-27b:thinking"
   },
   {
@@ -1983,7 +1983,7 @@
    "id": "qwen/qwen3.7-plus:thinking"
   },
   {
-   "context": 262144,
+   "context": 1001536,
    "id": "qwen/qwen3.8-27b"
   },
   {
@@ -2043,15 +2043,15 @@
    "id": "qwen/qwen3.8-27b-synthia"
   },
   {
-   "context": 524288,
+   "context": 1010000,
    "id": "qwen/qwen3.8-27b-uncensored"
   },
   {
-   "context": 524288,
+   "context": 1010000,
    "id": "qwen/qwen3.8-27b-uncensored:thinking"
   },
   {
-   "context": 262144,
+   "context": 1001536,
    "id": "qwen/qwen3.8-27b:thinking"
   },
   {

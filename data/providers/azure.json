@@ -1,5 +1,5 @@
 {
- "generated_at": 1791371030,
+ "generated_at": 1791458480,
  "id": "azure",
  "models": [
   {
@@ -13,6 +13,10 @@
   {
    "context": 200000,
    "id": "claude-haiku-4-5"
+  },
+  {
+   "context": 1000000,
+   "id": "claude-haiku-5-5"
   },
   {
    "context": 1000000,
@@ -285,6 +289,10 @@
   {
    "context": 200000,
    "id": "grok-4.6"
+  },
+  {
+   "context": 500000,
+   "id": "grok-4.7"
   },
   {
    "context": 262144,

@@ -1,5 +1,5 @@
 {
- "generated_at": 1791371030,
+ "generated_at": 1791458480,
  "id": "coralbricks",
  "models": [
   {
@@ -13,10 +13,6 @@
   {
    "context": 1048576,
    "id": "glm-5.3-fast"
-  },
-  {
-   "context": 1048576,
-   "id": "glm-5.3-flash-fp4"
   },
   {
    "context": 1048576,

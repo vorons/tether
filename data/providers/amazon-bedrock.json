@@ -1,5 +1,5 @@
 {
- "generated_at": 1791371030,
+ "generated_at": 1791458480,
  "id": "amazon-bedrock",
  "models": [
   {
@@ -29,6 +29,10 @@
   {
    "context": 200000,
    "id": "anthropic.claude-haiku-4-5-20251001-v1:0"
+  },
+  {
+   "context": 1000000,
+   "id": "anthropic.claude-haiku-5-5"
   },
   {
    "context": 200000,
@@ -93,6 +97,10 @@
   {
    "context": 200000,
    "id": "au.anthropic.claude-haiku-4-5-20251001-v1:0"
+  },
+  {
+   "context": 1000000,
+   "id": "au.anthropic.claude-haiku-5-5"
   },
   {
    "context": 1000000,
@@ -167,6 +175,10 @@
    "id": "eu.anthropic.claude-haiku-4-5-20251001-v1:0"
   },
   {
+   "context": 1000000,
+   "id": "eu.anthropic.claude-haiku-5-5"
+  },
+  {
    "context": 200000,
    "id": "eu.anthropic.claude-opus-4-5-20251101-v1:0"
   },
@@ -229,6 +241,10 @@
   {
    "context": 200000,
    "id": "global.anthropic.claude-haiku-4-5-20251001-v1:0"
+  },
+  {
+   "context": 1000000,
+   "id": "global.anthropic.claude-haiku-5-5"
   },
   {
    "context": 200000,
@@ -369,6 +385,10 @@
   {
    "context": 200000,
    "id": "jp.anthropic.claude-haiku-4-5-20251001-v1:0"
+  },
+  {
+   "context": 1000000,
+   "id": "jp.anthropic.claude-haiku-5-5"
   },
   {
    "context": 1000000,
@@ -617,6 +637,10 @@
   {
    "context": 200000,
    "id": "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+  },
+  {
+   "context": 1000000,
+   "id": "us.anthropic.claude-haiku-5-5"
   },
   {
    "context": 200000,

@@ -1,5 +1,5 @@
 {
- "generated_at": 1791371030,
+ "generated_at": 1791458480,
  "id": "berget",
  "models": [
   {
@@ -23,7 +23,7 @@
    "id": "zai-org/GLM-5.2"
   },
   {
-   "context": 524288,
+   "context": 1048576,
    "id": "zai-org/GLM-5.3-Flash"
   }
  ],

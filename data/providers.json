@@ -1,5 +1,5 @@
 {
- "generated_at": 1791371030,
+ "generated_at": 1791458480,
  "providers": {
   "302ai": {
    "api_key_env": [
@@ -2222,7 +2222,7 @@
     "AWS_BEARER_TOKEN_BEDROCK"
    ],
    "base_url": "",
-   "model": "us.openai.gpt-6.1-sol",
+   "model": "us.anthropic.claude-haiku-5-5",
    "models": [
     {
      "context": 1000000,
@@ -2251,6 +2251,10 @@
     {
      "context": 200000,
      "id": "anthropic.claude-haiku-4-5-20251001-v1:0"
+    },
+    {
+     "context": 1000000,
+     "id": "anthropic.claude-haiku-5-5"
     },
     {
      "context": 200000,
@@ -2315,6 +2319,10 @@
     {
      "context": 200000,
      "id": "au.anthropic.claude-haiku-4-5-20251001-v1:0"
+    },
+    {
+     "context": 1000000,
+     "id": "au.anthropic.claude-haiku-5-5"
     },
     {
      "context": 1000000,
@@ -2389,6 +2397,10 @@
      "id": "eu.anthropic.claude-haiku-4-5-20251001-v1:0"
     },
     {
+     "context": 1000000,
+     "id": "eu.anthropic.claude-haiku-5-5"
+    },
+    {
      "context": 200000,
      "id": "eu.anthropic.claude-opus-4-5-20251101-v1:0"
     },
@@ -2451,6 +2463,10 @@
     {
      "context": 200000,
      "id": "global.anthropic.claude-haiku-4-5-20251001-v1:0"
+    },
+    {
+     "context": 1000000,
+     "id": "global.anthropic.claude-haiku-5-5"
     },
     {
      "context": 200000,
@@ -2591,6 +2607,10 @@
     {
      "context": 200000,
      "id": "jp.anthropic.claude-haiku-4-5-20251001-v1:0"
+    },
+    {
+     "context": 1000000,
+     "id": "jp.anthropic.claude-haiku-5-5"
     },
     {
      "context": 1000000,
@@ -2839,6 +2859,10 @@
     {
      "context": 200000,
      "id": "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+    },
+    {
+     "context": 1000000,
+     "id": "us.anthropic.claude-haiku-5-5"
     },
     {
      "context": 200000,
@@ -3124,6 +3148,10 @@
      "id": "claude-haiku-4-5-20251001"
     },
     {
+     "context": 1000000,
+     "id": "claude-haiku-5-5"
+    },
+    {
      "context": 200000,
      "id": "claude-opus-4-5"
     },
@@ -3152,11 +3180,11 @@
      "id": "claude-opus-5-5"
     },
     {
-     "context": 1000000,
+     "context": 200000,
      "id": "claude-sonnet-4-5"
     },
     {
-     "context": 1000000,
+     "context": 200000,
      "id": "claude-sonnet-4-5-20250929"
     },
     {
@@ -3448,7 +3476,7 @@
     "AZURE_API_KEY"
    ],
    "base_url": "",
-   "model": "gpt-6.1-sol",
+   "model": "claude-haiku-5-5",
    "models": [
     {
      "context": 1000000,
@@ -3461,6 +3489,10 @@
     {
      "context": 200000,
      "id": "claude-haiku-4-5"
+    },
+    {
+     "context": 1000000,
+     "id": "claude-haiku-5-5"
     },
     {
      "context": 1000000,
@@ -3735,6 +3767,10 @@
      "id": "grok-4.6"
     },
     {
+     "context": 500000,
+     "id": "grok-4.7"
+    },
+    {
      "context": 262144,
      "id": "kimi-k2.5"
     },
@@ -3835,7 +3871,7 @@
     "AZURE_COGNITIVE_SERVICES_API_KEY"
    ],
    "base_url": "",
-   "model": "gpt-6.1-sol",
+   "model": "claude-haiku-5-5",
    "models": [
     {
      "context": 1000000,
@@ -3848,6 +3884,10 @@
     {
      "context": 200000,
      "id": "claude-haiku-4-5"
+    },
+    {
+     "context": 1000000,
+     "id": "claude-haiku-5-5"
     },
     {
      "context": 1000000,
@@ -4379,7 +4419,7 @@
      "id": "zai-org/GLM-5.2"
     },
     {
-     "context": 524288,
+     "context": 1048576,
      "id": "zai-org/GLM-5.3-Flash"
     }
    ],
@@ -4719,7 +4759,7 @@
     "CLOUDFLARE_ACCOUNT_ID",
     "CLOUDFLARE_GATEWAY_ID"
    ],
-   "model": "openai/gpt-6-sol",
+   "model": "openai/gpt-6.1-sol",
    "models": [
     {
      "context": 262144,
@@ -4788,6 +4828,10 @@
     {
      "context": 1000000,
      "id": "anthropic/claude-sonnet-5"
+    },
+    {
+     "context": 1000000,
+     "id": "anthropic/claude-sonnet-5.5"
     },
     {
      "context": 131072,
@@ -4880,6 +4924,10 @@
     {
      "context": 1050000,
      "id": "openai/gpt-6-sol"
+    },
+    {
+     "context": 1050000,
+     "id": "openai/gpt-6.1-sol"
     },
     {
      "context": 200000,
@@ -5143,10 +5191,6 @@
     },
     {
      "context": 1048576,
-     "id": "glm-5.3-flash-fp4"
-    },
-    {
-     "context": 1048576,
      "id": "glm-5.3-fp4"
     }
    ],
@@ -5157,7 +5201,7 @@
     "CORTECS_API_KEY"
    ],
    "base_url": "https://api.cortecs.ai/v1",
-   "model": "gpt-6.1-sol",
+   "model": "mistral-large-4-0",
    "models": [
     {
      "context": 65536,
@@ -5206,6 +5250,10 @@
     {
      "context": 1000000,
      "id": "claude-sonnet-5"
+    },
+    {
+     "context": 1000000,
+     "id": "claude-sonnet-5.5"
     },
     {
      "context": 256000,
@@ -5448,6 +5496,10 @@
      "id": "mistral-large-2512"
     },
     {
+     "context": 1000000,
+     "id": "mistral-large-4-0"
+    },
+    {
      "context": 256000,
      "id": "mistral-medium-3.5"
     },
@@ -5685,7 +5737,7 @@
     "CROSSMODEL_API_KEY"
    ],
    "base_url": "https://api.crossmodel.ai/v1",
-   "model": "openai/gpt-6.1-sol",
+   "model": "anthropic/claude-haiku-5-5",
    "models": [
     {
      "context": 1000000,
@@ -5698,6 +5750,10 @@
     {
      "context": 200000,
      "id": "anthropic/claude-haiku-4-5"
+    },
+    {
+     "context": 1000000,
+     "id": "anthropic/claude-haiku-5-5"
     },
     {
      "context": 1000000,
@@ -7028,7 +7084,7 @@
     "EDENAI_API_KEY"
    ],
    "base_url": "https://api.edenai.run/v3",
-   "model": "openai/gpt-6.1-sol",
+   "model": "anthropic/claude-haiku-5-5",
    "models": [
     {
      "context": 300000,
@@ -7137,6 +7193,10 @@
     {
      "context": 1000000,
      "id": "anthropic/claude-fable-latest"
+    },
+    {
+     "context": 1000000,
+     "id": "anthropic/claude-haiku-5-5"
     },
     {
      "context": 200000,
@@ -7577,6 +7637,10 @@
     {
      "context": 524288,
      "id": "minimax/MiniMax-M3"
+    },
+    {
+     "context": 256000,
+     "id": "mistral/codestral-2508"
     },
     {
      "context": 256000,
@@ -9383,6 +9447,10 @@
      "id": "claude-haiku-4.5"
     },
     {
+     "context": 1000000,
+     "id": "claude-haiku-5.5"
+    },
+    {
      "context": 200000,
      "id": "claude-opus-4.7"
     },
@@ -9762,7 +9830,7 @@
     "GOOGLE_APPLICATION_CREDENTIALS"
    ],
    "base_url": "",
-   "model": "claude-sonnet-5-5@default",
+   "model": "claude-haiku-5-5@default",
    "models": [
     {
      "context": 1000000,
@@ -9775,6 +9843,10 @@
     {
      "context": 200000,
      "id": "claude-haiku-4-5@20251001"
+    },
+    {
+     "context": 1000000,
+     "id": "claude-haiku-5-5@default"
     },
     {
      "context": 200000,
@@ -12435,7 +12507,7 @@
     "KILO_API_KEY"
    ],
    "base_url": "https://api.kilo.ai/api/gateway",
-   "model": "mistralai/mistral-large-4-0",
+   "model": "anthropic/claude-haiku-5.5",
    "models": [
     {
      "context": 131072,
@@ -12496,6 +12568,10 @@
     {
      "context": 200000,
      "id": "anthropic/claude-haiku-4.5"
+    },
+    {
+     "context": 1000000,
+     "id": "anthropic/claude-haiku-5.5"
     },
     {
      "context": 200000,
@@ -12634,7 +12710,7 @@
      "id": "deepseek/deepseek-v3.1-terminus"
     },
     {
-     "context": 131072,
+     "context": 163840,
      "id": "deepseek/deepseek-v3.2"
     },
     {
@@ -13554,7 +13630,7 @@
      "id": "qwen/qwen3-max-thinking"
     },
     {
-     "context": 262144,
+     "context": 131072,
      "id": "qwen/qwen3-next-80b-a3b-instruct"
     },
     {
@@ -13654,7 +13730,7 @@
      "id": "qwen/qwen3.7-plus"
     },
     {
-     "context": 1000000,
+     "context": 1048576,
      "id": "qwen/qwen3.8-2.4t-a95b"
     },
     {
@@ -13950,7 +14026,7 @@
      "id": "~anthropic/claude-fable-latest"
     },
     {
-     "context": 200000,
+     "context": 1000000,
      "id": "~anthropic/claude-haiku-latest"
     },
     {
@@ -14209,7 +14285,7 @@
     "LLMGATEWAY_API_KEY"
    ],
    "base_url": "https://api.llmgateway.io/v1",
-   "model": "mistral-large-4",
+   "model": "claude-haiku-5-5",
    "models": [
     {
      "context": 262000,
@@ -14238,6 +14314,10 @@
     {
      "context": 200000,
      "id": "claude-haiku-4-5-20251001"
+    },
+    {
+     "context": 1000000,
+     "id": "claude-haiku-5-5"
     },
     {
      "context": 200000,
@@ -15087,7 +15167,7 @@
     "LLMGATEWAY_API_KEY"
    ],
    "base_url": "https://api.llmgateway.io/v1",
-   "model": "mistral/mistral-large-4",
+   "model": "aws-bedrock/claude-haiku-5-5",
    "models": [
     {
      "context": 1000000,
@@ -15234,6 +15314,10 @@
      "id": "anthropic/claude-haiku-4-5-20251001"
     },
     {
+     "context": 1000000,
+     "id": "anthropic/claude-haiku-5-5"
+    },
+    {
      "context": 200000,
      "id": "anthropic/claude-opus-4-5-20251101"
     },
@@ -15296,6 +15380,10 @@
     {
      "context": 200000,
      "id": "aws-bedrock/claude-haiku-4-5-20251001"
+    },
+    {
+     "context": 1000000,
+     "id": "aws-bedrock/claude-haiku-5-5"
     },
     {
      "context": 200000,
@@ -15722,10 +15810,6 @@
      "id": "deepinfra/granite-4.2-8b"
     },
     {
-     "context": 262144,
-     "id": "deepinfra/hy3"
-    },
-    {
      "context": 524288,
      "id": "deepinfra/inkling"
     },
@@ -15816,6 +15900,10 @@
     {
      "context": 1048576,
      "id": "entrim/deepseek-v4.1-flash"
+    },
+    {
+     "context": 1048576,
+     "id": "entrim/glm-5.3-flash"
     },
     {
      "context": 1048576,
@@ -17439,6 +17527,10 @@
    "models": [
     {
      "context": 256000,
+     "id": "codestral-2508"
+    },
+    {
+     "context": 256000,
      "id": "codestral-latest"
     },
     {
@@ -17466,16 +17558,36 @@
      "id": "devstral-small-2507"
     },
     {
+     "context": 1048576,
+     "id": "glm-5-2"
+    },
+    {
      "context": 256000,
      "id": "labs-devstral-small-2512"
     },
     {
-     "context": 128000,
+     "context": 262144,
+     "id": "labs-leanstral-1-5-1"
+    },
+    {
+     "context": 262144,
      "id": "magistral-medium-latest"
+    },
+    {
+     "context": 262144,
+     "id": "ministral-14b-2512"
+    },
+    {
+     "context": 131072,
+     "id": "ministral-3b-2512"
     },
     {
      "context": 131072,
      "id": "ministral-3b-latest"
+    },
+    {
+     "context": 262144,
+     "id": "ministral-8b-2512"
     },
     {
      "context": 262144,
@@ -17564,6 +17676,10 @@
     {
      "context": 0,
      "id": "voxtral-mini-tts-latest"
+    },
+    {
+     "context": 32768,
+     "id": "voxtral-small-2507"
     },
     {
      "context": 32768,
@@ -17929,7 +18045,7 @@
     "NANO_GPT_API_KEY"
    ],
    "base_url": "https://nano-gpt.com/api/v1",
-   "model": "mistralai/mistral-large-4",
+   "model": "anthropic/claude-haiku-5.5",
    "models": [
     {
      "context": 32768,
@@ -18340,7 +18456,11 @@
      "id": "anthropic/claude-haiku-4.5:thinking"
     },
     {
-     "context": 200000,
+     "context": 1000000,
+     "id": "anthropic/claude-haiku-5.5"
+    },
+    {
+     "context": 1000000,
      "id": "anthropic/claude-haiku-latest"
     },
     {
@@ -18632,11 +18752,19 @@
      "id": "deepseek/deepseek-v4-flash"
     },
     {
-     "context": 1000000,
+     "context": 1048576,
+     "id": "deepseek/deepseek-v4-flash-0423"
+    },
+    {
+     "context": 1048576,
+     "id": "deepseek/deepseek-v4-flash-0423:thinking"
+    },
+    {
+     "context": 1048576,
      "id": "deepseek/deepseek-v4-flash-0731"
     },
     {
-     "context": 1000000,
+     "context": 1048576,
      "id": "deepseek/deepseek-v4-flash-0731:thinking"
     },
     {
@@ -18689,14 +18817,6 @@
     },
     {
      "context": 256000,
-     "id": "doubao-seed-1-6-250615"
-    },
-    {
-     "context": 256000,
-     "id": "doubao-seed-1-6-flash-250615"
-    },
-    {
-     "context": 256000,
      "id": "doubao-seed-2-0-code-preview-260215"
     },
     {
@@ -18722,10 +18842,6 @@
     {
      "context": 119000,
      "id": "ernie-5.1:thinking"
-    },
-    {
-     "context": 64000,
-     "id": "ernie-x1.1-preview"
     },
     {
      "context": 8192,
@@ -19328,19 +19444,19 @@
      "id": "moonshotai/kimi-k2-thinking"
     },
     {
-     "context": 256000,
+     "context": 262144,
      "id": "moonshotai/kimi-k2.5"
     },
     {
-     "context": 256000,
+     "context": 262144,
      "id": "moonshotai/kimi-k2.5:thinking"
     },
     {
-     "context": 256000,
+     "context": 262144,
      "id": "moonshotai/kimi-k2.6"
     },
     {
-     "context": 256000,
+     "context": 262144,
      "id": "moonshotai/kimi-k2.6:thinking"
     },
     {
@@ -19604,7 +19720,7 @@
      "id": "openai/gpt-oss-120b"
     },
     {
-     "context": 128000,
+     "context": 131072,
      "id": "openai/gpt-oss-20b"
     },
     {
@@ -19800,11 +19916,11 @@
      "id": "qwen/qwen3-vl-235b-a22b-thinking"
     },
     {
-     "context": 131072,
+     "context": 262144,
      "id": "qwen/qwen3.5-122b-a10b"
     },
     {
-     "context": 131072,
+     "context": 262144,
      "id": "qwen/qwen3.5-122b-a10b:thinking"
     },
     {
@@ -19824,15 +19940,15 @@
      "id": "qwen/qwen3.5-35b-a3b:thinking"
     },
     {
-     "context": 258048,
+     "context": 262144,
      "id": "qwen/qwen3.5-397b-a17b"
     },
     {
-     "context": 258048,
+     "context": 262144,
      "id": "qwen/qwen3.5-397b-a17b:thinking"
     },
     {
-     "context": 256000,
+     "context": 262144,
      "id": "qwen/qwen3.5-9b"
     },
     {
@@ -19860,11 +19976,11 @@
      "id": "qwen/qwen3.5-plus:thinking"
     },
     {
-     "context": 260096,
+     "context": 262144,
      "id": "qwen/qwen3.6-27b"
     },
     {
-     "context": 260096,
+     "context": 262144,
      "id": "qwen/qwen3.6-27b:thinking"
     },
     {
@@ -19912,7 +20028,7 @@
      "id": "qwen/qwen3.7-plus:thinking"
     },
     {
-     "context": 262144,
+     "context": 1001536,
      "id": "qwen/qwen3.8-27b"
     },
     {
@@ -19972,15 +20088,15 @@
      "id": "qwen/qwen3.8-27b-synthia"
     },
     {
-     "context": 524288,
+     "context": 1010000,
      "id": "qwen/qwen3.8-27b-uncensored"
     },
     {
-     "context": 524288,
+     "context": 1010000,
      "id": "qwen/qwen3.8-27b-uncensored:thinking"
     },
     {
-     "context": 262144,
+     "context": 1001536,
      "id": "qwen/qwen3.8-27b:thinking"
     },
     {
@@ -22517,7 +22633,7 @@
     "OLLAMA_API_KEY"
    ],
    "base_url": "https://ollama.com/v1",
-   "model": "deepseek-v4.1-flash",
+   "model": "mistral-large-4",
    "models": [
     {
      "context": 1048576,
@@ -22598,6 +22714,10 @@
     {
      "context": 262144,
      "id": "mistral-large-3:675b"
+    },
+    {
+     "context": 1048576,
+     "id": "mistral-large-4"
     },
     {
      "context": 1048576,
@@ -22873,6 +22993,10 @@
     {
      "context": 200000,
      "id": "claude-haiku-4-5"
+    },
+    {
+     "context": 1000000,
+     "id": "claude-haiku-5-5"
     },
     {
      "context": 200000,
@@ -23338,6 +23462,10 @@
    "models": [
     {
      "context": 1000000,
+     "id": "claude-haiku-5-5"
+    },
+    {
+     "context": 1000000,
      "id": "deepseek-v4-flash"
     },
     {
@@ -23563,6 +23691,10 @@
     {
      "context": 200000,
      "id": "anthropic/claude-haiku-4.5"
+    },
+    {
+     "context": 1000000,
+     "id": "anthropic/claude-haiku-5.5"
     },
     {
      "context": 200000,
@@ -24993,7 +25125,7 @@
      "id": "~anthropic/claude-fable-latest"
     },
     {
-     "context": 200000,
+     "context": 1000000,
      "id": "~anthropic/claude-haiku-latest"
     },
     {
@@ -25813,10 +25945,6 @@
     {
      "context": 32768,
      "id": "qwen2.5-vl-72b-instruct"
-    },
-    {
-     "context": 262144,
-     "id": "qwen3-coder-30b-a3b-instruct"
     },
     {
      "context": 262144,
@@ -27669,7 +27797,7 @@
     "REQUESTY_API_KEY"
    ],
    "base_url": "https://router.requesty.ai/v1",
-   "model": "mistral-large-4@eu",
+   "model": "claude-haiku-5-5@eu",
    "models": [
     {
      "context": 1000000,
@@ -27694,6 +27822,14 @@
     {
      "context": 200000,
      "id": "claude-haiku-4-5@eu"
+    },
+    {
+     "context": 1000000,
+     "id": "claude-haiku-5-5"
+    },
+    {
+     "context": 1000000,
+     "id": "claude-haiku-5-5@eu"
     },
     {
      "context": 200000,
@@ -28188,11 +28324,11 @@
      "id": "minimax-m3@eu"
     },
     {
-     "context": 1000000,
+     "context": 524288,
      "id": "mistral-large-4"
     },
     {
-     "context": 1000000,
+     "context": 524288,
      "id": "mistral-large-4@eu"
     },
     {
@@ -30891,6 +31027,10 @@
      "id": "claude-fable-5-1"
     },
     {
+     "context": 1000000,
+     "id": "claude-haiku-5-5"
+    },
+    {
      "context": 198000,
      "id": "claude-opus-4-5"
     },
@@ -31365,7 +31505,7 @@
     "VIVGRID_API_KEY"
    ],
    "base_url": "https://api.vivgrid.com/v1",
-   "model": "gpt-6.1-sol",
+   "model": "claude-haiku-5-5",
    "models": [
     {
      "context": 1000000,
@@ -31374,6 +31514,10 @@
     {
      "context": 1000000,
      "id": "claude-fable-5-1"
+    },
+    {
+     "context": 1000000,
+     "id": "claude-haiku-5-5"
     },
     {
      "context": 1000000,

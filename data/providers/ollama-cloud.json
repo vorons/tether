@@ -1,5 +1,5 @@
 {
- "generated_at": 1791371030,
+ "generated_at": 1791458480,
  "id": "ollama-cloud",
  "models": [
   {
@@ -81,6 +81,10 @@
   {
    "context": 262144,
    "id": "mistral-large-3:675b"
+  },
+  {
+   "context": 1048576,
+   "id": "mistral-large-4"
   },
   {
    "context": 1048576,

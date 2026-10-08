@@ -1,5 +1,5 @@
 {
- "generated_at": 1791371030,
+ "generated_at": 1791458480,
  "id": "google-vertex",
  "models": [
   {
@@ -13,6 +13,10 @@
   {
    "context": 200000,
    "id": "claude-haiku-4-5@20251001"
+  },
+  {
+   "context": 1000000,
+   "id": "claude-haiku-5-5@default"
   },
   {
    "context": 200000,

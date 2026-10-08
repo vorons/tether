@@ -1,5 +1,5 @@
 {
- "generated_at": 1791371030,
+ "generated_at": 1791458480,
  "id": "openrouter",
  "models": [
   {
@@ -61,6 +61,10 @@
   {
    "context": 200000,
    "id": "anthropic/claude-haiku-4.5"
+  },
+  {
+   "context": 1000000,
+   "id": "anthropic/claude-haiku-5.5"
   },
   {
    "context": 200000,
@@ -1491,7 +1495,7 @@
    "id": "~anthropic/claude-fable-latest"
   },
   {
-   "context": 200000,
+   "context": 1000000,
    "id": "~anthropic/claude-haiku-latest"
   },
   {

@@ -1,5 +1,5 @@
 {
- "generated_at": 1791371030,
+ "generated_at": 1791458480,
  "id": "edenai",
  "models": [
   {
@@ -109,6 +109,10 @@
   {
    "context": 1000000,
    "id": "anthropic/claude-fable-latest"
+  },
+  {
+   "context": 1000000,
+   "id": "anthropic/claude-haiku-5-5"
   },
   {
    "context": 200000,
@@ -549,6 +553,10 @@
   {
    "context": 524288,
    "id": "minimax/MiniMax-M3"
+  },
+  {
+   "context": 256000,
+   "id": "mistral/codestral-2508"
   },
   {
    "context": 256000,
