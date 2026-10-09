@@ -1,5 +1,5 @@
 {
- "generated_at": 1791458480,
+ "generated_at": 1791544745,
  "id": "google-vertex",
  "models": [
   {
@@ -71,6 +71,10 @@
    "id": "claude-sonnet-5@default"
   },
   {
+   "context": 128000,
+   "id": "codestral-2"
+  },
+  {
    "context": 163840,
    "id": "deepseek-ai/deepseek-v3.1-maas"
   },
@@ -119,8 +123,8 @@
    "id": "gemini-3.1-flash-lite"
   },
   {
-   "context": 1048576,
-   "id": "gemini-3.1-flash-lite-preview"
+   "context": 65536,
+   "id": "gemini-3.1-flash-lite-image"
   },
   {
    "context": 1048576,
@@ -155,12 +159,12 @@
    "id": "gemini-embedding-001"
   },
   {
-   "context": 1048576,
-   "id": "gemini-flash-latest"
+   "context": 131072,
+   "id": "gemini-nano-banana-2.1"
   },
   {
-   "context": 1048576,
-   "id": "gemini-flash-lite-latest"
+   "context": 262144,
+   "id": "google/gemma-4-26b-a4b-it-maas"
   },
   {
    "context": 128000,
@@ -169,6 +173,18 @@
   {
    "context": 524288,
    "id": "meta/llama-4-maverick-17b-128e-instruct-maas"
+  },
+  {
+   "context": 1310720,
+   "id": "meta/llama-4-scout-17b-16e-instruct-maas"
+  },
+  {
+   "context": 131072,
+   "id": "mistral-medium-3"
+  },
+  {
+   "context": 128000,
+   "id": "mistral-small-2503"
   },
   {
    "context": 262144,
@@ -209,6 +225,10 @@
   {
    "context": 524288,
    "id": "xai/grok-4.6"
+  },
+  {
+   "context": 524288,
+   "id": "xai/grok-4.7"
   },
   {
    "context": 200000,

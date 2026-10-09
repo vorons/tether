@@ -1,5 +1,5 @@
 {
- "generated_at": 1791458480,
+ "generated_at": 1791544745,
  "providers": {
   "302ai": {
    "api_key_env": [
@@ -3587,6 +3587,10 @@
      "id": "deepseek-v4-pro"
     },
     {
+     "context": 1000000,
+     "id": "deepseek-v4.1-flash"
+    },
+    {
      "context": 16384,
      "id": "gpt-3.5-turbo-0125"
     },
@@ -5201,7 +5205,7 @@
     "CORTECS_API_KEY"
    ],
    "base_url": "https://api.cortecs.ai/v1",
-   "model": "mistral-large-4-0",
+   "model": "claude-haiku-5.5",
    "models": [
     {
      "context": 65536,
@@ -5218,6 +5222,10 @@
     {
      "context": 200000,
      "id": "claude-haiku-4-5"
+    },
+    {
+     "context": 1000000,
+     "id": "claude-haiku-5.5"
     },
     {
      "context": 1000000,
@@ -7143,19 +7151,19 @@
      "id": "amazon/mistral.pixtral-large-2502-v1:0@us"
     },
     {
-     "context": 128000,
+     "context": 32768,
      "id": "amazon/mistral.voxtral-mini-3b-2507"
     },
     {
-     "context": 128000,
+     "context": 32768,
      "id": "amazon/mistral.voxtral-mini-3b-2507@us"
     },
     {
-     "context": 128000,
+     "context": 32768,
      "id": "amazon/mistral.voxtral-small-24b-2507"
     },
     {
-     "context": 128000,
+     "context": 32768,
      "id": "amazon/mistral.voxtral-small-24b-2507@us"
     },
     {
@@ -7581,6 +7589,10 @@
     {
      "context": 1048576,
      "id": "google/gemini-flash-latest"
+    },
+    {
+     "context": 65536,
+     "id": "google/gemini-nano-banana-2.1"
     },
     {
      "context": 1048576,
@@ -8051,10 +8063,6 @@
      "id": "tencent/hy4-preview"
     },
     {
-     "context": 1000000,
-     "id": "tencent/step-5-preview"
-    },
-    {
      "context": 1048576,
      "id": "tensorx/deepseek/deepseek-v4-flash-0731"
     },
@@ -8193,6 +8201,10 @@
     {
      "context": 1048576,
      "id": "vertex/gemini-flash-latest"
+    },
+    {
+     "context": 131072,
+     "id": "vertex/gemini-nano-banana-2.1"
     },
     {
      "context": 1048576,
@@ -9901,6 +9913,10 @@
      "id": "claude-sonnet-5@default"
     },
     {
+     "context": 128000,
+     "id": "codestral-2"
+    },
+    {
      "context": 163840,
      "id": "deepseek-ai/deepseek-v3.1-maas"
     },
@@ -9949,8 +9965,8 @@
      "id": "gemini-3.1-flash-lite"
     },
     {
-     "context": 1048576,
-     "id": "gemini-3.1-flash-lite-preview"
+     "context": 65536,
+     "id": "gemini-3.1-flash-lite-image"
     },
     {
      "context": 1048576,
@@ -9985,12 +10001,12 @@
      "id": "gemini-embedding-001"
     },
     {
-     "context": 1048576,
-     "id": "gemini-flash-latest"
+     "context": 131072,
+     "id": "gemini-nano-banana-2.1"
     },
     {
-     "context": 1048576,
-     "id": "gemini-flash-lite-latest"
+     "context": 262144,
+     "id": "google/gemma-4-26b-a4b-it-maas"
     },
     {
      "context": 128000,
@@ -9999,6 +10015,18 @@
     {
      "context": 524288,
      "id": "meta/llama-4-maverick-17b-128e-instruct-maas"
+    },
+    {
+     "context": 1310720,
+     "id": "meta/llama-4-scout-17b-16e-instruct-maas"
+    },
+    {
+     "context": 131072,
+     "id": "mistral-medium-3"
+    },
+    {
+     "context": 128000,
+     "id": "mistral-small-2503"
     },
     {
      "context": 262144,
@@ -10039,6 +10067,10 @@
     {
      "context": 524288,
      "id": "xai/grok-4.6"
+    },
+    {
+     "context": 524288,
+     "id": "xai/grok-4.7"
     },
     {
      "context": 200000,
@@ -11064,15 +11096,7 @@
    "models": [
     {
      "context": 1000000,
-     "id": "deepseek-v4-flash"
-    },
-    {
-     "context": 1000000,
      "id": "deepseek-v4-flash-0731"
-    },
-    {
-     "context": 1000000,
-     "id": "deepseek-v4-pro"
     },
     {
      "context": 1000000,
@@ -12626,10 +12650,6 @@
      "id": "arcee-ai/trinity-large-thinking"
     },
     {
-     "context": 123000,
-     "id": "baidu/ernie-4.5-vl-424b-a47b"
-    },
-    {
      "context": 262144,
      "id": "bytedance-seed/seed-1.6"
     },
@@ -12686,7 +12706,7 @@
      "id": "cohere/north-mini-code:free"
     },
     {
-     "context": 128000,
+     "context": 163840,
      "id": "deepseek/deepseek-chat"
     },
     {
@@ -12895,7 +12915,7 @@
     },
     {
      "context": 262144,
-     "id": "inclusionai/ling-3.0-flash-sante:free"
+     "id": "inclusionai/ling-3.0-flash-sante"
     },
     {
      "context": 262144,
@@ -13074,7 +13094,7 @@
      "id": "mistralai/mistral-large-2512"
     },
     {
-     "context": 524288,
+     "context": 1048576,
      "id": "mistralai/mistral-large-4-0"
     },
     {
@@ -13586,7 +13606,7 @@
      "id": "qwen/qwen3-30b-a3b"
     },
     {
-     "context": 128000,
+     "context": 262144,
      "id": "qwen/qwen3-30b-a3b-instruct-2507"
     },
     {
@@ -13630,7 +13650,7 @@
      "id": "qwen/qwen3-max-thinking"
     },
     {
-     "context": 131072,
+     "context": 262144,
      "id": "qwen/qwen3-next-80b-a3b-instruct"
     },
     {
@@ -13814,6 +13834,10 @@
      "id": "stealth/claude-sonnet-4.6"
     },
     {
+     "context": 256000,
+     "id": "stealth/glyph-cluster"
+    },
+    {
      "context": 1000000,
      "id": "stealth/qwen3.6-plus"
     },
@@ -13826,8 +13850,12 @@
      "id": "stepfun/step-3.7-flash"
     },
     {
-     "context": 262144,
-     "id": "stepfun/step-3.7-flash:free"
+     "context": 1000000,
+     "id": "stepfun/step-5-preview"
+    },
+    {
+     "context": 1000000,
+     "id": "stepfun/step-5-preview-free"
     },
     {
      "context": 131072,
@@ -17606,7 +17634,7 @@
      "id": "mistral-large-2512"
     },
     {
-     "context": 524288,
+     "context": 1048576,
      "id": "mistral-large-4"
     },
     {
@@ -18045,7 +18073,7 @@
     "NANO_GPT_API_KEY"
    ],
    "base_url": "https://nano-gpt.com/api/v1",
-   "model": "anthropic/claude-haiku-5.5",
+   "model": "gemma-4-31b-it-scarlet",
    "models": [
     {
      "context": 32768,
@@ -18957,6 +18985,10 @@
     },
     {
      "context": 262144,
+     "id": "gemma-4-26b-a4b-it-chimeraxheretic"
+    },
+    {
+     "context": 262144,
      "id": "gemma-4-26b-a4b-it-darksoul"
     },
     {
@@ -19006,6 +19038,10 @@
     {
      "context": 262144,
      "id": "gemma-4-31b-it-novelist"
+    },
+    {
+     "context": 262144,
+     "id": "gemma-4-31b-it-scarlet"
     },
     {
      "context": 128000,
@@ -20948,7 +20984,7 @@
     "NEURALWATT_API_KEY"
    ],
    "base_url": "https://api.neuralwatt.com/v1",
-   "model": "deepseek-v4.1-flash-flex",
+   "model": "mimo-v2.6-pro-flex",
    "models": [
     {
      "context": 1048560,
@@ -21045,6 +21081,14 @@
     {
      "context": 1048560,
      "id": "kimi-k3-flex"
+    },
+    {
+     "context": 1048560,
+     "id": "mimo-v2.6-pro"
+    },
+    {
+     "context": 1048560,
+     "id": "mimo-v2.6-pro-flex"
     },
     {
      "context": 262128,
@@ -23443,6 +23487,10 @@
      "id": "space-bunny-free"
     },
     {
+     "context": 1000000,
+     "id": "step-5-preview-free"
+    },
+    {
      "context": 131072,
      "id": "trinity-large-preview-free"
     },
@@ -23599,6 +23647,10 @@
     {
      "context": 1048576,
      "id": "space-bunny-free"
+    },
+    {
+     "context": 1000000,
+     "id": "step-5-preview-free"
     }
    ],
    "wire": "openai"
@@ -23751,10 +23803,6 @@
     {
      "context": 262144,
      "id": "arcee-ai/trinity-large-thinking"
-    },
-    {
-     "context": 123000,
-     "id": "baidu/ernie-4.5-vl-424b-a47b"
     },
     {
      "context": 262144,
@@ -24030,7 +24078,7 @@
     },
     {
      "context": 262144,
-     "id": "inclusionai/ling-3.0-flash-sante:free"
+     "id": "inclusionai/ling-3.0-flash-sante"
     },
     {
      "context": 262144,
@@ -24189,7 +24237,7 @@
      "id": "mistralai/mistral-large-2512"
     },
     {
-     "context": 524288,
+     "context": 1048576,
      "id": "mistralai/mistral-large-4-0"
     },
     {
@@ -24923,6 +24971,10 @@
     {
      "context": 262144,
      "id": "stepfun/step-3.7-flash"
+    },
+    {
+     "context": 1000000,
+     "id": "stepfun/step-5-preview"
     },
     {
      "context": 131072,
@@ -28238,6 +28290,10 @@
     {
      "context": 256000,
      "id": "kat-coder-pro"
+    },
+    {
+     "context": 128000,
+     "id": "kimi-k2.5@eu"
     },
     {
      "context": 262144,

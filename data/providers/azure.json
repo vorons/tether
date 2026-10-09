@@ -1,5 +1,5 @@
 {
- "generated_at": 1791458480,
+ "generated_at": 1791544745,
  "id": "azure",
  "models": [
   {
@@ -109,6 +109,10 @@
   {
    "context": 1000000,
    "id": "deepseek-v4-pro"
+  },
+  {
+   "context": 1000000,
+   "id": "deepseek-v4.1-flash"
   },
   {
    "context": 16384,

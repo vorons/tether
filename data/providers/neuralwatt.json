@@ -1,5 +1,5 @@
 {
- "generated_at": 1791458480,
+ "generated_at": 1791544745,
  "id": "neuralwatt",
  "models": [
   {
@@ -97,6 +97,14 @@
   {
    "context": 1048560,
    "id": "kimi-k3-flex"
+  },
+  {
+   "context": 1048560,
+   "id": "mimo-v2.6-pro"
+  },
+  {
+   "context": 1048560,
+   "id": "mimo-v2.6-pro-flex"
   },
   {
    "context": 262128,

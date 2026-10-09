@@ -1,5 +1,5 @@
 {
- "generated_at": 1791458480,
+ "generated_at": 1791544745,
  "id": "opencode-go",
  "models": [
   {
@@ -141,6 +141,10 @@
   {
    "context": 1048576,
    "id": "space-bunny-free"
+  },
+  {
+   "context": 1000000,
+   "id": "step-5-preview-free"
   }
  ],
  "schema": 1

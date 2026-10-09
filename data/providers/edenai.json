@@ -1,5 +1,5 @@
 {
- "generated_at": 1791458480,
+ "generated_at": 1791544745,
  "id": "edenai",
  "models": [
   {
@@ -59,19 +59,19 @@
    "id": "amazon/mistral.pixtral-large-2502-v1:0@us"
   },
   {
-   "context": 128000,
+   "context": 32768,
    "id": "amazon/mistral.voxtral-mini-3b-2507"
   },
   {
-   "context": 128000,
+   "context": 32768,
    "id": "amazon/mistral.voxtral-mini-3b-2507@us"
   },
   {
-   "context": 128000,
+   "context": 32768,
    "id": "amazon/mistral.voxtral-small-24b-2507"
   },
   {
-   "context": 128000,
+   "context": 32768,
    "id": "amazon/mistral.voxtral-small-24b-2507@us"
   },
   {
@@ -497,6 +497,10 @@
   {
    "context": 1048576,
    "id": "google/gemini-flash-latest"
+  },
+  {
+   "context": 65536,
+   "id": "google/gemini-nano-banana-2.1"
   },
   {
    "context": 1048576,
@@ -967,10 +971,6 @@
    "id": "tencent/hy4-preview"
   },
   {
-   "context": 1000000,
-   "id": "tencent/step-5-preview"
-  },
-  {
    "context": 1048576,
    "id": "tensorx/deepseek/deepseek-v4-flash-0731"
   },
@@ -1109,6 +1109,10 @@
   {
    "context": 1048576,
    "id": "vertex/gemini-flash-latest"
+  },
+  {
+   "context": 131072,
+   "id": "vertex/gemini-nano-banana-2.1"
   },
   {
    "context": 1048576,

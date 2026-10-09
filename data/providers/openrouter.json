@@ -1,5 +1,5 @@
 {
- "generated_at": 1791458480,
+ "generated_at": 1791544745,
  "id": "openrouter",
  "models": [
   {
@@ -121,10 +121,6 @@
   {
    "context": 262144,
    "id": "arcee-ai/trinity-large-thinking"
-  },
-  {
-   "context": 123000,
-   "id": "baidu/ernie-4.5-vl-424b-a47b"
   },
   {
    "context": 262144,
@@ -400,7 +396,7 @@
   },
   {
    "context": 262144,
-   "id": "inclusionai/ling-3.0-flash-sante:free"
+   "id": "inclusionai/ling-3.0-flash-sante"
   },
   {
    "context": 262144,
@@ -559,7 +555,7 @@
    "id": "mistralai/mistral-large-2512"
   },
   {
-   "context": 524288,
+   "context": 1048576,
    "id": "mistralai/mistral-large-4-0"
   },
   {
@@ -1293,6 +1289,10 @@
   {
    "context": 262144,
    "id": "stepfun/step-3.7-flash"
+  },
+  {
+   "context": 1000000,
+   "id": "stepfun/step-5-preview"
   },
   {
    "context": 131072,

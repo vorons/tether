@@ -1,18 +1,10 @@
 {
- "generated_at": 1791458480,
+ "generated_at": 1791544745,
  "id": "hyper",
  "models": [
   {
    "context": 1000000,
-   "id": "deepseek-v4-flash"
-  },
-  {
-   "context": 1000000,
    "id": "deepseek-v4-flash-0731"
-  },
-  {
-   "context": 1000000,
-   "id": "deepseek-v4-pro"
   },
   {
    "context": 1000000,

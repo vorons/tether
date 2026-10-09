@@ -1,5 +1,5 @@
 {
- "generated_at": 1791458480,
+ "generated_at": 1791544745,
  "id": "requesty",
  "models": [
   {
@@ -441,6 +441,10 @@
   {
    "context": 256000,
    "id": "kat-coder-pro"
+  },
+  {
+   "context": 128000,
+   "id": "kimi-k2.5@eu"
   },
   {
    "context": 262144,

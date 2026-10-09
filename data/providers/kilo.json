@@ -1,5 +1,5 @@
 {
- "generated_at": 1791458480,
+ "generated_at": 1791544745,
  "id": "kilo",
  "models": [
   {
@@ -119,10 +119,6 @@
    "id": "arcee-ai/trinity-large-thinking"
   },
   {
-   "context": 123000,
-   "id": "baidu/ernie-4.5-vl-424b-a47b"
-  },
-  {
    "context": 262144,
    "id": "bytedance-seed/seed-1.6"
   },
@@ -179,7 +175,7 @@
    "id": "cohere/north-mini-code:free"
   },
   {
-   "context": 128000,
+   "context": 163840,
    "id": "deepseek/deepseek-chat"
   },
   {
@@ -388,7 +384,7 @@
   },
   {
    "context": 262144,
-   "id": "inclusionai/ling-3.0-flash-sante:free"
+   "id": "inclusionai/ling-3.0-flash-sante"
   },
   {
    "context": 262144,
@@ -567,7 +563,7 @@
    "id": "mistralai/mistral-large-2512"
   },
   {
-   "context": 524288,
+   "context": 1048576,
    "id": "mistralai/mistral-large-4-0"
   },
   {
@@ -1079,7 +1075,7 @@
    "id": "qwen/qwen3-30b-a3b"
   },
   {
-   "context": 128000,
+   "context": 262144,
    "id": "qwen/qwen3-30b-a3b-instruct-2507"
   },
   {
@@ -1123,7 +1119,7 @@
    "id": "qwen/qwen3-max-thinking"
   },
   {
-   "context": 131072,
+   "context": 262144,
    "id": "qwen/qwen3-next-80b-a3b-instruct"
   },
   {
@@ -1307,6 +1303,10 @@
    "id": "stealth/claude-sonnet-4.6"
   },
   {
+   "context": 256000,
+   "id": "stealth/glyph-cluster"
+  },
+  {
    "context": 1000000,
    "id": "stealth/qwen3.6-plus"
   },
@@ -1319,8 +1319,12 @@
    "id": "stepfun/step-3.7-flash"
   },
   {
-   "context": 262144,
-   "id": "stepfun/step-3.7-flash:free"
+   "context": 1000000,
+   "id": "stepfun/step-5-preview"
+  },
+  {
+   "context": 1000000,
+   "id": "stepfun/step-5-preview-free"
   },
   {
    "context": 131072,

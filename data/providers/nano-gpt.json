@@ -1,5 +1,5 @@
 {
- "generated_at": 1791458480,
+ "generated_at": 1791544745,
  "id": "nano-gpt",
  "models": [
   {
@@ -912,6 +912,10 @@
   },
   {
    "context": 262144,
+   "id": "gemma-4-26b-a4b-it-chimeraxheretic"
+  },
+  {
+   "context": 262144,
    "id": "gemma-4-26b-a4b-it-darksoul"
   },
   {
@@ -961,6 +965,10 @@
   {
    "context": 262144,
    "id": "gemma-4-31b-it-novelist"
+  },
+  {
+   "context": 262144,
+   "id": "gemma-4-31b-it-scarlet"
   },
   {
    "context": 128000,
