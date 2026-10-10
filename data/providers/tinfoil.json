@@ -1,5 +1,5 @@
 {
- "generated_at": 1791544745,
+ "generated_at": 1791628553,
  "id": "tinfoil",
  "models": [
   {
@@ -13,10 +13,6 @@
   {
    "context": 1048576,
    "id": "glm-5-3"
-  },
-  {
-   "context": 1048576,
-   "id": "glm-5-3-flash"
   },
   {
    "context": 131072,

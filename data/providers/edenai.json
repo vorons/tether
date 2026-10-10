@@ -1,5 +1,5 @@
 {
- "generated_at": 1791544745,
+ "generated_at": 1791628553,
  "id": "edenai",
  "models": [
   {
@@ -195,6 +195,10 @@
    "id": "cloudflare/@cf/deepseek-ai/deepseek-v4-pro-0813"
   },
   {
+   "context": 60000,
+   "id": "cloudflare/@cf/meta/llama-3.2-1b-instruct"
+  },
+  {
    "context": 131072,
    "id": "cloudflare/@cf/meta/llama-guard-3-8b"
   },
@@ -271,8 +275,16 @@
    "id": "deepinfra/ByteDance/Seed-2.0-mini"
   },
   {
+   "context": 4096,
+   "id": "deepinfra/Gryphe/MythoMax-L2-13b"
+  },
+  {
    "context": 163840,
    "id": "deepinfra/deepseek-ai/DeepSeek-R1"
+  },
+  {
+   "context": 163840,
+   "id": "deepinfra/deepseek-ai/DeepSeek-R1-0528"
   },
   {
    "context": 163840,
@@ -321,6 +333,14 @@
   {
    "context": 131072,
    "id": "deepinfra/meta-models/Muse-Glimmer-30B"
+  },
+  {
+   "context": 65536,
+   "id": "deepinfra/microsoft/WizardLM-2-8x22B"
+  },
+  {
+   "context": 131072,
+   "id": "deepinfra/moonshotai/Kimi-K2-Instruct"
   },
   {
    "context": 262144,
@@ -855,6 +875,10 @@
    "id": "qwen/qwen-max"
   },
   {
+   "context": 4096,
+   "id": "qwen/qwen-mt-plus"
+  },
+  {
    "context": 131072,
    "id": "qwen/qwen-vl-max"
   },
@@ -915,6 +939,10 @@
    "id": "qwen/qwen3-vl-235b-a22b-thinking"
   },
   {
+   "context": 131072,
+   "id": "qwen/qwen3-vl-30b-a3b-instruct"
+  },
+  {
    "context": 1000000,
    "id": "qwen/qwen3.8-2.4t-a95b"
   },
@@ -969,6 +997,10 @@
   {
    "context": 1000000,
    "id": "tencent/hy4-preview"
+  },
+  {
+   "context": 164000,
+   "id": "tensorx/deepseek/deepseek-r1-0528"
   },
   {
    "context": 1048576,

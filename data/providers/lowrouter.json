@@ -1,0 +1,39 @@
+{
+ "generated_at": 1791628553,
+ "id": "lowrouter",
+ "models": [
+  {
+   "context": 128000,
+   "id": "auto/mistralai/codestral-2508"
+  },
+  {
+   "context": 262144,
+   "id": "auto/mistralai/ministral-14b-2512"
+  },
+  {
+   "context": 262144,
+   "id": "auto/mistralai/ministral-3b-2512"
+  },
+  {
+   "context": 262144,
+   "id": "auto/mistralai/ministral-8b-2512"
+  },
+  {
+   "context": 262144,
+   "id": "auto/mistralai/mistral-large-2512"
+  },
+  {
+   "context": 524288,
+   "id": "auto/mistralai/mistral-large-4"
+  },
+  {
+   "context": 262144,
+   "id": "auto/mistralai/mistral-medium-3.5"
+  },
+  {
+   "context": 256000,
+   "id": "auto/mistralai/mistral-small-2603"
+  }
+ ],
+ "schema": 1
+}

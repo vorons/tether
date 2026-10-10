@@ -1,5 +1,5 @@
 {
- "generated_at": 1791544745,
+ "generated_at": 1791628553,
  "id": "llmgateway-providers",
  "models": [
   {
@@ -35,20 +35,12 @@
    "id": "alibaba/kimi-k3"
   },
   {
-   "context": 131072,
-   "id": "alibaba/qwen-coder-plus"
-  },
-  {
    "context": 1000000,
    "id": "alibaba/qwen-flash"
   },
   {
    "context": 32768,
    "id": "alibaba/qwen-max"
-  },
-  {
-   "context": 32768,
-   "id": "alibaba/qwen-omni-turbo"
   },
   {
    "context": 131072,
@@ -61,18 +53,6 @@
   {
    "context": 997952,
    "id": "alibaba/qwen3-coder-flash"
-  },
-  {
-   "context": 1000000,
-   "id": "alibaba/qwen3-coder-plus"
-  },
-  {
-   "context": 256000,
-   "id": "alibaba/qwen3-max"
-  },
-  {
-   "context": 262144,
-   "id": "alibaba/qwen3-vl-flash"
   },
   {
    "context": 262144,
@@ -97,10 +77,6 @@
   {
    "context": 983616,
    "id": "alibaba/qwen3.6-flash"
-  },
-  {
-   "context": 262144,
-   "id": "alibaba/qwen3.6-max-preview"
   },
   {
    "context": 983616,
@@ -1373,6 +1349,30 @@
   {
    "context": 1000000,
    "id": "ranoai/deepseek-v4-flash"
+  },
+  {
+   "context": 262144,
+   "id": "reka-ai/deepseek-v4-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "reka-ai/deepseek-v4-pro"
+  },
+  {
+   "context": 1048576,
+   "id": "reka-ai/glm-5.3"
+  },
+  {
+   "context": 262144,
+   "id": "reka-ai/glm-5.3-flash"
+  },
+  {
+   "context": 262144,
+   "id": "reka-ai/qwen3.8-27b"
+  },
+  {
+   "context": 16384,
+   "id": "reka-ai/reka-edge-2603"
   },
   {
    "context": 1048576,

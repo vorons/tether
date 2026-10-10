@@ -1,18 +1,10 @@
 {
- "generated_at": 1791544745,
+ "generated_at": 1791628553,
  "id": "empiriolabs",
  "models": [
   {
-   "context": 128000,
-   "id": "deepseek-v3-2"
-  },
-  {
    "context": 1000000,
    "id": "deepseek-v4-1-flash"
-  },
-  {
-   "context": 1000000,
-   "id": "deepseek-v4-flash"
   },
   {
    "context": 1000000,
@@ -187,10 +179,6 @@
    "id": "qwen3-6-flash"
   },
   {
-   "context": 256000,
-   "id": "qwen3-6-max-preview"
-  },
-  {
    "context": 1000000,
    "id": "qwen3-6-plus"
   },
@@ -225,10 +213,6 @@
   {
    "context": 1000000,
    "id": "qwen3-8-omni-flash"
-  },
-  {
-   "context": 256000,
-   "id": "qwen3-max"
   },
   {
    "context": 256000,

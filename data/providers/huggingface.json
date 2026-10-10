@@ -1,7 +1,11 @@
 {
- "generated_at": 1791544745,
+ "generated_at": 1791628553,
  "id": "huggingface",
  "models": [
+  {
+   "context": 1000000,
+   "id": "MiniMaxAI/MiniMax-M1-80k"
+  },
   {
    "context": 204800,
    "id": "MiniMaxAI/MiniMax-M2"
@@ -81,6 +85,10 @@
   {
    "context": 131072,
    "id": "Qwen/Qwen3-VL-235B-A22B-Thinking"
+  },
+  {
+   "context": 131072,
+   "id": "Qwen/Qwen3-VL-30B-A3B-Instruct"
   },
   {
    "context": 262144,
@@ -265,6 +273,10 @@
   {
    "context": 524288,
    "id": "thinkingmachines/Inkling-Small"
+  },
+  {
+   "context": 65536,
+   "id": "zai-org/AutoGLM-Phone-9B-Multilingual"
   },
   {
    "context": 131072,

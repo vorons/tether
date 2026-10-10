@@ -1,5 +1,5 @@
 {
- "generated_at": 1791544745,
+ "generated_at": 1791628553,
  "id": "deepinfra",
  "models": [
   {
@@ -53,6 +53,10 @@
   {
    "context": 262144,
    "id": "Qwen/Qwen3-VL-235B-A22B-Instruct"
+  },
+  {
+   "context": 262144,
+   "id": "Qwen/Qwen3-VL-30B-A3B-Instruct"
   },
   {
    "context": 262144,

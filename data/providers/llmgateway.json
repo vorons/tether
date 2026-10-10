@@ -1,5 +1,5 @@
 {
- "generated_at": 1791544745,
+ "generated_at": 1791628553,
  "id": "llmgateway",
  "models": [
   {
@@ -683,20 +683,12 @@
    "id": "o4-mini"
   },
   {
-   "context": 131072,
-   "id": "qwen-coder-plus"
-  },
-  {
    "context": 1000000,
    "id": "qwen-flash"
   },
   {
    "context": 32768,
    "id": "qwen-max"
-  },
-  {
-   "context": 32768,
-   "id": "qwen-omni-turbo"
   },
   {
    "context": 131072,
@@ -739,10 +731,6 @@
    "id": "qwen3-coder-next"
   },
   {
-   "context": 1000000,
-   "id": "qwen3-coder-plus"
-  },
-  {
    "context": 262144,
    "id": "qwen3-max"
   },
@@ -765,10 +753,6 @@
   {
    "context": 262144,
    "id": "qwen3-vl-30b-a3b-instruct"
-  },
-  {
-   "context": 262144,
-   "id": "qwen3-vl-flash"
   },
   {
    "context": 262144,
@@ -797,10 +781,6 @@
   {
    "context": 983616,
    "id": "qwen3.6-flash"
-  },
-  {
-   "context": 262144,
-   "id": "qwen3.6-max-preview"
   },
   {
    "context": 983616,
@@ -833,6 +813,10 @@
   {
    "context": 262144,
    "id": "qwen35-397b-a17b"
+  },
+  {
+   "context": 16384,
+   "id": "reka-edge-2603"
   },
   {
    "context": 256000,

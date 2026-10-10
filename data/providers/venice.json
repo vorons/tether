@@ -1,5 +1,5 @@
 {
- "generated_at": 1791544745,
+ "generated_at": 1791628553,
  "id": "venice",
  "models": [
   {
@@ -337,6 +337,10 @@
   {
    "context": 1050000,
    "id": "openai-gpt-61-sol"
+  },
+  {
+   "context": 1050000,
+   "id": "openai-gpt-61-sol-ultrafast"
   },
   {
    "context": 128000,

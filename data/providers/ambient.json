@@ -1,5 +1,5 @@
 {
- "generated_at": 1791544745,
+ "generated_at": 1791628553,
  "id": "ambient",
  "models": [
   {
@@ -23,8 +23,16 @@
    "id": "moonshotai/kimi-k2.7-code"
   },
   {
+   "context": 131072,
+   "id": "qwen/qwen3-30b-a3b-instruct-2507"
+  },
+  {
    "context": 32768,
    "id": "qwen/qwen3.6-27b"
+  },
+  {
+   "context": 262144,
+   "id": "qwen/qwen3.6-35b-a3b"
   },
   {
    "context": 32768,

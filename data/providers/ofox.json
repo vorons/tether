@@ -1,5 +1,5 @@
 {
- "generated_at": 1791544745,
+ "generated_at": 1791628553,
  "id": "ofox",
  "models": [
   {
@@ -13,6 +13,10 @@
   {
    "context": 200000,
    "id": "anthropic/claude-haiku-4.5"
+  },
+  {
+   "context": 1000000,
+   "id": "anthropic/claude-haiku-5.5"
   },
   {
    "context": 200000,

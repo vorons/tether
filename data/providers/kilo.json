@@ -1,5 +1,5 @@
 {
- "generated_at": 1791544745,
+ "generated_at": 1791628553,
  "id": "kilo",
  "models": [
   {
@@ -1047,10 +1047,6 @@
    "id": "qwen/qwen-plus"
   },
   {
-   "context": 1000000,
-   "id": "qwen/qwen-plus-2025-07-28"
-  },
-  {
    "context": 128000,
    "id": "qwen/qwen2.5-vl-72b-instruct"
   },
@@ -1059,15 +1055,11 @@
    "id": "qwen/qwen3-14b"
   },
   {
-   "context": 131072,
-   "id": "qwen/qwen3-235b-a22b"
-  },
-  {
    "context": 262144,
    "id": "qwen/qwen3-235b-a22b-2507"
   },
   {
-   "context": 131072,
+   "context": 128000,
    "id": "qwen/qwen3-235b-a22b-thinking-2507"
   },
   {
@@ -1079,16 +1071,8 @@
    "id": "qwen/qwen3-30b-a3b-instruct-2507"
   },
   {
-   "context": 81920,
-   "id": "qwen/qwen3-30b-a3b-thinking-2507"
-  },
-  {
    "context": 40960,
    "id": "qwen/qwen3-32b"
-  },
-  {
-   "context": 131072,
-   "id": "qwen/qwen3-8b"
   },
   {
    "context": 262144,
@@ -1107,23 +1091,11 @@
    "id": "qwen/qwen3-coder-next"
   },
   {
-   "context": 1000000,
-   "id": "qwen/qwen3-coder-plus"
-  },
-  {
-   "context": 262144,
-   "id": "qwen/qwen3-max"
-  },
-  {
-   "context": 262144,
-   "id": "qwen/qwen3-max-thinking"
-  },
-  {
    "context": 262144,
    "id": "qwen/qwen3-next-80b-a3b-instruct"
   },
   {
-   "context": 131072,
+   "context": 262144,
    "id": "qwen/qwen3-next-80b-a3b-thinking"
   },
   {
@@ -1131,28 +1103,16 @@
    "id": "qwen/qwen3-vl-235b-a22b-instruct"
   },
   {
-   "context": 131072,
-   "id": "qwen/qwen3-vl-235b-a22b-thinking"
-  },
-  {
    "context": 262144,
    "id": "qwen/qwen3-vl-30b-a3b-instruct"
   },
   {
-   "context": 131072,
+   "context": 262144,
    "id": "qwen/qwen3-vl-30b-a3b-thinking"
   },
   {
-   "context": 131072,
-   "id": "qwen/qwen3-vl-32b-instruct"
-  },
-  {
-   "context": 131072,
+   "context": 262144,
    "id": "qwen/qwen3-vl-8b-instruct"
-  },
-  {
-   "context": 131072,
-   "id": "qwen/qwen3-vl-8b-thinking"
   },
   {
    "context": 262144,
@@ -1197,10 +1157,6 @@
   {
    "context": 1000000,
    "id": "qwen/qwen3.6-flash"
-  },
-  {
-   "context": 262144,
-   "id": "qwen/qwen3.6-max-preview"
   },
   {
    "context": 1000000,
@@ -1467,7 +1423,7 @@
    "id": "z-ai/glm-4.5v"
   },
   {
-   "context": 198000,
+   "context": 202752,
    "id": "z-ai/glm-4.6"
   },
   {

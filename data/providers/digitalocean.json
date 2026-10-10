@@ -1,5 +1,5 @@
 {
- "generated_at": 1791544745,
+ "generated_at": 1791628553,
  "id": "digitalocean",
  "models": [
   {
@@ -41,6 +41,10 @@
   {
    "context": 1000000,
    "id": "anthropic-claude-5-sonnet"
+  },
+  {
+   "context": 1000000,
+   "id": "anthropic-claude-5.5-haiku"
   },
   {
    "context": 1000000,
