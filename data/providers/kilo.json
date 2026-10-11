@@ -1,5 +1,5 @@
 {
- "generated_at": 1791628553,
+ "generated_at": 1791715715,
  "id": "kilo",
  "models": [
   {
@@ -683,7 +683,7 @@
    "id": "nvidia/nemotron-3-super-120b-a12b:free"
   },
   {
-   "context": 262144,
+   "context": 202800,
    "id": "nvidia/nemotron-3-ultra-550b-a55b"
   },
   {
@@ -1179,7 +1179,7 @@
    "id": "qwen/qwen3.8-2.4t-a95b"
   },
   {
-   "context": 1000000,
+   "context": 262144,
    "id": "qwen/qwen3.8-27b"
   },
   {

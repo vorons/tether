@@ -1,12 +1,12 @@
 {
- "generated_at": 1791628553,
+ "generated_at": 1791715715,
  "providers": {
   "302ai": {
    "api_key_env": [
     "302AI_API_KEY"
    ],
    "base_url": "https://api.302.ai/v1",
-   "model": "claude-sonnet-5-5",
+   "model": "claude-haiku-5-5",
    "models": [
     {
      "context": 1000000,
@@ -47,6 +47,10 @@
     {
      "context": 200000,
      "id": "claude-haiku-4-5-20251001"
+    },
+    {
+     "context": 1000000,
+     "id": "claude-haiku-5-5"
     },
     {
      "context": 200000,
@@ -363,6 +367,10 @@
     {
      "context": 1050000,
      "id": "gpt-6-sol"
+    },
+    {
+     "context": 1050000,
+     "id": "gpt-6.1-sol"
     },
     {
      "context": 2000000,
@@ -4998,10 +5006,6 @@
      "id": "@cf/aisingapore/gemma-sea-lion-v4-27b-it"
     },
     {
-     "context": 65536,
-     "id": "@cf/cloudflare/clef-omni"
-    },
-    {
      "context": 80000,
      "id": "@cf/deepseek-ai/deepseek-r1-distill-qwen-32b"
     },
@@ -7203,6 +7207,10 @@
      "id": "amazon/openai.gpt-oss-safeguard-20b@us"
     },
     {
+     "context": 262144,
+     "id": "amazon/qwen.qwen3-coder-next"
+    },
+    {
      "context": 203000,
      "id": "amazon/zai.glm-4.7-flash"
     },
@@ -7379,6 +7387,14 @@
      "id": "databricks/databricks-inkling"
     },
     {
+     "context": 131072,
+     "id": "databricks/databricks-qwen3-next-80b-a3b-instruct"
+    },
+    {
+     "context": 131072,
+     "id": "databricks/databricks-qwen3-next-80b-a3b-instruct@eu"
+    },
+    {
      "context": 256000,
      "id": "deepinfra/ByteDance/Seed-2.0-code"
     },
@@ -7389,6 +7405,30 @@
     {
      "context": 4096,
      "id": "deepinfra/Gryphe/MythoMax-L2-13b"
+    },
+    {
+     "context": 262144,
+     "id": "deepinfra/Qwen/Qwen3-235B-A22B-Instruct-2507"
+    },
+    {
+     "context": 262144,
+     "id": "deepinfra/Qwen/Qwen3-Coder-480B-A35B-Instruct"
+    },
+    {
+     "context": 256000,
+     "id": "deepinfra/Qwen/Qwen3-Max"
+    },
+    {
+     "context": 262144,
+     "id": "deepinfra/Qwen/Qwen3-Next-80B-A3B-Instruct"
+    },
+    {
+     "context": 262144,
+     "id": "deepinfra/Qwen/Qwen3-VL-235B-A22B-Instruct"
+    },
+    {
+     "context": 262144,
+     "id": "deepinfra/Qwen/Qwen3-VL-30B-A3B-Instruct"
     },
     {
      "context": 163840,
@@ -7663,6 +7703,10 @@
      "id": "infomaniak/mistralai/Ministral-3-14B-Instruct-2512"
     },
     {
+     "context": 262144,
+     "id": "ionos/Qwen/Qwen3-Coder-Next"
+    },
+    {
      "context": 128000,
      "id": "ionos/meta-llama/Llama-3.3-70B-Instruct"
     },
@@ -7757,6 +7801,10 @@
     {
      "context": 1048576,
      "id": "moonshot/kimi-k3"
+    },
+    {
+     "context": 262144,
+     "id": "nebius/Qwen/Qwen3-235B-A22B-Instruct-2507"
     },
     {
      "context": 1024000,
@@ -7991,68 +8039,8 @@
      "id": "qwen/qwen-mt-plus"
     },
     {
-     "context": 131072,
-     "id": "qwen/qwen-vl-max"
-    },
-    {
-     "context": 131072,
-     "id": "qwen/qwen-vl-plus"
-    },
-    {
-     "context": 131072,
-     "id": "qwen/qwen3-235b-a22b-instruct-2507"
-    },
-    {
-     "context": 262144,
-     "id": "qwen/qwen3-coder-30b-a3b-instruct"
-    },
-    {
-     "context": 262144,
-     "id": "qwen/qwen3-coder-480b-a35b-instruct"
-    },
-    {
      "context": 1000000,
      "id": "qwen/qwen3-coder-flash"
-    },
-    {
-     "context": 262144,
-     "id": "qwen/qwen3-coder-next"
-    },
-    {
-     "context": 262144,
-     "id": "qwen/qwen3-coder-next@eu"
-    },
-    {
-     "context": 1000000,
-     "id": "qwen/qwen3-coder-plus"
-    },
-    {
-     "context": 262144,
-     "id": "qwen/qwen3-max"
-    },
-    {
-     "context": 262144,
-     "id": "qwen/qwen3-max@eu"
-    },
-    {
-     "context": 131072,
-     "id": "qwen/qwen3-next-80b-a3b-instruct"
-    },
-    {
-     "context": 131072,
-     "id": "qwen/qwen3-next-80b-a3b-thinking"
-    },
-    {
-     "context": 131072,
-     "id": "qwen/qwen3-vl-235b-a22b-instruct"
-    },
-    {
-     "context": 131072,
-     "id": "qwen/qwen3-vl-235b-a22b-thinking"
-    },
-    {
-     "context": 131072,
-     "id": "qwen/qwen3-vl-30b-a3b-instruct"
     },
     {
      "context": 1000000,
@@ -8079,10 +8067,6 @@
      "id": "qwen/qwen3.8-omni-flash"
     },
     {
-     "context": 131072,
-     "id": "qwen/qwq-plus"
-    },
-    {
      "context": 256000,
      "id": "scaleway/deepseek-v4-flash-0731"
     },
@@ -8097,6 +8081,14 @@
     {
      "context": 128000,
      "id": "scaleway/llama-3.3-70b-instruct"
+    },
+    {
+     "context": 250000,
+     "id": "scaleway/qwen3-235b-a22b-instruct-2507"
+    },
+    {
+     "context": 128000,
+     "id": "scaleway/qwen3-coder-30b-a3b-instruct"
     },
     {
      "context": 1000000,
@@ -13262,7 +13254,7 @@
      "id": "nvidia/nemotron-3-super-120b-a12b:free"
     },
     {
-     "context": 262144,
+     "context": 202800,
      "id": "nvidia/nemotron-3-ultra-550b-a55b"
     },
     {
@@ -13758,7 +13750,7 @@
      "id": "qwen/qwen3.8-2.4t-a95b"
     },
     {
-     "context": 1000000,
+     "context": 262144,
      "id": "qwen/qwen3.8-27b"
     },
     {
@@ -17789,15 +17781,47 @@
     "MOARK_API_KEY"
    ],
    "base_url": "https://moark.com/v1",
-   "model": "MiniMax-M2.1",
+   "model": "GLM-5.3",
    "models": [
+    {
+     "context": 1000000,
+     "id": "DeepSeek-V4-Flash"
+    },
+    {
+     "context": 1000000,
+     "id": "DeepSeek-V4-Pro"
+    },
     {
      "context": 204800,
      "id": "GLM-4.7"
     },
     {
+     "context": 1000000,
+     "id": "GLM-5.3"
+    },
+    {
+     "context": 262144,
+     "id": "Kimi-K2.6"
+    },
+    {
      "context": 204800,
      "id": "MiniMax-M2.1"
+    },
+    {
+     "context": 204800,
+     "id": "MiniMax-M2.7"
+    },
+    {
+     "context": 1000000,
+     "id": "Qwen3.6-Flash"
+    },
+    {
+     "context": 1000000,
+     "id": "deepseek-v4-flash-0731"
+    },
+    {
+     "context": 1048576,
+     "id": "kimi-k3"
     }
    ],
    "wire": "openai"
@@ -20557,7 +20581,7 @@
     "NEARAI_API_KEY"
    ],
    "base_url": "https://cloud-api.near.ai/v1",
-   "model": "google/gemini-3.5-flash",
+   "model": "openai/gpt-6.1-sol",
    "models": [
     {
      "context": 32768,
@@ -20576,6 +20600,18 @@
      "id": "Qwen/Qwen3.6-35B-A3B-FP8"
     },
     {
+     "context": 262144,
+     "id": "Qwen/Qwen3.8-27B"
+    },
+    {
+     "context": 1000000,
+     "id": "anthropic/claude-fable-5"
+    },
+    {
+     "context": 1000000,
+     "id": "anthropic/claude-fable-5-1"
+    },
+    {
      "context": 200000,
      "id": "anthropic/claude-haiku-4-5"
     },
@@ -20588,6 +20624,14 @@
      "id": "anthropic/claude-opus-4-7"
     },
     {
+     "context": 1000000,
+     "id": "anthropic/claude-opus-4-8"
+    },
+    {
+     "context": 1000000,
+     "id": "anthropic/claude-opus-5"
+    },
+    {
      "context": 200000,
      "id": "anthropic/claude-sonnet-4-5"
     },
@@ -20596,8 +20640,16 @@
      "id": "anthropic/claude-sonnet-4-6"
     },
     {
+     "context": 1000000,
+     "id": "anthropic/claude-sonnet-5"
+    },
+    {
      "context": 128000,
      "id": "black-forest-labs/FLUX.2-klein-4B"
+    },
+    {
+     "context": 128000,
+     "id": "deepseek/deepseek-v3.2"
     },
     {
      "context": 1048576,
@@ -20618,6 +20670,18 @@
     {
      "context": 1048576,
      "id": "google/gemini-3.5-flash"
+    },
+    {
+     "context": 1048576,
+     "id": "google/gemini-3.8-flash"
+    },
+    {
+     "context": 262144,
+     "id": "moonshotai/kimi-k2.6"
+    },
+    {
+     "context": 1048576,
+     "id": "moonshotai/kimi-k3"
     },
     {
      "context": 1047576,
@@ -20668,6 +20732,30 @@
      "id": "openai/gpt-5.5"
     },
     {
+     "context": 1050000,
+     "id": "openai/gpt-5.6-luna"
+    },
+    {
+     "context": 1050000,
+     "id": "openai/gpt-5.6-sol"
+    },
+    {
+     "context": 1050000,
+     "id": "openai/gpt-6-astra"
+    },
+    {
+     "context": 1050000,
+     "id": "openai/gpt-6-luna"
+    },
+    {
+     "context": 1050000,
+     "id": "openai/gpt-6-sol"
+    },
+    {
+     "context": 1050000,
+     "id": "openai/gpt-6.1-sol"
+    },
+    {
      "context": 200000,
      "id": "openai/o3"
     },
@@ -20684,8 +20772,20 @@
      "id": "openai/whisper-large-v3"
     },
     {
-     "context": 202752,
-     "id": "zai-org/GLM-5.1-FP8"
+     "context": 262144,
+     "id": "qwen/qwen3.5-397b-a17b"
+    },
+    {
+     "context": 1000000,
+     "id": "qwen/qwen3.7-max"
+    },
+    {
+     "context": 500000,
+     "id": "x-ai/grok-4.6"
+    },
+    {
+     "context": 1000000,
+     "id": "z-ai/glm-5.3-flash"
     }
    ],
    "wire": "openai"
