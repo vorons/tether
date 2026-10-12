@@ -1,5 +1,5 @@
 {
- "generated_at": 1791715715,
+ "generated_at": 1791806249,
  "providers": {
   "302ai": {
    "api_key_env": [
@@ -7583,6 +7583,10 @@
      "id": "flexai/DeepSeek-V4.1-Flash"
     },
     {
+     "context": 131072,
+     "id": "flexai/Muse-Glimmer-30B"
+    },
+    {
      "context": 262144,
      "id": "flexai/Step-3.7-Flash"
     },
@@ -14030,7 +14034,7 @@
      "id": "z-ai/glm-5.3"
     },
     {
-     "context": 1048575,
+     "context": 1048576,
      "id": "z-ai/glm-5.3-flash"
     },
     {
@@ -15832,10 +15836,6 @@
     {
      "context": 262144,
      "id": "deepinfra/qwen3.5-9b"
-    },
-    {
-     "context": 262144,
-     "id": "deepinfra/qwen3.8-2.4t-a95b"
     },
     {
      "context": 1050000,
@@ -18127,7 +18127,7 @@
     "NANO_GPT_API_KEY"
    ],
    "base_url": "https://nano-gpt.com/api/v1",
-   "model": "gemma-4-31b-it-scarlet",
+   "model": "TheDrummer/Skyfall-31B-v4.2",
    "models": [
     {
      "context": 32768,
@@ -18440,6 +18440,10 @@
     {
      "context": 16384,
      "id": "TheDrummer/Rocinante-12B-v1.1"
+    },
+    {
+     "context": 16384,
+     "id": "TheDrummer/Skyfall-31B-v4.2"
     },
     {
      "context": 8192,
@@ -19978,10 +19982,6 @@
      "id": "qwen/qwen3-coder-next"
     },
     {
-     "context": 128000,
-     "id": "qwen/qwen3-coder-plus"
-    },
-    {
      "context": 256000,
      "id": "qwen/qwen3-max"
     },
@@ -20581,7 +20581,7 @@
     "NEARAI_API_KEY"
    ],
    "base_url": "https://cloud-api.near.ai/v1",
-   "model": "openai/gpt-6.1-sol",
+   "model": "anthropic/claude-haiku-5-5",
    "models": [
     {
      "context": 32768,
@@ -20616,6 +20616,10 @@
      "id": "anthropic/claude-haiku-4-5"
     },
     {
+     "context": 1000000,
+     "id": "anthropic/claude-haiku-5-5"
+    },
+    {
      "context": 200000,
      "id": "anthropic/claude-opus-4-6"
     },
@@ -20632,6 +20636,10 @@
      "id": "anthropic/claude-opus-5"
     },
     {
+     "context": 1000000,
+     "id": "anthropic/claude-opus-5-5"
+    },
+    {
      "context": 200000,
      "id": "anthropic/claude-sonnet-4-5"
     },
@@ -20644,12 +20652,20 @@
      "id": "anthropic/claude-sonnet-5"
     },
     {
+     "context": 1000000,
+     "id": "anthropic/claude-sonnet-5-5"
+    },
+    {
      "context": 128000,
      "id": "black-forest-labs/FLUX.2-klein-4B"
     },
     {
      "context": 128000,
      "id": "deepseek/deepseek-v3.2"
+    },
+    {
+     "context": 1000000,
+     "id": "deepseek/deepseek-v4.1-flash"
     },
     {
      "context": 1048576,
@@ -20782,6 +20798,10 @@
     {
      "context": 500000,
      "id": "x-ai/grok-4.6"
+    },
+    {
+     "context": 500000,
+     "id": "x-ai/grok-4.7"
     },
     {
      "context": 1000000,

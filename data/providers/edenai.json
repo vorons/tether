@@ -1,5 +1,5 @@
 {
- "generated_at": 1791715715,
+ "generated_at": 1791806249,
  "id": "edenai",
  "models": [
   {
@@ -465,6 +465,10 @@
   {
    "context": 1048576,
    "id": "flexai/DeepSeek-V4.1-Flash"
+  },
+  {
+   "context": 131072,
+   "id": "flexai/Muse-Glimmer-30B"
   },
   {
    "context": 262144,

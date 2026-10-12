@@ -1,5 +1,5 @@
 {
- "generated_at": 1791715715,
+ "generated_at": 1791806249,
  "id": "nano-gpt",
  "models": [
   {
@@ -313,6 +313,10 @@
   {
    "context": 16384,
    "id": "TheDrummer/Rocinante-12B-v1.1"
+  },
+  {
+   "context": 16384,
+   "id": "TheDrummer/Skyfall-31B-v4.2"
   },
   {
    "context": 8192,
@@ -1849,10 +1853,6 @@
   {
    "context": 262144,
    "id": "qwen/qwen3-coder-next"
-  },
-  {
-   "context": 128000,
-   "id": "qwen/qwen3-coder-plus"
   },
   {
    "context": 256000,

@@ -1,5 +1,5 @@
 {
- "generated_at": 1791715715,
+ "generated_at": 1791806249,
  "id": "llmgateway-providers",
  "models": [
   {
@@ -657,10 +657,6 @@
   {
    "context": 262144,
    "id": "deepinfra/qwen3.5-9b"
-  },
-  {
-   "context": 262144,
-   "id": "deepinfra/qwen3.8-2.4t-a95b"
   },
   {
    "context": 1050000,
