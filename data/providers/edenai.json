@@ -1,5 +1,5 @@
 {
- "generated_at": 1791806249,
+ "generated_at": 1791891986,
  "id": "edenai",
  "models": [
   {
@@ -208,6 +208,10 @@
   },
   {
    "context": 128000,
+   "id": "cloudflare/@cf/mistralai/mistral-small-3.1-24b-instruct"
+  },
+  {
+   "context": 128000,
    "id": "cloudflare/@cf/openai/gpt-oss-120b"
   },
   {
@@ -289,6 +293,14 @@
   {
    "context": 4096,
    "id": "deepinfra/Gryphe/MythoMax-L2-13b"
+  },
+  {
+   "context": 131072,
+   "id": "deepinfra/NousResearch/Hermes-3-Llama-3.1-405B"
+  },
+  {
+   "context": 131072,
+   "id": "deepinfra/NousResearch/Hermes-3-Llama-3.1-70B"
   },
   {
    "context": 262144,
@@ -373,6 +385,10 @@
   {
    "context": 65536,
    "id": "deepinfra/microsoft/WizardLM-2-8x22B"
+  },
+  {
+   "context": 32768,
+   "id": "deepinfra/mistralai/Mistral-Small-24B-Instruct-2501"
   },
   {
    "context": 131072,
@@ -575,6 +591,26 @@
    "id": "greenference/gpt-oss-20b"
   },
   {
+   "context": 1000000,
+   "id": "greenpt/deepseek-v4-flash-0731"
+  },
+  {
+   "context": 1000000,
+   "id": "greenpt/deepseek-v4.1-flash"
+  },
+  {
+   "context": 128000,
+   "id": "greenpt/gpt-oss-120b"
+  },
+  {
+   "context": 128000,
+   "id": "greenpt/llama-3.3-70b-instruct"
+  },
+  {
+   "context": 250000,
+   "id": "greenpt/qwen3-235b-a22b-instruct-2507"
+  },
+  {
    "context": 131072,
    "id": "groq/openai/gpt-oss-120b"
   },
@@ -644,6 +680,22 @@
   },
   {
    "context": 262144,
+   "id": "mistral/ministral-14b-2512"
+  },
+  {
+   "context": 131072,
+   "id": "mistral/ministral-3b-2512"
+  },
+  {
+   "context": 262144,
+   "id": "mistral/ministral-8b-2512"
+  },
+  {
+   "context": 131072,
+   "id": "mistral/mistral-large-2407"
+  },
+  {
+   "context": 262144,
    "id": "mistral/mistral-large-2512"
   },
   {
@@ -657,6 +709,14 @@
   {
    "context": 262144,
    "id": "mistral/mistral-medium-2604"
+  },
+  {
+   "context": 262144,
+   "id": "mistral/mistral-medium-3"
+  },
+  {
+   "context": 262144,
+   "id": "mistral/mistral-medium-3-5"
   },
   {
    "context": 262144,
@@ -959,6 +1019,10 @@
    "id": "scaleway/deepseek-v4-flash-0731"
   },
   {
+   "context": 256000,
+   "id": "scaleway/deepseek-v4.1-flash"
+  },
+  {
    "context": 40000,
    "id": "scaleway/gemma-3-27b-it"
   },
@@ -1141,6 +1205,10 @@
   {
    "context": 1048576,
    "id": "vertex/gemini-pro-latest"
+  },
+  {
+   "context": 2000000,
+   "id": "xai/grok-4-fast-non-reasoning"
   },
   {
    "context": 1000000,

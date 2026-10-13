@@ -1,5 +1,5 @@
 {
- "generated_at": 1791806249,
+ "generated_at": 1791891986,
  "id": "openrouter",
  "models": [
   {
@@ -481,6 +481,10 @@
   {
    "context": 1048576,
    "id": "meta/muse-spark-1.3-contributor"
+  },
+  {
+   "context": 1048576,
+   "id": "meta/muse-wonder"
   },
   {
    "context": 16384,

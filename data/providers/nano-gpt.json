@@ -1,5 +1,5 @@
 {
- "generated_at": 1791806249,
+ "generated_at": 1791891986,
  "id": "nano-gpt",
  "models": [
   {
@@ -303,7 +303,7 @@
    "id": "TheDrummer/Cydonia-24B-v4.1"
   },
   {
-   "context": 32768,
+   "context": 131072,
    "id": "TheDrummer/Cydonia-24B-v4.3"
   },
   {
@@ -567,6 +567,10 @@
    "id": "asi1-mini"
   },
   {
+   "context": 65536,
+   "id": "ateron/gemma-4-dark-thoughts-v2-31b"
+  },
+  {
    "context": 1000000,
    "id": "auto-model"
   },
@@ -733,6 +737,10 @@
   {
    "context": 1048576,
    "id": "deepseek/deepseek-v4-flash-vision-exp"
+  },
+  {
+   "context": 1048576,
+   "id": "deepseek/deepseek-v4-flash-vision-exp-cybersecurity"
   },
   {
    "context": 1048576,
@@ -1465,6 +1473,18 @@
   {
    "context": 1000000,
    "id": "nanogpt/coding-router:medium"
+  },
+  {
+   "context": 65536,
+   "id": "nbeerbower/gemma4-gutenberg-31b"
+  },
+  {
+   "context": 65536,
+   "id": "nimbz/gemma-4-giftige-blume-31b-v2"
+  },
+  {
+   "context": 65536,
+   "id": "nimbz/schattenblume-31b"
   },
   {
    "context": 32768,

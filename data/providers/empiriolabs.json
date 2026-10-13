@@ -1,5 +1,5 @@
 {
- "generated_at": 1791806249,
+ "generated_at": 1791891986,
  "id": "empiriolabs",
  "models": [
   {
@@ -17,6 +17,10 @@
   {
    "context": 1000000,
    "id": "deepseek-v4-pro-0813"
+  },
+  {
+   "context": 1000000,
+   "id": "fugu-max"
   },
   {
    "context": 1000000,

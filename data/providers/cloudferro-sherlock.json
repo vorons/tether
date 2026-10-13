@@ -1,5 +1,5 @@
 {
- "generated_at": 1791806249,
+ "generated_at": 1791891986,
  "id": "cloudferro-sherlock",
  "models": [
   {
@@ -16,11 +16,11 @@
   },
   {
    "context": 32000,
-   "id": "speakleash/Bielik-11B-v2.6-Instruct"
+   "id": "speakleash/Bielik-11B-v3.0-Instruct"
   },
   {
-   "context": 32000,
-   "id": "speakleash/Bielik-11B-v3.0-Instruct"
+   "context": 262144,
+   "id": "zai-org/GLM-5.3"
   }
  ],
  "schema": 1

@@ -1,10 +1,14 @@
 {
- "generated_at": 1791806249,
+ "generated_at": 1791891986,
  "id": "opencode",
  "models": [
   {
    "context": 200000,
    "id": "big-pickle"
+  },
+  {
+   "context": 262144,
+   "id": "cat-jam-free"
   },
   {
    "context": 200000,

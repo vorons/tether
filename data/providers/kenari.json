@@ -1,5 +1,5 @@
 {
- "generated_at": 1791806249,
+ "generated_at": 1791891986,
  "id": "kenari",
  "models": [
   {
@@ -143,6 +143,10 @@
    "id": "grok-build-0-1"
   },
   {
+   "context": 16000,
+   "id": "grok-imagine-image"
+  },
+  {
    "context": 8000,
    "id": "grok-imagine-image-2-0"
   },
@@ -205,6 +209,18 @@
   {
    "context": 262144,
    "id": "mistral-medium-3-5:free"
+  },
+  {
+   "context": 131072,
+   "id": "nano-banana-2"
+  },
+  {
+   "context": 65536,
+   "id": "nano-banana-2-lite"
+  },
+  {
+   "context": 65536,
+   "id": "nano-banana-pro"
   },
   {
    "context": 262144,

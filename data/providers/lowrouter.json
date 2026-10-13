@@ -1,5 +1,5 @@
 {
- "generated_at": 1791806249,
+ "generated_at": 1791891986,
  "id": "lowrouter",
  "models": [
   {
@@ -33,6 +33,22 @@
   {
    "context": 256000,
    "id": "auto/mistralai/mistral-small-2603"
+  },
+  {
+   "context": 131072,
+   "id": "auto/openai/gpt-oss-120b"
+  },
+  {
+   "context": 131072,
+   "id": "auto/openai/gpt-oss-20b"
+  },
+  {
+   "context": 131072,
+   "id": "auto/openai/gpt-oss-safeguard-120b"
+  },
+  {
+   "context": 131072,
+   "id": "auto/openai/gpt-oss-safeguard-20b"
   }
  ],
  "schema": 1
