@@ -1,5 +1,5 @@
 {
- "generated_at": 1791891986,
+ "generated_at": 1791970213,
  "id": "kilo",
  "models": [
   {
@@ -207,7 +207,7 @@
    "id": "deepseek/deepseek-v3.2-exp"
   },
   {
-   "context": 1048576,
+   "context": 1048575,
    "id": "deepseek/deepseek-v4-flash"
   },
   {
@@ -319,6 +319,10 @@
    "id": "google/gemini-3.8-flash"
   },
   {
+   "context": 1048576,
+   "id": "google/gemini-4-argon"
+  },
+  {
    "context": 65536,
    "id": "google/gemini-nano-banana-2.1"
   },
@@ -379,15 +383,7 @@
    "id": "inclusionai/ling-3.0-flash"
   },
   {
-   "context": 262144,
-   "id": "inclusionai/ling-3.0-flash-fin"
-  },
-  {
-   "context": 262144,
-   "id": "inclusionai/ling-3.0-flash-sante"
-  },
-  {
-   "context": 262144,
+   "context": 131072,
    "id": "inclusionai/ling-3.0-flash-vl"
   },
   {
@@ -425,6 +421,10 @@
   {
    "context": 65536,
    "id": "liquid/lfm-2.5-2.6b:free"
+  },
+  {
+   "context": 128000,
+   "id": "liquid/lfm-2.5-24b-a2b"
   },
   {
    "context": 8000,
@@ -511,7 +511,7 @@
    "id": "minimax/minimax-m1"
   },
   {
-   "context": 196608,
+   "context": 204800,
    "id": "minimax/minimax-m2"
   },
   {
@@ -1127,7 +1127,7 @@
    "id": "qwen/qwen3.5-27b"
   },
   {
-   "context": 262144,
+   "context": 256000,
    "id": "qwen/qwen3.5-35b-a3b"
   },
   {
@@ -1179,7 +1179,7 @@
    "id": "qwen/qwen3.7-plus"
   },
   {
-   "context": 1048576,
+   "context": 1000000,
    "id": "qwen/qwen3.8-2.4t-a95b"
   },
   {
@@ -1245,6 +1245,14 @@
   {
    "context": 131072,
    "id": "sao10k/l3.3-euryale-70b"
+  },
+  {
+   "context": 1000000,
+   "id": "scaledown/extract"
+  },
+  {
+   "context": 1000000,
+   "id": "scaledown/summarize"
   },
   {
    "context": 1000000,
@@ -1339,12 +1347,12 @@
    "id": "thinkingmachines/inkling-small:free"
   },
   {
-   "context": 262144,
-   "id": "unbiased/pareto"
-  },
-  {
    "context": 1048576,
    "id": "unbiased/pareto-26.10-preview"
+  },
+  {
+   "context": 262144,
+   "id": "unbiased/pareto-26.9"
   },
   {
    "context": 6144,
@@ -1451,7 +1459,7 @@
    "id": "z-ai/glm-5-turbo"
   },
   {
-   "context": 200000,
+   "context": 202745,
    "id": "z-ai/glm-5.1"
   },
   {
@@ -1537,6 +1545,10 @@
   {
    "context": 1050000,
    "id": "~openai/gpt-terra-latest"
+  },
+  {
+   "context": 262144,
+   "id": "~unbiased/pareto-latest"
   },
   {
    "context": 500000,

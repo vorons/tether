@@ -1,5 +1,5 @@
 {
- "generated_at": 1791891986,
+ "generated_at": 1791970213,
  "id": "edenai",
  "models": [
   {
@@ -447,6 +447,10 @@
    "id": "deepinfra/zai-org/GLM-4.7-Flash"
   },
   {
+   "context": 1000000,
+   "id": "deepseek-v4-flash-vision-exp"
+  },
+  {
    "context": 131072,
    "id": "deepseek/deepseek-chat"
   },
@@ -569,6 +573,10 @@
   {
    "context": 1048576,
    "id": "google/gemini-3.8-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "google/gemini-4-argon"
   },
   {
    "context": 1048576,
@@ -1047,6 +1055,10 @@
    "id": "tencent/deepseek-v4-pro-0813"
   },
   {
+   "context": 1000000,
+   "id": "tencent/deepseek-v4.1-flash"
+  },
+  {
    "context": 256000,
    "id": "tencent/hy3"
   },
@@ -1193,6 +1205,18 @@
   {
    "context": 1048576,
    "id": "vertex/gemini-3.8-flash@us"
+  },
+  {
+   "context": 1048576,
+   "id": "vertex/gemini-4-argon"
+  },
+  {
+   "context": 1048576,
+   "id": "vertex/gemini-4-argon@eu"
+  },
+  {
+   "context": 1048576,
+   "id": "vertex/gemini-4-argon@us"
   },
   {
    "context": 1048576,

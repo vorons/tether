@@ -1,7 +1,11 @@
 {
- "generated_at": 1791891986,
+ "generated_at": 1791970213,
  "id": "opencode-go",
  "models": [
+  {
+   "context": 262144,
+   "id": "cat-jam-free"
+  },
   {
    "context": 1000000,
    "id": "claude-haiku-5-5"
@@ -21,6 +25,10 @@
   {
    "context": 1000000,
    "id": "deepseek-v4.1-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini-4-argon-contributor"
   },
   {
    "context": 1000000,

@@ -1,5 +1,5 @@
 {
- "generated_at": 1791891986,
+ "generated_at": 1791970213,
  "id": "nano-gpt",
  "models": [
   {
@@ -1064,6 +1064,10 @@
   },
   {
    "context": 1048576,
+   "id": "google/gemini-4-argon"
+  },
+  {
+   "context": 1048576,
    "id": "google/gemini-flash-latest"
   },
   {
@@ -1185,6 +1189,10 @@
   {
    "context": 128000,
    "id": "liquid/lfm-2.5-2.6b"
+  },
+  {
+   "context": 128000,
+   "id": "liquid/lfm-2.5-24b-a2b"
   },
   {
    "context": 1000000,
@@ -2187,12 +2195,12 @@
    "id": "thinkingmachines/inkling:thinking"
   },
   {
-   "context": 262144,
-   "id": "unbiased/pareto"
-  },
-  {
    "context": 1048576,
    "id": "unbiased/pareto-26.10-preview"
+  },
+  {
+   "context": 262144,
+   "id": "unbiased/pareto-26.9"
   },
   {
    "context": 6144,

@@ -1,5 +1,5 @@
 {
- "generated_at": 1791891986,
+ "generated_at": 1791970213,
  "id": "github-copilot",
  "models": [
   {
@@ -61,6 +61,10 @@
   {
    "context": 1000000,
    "id": "gemini-3.8-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini-4-argon"
   },
   {
    "context": 264000,

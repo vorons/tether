@@ -1,5 +1,5 @@
 {
- "generated_at": 1791891986,
+ "generated_at": 1791970213,
  "id": "novita-ai",
  "models": [
   {
@@ -265,6 +265,10 @@
   {
    "context": 262144,
    "id": "stepfun/step-3.7-flash"
+  },
+  {
+   "context": 1000000,
+   "id": "stepfun/step-5-preview"
   },
   {
    "context": 262144,

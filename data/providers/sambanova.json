@@ -1,0 +1,31 @@
+{
+ "generated_at": 1791970213,
+ "id": "sambanova",
+ "models": [
+  {
+   "context": 131072,
+   "id": "DeepSeek-V3.1"
+  },
+  {
+   "context": 32768,
+   "id": "DeepSeek-V3.2"
+  },
+  {
+   "context": 131072,
+   "id": "Meta-Llama-3.3-70B-Instruct"
+  },
+  {
+   "context": 1048576,
+   "id": "MiniMax-M3"
+  },
+  {
+   "context": 131072,
+   "id": "gemma-4-31B-it"
+  },
+  {
+   "context": 131072,
+   "id": "gpt-oss-120b"
+  }
+ ],
+ "schema": 1
+}

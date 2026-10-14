@@ -1,5 +1,5 @@
 {
- "generated_at": 1791891986,
+ "generated_at": 1791970213,
  "id": "llmgateway-providers",
  "models": [
   {
@@ -343,10 +343,6 @@
    "id": "azure/gpt-4.1-mini"
   },
   {
-   "context": 1000000,
-   "id": "azure/gpt-4.1-nano"
-  },
-  {
    "context": 128000,
    "id": "azure/gpt-4o"
   },
@@ -591,6 +587,10 @@
    "id": "consensusprotocol/gpt-oss-20b"
   },
   {
+   "context": 1048576,
+   "id": "consensusprotocol/mimo-v2.6-flash"
+  },
+  {
    "context": 160000,
    "id": "deepinfra/deepseek-v3.2"
   },
@@ -792,6 +792,10 @@
   },
   {
    "context": 1048576,
+   "id": "google-ai-studio/gemini-4-argon"
+  },
+  {
+   "context": 1048576,
    "id": "google-ai-studio/gemini-pro-latest"
   },
   {
@@ -837,6 +841,10 @@
   {
    "context": 1048576,
    "id": "google-vertex/gemini-3.8-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "google-vertex/gemini-4-argon"
   },
   {
    "context": 131072,

@@ -1,10 +1,14 @@
 {
- "generated_at": 1791891986,
+ "generated_at": 1791970213,
  "id": "ambient",
  "models": [
   {
    "context": 202752,
    "id": "ambient/large"
+  },
+  {
+   "context": 101072,
+   "id": "ambient/small"
   },
   {
    "context": 1048576,
@@ -41,6 +45,10 @@
   {
    "context": 262144,
    "id": "stepfun/step-3.7-flash"
+  },
+  {
+   "context": 101072,
+   "id": "unsloth/qwen3.8-27b-gguf"
   },
   {
    "context": 1048576,

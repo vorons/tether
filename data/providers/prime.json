@@ -1,5 +1,5 @@
 {
- "generated_at": 1791891986,
+ "generated_at": 1791970213,
  "id": "prime",
  "models": [
   {
@@ -99,6 +99,10 @@
    "id": "mistralai/mistral-small-2603"
   },
   {
+   "context": 65536,
+   "id": "mistralai/mixtral-8x22b-instruct"
+  },
+  {
    "context": 262144,
    "id": "moonshotai/kimi-k2-0905"
   },
@@ -180,11 +184,23 @@
   },
   {
    "context": 1050000,
+   "id": "openai/gpt-5.6-luna-pro"
+  },
+  {
+   "context": 1050000,
    "id": "openai/gpt-5.6-sol"
   },
   {
    "context": 1050000,
+   "id": "openai/gpt-5.6-sol-pro"
+  },
+  {
+   "context": 1050000,
    "id": "openai/gpt-5.6-terra"
+  },
+  {
+   "context": 1050000,
+   "id": "openai/gpt-5.6-terra-pro"
   },
   {
    "context": 1050000,
