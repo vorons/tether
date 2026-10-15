@@ -1,5 +1,5 @@
 {
- "generated_at": 1791970213,
+ "generated_at": 1792055286,
  "id": "edenai",
  "models": [
   {
@@ -117,6 +117,10 @@
   {
    "context": 1000000,
    "id": "anthropic/claude-haiku-5-5"
+  },
+  {
+   "context": 1000000,
+   "id": "anthropic/claude-haiku-latest"
   },
   {
    "context": 200000,
@@ -427,6 +431,10 @@
    "id": "deepinfra/stepfun-ai/Step-3.7-Flash"
   },
   {
+   "context": 1048576,
+   "id": "deepinfra/stepfun-ai/Step-5-Preview"
+  },
+  {
    "context": 262144,
    "id": "deepinfra/tencent/Hy3"
   },
@@ -481,6 +489,10 @@
   {
    "context": 1048576,
    "id": "flexai/DeepSeek-V4-Flash-0731"
+  },
+  {
+   "context": 1048576,
+   "id": "flexai/DeepSeek-V4-Flash-0731@eu"
   },
   {
    "context": 1048576,
@@ -635,7 +647,7 @@
    "id": "infomaniak/mistralai/Ministral-3-14B-Instruct-2512"
   },
   {
-   "context": 262144,
+   "context": 128000,
    "id": "ionos/Qwen/Qwen3-Coder-Next"
   },
   {
@@ -643,7 +655,7 @@
    "id": "ionos/meta-llama/Llama-3.3-70B-Instruct"
   },
   {
-   "context": 131072,
+   "context": 128000,
    "id": "ionos/openai/gpt-oss-120b"
   },
   {
@@ -919,7 +931,7 @@
    "id": "openai/gpt-latest"
   },
   {
-   "context": 400000,
+   "context": 1050000,
    "id": "openai/gpt-mini-latest"
   },
   {

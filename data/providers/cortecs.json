@@ -1,5 +1,5 @@
 {
- "generated_at": 1791970213,
+ "generated_at": 1792055286,
  "id": "cortecs",
  "models": [
   {
@@ -117,6 +117,10 @@
   {
    "context": 1048576,
    "id": "gemini-3.8-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini-4-argon"
   },
   {
    "context": 131000,

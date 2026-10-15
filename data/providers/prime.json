@@ -1,5 +1,5 @@
 {
- "generated_at": 1791970213,
+ "generated_at": 1792055286,
  "id": "prime",
  "models": [
   {
@@ -77,6 +77,10 @@
   {
    "context": 1048576,
    "id": "google/gemini-3.8-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "google/gemini-4-argon"
   },
   {
    "context": 131072,

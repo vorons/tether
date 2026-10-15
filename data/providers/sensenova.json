@@ -1,5 +1,5 @@
 {
- "generated_at": 1791970213,
+ "generated_at": 1792055286,
  "id": "sensenova",
  "models": [
   {
@@ -9,6 +9,10 @@
   {
    "context": 1048576,
    "id": "deepseek-v4-pro"
+  },
+  {
+   "context": 1048576,
+   "id": "deepseek-v4.1-flash"
   },
   {
    "context": 1000000,

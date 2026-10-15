@@ -1,5 +1,5 @@
 {
- "generated_at": 1791970213,
+ "generated_at": 1792055286,
  "id": "nvidia",
  "models": [
   {
@@ -279,10 +279,6 @@
    "id": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning"
   },
   {
-   "context": 262144,
-   "id": "nvidia/nemotron-3-super-120b-a12b"
-  },
-  {
    "context": 1000000,
    "id": "nvidia/nemotron-3-ultra-550b-a55b"
   },
@@ -293,6 +289,10 @@
   {
    "context": 262144,
    "id": "nvidia/nemotron-3.5-lightning-30b-a3b"
+  },
+  {
+   "context": 1048576,
+   "id": "nvidia/nemotron-3.5-super-vl-120b-a12b"
   },
   {
    "context": 128000,

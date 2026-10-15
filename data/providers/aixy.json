@@ -1,7 +1,23 @@
 {
- "generated_at": 1791970213,
+ "generated_at": 1792055286,
  "id": "aixy",
  "models": [
+  {
+   "context": 1000000,
+   "id": "anthropic/claude-fable-5-1"
+  },
+  {
+   "context": 1000000,
+   "id": "anthropic/claude-haiku-5-5"
+  },
+  {
+   "context": 1000000,
+   "id": "anthropic/claude-opus-5-5"
+  },
+  {
+   "context": 1000000,
+   "id": "anthropic/claude-sonnet-5-5"
+  },
   {
    "context": 1050000,
    "id": "openai/gpt-5.6-luna"

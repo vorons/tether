@@ -1,5 +1,5 @@
 {
- "generated_at": 1791970213,
+ "generated_at": 1792055286,
  "id": "kilo",
  "models": [
   {
@@ -523,7 +523,7 @@
    "id": "minimax/minimax-m2.1"
   },
   {
-   "context": 200000,
+   "context": 198000,
    "id": "minimax/minimax-m2.5"
   },
   {
@@ -603,7 +603,7 @@
    "id": "mistralai/mistral-small-3.1-24b-instruct"
   },
   {
-   "context": 256000,
+   "context": 128000,
    "id": "mistralai/mistral-small-3.2-24b-instruct"
   },
   {
@@ -1451,7 +1451,7 @@
    "id": "z-ai/glm-4.7-flash"
   },
   {
-   "context": 198000,
+   "context": 202752,
    "id": "z-ai/glm-5"
   },
   {
@@ -1459,7 +1459,7 @@
    "id": "z-ai/glm-5-turbo"
   },
   {
-   "context": 202745,
+   "context": 200000,
    "id": "z-ai/glm-5.1"
   },
   {
@@ -1471,7 +1471,7 @@
    "id": "z-ai/glm-5.3"
   },
   {
-   "context": 1048576,
+   "context": 1048575,
    "id": "z-ai/glm-5.3-flash"
   },
   {

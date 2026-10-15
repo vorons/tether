@@ -1,5 +1,5 @@
 {
- "generated_at": 1791970213,
+ "generated_at": 1792055286,
  "id": "ovhcloud",
  "models": [
   {
@@ -13,10 +13,6 @@
   {
    "context": 131072,
    "id": "meta-llama-3_3-70b-instruct"
-  },
-  {
-   "context": 65536,
-   "id": "mistral-7b-instruct-v0.3"
   },
   {
    "context": 65536,

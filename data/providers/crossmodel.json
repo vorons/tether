@@ -1,5 +1,5 @@
 {
- "generated_at": 1791970213,
+ "generated_at": 1792055286,
  "id": "crossmodel",
  "models": [
   {
@@ -101,6 +101,10 @@
   {
    "context": 1048576,
    "id": "gemini/gemini-3.8-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini/gemini-4-argon"
   },
   {
    "context": 204800,

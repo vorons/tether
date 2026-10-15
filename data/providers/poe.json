@@ -1,5 +1,5 @@
 {
- "generated_at": 1791970213,
+ "generated_at": 1792055286,
  "id": "poe",
  "models": [
   {
@@ -148,7 +148,27 @@
   },
   {
    "context": 1048576,
+   "id": "google/gemini-3.5-flash-lite"
+  },
+  {
+   "context": 1048576,
+   "id": "google/gemini-3.6-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "google/gemini-3.7-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "google/gemini-3.8-flash"
+  },
+  {
+   "context": 1048576,
    "id": "google/gemini-deep-research"
+  },
+  {
+   "context": 131072,
+   "id": "google/gemini-omni-1.1-flash"
   },
   {
    "context": 262144,

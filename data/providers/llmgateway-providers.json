@@ -1,5 +1,5 @@
 {
- "generated_at": 1791970213,
+ "generated_at": 1792055286,
  "id": "llmgateway-providers",
  "models": [
   {
@@ -169,10 +169,6 @@
   {
    "context": 1000000,
    "id": "anthropic/claude-sonnet-5-5"
-  },
-  {
-   "context": 262144,
-   "id": "atria/atria-dawn-preview"
   },
   {
    "context": 1000000,
@@ -567,7 +563,7 @@
    "id": "consensusprotocol/Qwen3.8-27B"
   },
   {
-   "context": 524288,
+   "context": 1000000,
    "id": "consensusprotocol/deepseek-v4-flash"
   },
   {
@@ -589,6 +585,10 @@
   {
    "context": 1048576,
    "id": "consensusprotocol/mimo-v2.6-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "consensusprotocol/minimax-m3"
   },
   {
    "context": 160000,
@@ -708,6 +708,10 @@
   },
   {
    "context": 1048576,
+   "id": "entrim/glm-5.3"
+  },
+  {
+   "context": 1048576,
    "id": "entrim/glm-5.3-flash"
   },
   {
@@ -733,14 +737,6 @@
   {
    "context": 1040384,
    "id": "fireworks/kimi-k3-fast"
-  },
-  {
-   "context": 390000,
-   "id": "gonka24/deepseek-v4-flash"
-  },
-  {
-   "context": 200000,
-   "id": "gonka24/glm-5.3-flash"
   },
   {
    "context": 204800,
@@ -1355,24 +1351,12 @@
    "id": "ranoai/deepseek-v4-flash"
   },
   {
-   "context": 262144,
-   "id": "reka-ai/deepseek-v4-flash"
-  },
-  {
    "context": 1048576,
    "id": "reka-ai/deepseek-v4-pro"
   },
   {
    "context": 1048576,
    "id": "reka-ai/glm-5.3"
-  },
-  {
-   "context": 262144,
-   "id": "reka-ai/glm-5.3-flash"
-  },
-  {
-   "context": 262144,
-   "id": "reka-ai/qwen3.8-27b"
   },
   {
    "context": 16384,
@@ -1476,15 +1460,7 @@
   },
   {
    "context": 131072,
-   "id": "scx-ai/gemma-4-31b-it"
-  },
-  {
-   "context": 131072,
    "id": "scx-ai/gpt-oss-120b"
-  },
-  {
-   "context": 131072,
-   "id": "scx-ai/llama-4-maverick-17b-instruct"
   },
   {
    "context": 196608,
@@ -1709,14 +1685,6 @@
   {
    "context": 256000,
    "id": "xai/grok-build-0-1"
-  },
-  {
-   "context": 1000000,
-   "id": "xiaomi/mimo-v2.5"
-  },
-  {
-   "context": 1000000,
-   "id": "xiaomi/mimo-v2.5-pro"
   },
   {
    "context": 1000000,

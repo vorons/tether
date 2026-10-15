@@ -1,5 +1,5 @@
 {
- "generated_at": 1791970213,
+ "generated_at": 1792055286,
  "id": "venice",
  "models": [
   {
@@ -141,6 +141,10 @@
   {
    "context": 256000,
    "id": "gemini-3-flash-preview"
+  },
+  {
+   "context": 1000000,
+   "id": "gemini-4-argon"
   },
   {
    "context": 256000,

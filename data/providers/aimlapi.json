@@ -1,5 +1,5 @@
 {
- "generated_at": 1791970213,
+ "generated_at": 1792055286,
  "id": "aimlapi",
  "models": [
   {
@@ -19,24 +19,8 @@
    "id": "alibaba/qwen3-coder-480b-a35b-instruct"
   },
   {
-   "context": 262144,
-   "id": "alibaba/qwen3-max"
-  },
-  {
-   "context": 252000,
-   "id": "alibaba/qwen3-max-preview"
-  },
-  {
    "context": 129024,
    "id": "alibaba/qwen3-next-80b-a3b-instruct"
-  },
-  {
-   "context": 262144,
-   "id": "alibaba/qwen3-vl-flash"
-  },
-  {
-   "context": 262144,
-   "id": "alibaba/qwen3.6-max-preview"
   },
   {
    "context": 262144,
