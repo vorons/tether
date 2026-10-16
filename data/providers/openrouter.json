@@ -1,5 +1,5 @@
 {
- "generated_at": 1792055286,
+ "generated_at": 1792141274,
  "id": "openrouter",
  "models": [
   {
@@ -93,10 +93,6 @@
   {
    "context": 1000000,
    "id": "anthropic/claude-opus-5.5"
-  },
-  {
-   "context": 200000,
-   "id": "anthropic/claude-sonnet-4"
   },
   {
    "context": 1000000,
@@ -480,6 +476,10 @@
   },
   {
    "context": 1048576,
+   "id": "meta/muse-spark-open"
+  },
+  {
+   "context": 1048576,
    "id": "meta/muse-wonder"
   },
   {
@@ -603,6 +603,14 @@
    "id": "mistralai/voxtral-small-24b-2507"
   },
   {
+   "context": 32000,
+   "id": "moondream/moondream3-preview"
+  },
+  {
+   "context": 32000,
+   "id": "moondream/moondream3.1-9b-a2b"
+  },
+  {
    "context": 131072,
    "id": "moonshotai/kimi-k2"
   },
@@ -697,6 +705,14 @@
   {
    "context": 1000000,
    "id": "nvidia/nemotron-3.5-lightning:free"
+  },
+  {
+   "context": 1048576,
+   "id": "nvidia/nemotron-3.5-super-vl"
+  },
+  {
+   "context": 1000000,
+   "id": "nvidia/nemotron-3.5-super-vl:free"
   },
   {
    "context": 16385,
@@ -1313,10 +1329,6 @@
   {
    "context": 1048576,
    "id": "thinkingmachines/inkling:free"
-  },
-  {
-   "context": 1048576,
-   "id": "unbiased/pareto-26.10-preview"
   },
   {
    "context": 262144,

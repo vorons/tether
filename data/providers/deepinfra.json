@@ -1,5 +1,5 @@
 {
- "generated_at": 1792055286,
+ "generated_at": 1792141274,
  "id": "deepinfra",
  "models": [
   {
@@ -249,6 +249,10 @@
   {
    "context": 262144,
    "id": "stepfun-ai/Step-3.7-Flash"
+  },
+  {
+   "context": 1048576,
+   "id": "stepfun-ai/Step-5-Preview"
   },
   {
    "context": 262144,

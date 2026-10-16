@@ -1,5 +1,5 @@
 {
- "generated_at": 1792055286,
+ "generated_at": 1792141274,
  "id": "digitalocean",
  "models": [
   {
@@ -249,6 +249,10 @@
   {
    "context": 131072,
    "id": "nemotron-3-ultra-550b"
+  },
+  {
+   "context": 1048576,
+   "id": "nemotron-3.5-super-vl"
   },
   {
    "context": 128000,

@@ -1,5 +1,5 @@
 {
- "generated_at": 1792055286,
+ "generated_at": 1792141274,
  "id": "ollama-cloud",
  "models": [
   {
@@ -85,6 +85,10 @@
   {
    "context": 1048576,
    "id": "mistral-large-4"
+  },
+  {
+   "context": 1048576,
+   "id": "muse-spark-open"
   },
   {
    "context": 1048576,

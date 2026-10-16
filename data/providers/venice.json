@@ -1,5 +1,5 @@
 {
- "generated_at": 1792055286,
+ "generated_at": 1792141274,
  "id": "venice",
  "models": [
   {
@@ -195,6 +195,10 @@
    "id": "hermes-3-llama-3.1-405b"
   },
   {
+   "context": 1048576,
+   "id": "hy4-preview"
+  },
+  {
    "context": 524288,
    "id": "inkling"
   },
@@ -249,6 +253,18 @@
   {
    "context": 256000,
    "id": "mistral-small-3-2-24b-instruct"
+  },
+  {
+   "context": 1048576,
+   "id": "muse-spark-open"
+  },
+  {
+   "context": 1048576,
+   "id": "muse-wonder"
+  },
+  {
+   "context": 262144,
+   "id": "nvidia-nemotron-3-5-super-vl-120b-a12b"
   },
   {
    "context": 128000,

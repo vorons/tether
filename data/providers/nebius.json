@@ -1,5 +1,5 @@
 {
- "generated_at": 1792055286,
+ "generated_at": 1792141274,
  "id": "nebius",
  "models": [
   {
@@ -51,6 +51,10 @@
    "id": "google/gemma-3-27b-it"
   },
   {
+   "context": 1048576,
+   "id": "meta-models/muse-spark-open"
+  },
+  {
    "context": 262144,
    "id": "moonshotai/Kimi-K2.7-Code"
   },
@@ -61,6 +65,10 @@
   {
    "context": 1048576,
    "id": "nvidia/Nemotron-3-Ultra-550b-a55b"
+  },
+  {
+   "context": 1048576,
+   "id": "nvidia/Nemotron-3.5-Super-VL"
   },
   {
    "context": 1048576,

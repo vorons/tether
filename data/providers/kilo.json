@@ -1,5 +1,5 @@
 {
- "generated_at": 1792055286,
+ "generated_at": 1792141274,
  "id": "kilo",
  "models": [
   {
@@ -95,10 +95,6 @@
    "id": "anthropic/claude-opus-5.5"
   },
   {
-   "context": 200000,
-   "id": "anthropic/claude-sonnet-4"
-  },
-  {
    "context": 1000000,
    "id": "anthropic/claude-sonnet-4.5"
   },
@@ -175,7 +171,7 @@
    "id": "cohere/north-mini-code:free"
   },
   {
-   "context": 163840,
+   "context": 128000,
    "id": "deepseek/deepseek-chat"
   },
   {
@@ -492,6 +488,10 @@
   },
   {
    "context": 1048576,
+   "id": "meta/muse-spark-open"
+  },
+  {
+   "context": 1048576,
    "id": "meta/muse-wonder"
   },
   {
@@ -603,7 +603,7 @@
    "id": "mistralai/mistral-small-3.1-24b-instruct"
   },
   {
-   "context": 128000,
+   "context": 256000,
    "id": "mistralai/mistral-small-3.2-24b-instruct"
   },
   {
@@ -613,6 +613,14 @@
   {
    "context": 32768,
    "id": "mistralai/voxtral-small-24b-2507"
+  },
+  {
+   "context": 32000,
+   "id": "moondream/moondream3-preview"
+  },
+  {
+   "context": 32000,
+   "id": "moondream/moondream3.1-9b-a2b"
   },
   {
    "context": 131072,
@@ -709,6 +717,14 @@
   {
    "context": 1000000,
    "id": "nvidia/nemotron-3.5-lightning:free"
+  },
+  {
+   "context": 262144,
+   "id": "nvidia/nemotron-3.5-super-vl"
+  },
+  {
+   "context": 1000000,
+   "id": "nvidia/nemotron-3.5-super-vl:free"
   },
   {
    "context": 16385,
@@ -1291,10 +1307,6 @@
    "id": "stepfun/step-5-preview"
   },
   {
-   "context": 1000000,
-   "id": "stepfun/step-5-preview-free"
-  },
-  {
    "context": 131072,
    "id": "tencent/hunyuan-a13b-instruct"
   },
@@ -1345,10 +1357,6 @@
   {
    "context": 1048576,
    "id": "thinkingmachines/inkling-small:free"
-  },
-  {
-   "context": 1048576,
-   "id": "unbiased/pareto-26.10-preview"
   },
   {
    "context": 262144,
@@ -1471,7 +1479,7 @@
    "id": "z-ai/glm-5.3"
   },
   {
-   "context": 1048575,
+   "context": 1048576,
    "id": "z-ai/glm-5.3-flash"
   },
   {

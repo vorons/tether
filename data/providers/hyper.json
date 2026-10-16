@@ -1,5 +1,5 @@
 {
- "generated_at": 1792055286,
+ "generated_at": 1792141274,
  "id": "hyper",
  "models": [
   {
@@ -57,6 +57,10 @@
   {
    "context": 512000,
    "id": "minimax-m3"
+  },
+  {
+   "context": 1000000,
+   "id": "prism"
   },
   {
    "context": 1000000,

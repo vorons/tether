@@ -1,22 +1,14 @@
 {
- "generated_at": 1792055286,
+ "generated_at": 1792141274,
  "id": "opencode-go",
  "models": [
   {
-   "context": 262144,
+   "context": 1048576,
    "id": "cat-jam-free"
   },
   {
    "context": 1000000,
    "id": "claude-haiku-5-5"
-  },
-  {
-   "context": 1000000,
-   "id": "deepseek-v4-flash"
-  },
-  {
-   "context": 1000000,
-   "id": "deepseek-v4-flash-vision-exp"
   },
   {
    "context": 1000000,
@@ -52,14 +44,6 @@
   },
   {
    "context": 500000,
-   "id": "grok-4.5"
-  },
-  {
-   "context": 500000,
-   "id": "grok-4.6"
-  },
-  {
-   "context": 500000,
    "id": "grok-4.7"
   },
   {
@@ -69,10 +53,6 @@
   {
    "context": 1024000,
    "id": "hy4-preview"
-  },
-  {
-   "context": 262144,
-   "id": "kimi-k2.6"
   },
   {
    "context": 262144,
@@ -124,14 +104,6 @@
   },
   {
    "context": 1000000,
-   "id": "qwen3.6-plus"
-  },
-  {
-   "context": 1000000,
-   "id": "qwen3.7-max"
-  },
-  {
-   "context": 1000000,
    "id": "qwen3.7-plus"
   },
   {
@@ -147,8 +119,8 @@
    "id": "space-bunny"
   },
   {
-   "context": 1048576,
-   "id": "space-bunny-free"
+   "context": 1000000,
+   "id": "step-5-preview"
   },
   {
    "context": 1000000,

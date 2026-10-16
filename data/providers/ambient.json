@@ -1,5 +1,5 @@
 {
- "generated_at": 1792055286,
+ "generated_at": 1792141274,
  "id": "ambient",
  "models": [
   {
@@ -17,6 +17,10 @@
   {
    "context": 1048576,
    "id": "deepseek/deepseek-v4-flash-0731"
+  },
+  {
+   "context": 262144,
+   "id": "minimax/minimax-m3"
   },
   {
    "context": 262144,

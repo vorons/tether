@@ -1,5 +1,5 @@
 {
- "generated_at": 1792055286,
+ "generated_at": 1792141274,
  "id": "edenai",
  "models": [
   {
@@ -483,6 +483,10 @@
    "id": "fireworks_ai/accounts/fireworks/models/inkling"
   },
   {
+   "context": 1048576,
+   "id": "fireworks_ai/accounts/fireworks/models/muse-spark-open"
+  },
+  {
    "context": 131072,
    "id": "fireworks_ai/gpt-oss-120b"
   },
@@ -789,6 +793,10 @@
   {
    "context": 110000,
    "id": "nebius/google/gemma-3-27b-it"
+  },
+  {
+   "context": 1048576,
+   "id": "nebius/meta-models/muse-spark-open"
   },
   {
    "context": 1048576,

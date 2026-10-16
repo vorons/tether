@@ -1,9 +1,9 @@
 {
- "generated_at": 1792055286,
+ "generated_at": 1792141274,
  "id": "iteracompute",
  "models": [
   {
-   "context": 970000,
+   "context": 1048576,
    "id": "deepseek/deepseek-v4-flash-0731"
   },
   {
@@ -12,22 +12,26 @@
   },
   {
    "context": 1048576,
+   "id": "deepseek/deepseek-v4.1-flash"
+  },
+  {
+   "context": 1048576,
    "id": "minimax/minimax-m3"
+  },
+  {
+   "context": 262144,
+   "id": "moonshotai/kimi-k2.7-code"
   },
   {
    "context": 1048576,
    "id": "moonshotai/kimi-k3"
   },
   {
-   "context": 327680,
-   "id": "ornith-ai/ornith-1.5-35b-a3b"
-  },
-  {
-   "context": 970000,
+   "context": 1048576,
    "id": "qwen/qwen3.8-2.4t-a95b"
   },
   {
-   "context": 327680,
+   "context": 131072,
    "id": "qwen/qwen3.8-27b"
   },
   {

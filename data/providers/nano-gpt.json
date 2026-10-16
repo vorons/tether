@@ -1,5 +1,5 @@
 {
- "generated_at": 1792055286,
+ "generated_at": 1792141274,
  "id": "nano-gpt",
  "models": [
   {
@@ -371,6 +371,10 @@
    "id": "aion-labs/aion-rp-llama-3.1-8b"
   },
   {
+   "context": 131072,
+   "id": "aisingapore/Gemma-SEA-LION-v4-27B-IT"
+  },
+  {
    "context": 1000000,
    "id": "amazon/nova-2-lite-v1"
   },
@@ -732,10 +736,6 @@
   },
   {
    "context": 1048576,
-   "id": "deepseek/deepseek-v4-flash-vision-exp-cybersecurity"
-  },
-  {
-   "context": 1048576,
    "id": "deepseek/deepseek-v4-flash:thinking"
   },
   {
@@ -813,6 +813,10 @@
   {
    "context": 32000,
    "id": "featherless-ai/Qwerky-72B"
+  },
+  {
+   "context": 1048576,
+   "id": "fireworks/ember-1"
   },
   {
    "context": 2097152,
@@ -1519,6 +1523,10 @@
    "id": "nvidia/nemotron-3.5-lightning:thinking"
   },
   {
+   "context": 262144,
+   "id": "nvidia/nemotron-3.5-super-vl"
+  },
+  {
    "context": 16385,
    "id": "openai/gpt-3.5-turbo"
   },
@@ -2097,6 +2105,14 @@
   {
    "context": 32768,
    "id": "qwen3-vl-235b-a22b-instruct-original"
+  },
+  {
+   "context": 16384,
+   "id": "reka/reka-edge-2603"
+  },
+  {
+   "context": 65536,
+   "id": "reka/reka-flash-3"
   },
   {
    "context": 1000000,
