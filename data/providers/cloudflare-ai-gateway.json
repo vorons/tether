@@ -1,5 +1,5 @@
 {
- "generated_at": 1792141274,
+ "generated_at": 1792225969,
  "id": "cloudflare-ai-gateway",
  "models": [
   {
@@ -209,6 +209,10 @@
   {
    "context": 200000,
    "id": "openai/o4-mini"
+  },
+  {
+   "context": 262144,
+   "id": "reflection-ai/beam-1.0-501b-a23b"
   },
   {
    "context": 262144,

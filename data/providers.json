@@ -1,5 +1,5 @@
 {
- "generated_at": 1792141274,
+ "generated_at": 1792225969,
  "providers": {
   "302ai": {
    "api_key_env": [
@@ -5647,7 +5647,7 @@
     "CLOUDFLARE_ACCOUNT_ID",
     "CLOUDFLARE_GATEWAY_ID"
    ],
-   "model": "google/gemini-4-argon",
+   "model": "reflection-ai/beam-1.0-501b-a23b",
    "models": [
     {
      "context": 262144,
@@ -5856,6 +5856,10 @@
     {
      "context": 200000,
      "id": "openai/o4-mini"
+    },
+    {
+     "context": 262144,
+     "id": "reflection-ai/beam-1.0-501b-a23b"
     },
     {
      "context": 262144,
@@ -6082,6 +6086,300 @@
     {
      "context": 8000,
      "id": "tiny-aya-water"
+    }
+   ],
+   "wire": "openai"
+  },
+  "commandcode": {
+   "api_key_env": [
+    "CMD_API_KEY"
+   ],
+   "base_url": "https://api.commandcode.ai/provider/v1",
+   "model": "google/gemini-4-argon",
+   "models": [
+    {
+     "context": 200000,
+     "id": "MiniMaxAI/MiniMax-M2.5"
+    },
+    {
+     "context": 200000,
+     "id": "MiniMaxAI/MiniMax-M2.7"
+    },
+    {
+     "context": 1000000,
+     "id": "MiniMaxAI/MiniMax-M3"
+    },
+    {
+     "context": 262144,
+     "id": "Qwen/Qwen3.8-27B"
+    },
+    {
+     "context": 1000000,
+     "id": "Qwen/Qwen3.8-Flash"
+    },
+    {
+     "context": 1000000,
+     "id": "Qwen/Qwen3.8-Max"
+    },
+    {
+     "context": 1000000,
+     "id": "Qwen/Qwen3.8-Max-0902"
+    },
+    {
+     "context": 1000000,
+     "id": "Qwen/Qwen3.8-Omni-Flash"
+    },
+    {
+     "context": 1000000,
+     "id": "claude-fable-5"
+    },
+    {
+     "context": 1000000,
+     "id": "claude-fable-5-1"
+    },
+    {
+     "context": 200000,
+     "id": "claude-haiku-4-5-20251001"
+    },
+    {
+     "context": 1000000,
+     "id": "claude-haiku-5-5"
+    },
+    {
+     "context": 1000000,
+     "id": "claude-opus-4-7"
+    },
+    {
+     "context": 1000000,
+     "id": "claude-opus-4-8"
+    },
+    {
+     "context": 1000000,
+     "id": "claude-opus-5"
+    },
+    {
+     "context": 1000000,
+     "id": "claude-opus-5-5"
+    },
+    {
+     "context": 1000000,
+     "id": "claude-sonnet-4-6"
+    },
+    {
+     "context": 1000000,
+     "id": "claude-sonnet-5"
+    },
+    {
+     "context": 1000000,
+     "id": "claude-sonnet-5-5"
+    },
+    {
+     "context": 1000000,
+     "id": "deepseek/deepseek-v4-flash"
+    },
+    {
+     "context": 1000000,
+     "id": "deepseek/deepseek-v4-flash-fast"
+    },
+    {
+     "context": 1000000,
+     "id": "deepseek/deepseek-v4-flash-vision-exp"
+    },
+    {
+     "context": 1000000,
+     "id": "deepseek/deepseek-v4-pro"
+    },
+    {
+     "context": 1000000,
+     "id": "deepseek/deepseek-v4.1-flash"
+    },
+    {
+     "context": 1000000,
+     "id": "deepseek/deepseek-v4.1-flash-fast"
+    },
+    {
+     "context": 1000000,
+     "id": "google/gemini-3.1-flash-lite"
+    },
+    {
+     "context": 1000000,
+     "id": "google/gemini-3.5-flash"
+    },
+    {
+     "context": 1000000,
+     "id": "google/gemini-3.5-flash-lite"
+    },
+    {
+     "context": 1000000,
+     "id": "google/gemini-3.6-flash"
+    },
+    {
+     "context": 1048576,
+     "id": "google/gemini-3.7-flash"
+    },
+    {
+     "context": 1000000,
+     "id": "google/gemini-3.8-flash"
+    },
+    {
+     "context": 1000000,
+     "id": "google/gemini-4-argon"
+    },
+    {
+     "context": 400000,
+     "id": "gpt-5.3-codex"
+    },
+    {
+     "context": 400000,
+     "id": "gpt-5.4"
+    },
+    {
+     "context": 400000,
+     "id": "gpt-5.4-mini"
+    },
+    {
+     "context": 400000,
+     "id": "gpt-5.5"
+    },
+    {
+     "context": 1050000,
+     "id": "gpt-5.6-luna"
+    },
+    {
+     "context": 1050000,
+     "id": "gpt-5.6-sol"
+    },
+    {
+     "context": 1050000,
+     "id": "gpt-5.6-terra"
+    },
+    {
+     "context": 1050000,
+     "id": "gpt-6-astra"
+    },
+    {
+     "context": 1050000,
+     "id": "gpt-6-luna"
+    },
+    {
+     "context": 1050000,
+     "id": "gpt-6-sol"
+    },
+    {
+     "context": 1050000,
+     "id": "gpt-6.1-sol"
+    },
+    {
+     "context": 262144,
+     "id": "inclusionai/ling-3.1-flash:free"
+    },
+    {
+     "context": 1048576,
+     "id": "meta/muse-spark-1.1"
+    },
+    {
+     "context": 1048576,
+     "id": "meta/muse-spark-1.2"
+    },
+    {
+     "context": 1048576,
+     "id": "meta/muse-spark-1.2-contributor"
+    },
+    {
+     "context": 1048576,
+     "id": "meta/muse-spark-1.3"
+    },
+    {
+     "context": 1048576,
+     "id": "meta/muse-spark-1.3-contributor"
+    },
+    {
+     "context": 1048576,
+     "id": "meta/muse-wonder-1.0"
+    },
+    {
+     "context": 524288,
+     "id": "mistral/mistral-large-4"
+    },
+    {
+     "context": 256000,
+     "id": "moonshotai/Kimi-K2.7-Code"
+    },
+    {
+     "context": 262000,
+     "id": "moonshotai/Kimi-K2.7-Code-Highspeed"
+    },
+    {
+     "context": 1000000,
+     "id": "moonshotai/Kimi-K3"
+    },
+    {
+     "context": 1000000,
+     "id": "nvidia/nemotron-3-ultra-550b-a55b"
+    },
+    {
+     "context": 1000000,
+     "id": "sakana/fugu-ultra"
+    },
+    {
+     "context": 256000,
+     "id": "stepfun/Step-3.5-Flash"
+    },
+    {
+     "context": 256000,
+     "id": "stepfun/Step-3.7-Flash"
+    },
+    {
+     "context": 1000000,
+     "id": "stepfun/Step-5-Preview"
+    },
+    {
+     "context": 256000,
+     "id": "tencent/hy3-paid"
+    },
+    {
+     "context": 1024000,
+     "id": "tencent/hy4-preview"
+    },
+    {
+     "context": 256000,
+     "id": "thinkingmachines/inkling"
+    },
+    {
+     "context": 1000000,
+     "id": "thinkingmachines/inkling-small"
+    },
+    {
+     "context": 500000,
+     "id": "xai/grok-4.5"
+    },
+    {
+     "context": 500000,
+     "id": "xai/grok-4.6"
+    },
+    {
+     "context": 500000,
+     "id": "xai/grok-4.7"
+    },
+    {
+     "context": 1000000,
+     "id": "z-ai/glm-5.3-flash"
+    },
+    {
+     "context": 1000000,
+     "id": "z-ai/glm-5.3-flashx"
+    },
+    {
+     "context": 1000000,
+     "id": "zai-org/GLM-5.2"
+    },
+    {
+     "context": 1000000,
+     "id": "zai-org/GLM-5.2-Fast"
+    },
+    {
+     "context": 1000000,
+     "id": "zai-org/GLM-5.3"
     }
    ],
    "wire": "openai"
@@ -7097,6 +7395,10 @@
     {
      "context": 1048576,
      "id": "databricks-gemini-3-1-pro"
+    },
+    {
+     "context": 1048576,
+     "id": "databricks-gemini-3-5-flash"
     },
     {
      "context": 1048576,
@@ -8123,7 +8425,7 @@
      "id": "amazon/openai.gpt-oss-safeguard-20b@us"
     },
     {
-     "context": 262144,
+     "context": 256000,
      "id": "amazon/qwen.qwen3-coder-next"
     },
     {
@@ -13655,7 +13957,7 @@
     "KILO_API_KEY"
    ],
    "base_url": "https://api.kilo.ai/api/gateway",
-   "model": "nvidia/nemotron-3.5-super-vl:free",
+   "model": "elorian/glimpse",
    "models": [
     {
      "context": 131072,
@@ -13826,7 +14128,7 @@
      "id": "cohere/north-mini-code:free"
     },
     {
-     "context": 128000,
+     "context": 163840,
      "id": "deepseek/deepseek-chat"
     },
     {
@@ -13850,7 +14152,7 @@
      "id": "deepseek/deepseek-v3.1-terminus"
     },
     {
-     "context": 163840,
+     "context": 131072,
      "id": "deepseek/deepseek-v3.2"
     },
     {
@@ -13884,6 +14186,10 @@
     {
      "context": 512000,
      "id": "dots-studio/dots-3-note-preview:free"
+    },
+    {
+     "context": 262144,
+     "id": "elorian/glimpse"
     },
     {
      "context": 1048576,
@@ -14110,7 +14416,7 @@
      "id": "meta-llama/llama-4-maverick"
     },
     {
-     "context": 131072,
+     "context": 327680,
      "id": "meta-llama/llama-4-scout"
     },
     {
@@ -14874,6 +15180,14 @@
      "id": "qwen/qwen3.8-omni-flash"
     },
     {
+     "context": 1048576,
+     "id": "reflection/beam-1.0-501b-a23b"
+    },
+    {
+     "context": 1048576,
+     "id": "reflection/beam-free"
+    },
+    {
      "context": 16384,
      "id": "rekaai/reka-edge"
     },
@@ -15086,6 +15400,10 @@
      "id": "xiaomi/mimo-v2.6-pro-ultraspeed"
     },
     {
+     "context": 262144,
+     "id": "xingchen-agi/xing4.0-29b-a4b:free"
+    },
+    {
      "context": 131072,
      "id": "z-ai/glm-4.5"
     },
@@ -15106,7 +15424,7 @@
      "id": "z-ai/glm-4.6v"
     },
     {
-     "context": 202752,
+     "context": 204800,
      "id": "z-ai/glm-4.7"
     },
     {
@@ -17031,19 +17349,11 @@
     },
     {
      "context": 1048576,
-     "id": "google-ai-studio/gemini-3.5-flash"
-    },
-    {
-     "context": 1048576,
      "id": "google-ai-studio/gemini-3.5-flash-lite"
     },
     {
      "context": 1048576,
      "id": "google-ai-studio/gemini-3.6-flash"
-    },
-    {
-     "context": 1048576,
-     "id": "google-ai-studio/gemini-3.7-flash"
     },
     {
      "context": 1048576,
@@ -19271,7 +19581,7 @@
     "NANO_GPT_API_KEY"
    ],
    "base_url": "https://nano-gpt.com/api/v1",
-   "model": "reka/reka-flash-3",
+   "model": "elorian/glimpse",
    "models": [
     {
      "context": 32768,
@@ -19588,6 +19898,10 @@
     {
      "context": 8192,
      "id": "TheDrummer/UnslopNemo-12B-v4.1"
+    },
+    {
+     "context": 65536,
+     "id": "TheDrummer/orion-26b-a4b-v1.1"
     },
     {
      "context": 32768,
@@ -20062,6 +20376,10 @@
      "id": "doubao-seed-2-0-pro-260215"
     },
     {
+     "context": 262144,
+     "id": "elorian/glimpse"
+    },
+    {
      "context": 128000,
      "id": "ernie-5.0-thinking-preview"
     },
@@ -20374,6 +20692,10 @@
      "id": "heabsy/cyberheabsy"
     },
     {
+     "context": 524288,
+     "id": "heabsy/qwen3.8-27b-uncensored-fast"
+    },
+    {
      "context": 1048576,
      "id": "hermes-high"
     },
@@ -20538,6 +20860,10 @@
      "id": "meta/muse-spark-1.3-contributor"
     },
     {
+     "context": 1048576,
+     "id": "meta/muse-spark-open"
+    },
+    {
      "context": 65536,
      "id": "microsoft/wizardlm-2-8x22b"
     },
@@ -20676,6 +21002,14 @@
     {
      "context": 8192,
      "id": "mlabonne/NeuralDaredevil-8B-abliterated"
+    },
+    {
+     "context": 32000,
+     "id": "moondream/moondream3-preview"
+    },
+    {
+     "context": 32000,
+     "id": "moondream/moondream3.1-9b-a2b"
     },
     {
      "context": 262144,
@@ -21376,6 +21710,10 @@
     {
      "context": 32768,
      "id": "qwen3-vl-235b-a22b-instruct-original"
+    },
+    {
+     "context": 1048576,
+     "id": "reflection/beam-1.0"
     },
     {
      "context": 16384,
@@ -24305,6 +24643,10 @@
    "model": "kimi-k2.6",
    "models": [
     {
+     "context": 1048576,
+     "id": "beam-free"
+    },
+    {
      "context": 200000,
      "id": "big-pickle"
     },
@@ -24820,6 +25162,10 @@
    "models": [
     {
      "context": 1048576,
+     "id": "beam-free"
+    },
+    {
+     "context": 1048576,
      "id": "cat-jam-free"
     },
     {
@@ -25201,6 +25547,10 @@
     {
      "context": 512000,
      "id": "dots-studio/dots-3-note-preview:free"
+    },
+    {
+     "context": 262144,
+     "id": "elorian/glimpse"
     },
     {
      "context": 1048576,
@@ -26183,6 +26533,10 @@
      "id": "qwen/qwen3.8-omni-flash"
     },
     {
+     "context": 1048576,
+     "id": "reflection/beam-1.0-501b-a23b"
+    },
+    {
      "context": 16384,
      "id": "rekaai/reka-edge"
     },
@@ -26373,6 +26727,10 @@
     {
      "context": 1048576,
      "id": "xiaomi/mimo-v2.6-pro-ultraspeed"
+    },
+    {
+     "context": 262144,
+     "id": "xingchen-agi/xing4.0-29b-a4b:free"
     },
     {
      "context": 131072,
@@ -27468,7 +27826,7 @@
     "PIONEER_API_KEY"
    ],
    "base_url": "https://api.fastino.ai/v1",
-   "model": "fastino/GLiNER-2.5-Decide",
+   "model": "nvidia/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B-NVFP4",
    "models": [
     {
      "context": 32768,
@@ -27877,6 +28235,10 @@
     {
      "context": 8192,
      "id": "nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-BF16"
+    },
+    {
+     "context": 262144,
+     "id": "nvidia/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B-NVFP4"
     },
     {
      "context": 131072,
@@ -29322,6 +29684,20 @@
    "models": [],
    "wire": "radius"
   },
+  "reflection": {
+   "api_key_env": [
+    "REFLECTION_API_KEY"
+   ],
+   "base_url": "https://api.reflection.ai/openai/v1",
+   "model": "Beam-1.0-501B-A23B",
+   "models": [
+    {
+     "context": 1048576,
+     "id": "Beam-1.0-501B-A23B"
+    }
+   ],
+   "wire": "openai"
+  },
   "regolo-ai": {
    "api_key_env": [
     "REGOLO_API_KEY"
@@ -30114,6 +30490,10 @@
     {
      "context": 262144,
      "id": "step-3.7-flash"
+    },
+    {
+     "context": 1048576,
+     "id": "step-5-preview"
     }
    ],
    "wire": "openai"
@@ -30309,7 +30689,7 @@
     "SCALEWAY_API_KEY"
    ],
    "base_url": "https://api.scaleway.ai/v1",
-   "model": "qwen3.8-27b",
+   "model": "deepseek-v4.1-flash",
    "models": [
     {
      "context": 8191,
@@ -30318,6 +30698,10 @@
     {
      "context": 256000,
      "id": "deepseek-v4-flash-0731"
+    },
+    {
+     "context": 256000,
+     "id": "deepseek-v4.1-flash"
     },
     {
      "context": 256000,
@@ -33599,7 +33983,7 @@
     "WANDB_API_KEY"
    ],
    "base_url": "https://api.inference.wandb.ai/v1",
-   "model": "nvidia/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B",
+   "model": "reflection/Beam-1.0-501B-A23B",
    "models": [
     {
      "context": 262144,
@@ -33679,7 +34063,15 @@
     },
     {
      "context": 1048576,
+     "id": "reflection/Beam-1.0-501B-A23B"
+    },
+    {
+     "context": 1048576,
      "id": "zai-org/GLM-5.2"
+    },
+    {
+     "context": 1048576,
+     "id": "zai-org/GLM-5.3"
     },
     {
      "context": 1048576,

@@ -1,5 +1,5 @@
 {
- "generated_at": 1792141274,
+ "generated_at": 1792225969,
  "id": "kilo",
  "models": [
   {
@@ -171,7 +171,7 @@
    "id": "cohere/north-mini-code:free"
   },
   {
-   "context": 128000,
+   "context": 163840,
    "id": "deepseek/deepseek-chat"
   },
   {
@@ -195,7 +195,7 @@
    "id": "deepseek/deepseek-v3.1-terminus"
   },
   {
-   "context": 163840,
+   "context": 131072,
    "id": "deepseek/deepseek-v3.2"
   },
   {
@@ -229,6 +229,10 @@
   {
    "context": 512000,
    "id": "dots-studio/dots-3-note-preview:free"
+  },
+  {
+   "context": 262144,
+   "id": "elorian/glimpse"
   },
   {
    "context": 1048576,
@@ -455,7 +459,7 @@
    "id": "meta-llama/llama-4-maverick"
   },
   {
-   "context": 131072,
+   "context": 327680,
    "id": "meta-llama/llama-4-scout"
   },
   {
@@ -1219,6 +1223,14 @@
    "id": "qwen/qwen3.8-omni-flash"
   },
   {
+   "context": 1048576,
+   "id": "reflection/beam-1.0-501b-a23b"
+  },
+  {
+   "context": 1048576,
+   "id": "reflection/beam-free"
+  },
+  {
    "context": 16384,
    "id": "rekaai/reka-edge"
   },
@@ -1431,6 +1443,10 @@
    "id": "xiaomi/mimo-v2.6-pro-ultraspeed"
   },
   {
+   "context": 262144,
+   "id": "xingchen-agi/xing4.0-29b-a4b:free"
+  },
+  {
    "context": 131072,
    "id": "z-ai/glm-4.5"
   },
@@ -1451,7 +1467,7 @@
    "id": "z-ai/glm-4.6v"
   },
   {
-   "context": 202752,
+   "context": 204800,
    "id": "z-ai/glm-4.7"
   },
   {

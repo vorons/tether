@@ -1,5 +1,5 @@
 {
- "generated_at": 1792141274,
+ "generated_at": 1792225969,
  "id": "edenai",
  "models": [
   {
@@ -91,7 +91,7 @@
    "id": "amazon/openai.gpt-oss-safeguard-20b@us"
   },
   {
-   "context": 262144,
+   "context": 256000,
    "id": "amazon/qwen.qwen3-coder-next"
   },
   {

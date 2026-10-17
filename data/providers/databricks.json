@@ -1,5 +1,5 @@
 {
- "generated_at": 1792141274,
+ "generated_at": 1792225969,
  "id": "databricks",
  "models": [
   {
@@ -49,6 +49,10 @@
   {
    "context": 1048576,
    "id": "databricks-gemini-3-1-pro"
+  },
+  {
+   "context": 1048576,
+   "id": "databricks-gemini-3-5-flash"
   },
   {
    "context": 1048576,

@@ -1,5 +1,5 @@
 {
- "generated_at": 1792141274,
+ "generated_at": 1792225969,
  "id": "wandb",
  "models": [
   {
@@ -80,7 +80,15 @@
   },
   {
    "context": 1048576,
+   "id": "reflection/Beam-1.0-501B-A23B"
+  },
+  {
+   "context": 1048576,
    "id": "zai-org/GLM-5.2"
+  },
+  {
+   "context": 1048576,
+   "id": "zai-org/GLM-5.3"
   },
   {
    "context": 1048576,

@@ -1,7 +1,11 @@
 {
- "generated_at": 1792141274,
+ "generated_at": 1792225969,
  "id": "opencode-go",
  "models": [
+  {
+   "context": 1048576,
+   "id": "beam-free"
+  },
   {
    "context": 1048576,
    "id": "cat-jam-free"

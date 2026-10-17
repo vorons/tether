@@ -1,5 +1,5 @@
 {
- "generated_at": 1792141274,
+ "generated_at": 1792225969,
  "id": "llmgateway-providers",
  "models": [
   {
@@ -756,19 +756,11 @@
   },
   {
    "context": 1048576,
-   "id": "google-ai-studio/gemini-3.5-flash"
-  },
-  {
-   "context": 1048576,
    "id": "google-ai-studio/gemini-3.5-flash-lite"
   },
   {
    "context": 1048576,
    "id": "google-ai-studio/gemini-3.6-flash"
-  },
-  {
-   "context": 1048576,
-   "id": "google-ai-studio/gemini-3.7-flash"
   },
   {
    "context": 1048576,
