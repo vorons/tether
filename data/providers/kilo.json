@@ -1,5 +1,5 @@
 {
- "generated_at": 1792225969,
+ "generated_at": 1792313424,
  "id": "kilo",
  "models": [
   {
@@ -219,12 +219,16 @@
    "id": "deepseek/deepseek-v4-pro"
   },
   {
-   "context": 1048576,
+   "context": 1024000,
    "id": "deepseek/deepseek-v4-pro-0813"
   },
   {
    "context": 1048576,
    "id": "deepseek/deepseek-v4.1-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "deepseek/deepseek-v4.1-flash-1017"
   },
   {
    "context": 512000,
@@ -1147,7 +1151,7 @@
    "id": "qwen/qwen3.5-27b"
   },
   {
-   "context": 256000,
+   "context": 262144,
    "id": "qwen/qwen3.5-35b-a3b"
   },
   {
@@ -1371,6 +1375,10 @@
    "id": "thinkingmachines/inkling-small:free"
   },
   {
+   "context": 1048576,
+   "id": "unbiased/pareto-26.10"
+  },
+  {
    "context": 262144,
    "id": "unbiased/pareto-26.9"
   },
@@ -1571,7 +1579,7 @@
    "id": "~openai/gpt-terra-latest"
   },
   {
-   "context": 262144,
+   "context": 1048576,
    "id": "~unbiased/pareto-latest"
   },
   {

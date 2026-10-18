@@ -1,5 +1,5 @@
 {
- "generated_at": 1792225969,
+ "generated_at": 1792313424,
  "id": "openrouter",
  "models": [
   {
@@ -225,6 +225,10 @@
   {
    "context": 1048576,
    "id": "deepseek/deepseek-v4.1-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "deepseek/deepseek-v4.1-flash-1017"
   },
   {
    "context": 512000,
@@ -1339,6 +1343,10 @@
    "id": "thinkingmachines/inkling:free"
   },
   {
+   "context": 1048576,
+   "id": "unbiased/pareto-26.10"
+  },
+  {
    "context": 262144,
    "id": "unbiased/pareto-26.9"
   },
@@ -1539,7 +1547,7 @@
    "id": "~openai/gpt-terra-latest"
   },
   {
-   "context": 262144,
+   "context": 1048576,
    "id": "~unbiased/pareto-latest"
   },
   {

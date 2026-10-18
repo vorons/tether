@@ -1,5 +1,5 @@
 {
- "generated_at": 1792225969,
+ "generated_at": 1792313424,
  "id": "cortecs",
  "models": [
   {
@@ -47,10 +47,6 @@
    "id": "claude-opus4-8"
   },
   {
-   "context": 200000,
-   "id": "claude-sonnet-4"
-  },
-  {
    "context": 1000000,
    "id": "claude-sonnet-5"
   },
@@ -81,6 +77,10 @@
   {
    "context": 1048576,
    "id": "deepseek-v4.1-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "deepseek-v4.1-flash-1017"
   },
   {
    "context": 256000,
@@ -285,10 +285,6 @@
   {
    "context": 32000,
    "id": "mistral-7b-instruct-v0.2"
-  },
-  {
-   "context": 127000,
-   "id": "mistral-7b-instruct-v0.3"
   },
   {
    "context": 32000,

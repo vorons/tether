@@ -1,5 +1,5 @@
 {
- "generated_at": 1792225969,
+ "generated_at": 1792313424,
  "id": "nebius",
  "models": [
   {
@@ -81,6 +81,10 @@
   {
    "context": 131072,
    "id": "openai/gpt-oss-120b"
+  },
+  {
+   "context": 1048576,
+   "id": "reflection/beam"
   },
   {
    "context": 1048576,

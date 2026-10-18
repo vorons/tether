@@ -1,5 +1,5 @@
 {
- "generated_at": 1792225969,
+ "generated_at": 1792313424,
  "id": "llmgateway-providers",
  "models": [
   {
@@ -667,6 +667,10 @@
    "id": "deepseek/deepseek-v4.1-flash"
   },
   {
+   "context": 1050000,
+   "id": "deepseek/deepseek-v4.1-flash-1017"
+  },
+  {
    "context": 131000,
    "id": "embercloud/glm-4.5"
   },
@@ -817,6 +821,10 @@
   {
    "context": 131072,
    "id": "groq/gpt-oss-20b"
+  },
+  {
+   "context": 262144,
+   "id": "inference.net/deepseek-v4.1-flash-1017"
   },
   {
    "context": 1048576,

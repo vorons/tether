@@ -1,5 +1,5 @@
 {
- "generated_at": 1792225969,
+ "generated_at": 1792313424,
  "id": "nano-gpt",
  "models": [
   {
@@ -731,7 +731,7 @@
    "id": "deepseek/deepseek-v4-flash-0731:thinking"
   },
   {
-   "context": 1000000,
+   "context": 1048576,
    "id": "deepseek/deepseek-v4-flash-latest"
   },
   {
@@ -761,6 +761,14 @@
   {
    "context": 1000000,
    "id": "deepseek/deepseek-v4.1-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "deepseek/deepseek-v4.1-flash-1017"
+  },
+  {
+   "context": 1048576,
+   "id": "deepseek/deepseek-v4.1-flash-1017:thinking"
   },
   {
    "context": 1000000,
@@ -2091,11 +2099,11 @@
    "id": "qwen/qwen3.8-27b-synthia"
   },
   {
-   "context": 1010000,
+   "context": 1048576,
    "id": "qwen/qwen3.8-27b-uncensored"
   },
   {
-   "context": 1010000,
+   "context": 1048576,
    "id": "qwen/qwen3.8-27b-uncensored:thinking"
   },
   {
@@ -2216,7 +2224,7 @@
   },
   {
    "context": 1048576,
-   "id": "unbiased/pareto-26.10-preview"
+   "id": "unbiased/pareto-26.10"
   },
   {
    "context": 262144,

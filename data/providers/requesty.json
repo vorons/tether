@@ -1,5 +1,5 @@
 {
- "generated_at": 1792225969,
+ "generated_at": 1792313424,
  "id": "requesty",
  "models": [
   {
@@ -153,6 +153,14 @@
   {
    "context": 1048576,
    "id": "deepseek-v4.1-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "deepseek-v4.1-flash-1017"
+  },
+  {
+   "context": 1048576,
+   "id": "deepseek-v4.1-flash-1017@eu"
   },
   {
    "context": 1048576,

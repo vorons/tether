@@ -1,5 +1,5 @@
 {
- "generated_at": 1792225969,
+ "generated_at": 1792313424,
  "id": "edenai",
  "models": [
   {
@@ -359,6 +359,10 @@
    "id": "deepinfra/deepseek-ai/DeepSeek-V4.1-Flash"
   },
   {
+   "context": 1048576,
+   "id": "deepinfra/deepseek-ai/DeepSeek-V4.1-Flash-1017"
+  },
+  {
    "context": 131072,
    "id": "deepinfra/google/gemma-3-12b-it"
   },
@@ -401,6 +405,10 @@
   {
    "context": 262144,
    "id": "deepinfra/moonshotai/Kimi-K2.5"
+  },
+  {
+   "context": 262144,
+   "id": "deepinfra/nemotron-3-super-120b-a12b"
   },
   {
    "context": 262144,
@@ -1101,6 +1109,10 @@
   {
    "context": 1048576,
    "id": "tensorx/deepseek/deepseek-v4.1-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "tensorx/deepseek/deepseek-v4.1-flash-1017"
   },
   {
    "context": 262144,
