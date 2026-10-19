@@ -1,5 +1,5 @@
 {
- "generated_at": 1792313424,
+ "generated_at": 1792403575,
  "id": "novita-ai",
  "models": [
   {
@@ -57,6 +57,10 @@
   {
    "context": 1048576,
    "id": "deepseek/deepseek-v4.1-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "deepseek/deepseek-v4.1-flash-1017"
   },
   {
    "context": 64000,

@@ -1,5 +1,5 @@
 {
- "generated_at": 1792313424,
+ "generated_at": 1792403575,
  "id": "nano-gpt",
  "models": [
   {
@@ -504,10 +504,6 @@
   },
   {
    "context": 200000,
-   "id": "anthropic/claude-sonnet-4"
-  },
-  {
-   "context": 200000,
    "id": "anthropic/claude-sonnet-4.5"
   },
   {
@@ -521,26 +517,6 @@
   {
    "context": 1000000,
    "id": "anthropic/claude-sonnet-4.6:thinking"
-  },
-  {
-   "context": 1000000,
-   "id": "anthropic/claude-sonnet-4:thinking"
-  },
-  {
-   "context": 1000000,
-   "id": "anthropic/claude-sonnet-4:thinking:1024"
-  },
-  {
-   "context": 1000000,
-   "id": "anthropic/claude-sonnet-4:thinking:32768"
-  },
-  {
-   "context": 1000000,
-   "id": "anthropic/claude-sonnet-4:thinking:64000"
-  },
-  {
-   "context": 1000000,
-   "id": "anthropic/claude-sonnet-4:thinking:8192"
   },
   {
    "context": 1000000,

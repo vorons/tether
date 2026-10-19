@@ -1,5 +1,5 @@
 {
- "generated_at": 1792313424,
+ "generated_at": 1792403575,
  "id": "nvidia",
  "models": [
   {
@@ -405,6 +405,10 @@
   {
    "context": 256000,
    "id": "stepfun-ai/step-3.7-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "stepfun-ai/step-5-preview"
   },
   {
    "context": 1048576,

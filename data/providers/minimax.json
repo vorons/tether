@@ -1,5 +1,5 @@
 {
- "generated_at": 1792313424,
+ "generated_at": 1792403575,
  "id": "minimax",
  "models": [
   {
@@ -29,6 +29,10 @@
   {
    "context": 1000000,
    "id": "MiniMax-M3"
+  },
+  {
+   "context": 1000000,
+   "id": "MiniMax-M3.1-Flash"
   }
  ],
  "schema": 1

@@ -1,5 +1,5 @@
 {
- "generated_at": 1792313424,
+ "generated_at": 1792403575,
  "id": "edenai",
  "models": [
   {
@@ -1015,6 +1015,10 @@
    "id": "qwen/deepseek-v4.1-flash"
   },
   {
+   "context": 1000000,
+   "id": "qwen/deepseek-v4.1-flash-1017"
+  },
+  {
    "context": 32768,
    "id": "qwen/qwen-max"
   },
@@ -1129,6 +1133,10 @@
   {
    "context": 1048576,
    "id": "together_ai/deepseek-ai/DeepSeek-V4.1-Flash"
+  },
+  {
+   "context": 1048576,
+   "id": "together_ai/deepseek-ai/DeepSeek-V4.1-Flash-1017"
   },
   {
    "context": 131072,

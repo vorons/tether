@@ -1,5 +1,5 @@
 {
- "generated_at": 1792313424,
+ "generated_at": 1792403575,
  "providers": {
   "302ai": {
    "api_key_env": [
@@ -2871,7 +2871,7 @@
     "ALIBABA_TOKEN_PLAN_API_KEY"
    ],
    "base_url": "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1",
-   "model": "deepseek-v4.1-flash",
+   "model": "deepseek-v4.1-flash-1017",
    "models": [
     {
      "context": 196608,
@@ -2900,6 +2900,10 @@
     {
      "context": 1000000,
      "id": "deepseek-v4.1-flash"
+    },
+    {
+     "context": 1000000,
+     "id": "deepseek-v4.1-flash-1017"
     },
     {
      "context": 202752,
@@ -5086,6 +5090,10 @@
     },
     {
      "context": 1048576,
+     "id": "deepseek-ai/DeepSeek-V4.1-Flash-1017-Fast"
+    },
+    {
+     "context": 1048576,
      "id": "deepseek-ai/DeepSeek-V4.1-Flash-Fast"
     },
     {
@@ -6397,23 +6405,11 @@
     "CORAL_API_KEY"
    ],
    "base_url": "https://inference.coralbricks.ai/v1",
-   "model": "deepseek-v4.1-flash-fast-fp4",
+   "model": "deepseek-v4.1-flash-fast",
    "models": [
     {
      "context": 1048576,
      "id": "deepseek-v4.1-flash-fast"
-    },
-    {
-     "context": 1048576,
-     "id": "deepseek-v4.1-flash-fast-fp4"
-    },
-    {
-     "context": 1048576,
-     "id": "glm-5.3-fast"
-    },
-    {
-     "context": 1048576,
-     "id": "glm-5.3-fp4"
     }
    ],
    "wire": "openai"
@@ -8342,7 +8338,7 @@
     "EDENAI_API_KEY"
    ],
    "base_url": "https://api.edenai.run/v3",
-   "model": "tensorx/deepseek/deepseek-v4.1-flash-1017",
+   "model": "together_ai/deepseek-ai/DeepSeek-V4.1-Flash-1017",
    "models": [
     {
      "context": 300000,
@@ -9357,6 +9353,10 @@
      "id": "qwen/deepseek-v4.1-flash"
     },
     {
+     "context": 1000000,
+     "id": "qwen/deepseek-v4.1-flash-1017"
+    },
+    {
      "context": 32768,
      "id": "qwen/qwen-max"
     },
@@ -9471,6 +9471,10 @@
     {
      "context": 1048576,
      "id": "together_ai/deepseek-ai/DeepSeek-V4.1-Flash"
+    },
+    {
+     "context": 1048576,
+     "id": "together_ai/deepseek-ai/DeepSeek-V4.1-Flash-1017"
     },
     {
      "context": 131072,
@@ -9688,11 +9692,15 @@
     "EMPIRIOLABS_API_KEY"
    ],
    "base_url": "https://api.empiriolabs.ai/v1",
-   "model": "mimo-v2-6-pro",
+   "model": "deepseek-v4-1-flash-1017",
    "models": [
     {
      "context": 1000000,
      "id": "deepseek-v4-1-flash"
+    },
+    {
+     "context": 1000000,
+     "id": "deepseek-v4-1-flash-1017"
     },
     {
      "context": 1000000,
@@ -10275,6 +10283,10 @@
      "id": "accounts/fireworks/models/deepseek-v4p1-flash"
     },
     {
+     "context": 1000000,
+     "id": "accounts/fireworks/models/deepseek-v4p1-flash-1017"
+    },
+    {
      "context": 1048576,
      "id": "accounts/fireworks/models/ember-1"
     },
@@ -10370,11 +10382,15 @@
     "FIREWORKS_API_KEY"
    ],
    "base_url": "https://api.fireworks.ai/inference/v1",
-   "model": "accounts/fireworks/models/muse-spark-open",
+   "model": "accounts/fireworks/models/deepseek-v4p1-flash-1017",
    "models": [
     {
      "context": 1000000,
      "id": "accounts/fireworks/models/deepseek-v4p1-flash"
+    },
+    {
+     "context": 1000000,
+     "id": "accounts/fireworks/models/deepseek-v4p1-flash-1017"
     },
     {
      "context": 1048576,
@@ -14432,7 +14448,7 @@
      "id": "meta-llama/llama-3.2-1b-instruct"
     },
     {
-     "context": 131072,
+     "context": 80000,
      "id": "meta-llama/llama-3.2-3b-instruct"
     },
     {
@@ -14640,7 +14656,7 @@
      "id": "moonshotai/kimi-k3"
     },
     {
-     "context": 81920,
+     "context": 262144,
      "id": "morph/morph-v3-fast"
     },
     {
@@ -15256,10 +15272,6 @@
      "id": "sao10k/l3.1-euryale-70b"
     },
     {
-     "context": 131072,
-     "id": "sao10k/l3.3-euryale-70b"
-    },
-    {
      "context": 1000000,
      "id": "scaledown/extract"
     },
@@ -15448,7 +15460,7 @@
      "id": "z-ai/glm-4.5v"
     },
     {
-     "context": 202752,
+     "context": 204800,
      "id": "z-ai/glm-4.6"
     },
     {
@@ -18940,6 +18952,10 @@
     {
      "context": 1000000,
      "id": "MiniMax-M3"
+    },
+    {
+     "context": 1000000,
+     "id": "MiniMax-M3.1-Flash"
     }
    ],
    "wire": "anthropic"
@@ -18949,7 +18965,7 @@
     "MINIMAX_API_KEY"
    ],
    "base_url": "https://api.minimax.cn/anthropic",
-   "model": "MiniMax-M3",
+   "model": "MiniMax-M3.1-Flash",
    "models": [
     {
      "context": 204800,
@@ -18978,6 +18994,10 @@
     {
      "context": 1000000,
      "id": "MiniMax-M3"
+    },
+    {
+     "context": 1000000,
+     "id": "MiniMax-M3.1-Flash"
     }
    ],
    "wire": "anthropic"
@@ -18987,7 +19007,7 @@
     "MINIMAX_API_KEY"
    ],
    "base_url": "https://api.minimax.cn/anthropic/v1",
-   "model": "MiniMax-M3.1-Flash-Preview",
+   "model": "MiniMax-M3.1-Flash",
    "models": [
     {
      "context": 204800,
@@ -19016,6 +19036,10 @@
     {
      "context": 1048576,
      "id": "MiniMax-M3"
+    },
+    {
+     "context": 1000000,
+     "id": "MiniMax-M3.1-Flash"
     },
     {
      "context": 1000000,
@@ -19029,7 +19053,7 @@
     "MINIMAX_API_KEY"
    ],
    "base_url": "https://api.minimax.io/anthropic/v1",
-   "model": "MiniMax-M3.1-Flash-Preview",
+   "model": "MiniMax-M3.1-Flash",
    "models": [
     {
      "context": 204800,
@@ -19058,6 +19082,10 @@
     {
      "context": 1048576,
      "id": "MiniMax-M3"
+    },
+    {
+     "context": 1000000,
+     "id": "MiniMax-M3.1-Flash"
     },
     {
      "context": 1000000,
@@ -20129,10 +20157,6 @@
     },
     {
      "context": 200000,
-     "id": "anthropic/claude-sonnet-4"
-    },
-    {
-     "context": 200000,
      "id": "anthropic/claude-sonnet-4.5"
     },
     {
@@ -20146,26 +20170,6 @@
     {
      "context": 1000000,
      "id": "anthropic/claude-sonnet-4.6:thinking"
-    },
-    {
-     "context": 1000000,
-     "id": "anthropic/claude-sonnet-4:thinking"
-    },
-    {
-     "context": 1000000,
-     "id": "anthropic/claude-sonnet-4:thinking:1024"
-    },
-    {
-     "context": 1000000,
-     "id": "anthropic/claude-sonnet-4:thinking:32768"
-    },
-    {
-     "context": 1000000,
-     "id": "anthropic/claude-sonnet-4:thinking:64000"
-    },
-    {
-     "context": 1000000,
-     "id": "anthropic/claude-sonnet-4:thinking:8192"
     },
     {
      "context": 1000000,
@@ -22218,10 +22222,6 @@
      "id": "deepseek/deepseek-v3.2"
     },
     {
-     "context": 1000000,
-     "id": "deepseek/deepseek-v4.1-flash"
-    },
-    {
      "context": 1048576,
      "id": "google/gemini-2.5-flash"
     },
@@ -22892,7 +22892,7 @@
     "NOVITA_API_KEY"
    ],
    "base_url": "https://api.novita.ai/openai",
-   "model": "inclusionai/ling-3.1-flash",
+   "model": "deepseek/deepseek-v4.1-flash-1017",
    "models": [
     {
      "context": 262144,
@@ -22949,6 +22949,10 @@
     {
      "context": 1048576,
      "id": "deepseek/deepseek-v4.1-flash"
+    },
+    {
+     "context": 1048576,
+     "id": "deepseek/deepseek-v4.1-flash-1017"
     },
     {
      "context": 64000,
@@ -23650,6 +23654,10 @@
     },
     {
      "context": 1048576,
+     "id": "stepfun-ai/step-5-preview"
+    },
+    {
+     "context": 1048576,
      "id": "thinkingmachines/inkling"
     },
     {
@@ -23722,7 +23730,7 @@
     "OFOX_API_KEY"
    ],
    "base_url": "https://api.ofox.ai/v1",
-   "model": "google/gemini-4-argon",
+   "model": "deepseek/deepseek-v4.1-flash-1017",
    "models": [
     {
      "context": 1000000,
@@ -23915,6 +23923,10 @@
     {
      "context": 1000000,
      "id": "deepseek/deepseek-v4.1-flash"
+    },
+    {
+     "context": 1000000,
+     "id": "deepseek/deepseek-v4.1-flash-1017"
     },
     {
      "context": 1048576,
@@ -26025,7 +26037,7 @@
      "id": "moonshotai/kimi-k3"
     },
     {
-     "context": 81920,
+     "context": 262144,
      "id": "morph/morph-v3-fast"
     },
     {
@@ -26639,10 +26651,6 @@
     {
      "context": 131072,
      "id": "sao10k/l3.1-euryale-70b"
-    },
-    {
-     "context": 131072,
-     "id": "sao10k/l3.3-euryale-70b"
     },
     {
      "context": 1000000,
@@ -29221,6 +29229,10 @@
     {
      "context": 262144,
      "id": "qwen/qwen3-vl-30b-a3b-instruct"
+    },
+    {
+     "context": 1000000,
+     "id": "qwen/qwen3.8-27b"
     },
     {
      "context": 500000,
@@ -33246,11 +33258,15 @@
     "UPSTAGE_API_KEY"
    ],
    "base_url": "https://api.upstage.ai/v1/solar",
-   "model": "solar-pro4",
+   "model": "solar-mini4",
    "models": [
     {
      "context": 32768,
      "id": "solar-mini"
+    },
+    {
+     "context": 524288,
+     "id": "solar-mini4"
     },
     {
      "context": 65536,
@@ -33407,6 +33423,10 @@
     {
      "context": 1000000,
      "id": "deepseek-v4-1-flash"
+    },
+    {
+     "context": 1000000,
+     "id": "deepseek-v4-1-flash-1017"
     },
     {
      "context": 1000000,

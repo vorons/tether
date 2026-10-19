@@ -1,10 +1,14 @@
 {
- "generated_at": 1792313424,
+ "generated_at": 1792403575,
  "id": "upstage",
  "models": [
   {
    "context": 32768,
    "id": "solar-mini"
+  },
+  {
+   "context": 524288,
+   "id": "solar-mini4"
   },
   {
    "context": 65536,

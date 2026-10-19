@@ -1,10 +1,14 @@
 {
- "generated_at": 1792313424,
+ "generated_at": 1792403575,
  "id": "fireworks",
  "models": [
   {
    "context": 1000000,
    "id": "accounts/fireworks/models/deepseek-v4p1-flash"
+  },
+  {
+   "context": 1000000,
+   "id": "accounts/fireworks/models/deepseek-v4p1-flash-1017"
   },
   {
    "context": 1048576,

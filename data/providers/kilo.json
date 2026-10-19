@@ -1,5 +1,5 @@
 {
- "generated_at": 1792313424,
+ "generated_at": 1792403575,
  "id": "kilo",
  "models": [
   {
@@ -451,7 +451,7 @@
    "id": "meta-llama/llama-3.2-1b-instruct"
   },
   {
-   "context": 131072,
+   "context": 80000,
    "id": "meta-llama/llama-3.2-3b-instruct"
   },
   {
@@ -659,7 +659,7 @@
    "id": "moonshotai/kimi-k3"
   },
   {
-   "context": 81920,
+   "context": 262144,
    "id": "morph/morph-v3-fast"
   },
   {
@@ -1275,10 +1275,6 @@
    "id": "sao10k/l3.1-euryale-70b"
   },
   {
-   "context": 131072,
-   "id": "sao10k/l3.3-euryale-70b"
-  },
-  {
    "context": 1000000,
    "id": "scaledown/extract"
   },
@@ -1467,7 +1463,7 @@
    "id": "z-ai/glm-4.5v"
   },
   {
-   "context": 202752,
+   "context": 204800,
    "id": "z-ai/glm-4.6"
   },
   {
