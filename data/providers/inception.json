@@ -1,5 +1,5 @@
 {
- "generated_at": 1792403575,
+ "generated_at": 1792488279,
  "id": "inception",
  "models": [
   {
@@ -9,6 +9,10 @@
   {
    "context": 260000,
    "id": "mercury-2.5"
+  },
+  {
+   "context": 1000000,
+   "id": "mercury-3"
   },
   {
    "context": 32000,

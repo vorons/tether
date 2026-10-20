@@ -1,5 +1,5 @@
 {
- "generated_at": 1792403575,
+ "generated_at": 1792488279,
  "id": "runinfra",
  "models": [
   {
@@ -25,6 +25,10 @@
   {
    "context": 262144,
    "id": "ornith-ai/Ornith-1.5-35B-A3B"
+  },
+  {
+   "context": 1048576,
+   "id": "zai-org/GLM-5.3"
   },
   {
    "context": 1048576,

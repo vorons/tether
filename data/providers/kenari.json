@@ -1,5 +1,5 @@
 {
- "generated_at": 1792403575,
+ "generated_at": 1792488279,
  "id": "kenari",
  "models": [
   {
@@ -147,7 +147,7 @@
    "id": "grok-imagine-image"
   },
   {
-   "context": 8000,
+   "context": 64000,
    "id": "grok-imagine-image-2-0"
   },
   {

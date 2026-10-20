@@ -1,5 +1,5 @@
 {
- "generated_at": 1792403575,
+ "generated_at": 1792488279,
  "id": "kilo",
  "models": [
   {
@@ -171,7 +171,7 @@
    "id": "cohere/north-mini-code:free"
   },
   {
-   "context": 163840,
+   "context": 128000,
    "id": "deepseek/deepseek-chat"
   },
   {
@@ -181,10 +181,6 @@
   {
    "context": 163840,
    "id": "deepseek/deepseek-chat-v3.1"
-  },
-  {
-   "context": 64000,
-   "id": "deepseek/deepseek-r1"
   },
   {
    "context": 163840,
@@ -383,6 +379,10 @@
    "id": "inception/mercury-2.5"
   },
   {
+   "context": 1000000,
+   "id": "inception/mercury-3"
+  },
+  {
    "context": 262144,
    "id": "inclusionai/ling-3.0-flash"
   },
@@ -507,10 +507,6 @@
    "id": "microsoft/phi-4"
   },
   {
-   "context": 65535,
-   "id": "microsoft/wizardlm-2-8x22b"
-  },
-  {
    "context": 1000192,
    "id": "minimax/minimax-01"
   },
@@ -541,6 +537,10 @@
   {
    "context": 524288,
    "id": "minimax/minimax-m3"
+  },
+  {
+   "context": 1000000,
+   "id": "minimax/minimax-m3.1-flash:free"
   },
   {
    "context": 256000,
@@ -1479,7 +1479,7 @@
    "id": "z-ai/glm-4.7-flash"
   },
   {
-   "context": 202752,
+   "context": 198000,
    "id": "z-ai/glm-5"
   },
   {

@@ -1,5 +1,5 @@
 {
- "generated_at": 1792403575,
+ "generated_at": 1792488279,
  "id": "empiriolabs",
  "models": [
   {
@@ -92,14 +92,6 @@
   },
   {
    "context": 1000000,
-   "id": "mimo-v2-5"
-  },
-  {
-   "context": 1000000,
-   "id": "mimo-v2-5-pro"
-  },
-  {
-   "context": 1000000,
    "id": "mimo-v2-6-flash"
   },
   {
@@ -121,6 +113,10 @@
   {
    "context": 1000000,
    "id": "minimax-m3"
+  },
+  {
+   "context": 1000000,
+   "id": "minimax-m3-1-flash"
   },
   {
    "context": 256000,

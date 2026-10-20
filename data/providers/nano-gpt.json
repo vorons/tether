@@ -1,5 +1,5 @@
 {
- "generated_at": 1792403575,
+ "generated_at": 1792488279,
  "id": "nano-gpt",
  "models": [
   {
@@ -1143,6 +1143,10 @@
    "id": "inception/mercury-2.5-preview"
   },
   {
+   "context": 1000000,
+   "id": "inception/mercury-3"
+  },
+  {
    "context": 262144,
    "id": "inclusionai/ling-3.0-flash"
   },
@@ -1305,6 +1309,10 @@
   {
    "context": 512000,
    "id": "minimax/minimax-m3"
+  },
+  {
+   "context": 1000000,
+   "id": "minimax/minimax-m3.1-flash"
   },
   {
    "context": 512000,

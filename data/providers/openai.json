@@ -1,5 +1,5 @@
 {
- "generated_at": 1792403575,
+ "generated_at": 1792488279,
  "id": "openai",
  "models": [
   {
@@ -75,16 +75,8 @@
    "id": "gpt-5.2"
   },
   {
-   "context": 128000,
-   "id": "gpt-5.2-chat-latest"
-  },
-  {
    "context": 400000,
    "id": "gpt-5.2-pro"
-  },
-  {
-   "context": 128000,
-   "id": "gpt-5.3-chat-latest"
   },
   {
    "context": 400000,

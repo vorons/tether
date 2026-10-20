@@ -1,5 +1,5 @@
 {
- "generated_at": 1792403575,
+ "generated_at": 1792488279,
  "id": "openrouter",
  "models": [
   {
@@ -181,10 +181,6 @@
   {
    "context": 163840,
    "id": "deepseek/deepseek-chat-v3.1"
-  },
-  {
-   "context": 64000,
-   "id": "deepseek/deepseek-r1"
   },
   {
    "context": 163840,
@@ -391,6 +387,10 @@
    "id": "inception/mercury-2.5"
   },
   {
+   "context": 1000000,
+   "id": "inception/mercury-3"
+  },
+  {
    "context": 262144,
    "id": "inclusionai/ling-3.0-flash"
   },
@@ -447,7 +447,7 @@
    "id": "meta-llama/llama-3.3-70b-instruct"
   },
   {
-   "context": 1048576,
+   "context": 524288,
    "id": "meta-llama/llama-4-maverick"
   },
   {
@@ -495,10 +495,6 @@
    "id": "microsoft/phi-4"
   },
   {
-   "context": 65535,
-   "id": "microsoft/wizardlm-2-8x22b"
-  },
-  {
    "context": 1000192,
    "id": "minimax/minimax-01"
   },
@@ -529,6 +525,10 @@
   {
    "context": 1048576,
    "id": "minimax/minimax-m3"
+  },
+  {
+   "context": 1000000,
+   "id": "minimax/minimax-m3.1-flash:free"
   },
   {
    "context": 256000,

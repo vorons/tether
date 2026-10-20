@@ -1,5 +1,5 @@
 {
- "generated_at": 1792403575,
+ "generated_at": 1792488279,
  "id": "llmgateway",
  "models": [
   {
@@ -395,12 +395,20 @@
    "id": "gpt-6.1-sol"
   },
   {
+   "context": 0,
+   "id": "gpt-live-transcribe"
+  },
+  {
    "context": 131072,
    "id": "gpt-oss-120b"
   },
   {
    "context": 131072,
    "id": "gpt-oss-20b"
+  },
+  {
+   "context": 0,
+   "id": "gpt-transcribe"
   },
   {
    "context": 131072,
@@ -589,6 +597,10 @@
   {
    "context": 1048576,
    "id": "minimax-m3"
+  },
+  {
+   "context": 1048576,
+   "id": "minimax-m3.1-flash"
   },
   {
    "context": 1000000,

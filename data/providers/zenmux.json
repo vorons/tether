@@ -1,5 +1,5 @@
 {
- "generated_at": 1792403575,
+ "generated_at": 1792488279,
  "id": "zenmux",
  "models": [
   {
@@ -173,6 +173,10 @@
   {
    "context": 1048576,
    "id": "minimax/minimax-m3"
+  },
+  {
+   "context": 1000000,
+   "id": "minimax/minimax-m3.1-flash"
   },
   {
    "context": 262000,

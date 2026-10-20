@@ -1,5 +1,5 @@
 {
- "generated_at": 1792403575,
+ "generated_at": 1792488279,
  "id": "azure-cognitive-services",
  "models": [
   {
@@ -101,6 +101,18 @@
   {
    "context": 128000,
    "id": "deepseek-v3.2-speciale"
+  },
+  {
+   "context": 1000000,
+   "id": "deepseek-v4-flash"
+  },
+  {
+   "context": 1000000,
+   "id": "deepseek-v4-pro"
+  },
+  {
+   "context": 1000000,
+   "id": "deepseek-v4.1-flash"
   },
   {
    "context": 16384,
@@ -263,12 +275,40 @@
    "id": "gpt-image-2.5-sunburst"
   },
   {
+   "context": 128000,
+   "id": "grok-4-1-fast-non-reasoning"
+  },
+  {
+   "context": 128000,
+   "id": "grok-4-1-fast-reasoning"
+  },
+  {
+   "context": 262000,
+   "id": "grok-4-20-non-reasoning"
+  },
+  {
+   "context": 262000,
+   "id": "grok-4-20-reasoning"
+  },
+  {
+   "context": 200000,
+   "id": "grok-4.6"
+  },
+  {
+   "context": 500000,
+   "id": "grok-4.7"
+  },
+  {
    "context": 262144,
    "id": "kimi-k2.5"
   },
   {
    "context": 262144,
    "id": "kimi-k2.6"
+  },
+  {
+   "context": 262144,
+   "id": "kimi-k2.7-code"
   },
   {
    "context": 128000,

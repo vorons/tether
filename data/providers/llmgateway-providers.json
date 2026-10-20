@@ -1,5 +1,5 @@
 {
- "generated_at": 1792403575,
+ "generated_at": 1792488279,
  "id": "llmgateway-providers",
  "models": [
   {
@@ -13,6 +13,10 @@
   {
    "context": 1000000,
    "id": "alibaba/deepseek-v4.1-flash"
+  },
+  {
+   "context": 1000000,
+   "id": "alibaba/deepseek-v4.1-flash-1017"
   },
   {
    "context": 202752,
@@ -444,10 +448,6 @@
   },
   {
    "context": 202752,
-   "id": "baidu/glm-5"
-  },
-  {
-   "context": 202752,
    "id": "baidu/glm-5.1"
   },
   {
@@ -607,6 +607,10 @@
    "id": "deepinfra/deepseek-v4.1-flash"
   },
   {
+   "context": 1048576,
+   "id": "deepinfra/deepseek-v4.1-flash-1017"
+  },
+  {
    "context": 262144,
    "id": "deepinfra/gemma-4-26b-a4b-it"
   },
@@ -717,10 +721,6 @@
   {
    "context": 1048576,
    "id": "entrim/glm-5.3-flash"
-  },
-  {
-   "context": 1048576,
-   "id": "fireworks/deepseek-v4-flash"
   },
   {
    "context": 1048576,
@@ -899,6 +899,10 @@
    "id": "minimax/minimax-m3"
   },
   {
+   "context": 1048576,
+   "id": "minimax/minimax-m3.1-flash"
+  },
+  {
    "context": 1000000,
    "id": "minimax/minimax-text-01"
   },
@@ -981,6 +985,10 @@
   {
    "context": 1048576,
    "id": "novita/deepseek-v4.1-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "novita/deepseek-v4.1-flash-1017"
   },
   {
    "context": 123000,
@@ -1299,6 +1307,14 @@
    "id": "openai/gpt-6.1-sol"
   },
   {
+   "context": 0,
+   "id": "openai/gpt-live-transcribe"
+  },
+  {
+   "context": 0,
+   "id": "openai/gpt-transcribe"
+  },
+  {
    "context": 200000,
    "id": "openai/o1"
   },
@@ -1393,10 +1409,6 @@
   {
    "context": 1000000,
    "id": "sakana/fugu-ultra-v2.0"
-  },
-  {
-   "context": 1048576,
-   "id": "sciforium/deepseek-v4.1-flash"
   },
   {
    "context": 1000000,
@@ -1527,6 +1539,10 @@
    "id": "together-ai/deepseek-v4.1-flash"
   },
   {
+   "context": 1048576,
+   "id": "together-ai/deepseek-v4.1-flash-1017"
+  },
+  {
    "context": 202752,
    "id": "together-ai/glm-4.7"
   },
@@ -1609,6 +1625,10 @@
   {
    "context": 500000,
    "id": "vertex-openai/grok-4-6"
+  },
+  {
+   "context": 524288,
+   "id": "vertex-openai/grok-4-7"
   },
   {
    "context": 262144,

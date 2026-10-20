@@ -1,5 +1,5 @@
 {
- "generated_at": 1792403575,
+ "generated_at": 1792488279,
  "id": "opencode",
  "models": [
   {
@@ -425,6 +425,10 @@
   {
    "context": 200000,
    "id": "minimax-m3-free"
+  },
+  {
+   "context": 1000000,
+   "id": "minimax-m3.1-flash-free"
   },
   {
    "context": 524288,

@@ -1,5 +1,5 @@
 {
- "generated_at": 1792403575,
+ "generated_at": 1792488279,
  "id": "venice",
  "models": [
   {
@@ -243,12 +243,20 @@
    "id": "mercury-2-5"
   },
   {
+   "context": 1000000,
+   "id": "mercury-3"
+  },
+  {
    "context": 198000,
    "id": "minimax-m25"
   },
   {
    "context": 198000,
    "id": "minimax-m27"
+  },
+  {
+   "context": 1000000,
+   "id": "minimax-m3-1-flash"
   },
   {
    "context": 524288,
@@ -481,10 +489,6 @@
   {
    "context": 198000,
    "id": "zai-org-glm-4.7"
-  },
-  {
-   "context": 128000,
-   "id": "zai-org-glm-4.7-flash"
   },
   {
    "context": 198000,

@@ -1,5 +1,5 @@
 {
- "generated_at": 1792403575,
+ "generated_at": 1792488279,
  "id": "nearai",
  "models": [
   {
@@ -81,6 +81,10 @@
   {
    "context": 128000,
    "id": "deepseek/deepseek-v3.2"
+  },
+  {
+   "context": 1000000,
+   "id": "deepseek/deepseek-v4.1-flash-1017"
   },
   {
    "context": 1048576,

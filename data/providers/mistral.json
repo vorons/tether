@@ -1,5 +1,5 @@
 {
- "generated_at": 1792403575,
+ "generated_at": 1792488279,
  "id": "mistral",
  "models": [
   {
@@ -123,20 +123,8 @@
    "id": "mistral-small-latest"
   },
   {
-   "context": 8000,
-   "id": "open-mistral-7b"
-  },
-  {
    "context": 128000,
    "id": "open-mistral-nemo"
-  },
-  {
-   "context": 64000,
-   "id": "open-mixtral-8x22b"
-  },
-  {
-   "context": 32000,
-   "id": "open-mixtral-8x7b"
   },
   {
    "context": 128000,

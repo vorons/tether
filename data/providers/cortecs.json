@@ -1,5 +1,5 @@
 {
- "generated_at": 1792403575,
+ "generated_at": 1792488279,
  "id": "cortecs",
  "models": [
   {
@@ -205,6 +205,10 @@
   {
    "context": 1050000,
    "id": "gpt-5.6-terra"
+  },
+  {
+   "context": 1050000,
+   "id": "gpt-6-astra"
   },
   {
    "context": 1050000,

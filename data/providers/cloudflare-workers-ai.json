@@ -1,5 +1,5 @@
 {
- "generated_at": 1792403575,
+ "generated_at": 1792488279,
  "id": "cloudflare-workers-ai",
  "models": [
   {
@@ -17,6 +17,10 @@
   {
    "context": 1048576,
    "id": "@cf/deepseek-ai/deepseek-v4-pro-0813"
+  },
+  {
+   "context": 1048576,
+   "id": "@cf/deepseek-ai/deepseek-v4.1-flash-1017"
   },
   {
    "context": 256000,

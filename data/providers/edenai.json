@@ -1,5 +1,5 @@
 {
- "generated_at": 1792403575,
+ "generated_at": 1792488279,
  "id": "edenai",
  "models": [
   {
@@ -203,6 +203,10 @@
    "id": "cloudflare/@cf/deepseek-ai/deepseek-v4-pro-0813"
   },
   {
+   "context": 1048576,
+   "id": "cloudflare/@cf/deepseek-ai/deepseek-v4.1-flash-1017"
+  },
+  {
    "context": 60000,
    "id": "cloudflare/@cf/meta/llama-3.2-1b-instruct"
   },
@@ -376,6 +380,10 @@
   },
   {
    "context": 131072,
+   "id": "deepinfra/ibm-granite/granite-4.2-8b"
+  },
+  {
+   "context": 131072,
    "id": "deepinfra/meta-llama/Llama-3.2-11B-Vision-Instruct"
   },
   {
@@ -481,6 +489,10 @@
   {
    "context": 1000000,
    "id": "deepseek/deepseek-v4-pro"
+  },
+  {
+   "context": 1048576,
+   "id": "fireworks_ai/accounts/fireworks/models/ember-1"
   },
   {
    "context": 131072,
@@ -615,6 +627,10 @@
    "id": "google/gemini-pro-latest"
   },
   {
+   "context": 131072,
+   "id": "google/gemini-robotics-er-2-preview"
+  },
+  {
    "context": 1048576,
    "id": "greenference/deepseek-v4.1-flash"
   },
@@ -689,6 +705,10 @@
   {
    "context": 524288,
    "id": "minimax/MiniMax-M3"
+  },
+  {
+   "context": 1000000,
+   "id": "minimax/MiniMax-M3.1-Flash"
   },
   {
    "context": 256000,
@@ -873,6 +893,10 @@
   {
    "context": 400000,
    "id": "openai/gpt-5-pro"
+  },
+  {
+   "context": 272000,
+   "id": "openai/gpt-5-search-api"
   },
   {
    "context": 400000,
@@ -1145,6 +1169,10 @@
   {
    "context": 131072,
    "id": "together_ai/openai/gpt-oss-120b"
+  },
+  {
+   "context": 1048576,
+   "id": "together_ai/reflection/Beam-1.0-501B-A23B"
   },
   {
    "context": 524288,

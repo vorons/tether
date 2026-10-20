@@ -1,5 +1,5 @@
 {
- "generated_at": 1792403575,
+ "generated_at": 1792488279,
  "id": "aixy",
  "models": [
   {
@@ -17,6 +17,14 @@
   {
    "context": 1000000,
    "id": "anthropic/claude-sonnet-5-5"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini/gemini-3.8-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini/gemini-4-argon"
   },
   {
    "context": 1050000,
