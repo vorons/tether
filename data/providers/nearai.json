@@ -1,5 +1,5 @@
 {
- "generated_at": 1792488279,
+ "generated_at": 1792574479,
  "id": "nearai",
  "models": [
   {
@@ -75,7 +75,7 @@
    "id": "anthropic/claude-sonnet-5-5"
   },
   {
-   "context": 128000,
+   "context": 0,
    "id": "black-forest-labs/FLUX.2-klein-4B"
   },
   {

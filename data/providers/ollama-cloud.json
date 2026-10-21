@@ -1,7 +1,11 @@
 {
- "generated_at": 1792488279,
+ "generated_at": 1792574479,
  "id": "ollama-cloud",
  "models": [
+  {
+   "context": 1048576,
+   "id": "beam"
+  },
   {
    "context": 1048576,
    "id": "deepseek-v4-flash"

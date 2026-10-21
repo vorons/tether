@@ -1,5 +1,5 @@
 {
- "generated_at": 1792488279,
+ "generated_at": 1792574479,
  "id": "kilo",
  "models": [
   {
@@ -1159,7 +1159,7 @@
    "id": "qwen/qwen3.5-397b-a17b"
   },
   {
-   "context": 256000,
+   "context": 262144,
    "id": "qwen/qwen3.5-9b"
   },
   {
@@ -1203,7 +1203,7 @@
    "id": "qwen/qwen3.7-plus"
   },
   {
-   "context": 1000000,
+   "context": 1010000,
    "id": "qwen/qwen3.8-2.4t-a95b"
   },
   {
@@ -1368,10 +1368,6 @@
   },
   {
    "context": 1048576,
-   "id": "thinkingmachines/inkling-small:free"
-  },
-  {
-   "context": 1048576,
    "id": "unbiased/pareto-26.10"
   },
   {
@@ -1427,11 +1423,11 @@
    "id": "x-ai/grok-build-0.1"
   },
   {
-   "context": 1048576,
+   "context": 1050000,
    "id": "xiaomi/mimo-v2.5"
   },
   {
-   "context": 1048576,
+   "context": 1050000,
    "id": "xiaomi/mimo-v2.5-pro"
   },
   {
@@ -1479,7 +1475,7 @@
    "id": "z-ai/glm-4.7-flash"
   },
   {
-   "context": 198000,
+   "context": 202752,
    "id": "z-ai/glm-5"
   },
   {
@@ -1487,7 +1483,7 @@
    "id": "z-ai/glm-5-turbo"
   },
   {
-   "context": 200000,
+   "context": 202752,
    "id": "z-ai/glm-5.1"
   },
   {

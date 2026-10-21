@@ -1,5 +1,5 @@
 {
- "generated_at": 1792488279,
+ "generated_at": 1792574479,
  "id": "gemini",
  "models": [
   {
@@ -133,6 +133,10 @@
   {
    "context": 131072,
    "id": "gemini-omni-flash-preview"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini-pro-latest"
   },
   {
    "context": 262144,

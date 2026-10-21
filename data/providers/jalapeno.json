@@ -1,5 +1,5 @@
 {
- "generated_at": 1792488279,
+ "generated_at": 1792574479,
  "id": "jalapeno",
  "models": [
   {
@@ -43,7 +43,7 @@
    "id": "Qwen3-Next-80B-A3B-Instruct"
   },
   {
-   "context": 131072,
+   "context": 262144,
    "id": "Qwen3-Next-80B-A3B-Thinking"
   },
   {

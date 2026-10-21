@@ -1,5 +1,5 @@
 {
- "generated_at": 1792488279,
+ "generated_at": 1792574479,
  "id": "arcee",
  "models": [
   {
@@ -13,6 +13,14 @@
   {
    "context": 1048576,
    "id": "deepseek/deepseek-v4-pro-0813"
+  },
+  {
+   "context": 1000000,
+   "id": "deepseek/deepseek-v4.1-flash"
+  },
+  {
+   "context": 1000000,
+   "id": "deepseek/deepseek-v4.1-flash-1017"
   },
   {
    "context": 1048576,
@@ -29,6 +37,14 @@
   {
    "context": 262144,
    "id": "zai-org/glm-5.2"
+  },
+  {
+   "context": 1000000,
+   "id": "zai-org/glm-5.3"
+  },
+  {
+   "context": 1000000,
+   "id": "zai-org/glm-5.3-flash"
   }
  ],
  "schema": 1

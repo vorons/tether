@@ -1,5 +1,5 @@
 {
- "generated_at": 1792488279,
+ "generated_at": 1792574479,
  "id": "nebius",
  "models": [
   {
@@ -59,7 +59,7 @@
    "id": "moonshotai/Kimi-K2.7-Code"
   },
   {
-   "context": 1048576,
+   "context": 1024000,
    "id": "moonshotai/Kimi-K3"
   },
   {

@@ -1,5 +1,5 @@
 {
- "generated_at": 1792488279,
+ "generated_at": 1792574479,
  "id": "scaleway",
  "models": [
   {
@@ -43,16 +43,8 @@
    "id": "mistral-small-3.2-24b-instruct-2506"
   },
   {
-   "context": 128000,
-   "id": "pixtral-12b-2409"
-  },
-  {
    "context": 260000,
    "id": "qwen3-235b-a22b-instruct-2507"
-  },
-  {
-   "context": 128000,
-   "id": "qwen3-coder-30b-a3b-instruct"
   },
   {
    "context": 32768,

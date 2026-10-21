@@ -1,5 +1,5 @@
 {
- "generated_at": 1792488279,
+ "generated_at": 1792574479,
  "id": "hyper",
  "models": [
   {
@@ -15,7 +15,7 @@
    "id": "deepseek-v4.1-flash"
   },
   {
-   "context": 1048576,
+   "context": 1000000,
    "id": "deepseek-v4.1-flash-1017"
   },
   {

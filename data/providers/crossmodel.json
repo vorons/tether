@@ -1,5 +1,5 @@
 {
- "generated_at": 1792488279,
+ "generated_at": 1792574479,
  "id": "crossmodel",
  "models": [
   {
@@ -237,14 +237,6 @@
   {
    "context": 256000,
    "id": "x-ai/grok-build-0.1"
-  },
-  {
-   "context": 1000000,
-   "id": "xiaomi/mimo-v2.5"
-  },
-  {
-   "context": 1000000,
-   "id": "xiaomi/mimo-v2.5-pro"
   },
   {
    "context": 1048576,

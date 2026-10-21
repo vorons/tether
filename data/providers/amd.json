@@ -1,5 +1,5 @@
 {
- "generated_at": 1792488279,
+ "generated_at": 1792574479,
  "id": "amd",
  "models": [
   {
@@ -15,11 +15,31 @@
    "id": "DeepSeek-V4.1-Flash"
   },
   {
+   "context": 262144,
+   "id": "GLM-5.3-Flash"
+  },
+  {
+   "context": 262144,
+   "id": "Gemma-4-31B-IT"
+  },
+  {
+   "context": 1048576,
+   "id": "MiMo-V2.6-Flash"
+  },
+  {
+   "context": 262144,
+   "id": "MiniCPM-V-4.7-1B"
+  },
+  {
+   "context": 262144,
+   "id": "MiniCPM-V-4.7-35B-A3B"
+  },
+  {
    "context": 131072,
    "id": "MiniCPM5-2B"
   },
   {
-   "context": 131072,
+   "context": 262144,
    "id": "Qwen3.8-27B"
   },
   {

@@ -1,5 +1,5 @@
 {
- "generated_at": 1792488279,
+ "generated_at": 1792574479,
  "id": "groq",
  "models": [
   {
@@ -55,15 +55,15 @@
    "id": "qwen/qwen3.6-27b"
   },
   {
-   "context": 131042,
+   "context": 131072,
    "id": "qwen/qwen3.8-27b"
   },
   {
-   "context": 0,
+   "context": 448,
    "id": "whisper-large-v3"
   },
   {
-   "context": 0,
+   "context": 448,
    "id": "whisper-large-v3-turbo"
   }
  ],

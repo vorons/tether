@@ -1,5 +1,5 @@
 {
- "generated_at": 1792488279,
+ "generated_at": 1792574479,
  "id": "nano-gpt",
  "models": [
   {
@@ -653,22 +653,6 @@
   {
    "context": 128000,
    "id": "deepseek-chat-cheaper"
-  },
-  {
-   "context": 128000,
-   "id": "deepseek-r1"
-  },
-  {
-   "context": 128000,
-   "id": "deepseek-r1-sambanova"
-  },
-  {
-   "context": 64000,
-   "id": "deepseek-reasoner"
-  },
-  {
-   "context": 128000,
-   "id": "deepseek-reasoner-cheaper"
   },
   {
    "context": 128000,
@@ -1853,6 +1837,10 @@
   {
    "context": 262144,
    "id": "qwen/qwen3-235b-a22b-instruct-2507"
+  },
+  {
+   "context": 131072,
+   "id": "qwen/qwen3-235b-a22b-thinking-2507"
   },
   {
    "context": 41000,

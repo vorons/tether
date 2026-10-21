@@ -1,5 +1,5 @@
 {
- "generated_at": 1792488279,
+ "generated_at": 1792574479,
  "id": "snowflake-cortex",
  "models": [
   {
@@ -47,11 +47,11 @@
    "id": "deepseek-r1"
   },
   {
-   "context": 1048576,
+   "context": 1000000,
    "id": "gemini-3.1-pro"
   },
   {
-   "context": 262144,
+   "context": 128000,
    "id": "mistral-large2"
   },
   {

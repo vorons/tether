@@ -1,5 +1,5 @@
 {
- "generated_at": 1792488279,
+ "generated_at": 1792574479,
  "id": "huggingface",
  "models": [
   {
@@ -63,11 +63,11 @@
    "id": "Qwen/Qwen3-Coder-Next"
   },
   {
-   "context": 32000,
+   "context": 32768,
    "id": "Qwen/Qwen3-Embedding-4B"
   },
   {
-   "context": 32000,
+   "context": 32768,
    "id": "Qwen/Qwen3-Embedding-8B"
   },
   {

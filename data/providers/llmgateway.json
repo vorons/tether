@@ -1,5 +1,5 @@
 {
- "generated_at": 1792488279,
+ "generated_at": 1792574479,
  "id": "llmgateway",
  "models": [
   {
@@ -29,10 +29,6 @@
   {
    "context": 1000000,
    "id": "claude-haiku-5-5"
-  },
-  {
-   "context": 200000,
-   "id": "claude-opus-4-1-20250805"
   },
   {
    "context": 200000,
@@ -484,10 +480,6 @@
   },
   {
    "context": 262144,
-   "id": "kimi-k2-thinking"
-  },
-  {
-   "context": 262144,
    "id": "kimi-k2.5"
   },
   {
@@ -517,10 +509,6 @@
   {
    "context": 131072,
    "id": "ling-3.0-flash-vl"
-  },
-  {
-   "context": 262144,
-   "id": "ling-3.1-flash"
   },
   {
    "context": 8192,
@@ -745,10 +733,6 @@
   {
    "context": 131072,
    "id": "qwen3-next-80b-a3b-instruct"
-  },
-  {
-   "context": 131072,
-   "id": "qwen3-next-80b-a3b-thinking"
   },
   {
    "context": 262144,

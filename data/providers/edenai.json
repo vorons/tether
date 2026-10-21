@@ -1,5 +1,5 @@
 {
- "generated_at": 1792488279,
+ "generated_at": 1792574479,
  "id": "edenai",
  "models": [
   {
@@ -283,11 +283,11 @@
    "id": "databricks/databricks-inkling"
   },
   {
-   "context": 131072,
+   "context": 262144,
    "id": "databricks/databricks-qwen3-next-80b-a3b-instruct"
   },
   {
-   "context": 131072,
+   "context": 262144,
    "id": "databricks/databricks-qwen3-next-80b-a3b-instruct@eu"
   },
   {
@@ -311,8 +311,16 @@
    "id": "deepinfra/NousResearch/Hermes-3-Llama-3.1-70B"
   },
   {
+   "context": 32768,
+   "id": "deepinfra/Qwen/Qwen2.5-7B-Instruct"
+  },
+  {
    "context": 262144,
    "id": "deepinfra/Qwen/Qwen3-235B-A22B-Instruct-2507"
+  },
+  {
+   "context": 262144,
+   "id": "deepinfra/Qwen/Qwen3-235B-A22B-Thinking-2507"
   },
   {
    "context": 262144,
@@ -659,6 +667,14 @@
    "id": "greenpt/qwen3-235b-a22b-instruct-2507"
   },
   {
+   "context": 512,
+   "id": "groq/meta-llama/llama-prompt-guard-2-22m"
+  },
+  {
+   "context": 512,
+   "id": "groq/meta-llama/llama-prompt-guard-2-86m"
+  },
+  {
    "context": 131072,
    "id": "groq/openai/gpt-oss-120b"
   },
@@ -685,6 +701,22 @@
   {
    "context": 128000,
    "id": "ionos/openai/gpt-oss-120b"
+  },
+  {
+   "context": 1048576,
+   "id": "meta/muse-spark-1.1"
+  },
+  {
+   "context": 1048576,
+   "id": "meta/muse-spark-1.2"
+  },
+  {
+   "context": 1048576,
+   "id": "meta/muse-spark-1.3"
+  },
+  {
+   "context": 1048576,
+   "id": "meta/muse-wonder-1.0"
   },
   {
    "context": 204800,
@@ -805,6 +837,10 @@
   {
    "context": 262144,
    "id": "nebius/Qwen/Qwen3-235B-A22B-Instruct-2507"
+  },
+  {
+   "context": 262144,
+   "id": "nebius/Qwen/Qwen3-30B-A3B-Instruct-2507"
   },
   {
    "context": 1024000,
@@ -1121,6 +1157,10 @@
   {
    "context": 1000000,
    "id": "tencent/hy4-preview"
+  },
+  {
+   "context": 1000000,
+   "id": "tencent/step-5-preview"
   },
   {
    "context": 164000,

@@ -1,5 +1,5 @@
 {
- "generated_at": 1792488279,
+ "generated_at": 1792574479,
  "id": "modal",
  "models": [
   {
@@ -7,12 +7,28 @@
    "id": "Qwen/Qwen3.8-2.4T-A95B"
   },
   {
+   "context": 1000000,
+   "id": "deepseek-ai/DeepSeek-V4.1-Flash"
+  },
+  {
+   "context": 1048576,
+   "id": "meta-models/Muse-Spark-Open-816B-A42B"
+  },
+  {
    "context": 1048576,
    "id": "moonshotai/Kimi-K3"
   },
   {
+   "context": 1000000,
+   "id": "nvidia/GLM-5.3-Flash-NVFP4"
+  },
+  {
    "context": 1048576,
    "id": "thinkingmachines/Inkling-NVFP4"
+  },
+  {
+   "context": 1000000,
+   "id": "zai-org/GLM-5.3"
   },
   {
    "context": 1000000,
