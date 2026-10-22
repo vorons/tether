@@ -1,5 +1,5 @@
 {
- "generated_at": 1792574479,
+ "generated_at": 1792661019,
  "id": "jiekou",
  "models": [
   {
@@ -11,7 +11,7 @@
    "id": "baidu/ernie-4.5-vl-424b-a47b"
   },
   {
-   "context": 20000,
+   "context": 200000,
    "id": "claude-haiku-4-5-20251001"
   },
   {
@@ -179,11 +179,11 @@
    "id": "moonshotai/kimi-k2.5"
   },
   {
-   "context": 131072,
+   "context": 200000,
    "id": "o3"
   },
   {
-   "context": 131072,
+   "context": 200000,
    "id": "o3-mini"
   },
   {

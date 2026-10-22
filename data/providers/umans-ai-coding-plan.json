@@ -1,5 +1,5 @@
 {
- "generated_at": 1792574479,
+ "generated_at": 1792661019,
  "id": "umans-ai-coding-plan",
  "models": [
   {
@@ -13,6 +13,10 @@
   {
    "context": 1048576,
    "id": "umans-deepseek-v4.1-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "umans-deepseek-v4.1-flash-1017"
   },
   {
    "context": 262144,

@@ -1,5 +1,5 @@
 {
- "generated_at": 1792574479,
+ "generated_at": 1792661019,
  "id": "scaleway",
  "models": [
   {
@@ -29,6 +29,10 @@
   {
    "context": 128000,
    "id": "gpt-oss-120b"
+  },
+  {
+   "context": 262144,
+   "id": "lightonocr-3-0.8b"
   },
   {
    "context": 100000,

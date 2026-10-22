@@ -1,5 +1,5 @@
 {
- "generated_at": 1792574479,
+ "generated_at": 1792661019,
  "providers": {
   "302ai": {
    "api_key_env": [
@@ -4221,7 +4221,7 @@
     "ATOMIC_CHAT_API_KEY"
    ],
    "base_url": "http://127.0.0.1:1337/v1",
-   "model": "Qwen3_5-9B-Q4_K_M",
+   "model": "gemma-4-E4B-it-MLX-4bit",
    "models": [
     {
      "context": 131072,
@@ -5558,7 +5558,7 @@
     "CLARIFAI_PAT"
    ],
    "base_url": "https://api.clarifai.com/v2/ext/openai/v1",
-   "model": "moonshotai/chat-completion/models/Kimi-K2_6",
+   "model": "arcee_ai/AFM/models/trinity-mini",
    "models": [
     {
      "context": 131072,
@@ -5634,7 +5634,7 @@
     "CLINE_API_KEY"
    ],
    "base_url": "https://api.cline.bot/api/v1",
-   "model": "cline-pass/mimo-v2.6-pro",
+   "model": "cline-pass/deepseek-v4.1-flash",
    "models": [
     {
      "context": 1000000,
@@ -6907,10 +6907,6 @@
     },
     {
      "context": 128000,
-     "id": "pixtral-12b-2409"
-    },
-    {
-     "context": 128000,
      "id": "pixtral-large-2502"
     },
     {
@@ -7271,7 +7267,7 @@
     "CRUSOE_API_KEY"
    ],
    "base_url": "https://api.inference.crusoecloud.com/v1",
-   "model": "zai/GLM-5.2",
+   "model": "nvidia/Nemotron-3-Nano-Omni-Reasoning-30B-A3B",
    "models": [
     {
      "context": 262144,
@@ -7717,6 +7713,10 @@
      "id": "meta-llama/Llama-4-Scout-17B-16E-Instruct"
     },
     {
+     "context": 163840,
+     "id": "meta-llama/Llama-Guard-4-12B"
+    },
+    {
      "context": 32768,
      "id": "mistralai/Mistral-Small-24B-Instruct-2501"
     },
@@ -7846,7 +7846,7 @@
     "DIGITALOCEAN_ACCESS_TOKEN"
    ],
    "base_url": "https://inference.do-ai.run/v1",
-   "model": "nemotron-3.5-super-vl",
+   "model": "reflection-beam",
    "models": [
     {
      "context": 32768,
@@ -8253,6 +8253,10 @@
      "id": "qwen3.8-max"
     },
     {
+     "context": 1048576,
+     "id": "reflection-beam"
+    },
+    {
      "context": 256,
      "id": "stable-diffusion-3.5-large"
     },
@@ -8268,7 +8272,7 @@
     "DINFERENCE_API_KEY"
    ],
    "base_url": "https://api.dinference.com/v1",
-   "model": "glm-5.2",
+   "model": "glm-5",
    "models": [
     {
      "context": 200000,
@@ -8575,6 +8579,10 @@
      "id": "cloudflare/@cf/meta/llama-3.2-1b-instruct"
     },
     {
+     "context": 80000,
+     "id": "cloudflare/@cf/meta/llama-3.2-3b-instruct"
+    },
+    {
      "context": 131072,
      "id": "cloudflare/@cf/meta/llama-guard-3-8b"
     },
@@ -8760,11 +8768,19 @@
     },
     {
      "context": 131072,
+     "id": "deepinfra/meta-llama/Llama-3.2-3B-Instruct"
+    },
+    {
+     "context": 131072,
      "id": "deepinfra/meta-llama/Llama-3.3-70B-Instruct"
     },
     {
      "context": 131072,
      "id": "deepinfra/meta-llama/Llama-Guard-3-8B"
+    },
+    {
+     "context": 163840,
+     "id": "deepinfra/meta-llama/Llama-Guard-4-12B"
     },
     {
      "context": 131072,
@@ -8777,6 +8793,10 @@
     {
      "context": 32768,
      "id": "deepinfra/mistralai/Mistral-Small-24B-Instruct-2501"
+    },
+    {
+     "context": 32768,
+     "id": "deepinfra/mistralai/Mixtral-8x7B-Instruct-v0.1"
     },
     {
      "context": 131072,
@@ -9507,6 +9527,14 @@
      "id": "scaleway/qwen3-coder-30b-a3b-instruct"
     },
     {
+     "context": 1048576,
+     "id": "sference/deepseek-ai/DeepSeek-V4-Flash-0731"
+    },
+    {
+     "context": 1048576,
+     "id": "sference/deepseek-ai/DeepSeek-V4.1-Flash-1017"
+    },
+    {
      "context": 1000000,
      "id": "tencent/deepseek-v4-pro-0813"
     },
@@ -10168,7 +10196,7 @@
     "FASTROUTER_API_KEY"
    ],
    "base_url": "https://go.fastrouter.ai/api/v1",
-   "model": "anthropic/claude-opus-4.8",
+   "model": "bytedance/seedance-2",
    "models": [
     {
      "context": 200000,
@@ -10225,14 +10253,6 @@
     {
      "context": 262144,
      "id": "google/gemma-4-31b-it"
-    },
-    {
-     "context": 480,
-     "id": "google/imagen-4.0-fast"
-    },
-    {
-     "context": 480,
-     "id": "google/imagen-4.0-ultra"
     },
     {
      "context": 400000,
@@ -10317,10 +10337,6 @@
     {
      "context": 131072,
      "id": "openai/gpt-oss-20b"
-    },
-    {
-     "context": 32000,
-     "id": "openai/gpt-realtime-1.5"
     },
     {
      "context": 262144,
@@ -10631,10 +10647,6 @@
    "model": "zai-org/GLM-5.3-Flash",
    "models": [
     {
-     "context": 196608,
-     "id": "MiniMaxAI/MiniMax-M2.5"
-    },
-    {
      "context": 163840,
      "id": "deepseek-ai/DeepSeek-V3.2"
     },
@@ -10666,7 +10678,7 @@
     "FROGBOT_API_KEY"
    ],
    "base_url": "https://app.frogbot.ai/api/v1",
-   "model": "grok-4-3",
+   "model": "deepseek-v4-pro",
    "models": [
     {
      "context": 200000,
@@ -11864,7 +11876,7 @@
     "HELICONE_API_KEY"
    ],
    "base_url": "https://ai-gateway.helicone.ai/v1",
-   "model": "claude-4.5-opus",
+   "model": "deepseek-reasoner",
    "models": [
     {
      "context": 128000,
@@ -12349,6 +12361,10 @@
      "id": "Qwen/Qwen3-32B"
     },
     {
+     "context": 40960,
+     "id": "Qwen/Qwen3-8B"
+    },
+    {
      "context": 262144,
      "id": "Qwen/Qwen3-Coder-30B-A3B-Instruct"
     },
@@ -12515,6 +12531,10 @@
     {
      "context": 131072,
      "id": "meta-llama/Llama-3.3-70B-Instruct"
+    },
+    {
+     "context": 163840,
+     "id": "meta-llama/Llama-Guard-4-12B"
     },
     {
      "context": 131072,
@@ -13144,7 +13164,7 @@
     "INCEPTRON_API_KEY"
    ],
    "base_url": "https://api.inceptron.io/v1",
-   "model": "deepseek-ai/DeepSeek-V4-Flash-0731",
+   "model": "zai-org/GLM-5.3-Flash",
    "models": [
     {
      "context": 1048576,
@@ -13161,6 +13181,14 @@
     {
      "context": 1048576,
      "id": "zai-org/GLM-5.2"
+    },
+    {
+     "context": 1048576,
+     "id": "zai-org/GLM-5.3"
+    },
+    {
+     "context": 1048576,
+     "id": "zai-org/GLM-5.3-Flash"
     }
    ],
    "wire": "openai"
@@ -13226,7 +13254,7 @@
     "INFERENCE_API_KEY"
    ],
    "base_url": "https://inference.net/v1",
-   "model": "qwen/qwen3-embedding-4b",
+   "model": "meta/llama-3.2-3b-instruct",
    "models": [
     {
      "context": 125000,
@@ -13381,7 +13409,7 @@
     "IOINTELLIGENCE_API_KEY"
    ],
    "base_url": "https://api.intelligence.io.solutions/api/v1",
-   "model": "Qwen/Qwen3-235B-A22B-Thinking-2507",
+   "model": "moonshotai/Kimi-K2-Thinking",
    "models": [
     {
      "context": 106000,
@@ -13587,7 +13615,7 @@
     "JIEKOU_API_KEY"
    ],
    "base_url": "https://api.jiekou.ai/openai",
-   "model": "qwen/qwen3-coder-next",
+   "model": "claude-opus-4-6",
    "models": [
     {
      "context": 123000,
@@ -13598,7 +13626,7 @@
      "id": "baidu/ernie-4.5-vl-424b-a47b"
     },
     {
-     "context": 20000,
+     "context": 200000,
      "id": "claude-haiku-4-5-20251001"
     },
     {
@@ -13766,11 +13794,11 @@
      "id": "moonshotai/kimi-k2.5"
     },
     {
-     "context": 131072,
+     "context": 200000,
      "id": "o3"
     },
     {
-     "context": 131072,
+     "context": 200000,
      "id": "o3-mini"
     },
     {
@@ -14107,7 +14135,7 @@
     "KILO_API_KEY"
    ],
    "base_url": "https://api.kilo.ai/api/gateway",
-   "model": "minimax/minimax-m3.1-flash:free",
+   "model": "recursive/flint-v1.0:free",
    "models": [
     {
      "context": 131072,
@@ -14322,7 +14350,7 @@
      "id": "deepseek/deepseek-v4-pro"
     },
     {
-     "context": 1024000,
+     "context": 1048576,
      "id": "deepseek/deepseek-v4-pro-0813"
     },
     {
@@ -15332,6 +15360,10 @@
     {
      "context": 1000000,
      "id": "qwen/qwen3.8-omni-flash"
+    },
+    {
+     "context": 262144,
+     "id": "recursive/flint-v1.0:free"
     },
     {
      "context": 1048576,
@@ -16370,10 +16402,6 @@
      "id": "hy4-preview"
     },
     {
-     "context": 524288,
-     "id": "inkling"
-    },
-    {
      "context": 256000,
      "id": "kimi-k2"
     },
@@ -16594,6 +16622,10 @@
      "id": "qwen-plus-latest"
     },
     {
+     "context": 32768,
+     "id": "qwen3-14b"
+    },
+    {
      "context": 40960,
      "id": "qwen3-235b-a22b-fp8"
     },
@@ -16604,6 +16636,10 @@
     {
      "context": 262000,
      "id": "qwen3-235b-a22b-thinking-2507"
+    },
+    {
+     "context": 32768,
+     "id": "qwen3-30b-a3b"
     },
     {
      "context": 40960,
@@ -16664,6 +16700,10 @@
     {
      "context": 262144,
      "id": "qwen3.5-9b"
+    },
+    {
+     "context": 16384,
+     "id": "qwen3.6-27b"
     },
     {
      "context": 262144,
@@ -17374,10 +17414,6 @@
     {
      "context": 131072,
      "id": "deepinfra/granite-4.2-8b"
-    },
-    {
-     "context": 524288,
-     "id": "deepinfra/inkling"
     },
     {
      "context": 262144,
@@ -18116,6 +18152,10 @@
      "id": "reka-ai/glm-5.3"
     },
     {
+     "context": 262144,
+     "id": "reka-ai/glm-5.3-flash"
+    },
+    {
      "context": 16384,
      "id": "reka-ai/reka-edge-2603"
     },
@@ -18290,10 +18330,6 @@
     {
      "context": 1000000,
      "id": "tencent/minimax-m3"
-    },
-    {
-     "context": 163840,
-     "id": "together-ai/deepseek-v4-flash"
     },
     {
      "context": 1048576,
@@ -18861,7 +18897,7 @@
     "MEGANOVA_API_KEY"
    ],
    "base_url": "https://api.meganova.ai/v1",
-   "model": "MiniMaxAI/MiniMax-M2.5",
+   "model": "Qwen/Qwen3.5-Plus",
    "models": [
     {
      "context": 196608,
@@ -19766,7 +19802,7 @@
      "id": "qwen3.6"
     },
     {
-     "context": 262144,
+     "context": 1048576,
      "id": "qwen3.8-flash"
     }
    ],
@@ -19777,7 +19813,7 @@
     "NANO_GPT_API_KEY"
    ],
    "base_url": "https://nano-gpt.com/api/v1",
-   "model": "inception/mercury-3",
+   "model": "ornith-ai/ornith-1.5-122b",
    "models": [
     {
      "context": 32768,
@@ -20100,6 +20136,10 @@
      "id": "TheDrummer/orion-26b-a4b-v1.1"
     },
     {
+     "context": 16384,
+     "id": "TheDrummer/skyfall-31b-v4.2"
+    },
+    {
      "context": 32768,
      "id": "TheDrummer/skyfall-36b-v2"
     },
@@ -20322,6 +20362,10 @@
     {
      "context": 128000,
      "id": "asi1-mini"
+    },
+    {
+     "context": 65536,
+     "id": "ateron/gemma-4-dark-thoughts-v2-31b"
     },
     {
      "context": 1000000,
@@ -21256,6 +21300,18 @@
      "id": "nanogpt/coding-router:medium"
     },
     {
+     "context": 65536,
+     "id": "nbeerbower/gemma4-gutenberg-31b"
+    },
+    {
+     "context": 65536,
+     "id": "nimbz/gemma-4-giftige-blume-31b-v2"
+    },
+    {
+     "context": 65536,
+     "id": "nimbz/schattenblume-31b"
+    },
+    {
      "context": 32768,
      "id": "nothingiisreal/L3.1-70B-Celeste-V0.1-BF16"
     },
@@ -21530,6 +21586,10 @@
     {
      "context": 200000,
      "id": "openai/o4-mini-high"
+    },
+    {
+     "context": 262144,
+     "id": "ornith-ai/ornith-1.5-122b"
     },
     {
      "context": 262144,
@@ -22864,7 +22924,7 @@
     "NEURALWATT_API_KEY"
    ],
    "base_url": "https://api.neuralwatt.com/v1",
-   "model": "mimo-v2.6-pro-flex",
+   "model": "deepseek-v4.1-flash-flex",
    "models": [
     {
      "context": 1048560,
@@ -23373,48 +23433,20 @@
    "model": "meta/llama-3.3-70b-instruct",
    "models": [
     {
-     "context": 128000,
-     "id": "abacusai/dracarys-llama-3.1-70b-instruct"
-    },
-    {
-     "context": 8192,
-     "id": "baai/bge-m3"
-    },
-    {
-     "context": 4096,
+     "context": 0,
      "id": "black-forest-labs/flux.1-dev"
     },
     {
-     "context": 40960,
+     "context": 0,
      "id": "black-forest-labs/flux_1-kontext-dev"
     },
     {
-     "context": 77,
+     "context": 0,
      "id": "black-forest-labs/flux_1-schnell"
     },
     {
-     "context": 40960,
+     "context": 0,
      "id": "black-forest-labs/flux_2-klein-4b"
-    },
-    {
-     "context": 262000,
-     "id": "bytedance/seed-oss-36b-instruct"
-    },
-    {
-     "context": 1048576,
-     "id": "deepseek-ai/deepseek-v4-flash"
-    },
-    {
-     "context": 1000000,
-     "id": "deepseek-ai/deepseek-v4-flash-0731"
-    },
-    {
-     "context": 1048576,
-     "id": "deepseek-ai/deepseek-v4-pro"
-    },
-    {
-     "context": 1000000,
-     "id": "deepseek-ai/deepseek-v4-pro-0813"
     },
     {
      "context": 1000000,
@@ -23425,24 +23457,12 @@
      "id": "google/diffusiongemma-26b-a4b-it"
     },
     {
-     "context": 128000,
-     "id": "google/gemma-2-2b-it"
-    },
-    {
      "context": 131072,
      "id": "google/gemma-3-12b-it"
     },
     {
      "context": 131072,
      "id": "google/gemma-3-4b-it"
-    },
-    {
-     "context": 128000,
-     "id": "google/gemma-3n-e2b-it"
-    },
-    {
-     "context": 128000,
-     "id": "google/gemma-3n-e4b-it"
     },
     {
      "context": 256000,
@@ -23454,46 +23474,14 @@
     },
     {
      "context": 128000,
-     "id": "meta/esm2-650m"
-    },
-    {
-     "context": 128000,
-     "id": "meta/esmfold"
-    },
-    {
-     "context": 128000,
-     "id": "meta/llama-3.1-70b-instruct"
-    },
-    {
-     "context": 16000,
-     "id": "meta/llama-3.1-8b-instruct"
-    },
-    {
-     "context": 128000,
      "id": "meta/llama-3.2-11b-vision-instruct"
-    },
-    {
-     "context": 128000,
-     "id": "meta/llama-3.2-1b-instruct"
-    },
-    {
-     "context": 32768,
-     "id": "meta/llama-3.2-3b-instruct"
     },
     {
      "context": 128000,
      "id": "meta/llama-3.2-90b-vision-instruct"
     },
     {
-     "context": 128000,
-     "id": "meta/llama-3.3-70b-instruct"
-    },
-    {
-     "context": 128000,
-     "id": "meta/llama-4-maverick-17b-128e-instruct"
-    },
-    {
-     "context": 128000,
+     "context": 163840,
      "id": "meta/llama-guard-4-12b"
     },
     {
@@ -23501,60 +23489,16 @@
      "id": "meta/muse-glimmer-30b"
     },
     {
-     "context": 131072,
-     "id": "microsoft/phi-4-mini-instruct"
-    },
-    {
-     "context": 128000,
-     "id": "microsoft/phi-4-multimodal-instruct"
-    },
-    {
-     "context": 204800,
-     "id": "minimaxai/minimax-m2.7"
-    },
-    {
-     "context": 1000000,
-     "id": "minimaxai/minimax-m3"
-    },
-    {
      "context": 32768,
      "id": "mistralai/magistral-small-2506"
-    },
-    {
-     "context": 262144,
-     "id": "mistralai/ministral-14b-instruct-2512"
     },
     {
      "context": 65536,
      "id": "mistralai/mistral-7b-instruct-v0.3"
     },
     {
-     "context": 262144,
-     "id": "mistralai/mistral-large-3-675b-instruct-2512"
-    },
-    {
      "context": 131072,
      "id": "mistralai/mistral-medium-3-instruct"
-    },
-    {
-     "context": 262144,
-     "id": "mistralai/mistral-medium-3.5-128b"
-    },
-    {
-     "context": 128000,
-     "id": "mistralai/mistral-nemotron"
-    },
-    {
-     "context": 128000,
-     "id": "mistralai/mistral-small-4-119b-2603"
-    },
-    {
-     "context": 65536,
-     "id": "mistralai/mixtral-8x22b-instruct"
-    },
-    {
-     "context": 32768,
-     "id": "mistralai/mixtral-8x7b-instruct"
     },
     {
      "context": 262144,
@@ -23573,16 +23517,8 @@
      "id": "nvidia/bevformer"
     },
     {
-     "context": 0,
-     "id": "nvidia/cosmos-predict1-5b"
-    },
-    {
      "context": 131072,
      "id": "nvidia/cosmos-reason2-8b"
-    },
-    {
-     "context": 0,
-     "id": "nvidia/cosmos-transfer1-7b"
     },
     {
      "context": 0,
@@ -23590,19 +23526,7 @@
     },
     {
      "context": 128000,
-     "id": "nvidia/gliner-pii"
-    },
-    {
-     "context": 128000,
      "id": "nvidia/llama-3.1-nemotron-70b-instruct"
-    },
-    {
-     "context": 131072,
-     "id": "nvidia/llama-3.1-nemotron-nano-8b-v1"
-    },
-    {
-     "context": 32768,
-     "id": "nvidia/llama-3.1-nemotron-nano-vl-8b-v1"
     },
     {
      "context": 128000,
@@ -23613,36 +23537,16 @@
      "id": "nvidia/llama-3.1-nemotron-ultra-253b-v1"
     },
     {
-     "context": 131072,
-     "id": "nvidia/llama-3.3-nemotron-super-49b-v1"
-    },
-    {
-     "context": 131072,
-     "id": "nvidia/llama-3.3-nemotron-super-49b-v1.5"
-    },
-    {
-     "context": 32768,
-     "id": "nvidia/llama-3_2-nemoretriever-300m-embed-v1"
-    },
-    {
-     "context": 32768,
+     "context": 8192,
      "id": "nvidia/llama-nemotron-embed-vl-1b-v2"
     },
     {
-     "context": 128000,
+     "context": 10240,
      "id": "nvidia/llama-nemotron-rerank-vl-1b-v2"
     },
     {
      "context": 0,
      "id": "nvidia/magpie-tts-zeroshot"
-    },
-    {
-     "context": 128000,
-     "id": "nvidia/nemotron-3-content-safety"
-    },
-    {
-     "context": 131072,
-     "id": "nvidia/nemotron-3-nano-30b-a3b"
     },
     {
      "context": 256000,
@@ -23666,31 +23570,7 @@
     },
     {
      "context": 128000,
-     "id": "nvidia/nemotron-content-safety-reasoning-4b"
-    },
-    {
-     "context": 128000,
-     "id": "nvidia/nemotron-mini-4b-instruct"
-    },
-    {
-     "context": 128000,
-     "id": "nvidia/nemotron-nano-12b-v2-vl"
-    },
-    {
-     "context": 128000,
      "id": "nvidia/nemotron-voicechat"
-    },
-    {
-     "context": 32768,
-     "id": "nvidia/nv-embed-v1"
-    },
-    {
-     "context": 32768,
-     "id": "nvidia/nv-embedcode-7b-v1"
-    },
-    {
-     "context": 131072,
-     "id": "nvidia/nvidia-nemotron-nano-9b-v2"
     },
     {
      "context": 128000,
@@ -23709,7 +23589,7 @@
      "id": "nvidia/streampetr"
     },
     {
-     "context": 128000,
+     "context": 0,
      "id": "nvidia/studiovoice"
     },
     {
@@ -23729,7 +23609,7 @@
      "id": "openai/gpt-oss-20b"
     },
     {
-     "context": 0,
+     "context": 448,
      "id": "openai/whisper-large-v3"
     },
     {
@@ -23745,52 +23625,8 @@
      "id": "qwen/qwen-image-edit"
     },
     {
-     "context": 128000,
-     "id": "qwen/qwen2.5-coder-32b-instruct"
-    },
-    {
-     "context": 262144,
-     "id": "qwen/qwen3-coder-480b-a35b-instruct"
-    },
-    {
-     "context": 262144,
-     "id": "qwen/qwen3-next-80b-a3b-instruct"
-    },
-    {
-     "context": 262144,
-     "id": "qwen/qwen3.5-122b-a10b"
-    },
-    {
-     "context": 262144,
-     "id": "qwen/qwen3.5-397b-a17b"
-    },
-    {
-     "context": 128000,
-     "id": "sarvamai/sarvam-m"
-    },
-    {
-     "context": 256000,
-     "id": "stepfun-ai/step-3.5-flash"
-    },
-    {
-     "context": 256000,
-     "id": "stepfun-ai/step-3.7-flash"
-    },
-    {
      "context": 1048576,
      "id": "stepfun-ai/step-5-preview"
-    },
-    {
-     "context": 1048576,
-     "id": "thinkingmachines/inkling"
-    },
-    {
-     "context": 128000,
-     "id": "upstage/solar-10.7b-instruct"
-    },
-    {
-     "context": 1000000,
-     "id": "z-ai/glm-5.2"
     },
     {
      "context": 1000000,
@@ -24949,6 +24785,10 @@
     {
      "context": 1048576,
      "id": "fledge-alpha-free"
+    },
+    {
+     "context": 262144,
+     "id": "flint-40b-free"
     },
     {
      "context": 1048576,
@@ -26745,6 +26585,10 @@
      "id": "qwen/qwen3.8-omni-flash"
     },
     {
+     "context": 262144,
+     "id": "recursive/flint-v1.0:free"
+    },
+    {
      "context": 1048576,
      "id": "reflection/beam-1.0-501b-a23b"
     },
@@ -28104,6 +27948,10 @@
     },
     {
      "context": 1048576,
+     "id": "perplexity/kimi-k3"
+    },
+    {
+     "context": 1048576,
      "id": "perplexity/nemotron-3.5-super-120b-a12b"
     },
     {
@@ -28541,7 +28389,7 @@
      "id": "nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B-BF16"
     },
     {
-     "context": 8192,
+     "context": 65536,
      "id": "nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-BF16"
     },
     {
@@ -31006,7 +30854,7 @@
     "SARVAM_API_KEY"
    ],
    "base_url": "https://api.sarvam.ai/v1",
-   "model": "sarvam-30b",
+   "model": "sarvam-105b",
    "models": [
     {
      "context": 131072,
@@ -31024,7 +30872,7 @@
     "SCALEWAY_API_KEY"
    ],
    "base_url": "https://api.scaleway.ai/v1",
-   "model": "deepseek-v4.1-flash",
+   "model": "lightonocr-3-0.8b",
    "models": [
     {
      "context": 8191,
@@ -31053,6 +30901,10 @@
     {
      "context": 128000,
      "id": "gpt-oss-120b"
+    },
+    {
+     "context": 262144,
+     "id": "lightonocr-3-0.8b"
     },
     {
      "context": 100000,
@@ -31779,7 +31631,7 @@
     "STACKIT_API_KEY"
    ],
    "base_url": "https://api.openai-compat.model-serving.eu01.onstackit.cloud/v1",
-   "model": "Qwen/Qwen3.6-27B",
+   "model": "Qwen/Qwen3-VL-Embedding-8B",
    "models": [
     {
      "context": 218000,
@@ -32157,7 +32009,7 @@
     "SUBMODEL_INSTAGEN_ACCESS_KEY"
    ],
    "base_url": "https://llm.submodel.ai/v1",
-   "model": "openai/gpt-oss-120b",
+   "model": "deepseek-ai/DeepSeek-V3.1",
    "models": [
     {
      "context": 262144,
@@ -32791,7 +32643,7 @@
     "THEGRID_API_KEY"
    ],
    "base_url": "https://api.thegrid.ai/v1",
-   "model": "claude-opus-latest",
+   "model": "code-standard",
    "models": [
     {
      "context": 1000000,
@@ -32834,12 +32686,16 @@
      "id": "gemini-pro-latest"
     },
     {
-     "context": 1000000,
+     "context": 1048576,
      "id": "glm-latest"
     },
     {
      "context": 1000000,
      "id": "gpt-sol-latest"
+    },
+    {
+     "context": 1048576,
+     "id": "kimi-latest"
     },
     {
      "context": 1000000,
@@ -33459,7 +33315,7 @@
     "UMANS_AI_API_KEY"
    ],
    "base_url": "https://api.code.umans.ai/v1",
-   "model": "umans-deepseek-v4.1-flash",
+   "model": "umans-deepseek-v4.1-flash-1017",
    "models": [
     {
      "context": 1048576,
@@ -33472,6 +33328,10 @@
     {
      "context": 1048576,
      "id": "umans-deepseek-v4.1-flash"
+    },
+    {
+     "context": 1048576,
+     "id": "umans-deepseek-v4.1-flash-1017"
     },
     {
      "context": 262144,
@@ -33497,7 +33357,7 @@
     "UMANS_AI_CODING_PLAN_API_KEY"
    ],
    "base_url": "https://api.code.umans.ai/v1",
-   "model": "umans-deepseek-v4.1-flash",
+   "model": "umans-deepseek-v4.1-flash-1017",
    "models": [
     {
      "context": 1048576,
@@ -33510,6 +33370,10 @@
     {
      "context": 1048576,
      "id": "umans-deepseek-v4.1-flash"
+    },
+    {
+     "context": 1048576,
+     "id": "umans-deepseek-v4.1-flash-1017"
     },
     {
      "context": 262144,
@@ -35288,6 +35152,30 @@
      "id": "baidu/ernie-5.0-thinking-preview"
     },
     {
+     "context": 256000,
+     "id": "bytedance/doubao-seed-1.8"
+    },
+    {
+     "context": 256000,
+     "id": "bytedance/doubao-seed-2.0-code"
+    },
+    {
+     "context": 256000,
+     "id": "bytedance/doubao-seed-2.0-lite"
+    },
+    {
+     "context": 256000,
+     "id": "bytedance/doubao-seed-2.0-mini"
+    },
+    {
+     "context": 256000,
+     "id": "bytedance/doubao-seed-2.0-pro"
+    },
+    {
+     "context": 256000,
+     "id": "bytedance/doubao-seed-code"
+    },
+    {
      "context": 128000,
      "id": "deepseek/deepseek-chat"
     },
@@ -35384,7 +35272,7 @@
      "id": "minimax/minimax-m2.7-highspeed"
     },
     {
-     "context": 1048576,
+     "context": 1000000,
      "id": "minimax/minimax-m3"
     },
     {
@@ -35430,6 +35318,10 @@
     {
      "context": 1048576,
      "id": "moonshotai/kimi-k3-free"
+    },
+    {
+     "context": 400000,
+     "id": "openai/chat-latest"
     },
     {
      "context": 400000,

@@ -1,5 +1,5 @@
 {
- "generated_at": 1792574479,
+ "generated_at": 1792661019,
  "id": "huggingface",
  "models": [
   {
@@ -49,6 +49,10 @@
   {
    "context": 131072,
    "id": "Qwen/Qwen3-32B"
+  },
+  {
+   "context": 40960,
+   "id": "Qwen/Qwen3-8B"
   },
   {
    "context": 262144,
@@ -217,6 +221,10 @@
   {
    "context": 131072,
    "id": "meta-llama/Llama-3.3-70B-Instruct"
+  },
+  {
+   "context": 163840,
+   "id": "meta-llama/Llama-Guard-4-12B"
   },
   {
    "context": 131072,

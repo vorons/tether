@@ -1,5 +1,5 @@
 {
- "generated_at": 1792574479,
+ "generated_at": 1792661019,
  "id": "perplexity-agent",
  "models": [
   {
@@ -161,6 +161,10 @@
   {
    "context": 1000000,
    "id": "perplexity/glm-5.3-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "perplexity/kimi-k3"
   },
   {
    "context": 1048576,

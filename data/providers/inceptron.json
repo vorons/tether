@@ -1,5 +1,5 @@
 {
- "generated_at": 1792574479,
+ "generated_at": 1792661019,
  "id": "inceptron",
  "models": [
   {
@@ -17,6 +17,14 @@
   {
    "context": 1048576,
    "id": "zai-org/GLM-5.2"
+  },
+  {
+   "context": 1048576,
+   "id": "zai-org/GLM-5.3"
+  },
+  {
+   "context": 1048576,
+   "id": "zai-org/GLM-5.3-Flash"
   }
  ],
  "schema": 1

@@ -1,5 +1,5 @@
 {
- "generated_at": 1792574479,
+ "generated_at": 1792661019,
  "id": "digitalocean",
  "models": [
   {
@@ -405,6 +405,10 @@
   {
    "context": 1000000,
    "id": "qwen3.8-max"
+  },
+  {
+   "context": 1048576,
+   "id": "reflection-beam"
   },
   {
    "context": 256,

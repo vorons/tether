@@ -1,5 +1,5 @@
 {
- "generated_at": 1792574479,
+ "generated_at": 1792661019,
  "id": "kilo",
  "models": [
   {
@@ -215,7 +215,7 @@
    "id": "deepseek/deepseek-v4-pro"
   },
   {
-   "context": 1024000,
+   "context": 1048576,
    "id": "deepseek/deepseek-v4-pro-0813"
   },
   {
@@ -1225,6 +1225,10 @@
   {
    "context": 1000000,
    "id": "qwen/qwen3.8-omni-flash"
+  },
+  {
+   "context": 262144,
+   "id": "recursive/flint-v1.0:free"
   },
   {
    "context": 1048576,

@@ -1,11 +1,7 @@
 {
- "generated_at": 1792574479,
+ "generated_at": 1792661019,
  "id": "friendli",
  "models": [
-  {
-   "context": 196608,
-   "id": "MiniMaxAI/MiniMax-M2.5"
-  },
   {
    "context": 163840,
    "id": "deepseek-ai/DeepSeek-V3.2"

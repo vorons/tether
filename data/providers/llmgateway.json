@@ -1,5 +1,5 @@
 {
- "generated_at": 1792574479,
+ "generated_at": 1792661019,
  "id": "llmgateway",
  "models": [
   {
@@ -471,10 +471,6 @@
    "id": "hy4-preview"
   },
   {
-   "context": 524288,
-   "id": "inkling"
-  },
-  {
    "context": 256000,
    "id": "kimi-k2"
   },
@@ -695,6 +691,10 @@
    "id": "qwen-plus-latest"
   },
   {
+   "context": 32768,
+   "id": "qwen3-14b"
+  },
+  {
    "context": 40960,
    "id": "qwen3-235b-a22b-fp8"
   },
@@ -705,6 +705,10 @@
   {
    "context": 262000,
    "id": "qwen3-235b-a22b-thinking-2507"
+  },
+  {
+   "context": 32768,
+   "id": "qwen3-30b-a3b"
   },
   {
    "context": 40960,
@@ -765,6 +769,10 @@
   {
    "context": 262144,
    "id": "qwen3.5-9b"
+  },
+  {
+   "context": 16384,
+   "id": "qwen3.6-27b"
   },
   {
    "context": 262144,

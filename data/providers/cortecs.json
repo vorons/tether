@@ -1,5 +1,5 @@
 {
- "generated_at": 1792574479,
+ "generated_at": 1792661019,
  "id": "cortecs",
  "models": [
   {
@@ -349,10 +349,6 @@
   {
    "context": 256000,
    "id": "nvidia-nemotron-3-nano-30b-a3b"
-  },
-  {
-   "context": 128000,
-   "id": "pixtral-12b-2409"
   },
   {
    "context": 128000,

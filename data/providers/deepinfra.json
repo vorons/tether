@@ -1,5 +1,5 @@
 {
- "generated_at": 1792574479,
+ "generated_at": 1792661019,
  "id": "deepinfra",
  "models": [
   {
@@ -209,6 +209,10 @@
   {
    "context": 327680,
    "id": "meta-llama/Llama-4-Scout-17B-16E-Instruct"
+  },
+  {
+   "context": 163840,
+   "id": "meta-llama/Llama-Guard-4-12B"
   },
   {
    "context": 32768,

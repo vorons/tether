@@ -1,5 +1,5 @@
 {
- "generated_at": 1792574479,
+ "generated_at": 1792661019,
  "id": "nano-gpt",
  "models": [
   {
@@ -323,6 +323,10 @@
    "id": "TheDrummer/orion-26b-a4b-v1.1"
   },
   {
+   "context": 16384,
+   "id": "TheDrummer/skyfall-31b-v4.2"
+  },
+  {
    "context": 32768,
    "id": "TheDrummer/skyfall-36b-v2"
   },
@@ -545,6 +549,10 @@
   {
    "context": 128000,
    "id": "asi1-mini"
+  },
+  {
+   "context": 65536,
+   "id": "ateron/gemma-4-dark-thoughts-v2-31b"
   },
   {
    "context": 1000000,
@@ -1479,6 +1487,18 @@
    "id": "nanogpt/coding-router:medium"
   },
   {
+   "context": 65536,
+   "id": "nbeerbower/gemma4-gutenberg-31b"
+  },
+  {
+   "context": 65536,
+   "id": "nimbz/gemma-4-giftige-blume-31b-v2"
+  },
+  {
+   "context": 65536,
+   "id": "nimbz/schattenblume-31b"
+  },
+  {
    "context": 32768,
    "id": "nothingiisreal/L3.1-70B-Celeste-V0.1-BF16"
   },
@@ -1753,6 +1773,10 @@
   {
    "context": 200000,
    "id": "openai/o4-mini-high"
+  },
+  {
+   "context": 262144,
+   "id": "ornith-ai/ornith-1.5-122b"
   },
   {
    "context": 262144,

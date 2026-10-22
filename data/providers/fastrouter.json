@@ -1,5 +1,5 @@
 {
- "generated_at": 1792574479,
+ "generated_at": 1792661019,
  "id": "fastrouter",
  "models": [
   {
@@ -57,14 +57,6 @@
   {
    "context": 262144,
    "id": "google/gemma-4-31b-it"
-  },
-  {
-   "context": 480,
-   "id": "google/imagen-4.0-fast"
-  },
-  {
-   "context": 480,
-   "id": "google/imagen-4.0-ultra"
   },
   {
    "context": 400000,
@@ -149,10 +141,6 @@
   {
    "context": 131072,
    "id": "openai/gpt-oss-20b"
-  },
-  {
-   "context": 32000,
-   "id": "openai/gpt-realtime-1.5"
   },
   {
    "context": 262144,

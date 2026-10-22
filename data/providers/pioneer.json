@@ -1,5 +1,5 @@
 {
- "generated_at": 1792574479,
+ "generated_at": 1792661019,
  "id": "pioneer",
  "models": [
   {
@@ -407,7 +407,7 @@
    "id": "nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B-BF16"
   },
   {
-   "context": 8192,
+   "context": 65536,
    "id": "nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-BF16"
   },
   {

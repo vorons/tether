@@ -1,5 +1,5 @@
 {
- "generated_at": 1792574479,
+ "generated_at": 1792661019,
  "id": "zenmux",
  "models": [
   {
@@ -73,6 +73,30 @@
   {
    "context": 128000,
    "id": "baidu/ernie-5.0-thinking-preview"
+  },
+  {
+   "context": 256000,
+   "id": "bytedance/doubao-seed-1.8"
+  },
+  {
+   "context": 256000,
+   "id": "bytedance/doubao-seed-2.0-code"
+  },
+  {
+   "context": 256000,
+   "id": "bytedance/doubao-seed-2.0-lite"
+  },
+  {
+   "context": 256000,
+   "id": "bytedance/doubao-seed-2.0-mini"
+  },
+  {
+   "context": 256000,
+   "id": "bytedance/doubao-seed-2.0-pro"
+  },
+  {
+   "context": 256000,
+   "id": "bytedance/doubao-seed-code"
   },
   {
    "context": 128000,
@@ -171,7 +195,7 @@
    "id": "minimax/minimax-m2.7-highspeed"
   },
   {
-   "context": 1048576,
+   "context": 1000000,
    "id": "minimax/minimax-m3"
   },
   {
@@ -217,6 +241,10 @@
   {
    "context": 1048576,
    "id": "moonshotai/kimi-k3-free"
+  },
+  {
+   "context": 400000,
+   "id": "openai/chat-latest"
   },
   {
    "context": 400000,

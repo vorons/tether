@@ -1,5 +1,5 @@
 {
- "generated_at": 1792574479,
+ "generated_at": 1792661019,
  "id": "llmgateway-providers",
  "models": [
   {
@@ -617,10 +617,6 @@
   {
    "context": 131072,
    "id": "deepinfra/granite-4.2-8b"
-  },
-  {
-   "context": 524288,
-   "id": "deepinfra/inkling"
   },
   {
    "context": 262144,
@@ -1359,6 +1355,10 @@
    "id": "reka-ai/glm-5.3"
   },
   {
+   "context": 262144,
+   "id": "reka-ai/glm-5.3-flash"
+  },
+  {
    "context": 16384,
    "id": "reka-ai/reka-edge-2603"
   },
@@ -1533,10 +1533,6 @@
   {
    "context": 1000000,
    "id": "tencent/minimax-m3"
-  },
-  {
-   "context": 163840,
-   "id": "together-ai/deepseek-v4-flash"
   },
   {
    "context": 1048576,

@@ -1,5 +1,5 @@
 {
- "generated_at": 1792574479,
+ "generated_at": 1792661019,
  "id": "nan",
  "models": [
   {
@@ -31,7 +31,7 @@
    "id": "qwen3.6"
   },
   {
-   "context": 262144,
+   "context": 1048576,
    "id": "qwen3.8-flash"
   }
  ],

@@ -1,5 +1,5 @@
 {
- "generated_at": 1792574479,
+ "generated_at": 1792661019,
  "id": "the-grid-ai",
  "models": [
   {
@@ -43,12 +43,16 @@
    "id": "gemini-pro-latest"
   },
   {
-   "context": 1000000,
+   "context": 1048576,
    "id": "glm-latest"
   },
   {
    "context": 1000000,
    "id": "gpt-sol-latest"
+  },
+  {
+   "context": 1048576,
+   "id": "kimi-latest"
   },
   {
    "context": 1000000,
