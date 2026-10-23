@@ -1,19 +1,7 @@
 {
- "generated_at": 1792661019,
+ "generated_at": 1792747220,
  "id": "xiaomi",
  "models": [
-  {
-   "context": 262144,
-   "id": "mimo-v2-flash"
-  },
-  {
-   "context": 262144,
-   "id": "mimo-v2-omni"
-  },
-  {
-   "context": 1048576,
-   "id": "mimo-v2-pro"
-  },
   {
    "context": 1048576,
    "id": "mimo-v2.5"

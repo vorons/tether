@@ -1,5 +1,5 @@
 {
- "generated_at": 1792661019,
+ "generated_at": 1792747220,
  "id": "edenai",
  "models": [
   {
@@ -547,6 +547,10 @@
    "id": "flexai/DeepSeek-V4.1-Flash"
   },
   {
+   "context": 1048576,
+   "id": "flexai/DeepSeek-V4.1-Flash-1017"
+  },
+  {
    "context": 131072,
    "id": "flexai/Muse-Glimmer-30B"
   },
@@ -755,7 +759,7 @@
    "id": "minimax/MiniMax-M3"
   },
   {
-   "context": 1000000,
+   "context": 1048576,
    "id": "minimax/MiniMax-M3.1-Flash"
   },
   {
@@ -869,6 +873,10 @@
   {
    "context": 1048000,
    "id": "nebius/deepseek-ai/DeepSeek-V4.1-Flash"
+  },
+  {
+   "context": 1048576,
+   "id": "nebius/deepseek-ai/DeepSeek-V4.1-Flash-1017"
   },
   {
    "context": 110000,

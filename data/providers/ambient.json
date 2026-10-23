@@ -1,5 +1,5 @@
 {
- "generated_at": 1792661019,
+ "generated_at": 1792747220,
  "id": "ambient",
  "models": [
   {
@@ -11,24 +11,8 @@
    "id": "ambient/small"
   },
   {
-   "context": 1048576,
-   "id": "deepseek/deepseek-v4-flash"
-  },
-  {
-   "context": 1048576,
-   "id": "deepseek/deepseek-v4-flash-0731"
-  },
-  {
    "context": 262144,
    "id": "minimax/minimax-m3"
-  },
-  {
-   "context": 262144,
-   "id": "moonshotai/kimi-k2.6"
-  },
-  {
-   "context": 262144,
-   "id": "moonshotai/kimi-k2.7-code"
   },
   {
    "context": 131072,
@@ -47,24 +31,12 @@
    "id": "qwen/qwen3.8-27b"
   },
   {
-   "context": 262144,
-   "id": "stepfun/step-3.7-flash"
-  },
-  {
    "context": 101072,
    "id": "unsloth/qwen3.8-27b-gguf"
   },
   {
-   "context": 1048576,
-   "id": "xiaomi/mimo-v2.5"
-  },
-  {
    "context": 202752,
    "id": "z-ai/glm-5.2"
-  },
-  {
-   "context": 202752,
-   "id": "zai-org/GLM-5.1-FP8"
   },
   {
    "context": 202752,

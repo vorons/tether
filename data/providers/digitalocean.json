@@ -1,34 +1,10 @@
 {
- "generated_at": 1792661019,
+ "generated_at": 1792747220,
  "id": "digitalocean",
  "models": [
   {
-   "context": 32768,
-   "id": "alibaba-qwen3-32b"
-  },
-  {
    "context": 256,
    "id": "all-mini-lm-l6-v2"
-  },
-  {
-   "context": 200000,
-   "id": "anthropic-claude-3-opus"
-  },
-  {
-   "context": 200000,
-   "id": "anthropic-claude-3.5-haiku"
-  },
-  {
-   "context": 200000,
-   "id": "anthropic-claude-3.5-sonnet"
-  },
-  {
-   "context": 200000,
-   "id": "anthropic-claude-3.7-sonnet"
-  },
-  {
-   "context": 200000,
-   "id": "anthropic-claude-4.1-opus"
   },
   {
    "context": 200000,
@@ -60,10 +36,6 @@
   },
   {
    "context": 200000,
-   "id": "anthropic-claude-opus-4"
-  },
-  {
-   "context": 200000,
    "id": "anthropic-claude-opus-4.5"
   },
   {
@@ -85,10 +57,6 @@
   {
    "context": 1000000,
    "id": "anthropic-claude-opus-5.5"
-  },
-  {
-   "context": 1000000,
-   "id": "anthropic-claude-sonnet-4"
   },
   {
    "context": 1000000,
@@ -115,14 +83,6 @@
    "id": "deepseek-4-flash"
   },
   {
-   "context": 32678,
-   "id": "deepseek-r1-distill-llama-70b"
-  },
-  {
-   "context": 163840,
-   "id": "deepseek-v3"
-  },
-  {
    "context": 1048576,
    "id": "deepseek-v4-flash-0731"
   },
@@ -137,6 +97,10 @@
   {
    "context": 1048576,
    "id": "deepseek-v4.1-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "deepseek-v4.1-flash-1017"
   },
   {
    "context": 512,
@@ -163,14 +127,6 @@
    "id": "gemma-4-31B-it"
   },
   {
-   "context": 64000,
-   "id": "glm-5"
-  },
-  {
-   "context": 163840,
-   "id": "glm-5.1"
-  },
-  {
    "context": 262144,
    "id": "glm-5.2"
   },
@@ -188,10 +144,6 @@
   },
   {
    "context": 262144,
-   "id": "kimi-k2.5"
-  },
-  {
-   "context": 262144,
    "id": "kimi-k2.6"
   },
   {
@@ -203,14 +155,6 @@
    "id": "llama-4-maverick"
   },
   {
-   "context": 131072,
-   "id": "llama3-8b-instruct"
-  },
-  {
-   "context": 128000,
-   "id": "llama3.3-70b-instruct"
-  },
-  {
    "context": 262144,
    "id": "mimo-v2.5-pro"
   },
@@ -220,27 +164,11 @@
   },
   {
    "context": 262144,
-   "id": "ministral-3-8b-instruct-2512"
-  },
-  {
-   "context": 262144,
    "id": "mistral-3-14B"
-  },
-  {
-   "context": 32768,
-   "id": "mistral-7b-instruct-v0.3"
-  },
-  {
-   "context": 128000,
-   "id": "mistral-nemo-instruct-2407"
   },
   {
    "context": 512,
    "id": "multi-qa-mpnet-base-dot-v1"
-  },
-  {
-   "context": 262144,
-   "id": "nemotron-3-nano-30b"
   },
   {
    "context": 65536,
@@ -257,10 +185,6 @@
   {
    "context": 128000,
    "id": "nemotron-nano-12b-v2-vl"
-  },
-  {
-   "context": 1000000,
-   "id": "nvidia-nemotron-3-super-120b"
   },
   {
    "context": 1047576,
@@ -285,10 +209,6 @@
   {
    "context": 400000,
    "id": "openai-gpt-5-nano"
-  },
-  {
-   "context": 400000,
-   "id": "openai-gpt-5.1-codex-max"
   },
   {
    "context": 400000,
@@ -381,14 +301,6 @@
   {
    "context": 200000,
    "id": "openai-o3-mini"
-  },
-  {
-   "context": 131072,
-   "id": "qwen-2.5-14b-instruct"
-  },
-  {
-   "context": 262144,
-   "id": "qwen3-coder-flash"
   },
   {
    "context": 8000,

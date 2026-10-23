@@ -1,5 +1,5 @@
 {
- "generated_at": 1792661019,
+ "generated_at": 1792747220,
  "id": "groq",
  "models": [
   {
@@ -13,14 +13,6 @@
   {
    "context": 4000,
    "id": "canopylabs/orpheus-v1-english"
-  },
-  {
-   "context": 131072,
-   "id": "groq/compound"
-  },
-  {
-   "context": 131072,
-   "id": "groq/compound-mini"
   },
   {
    "context": 131072,

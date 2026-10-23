@@ -1,5 +1,5 @@
 {
- "generated_at": 1792661019,
+ "generated_at": 1792747220,
  "id": "fireworks-ai",
  "models": [
   {
@@ -39,6 +39,10 @@
    "id": "accounts/fireworks/models/minimax-m3"
   },
   {
+   "context": 1000000,
+   "id": "accounts/fireworks/models/minimax-m3p1-flash"
+  },
+  {
    "context": 1048576,
    "id": "accounts/fireworks/models/muse-spark-open"
   },
@@ -63,8 +67,20 @@
    "id": "accounts/fireworks/routers/deepseek-flash-latest"
   },
   {
+   "context": 1000000,
+   "id": "accounts/fireworks/routers/deepseek-v4p1-flash-1017-spot"
+  },
+  {
+   "context": 1000000,
+   "id": "accounts/fireworks/routers/deepseek-v4p1-flash-spot"
+  },
+  {
    "context": 1048572,
    "id": "accounts/fireworks/routers/glm-5p3-fast"
+  },
+  {
+   "context": 1048573,
+   "id": "accounts/fireworks/routers/glm-5p3-spot"
   },
   {
    "context": 1048572,
@@ -85,6 +101,10 @@
   {
    "context": 1048576,
    "id": "accounts/fireworks/routers/kimi-k3-fast"
+  },
+  {
+   "context": 1048576,
+   "id": "accounts/fireworks/routers/kimi-k3-spot"
   },
   {
    "context": 1048576,

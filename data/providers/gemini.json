@@ -1,5 +1,5 @@
 {
- "generated_at": 1792661019,
+ "generated_at": 1792747220,
  "id": "gemini",
  "models": [
   {
@@ -153,18 +153,6 @@
   {
    "context": 1048576,
    "id": "lyria-3-pro-preview"
-  },
-  {
-   "context": 480,
-   "id": "veo-3.1-fast-generate-preview"
-  },
-  {
-   "context": 480,
-   "id": "veo-3.1-generate-preview"
-  },
-  {
-   "context": 480,
-   "id": "veo-3.1-lite-generate-preview"
   }
  ],
  "schema": 1

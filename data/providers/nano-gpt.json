@@ -1,5 +1,5 @@
 {
- "generated_at": 1792661019,
+ "generated_at": 1792747220,
  "id": "nano-gpt",
  "models": [
   {
@@ -345,6 +345,10 @@
   {
    "context": 1000000,
    "id": "abliteration-ai/abliterated-model-large"
+  },
+  {
+   "context": 1048576,
+   "id": "abliteration-ai/abliterated-model-large-flash"
   },
   {
    "context": 1000000,
@@ -1087,7 +1091,7 @@
    "id": "heabsy/cyberheabsy"
   },
   {
-   "context": 524288,
+   "context": 1048576,
    "id": "heabsy/qwen3.8-27b-uncensored-fast"
   },
   {
@@ -2095,11 +2099,11 @@
    "id": "qwen/qwen3.8-27b-synthia"
   },
   {
-   "context": 1048576,
+   "context": 1010000,
    "id": "qwen/qwen3.8-27b-uncensored"
   },
   {
-   "context": 1048576,
+   "context": 1010000,
    "id": "qwen/qwen3.8-27b-uncensored:thinking"
   },
   {

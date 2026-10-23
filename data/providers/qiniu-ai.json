@@ -1,5 +1,5 @@
 {
- "generated_at": 1792661019,
+ "generated_at": 1792747220,
  "id": "qiniu-ai",
  "models": [
   {
@@ -53,10 +53,6 @@
   {
    "context": 128000,
    "id": "deepseek-v3"
-  },
-  {
-   "context": 128000,
-   "id": "deepseek-v3-0324"
   },
   {
    "context": 128000,
@@ -172,10 +168,6 @@
   },
   {
    "context": 128000,
-   "id": "gpt-oss-120b"
-  },
-  {
-   "context": 128000,
    "id": "gpt-oss-20b"
   },
   {
@@ -249,10 +241,6 @@
   {
    "context": 128000,
    "id": "qwen2.5-vl-72b-instruct"
-  },
-  {
-   "context": 128000,
-   "id": "qwen2.5-vl-7b-instruct"
   },
   {
    "context": 128000,
@@ -345,10 +333,6 @@
   {
    "context": 256000,
    "id": "x-ai/grok-code-fast-1"
-  },
-  {
-   "context": 256000,
-   "id": "xiaomi/mimo-v2-flash"
   },
   {
    "context": 12800,

@@ -1,5 +1,5 @@
 {
- "generated_at": 1792661019,
+ "generated_at": 1792747220,
  "id": "poe",
  "models": [
   {
@@ -129,10 +129,6 @@
   {
    "context": 1048576,
    "id": "google/gemini-3-flash"
-  },
-  {
-   "context": 1048576,
-   "id": "google/gemini-3-pro"
   },
   {
    "context": 1048576,
@@ -309,14 +305,6 @@
   {
    "context": 4524,
    "id": "openai/gpt-3.5-turbo-raw"
-  },
-  {
-   "context": 8192,
-   "id": "openai/gpt-4-classic"
-  },
-  {
-   "context": 8192,
-   "id": "openai/gpt-4-classic-0314"
   },
   {
    "context": 128000,

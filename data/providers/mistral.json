@@ -1,5 +1,5 @@
 {
- "generated_at": 1792661019,
+ "generated_at": 1792747220,
  "id": "mistral",
  "models": [
   {
@@ -19,20 +19,8 @@
    "id": "devstral-latest"
   },
   {
-   "context": 128000,
-   "id": "devstral-medium-2507"
-  },
-  {
    "context": 262144,
    "id": "devstral-medium-latest"
-  },
-  {
-   "context": 128000,
-   "id": "devstral-small-2505"
-  },
-  {
-   "context": 128000,
-   "id": "devstral-small-2507"
   },
   {
    "context": 1048576,
@@ -75,10 +63,6 @@
    "id": "mistral-embed"
   },
   {
-   "context": 131072,
-   "id": "mistral-large-2411"
-  },
-  {
    "context": 262144,
    "id": "mistral-large-2512"
   },
@@ -108,10 +92,6 @@
   },
   {
    "context": 128000,
-   "id": "mistral-nemo"
-  },
-  {
-   "context": 128000,
    "id": "mistral-small-2506"
   },
   {
@@ -129,10 +109,6 @@
   {
    "context": 128000,
    "id": "pixtral-12b"
-  },
-  {
-   "context": 128000,
-   "id": "pixtral-large-latest"
   },
   {
    "context": 0,
@@ -157,6 +133,10 @@
   {
    "context": 1048576,
    "id": "zai-glm-5-3"
+  },
+  {
+   "context": 1048576,
+   "id": "zai-glm-5-3-flash"
   }
  ],
  "schema": 1

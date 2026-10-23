@@ -1,5 +1,5 @@
 {
- "generated_at": 1792661019,
+ "generated_at": 1792747220,
  "id": "opper",
  "models": [
   {
@@ -55,10 +55,6 @@
    "id": "deepseek-v4-pro"
   },
   {
-   "context": 256000,
-   "id": "devstral-2512"
-  },
-  {
    "context": 1048576,
    "id": "gemini-3-flash-preview"
   },
@@ -97,10 +93,6 @@
   {
    "context": 1000000,
    "id": "glm-5.3-flash"
-  },
-  {
-   "context": 128000,
-   "id": "gpt-5.3-chat-latest"
   },
   {
    "context": 400000,

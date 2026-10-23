@@ -1,5 +1,5 @@
 {
- "generated_at": 1792661019,
+ "generated_at": 1792747220,
  "id": "github-copilot",
  "models": [
   {
@@ -137,10 +137,6 @@
   {
    "context": 1048576,
    "id": "kimi-k3"
-  },
-  {
-   "context": 256000,
-   "id": "mai-code-1-flash-picker"
   },
   {
    "context": 256000,

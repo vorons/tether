@@ -1,5 +1,5 @@
 {
- "generated_at": 1792661019,
+ "generated_at": 1792747220,
  "id": "cloudflare-ai-gateway",
  "models": [
   {
@@ -153,6 +153,10 @@
   {
    "context": 1048576,
    "id": "meta/muse-wonder-1.0"
+  },
+  {
+   "context": 1000000,
+   "id": "minimax/m3.1-flash"
   },
   {
    "context": 1048576,

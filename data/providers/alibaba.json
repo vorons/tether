@@ -1,5 +1,5 @@
 {
- "generated_at": 1792661019,
+ "generated_at": 1792747220,
  "id": "alibaba",
  "models": [
   {
@@ -67,32 +67,8 @@
    "id": "qwen-vl-plus"
   },
   {
-   "context": 131072,
-   "id": "qwen2-5-14b-instruct"
-  },
-  {
-   "context": 131072,
-   "id": "qwen2-5-32b-instruct"
-  },
-  {
-   "context": 131072,
-   "id": "qwen2-5-72b-instruct"
-  },
-  {
-   "context": 131072,
-   "id": "qwen2-5-7b-instruct"
-  },
-  {
    "context": 32768,
    "id": "qwen2-5-omni-7b"
-  },
-  {
-   "context": 131072,
-   "id": "qwen2-5-vl-72b-instruct"
-  },
-  {
-   "context": 131072,
-   "id": "qwen2-5-vl-7b-instruct"
   },
   {
    "context": 131072,

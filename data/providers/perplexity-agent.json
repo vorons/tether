@@ -1,5 +1,5 @@
 {
- "generated_at": 1792661019,
+ "generated_at": 1792747220,
  "id": "perplexity-agent",
  "models": [
   {
@@ -57,14 +57,6 @@
   {
    "context": 1000000,
    "id": "deepseek/deepseek-v4-flash-0731"
-  },
-  {
-   "context": 1048576,
-   "id": "google/gemini-2.5-flash"
-  },
-  {
-   "context": 1048576,
-   "id": "google/gemini-2.5-pro"
   },
   {
    "context": 1048576,

@@ -1,5 +1,5 @@
 {
- "generated_at": 1792661019,
+ "generated_at": 1792747220,
  "id": "azure-cognitive-services",
  "models": [
   {
@@ -21,10 +21,6 @@
   {
    "context": 1000000,
    "id": "claude-mythos-5"
-  },
-  {
-   "context": 200000,
-   "id": "claude-opus-4-1"
   },
   {
    "context": 200000,
@@ -89,10 +85,6 @@
   {
    "context": 512,
    "id": "cohere-embed-v3-multilingual"
-  },
-  {
-   "context": 163840,
-   "id": "deepseek-r1"
   },
   {
    "context": 128000,

@@ -1,5 +1,5 @@
 {
- "generated_at": 1792661019,
+ "generated_at": 1792747220,
  "id": "llmgateway",
  "models": [
   {
@@ -255,28 +255,12 @@
    "id": "glm-5v-turbo"
   },
   {
-   "context": 16385,
-   "id": "gpt-3.5-turbo"
-  },
-  {
-   "context": 8192,
-   "id": "gpt-4"
-  },
-  {
-   "context": 128000,
-   "id": "gpt-4-turbo"
-  },
-  {
    "context": 1000000,
    "id": "gpt-4.1"
   },
   {
    "context": 1000000,
    "id": "gpt-4.1-mini"
-  },
-  {
-   "context": 1000000,
-   "id": "gpt-4.1-nano"
   },
   {
    "context": 128000,
@@ -536,14 +520,6 @@
   },
   {
    "context": 1048576,
-   "id": "mimo-v2.5"
-  },
-  {
-   "context": 1048576,
-   "id": "mimo-v2.5-pro"
-  },
-  {
-   "context": 1048576,
    "id": "mimo-v2.6-flash"
   },
   {
@@ -660,19 +636,7 @@
   },
   {
    "context": 200000,
-   "id": "o1"
-  },
-  {
-   "context": 200000,
    "id": "o3"
-  },
-  {
-   "context": 200000,
-   "id": "o3-mini"
-  },
-  {
-   "context": 200000,
-   "id": "o4-mini"
   },
   {
    "context": 1000000,

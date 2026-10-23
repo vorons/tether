@@ -1,5 +1,5 @@
 {
- "generated_at": 1792661019,
+ "generated_at": 1792747220,
  "id": "siliconflow-cn",
  "models": [
   {
@@ -9,10 +9,6 @@
   {
    "context": 16384,
    "id": "PaddlePaddle/PaddleOCR-VL-1.5"
-  },
-  {
-   "context": 192000,
-   "id": "Pro/MiniMaxAI/MiniMax-M2.5"
   },
   {
    "context": 164000,
@@ -60,10 +56,6 @@
   },
   {
    "context": 262000,
-   "id": "Qwen/Qwen3-235B-A22B-Thinking-2507"
-  },
-  {
-   "context": 262000,
    "id": "Qwen/Qwen3-30B-A3B-Instruct-2507"
   },
   {
@@ -77,10 +69,6 @@
   {
    "context": 262000,
    "id": "Qwen/Qwen3-Coder-30B-A3B-Instruct"
-  },
-  {
-   "context": 262000,
-   "id": "Qwen/Qwen3-Coder-480B-A35B-Instruct"
   },
   {
    "context": 262000,
@@ -113,10 +101,6 @@
   {
    "context": 262144,
    "id": "Qwen/Qwen3.5-35B-A3B"
-  },
-  {
-   "context": 262144,
-   "id": "Qwen/Qwen3.5-397B-A17B"
   },
   {
    "context": 262144,

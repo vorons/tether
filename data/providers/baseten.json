@@ -1,22 +1,10 @@
 {
- "generated_at": 1792661019,
+ "generated_at": 1792747220,
  "id": "baseten",
  "models": [
   {
-   "context": 204000,
-   "id": "MiniMaxAI/MiniMax-M2.5"
-  },
-  {
-   "context": 164000,
-   "id": "deepseek-ai/DeepSeek-V3.1"
-  },
-  {
    "context": 1048576,
    "id": "deepseek-ai/DeepSeek-V4-Flash-0731"
-  },
-  {
-   "context": 1048576,
-   "id": "deepseek-ai/DeepSeek-V4-Pro"
   },
   {
    "context": 1048576,
@@ -39,18 +27,6 @@
    "id": "deepseek-ai/DeepSeek-V4.1-Flash-Fast"
   },
   {
-   "context": 262000,
-   "id": "moonshotai/Kimi-K2.5"
-  },
-  {
-   "context": 262000,
-   "id": "moonshotai/Kimi-K2.6"
-  },
-  {
-   "context": 262000,
-   "id": "moonshotai/Kimi-K2.7-Code"
-  },
-  {
    "context": 1048576,
    "id": "moonshotai/Kimi-K3"
   },
@@ -59,32 +35,8 @@
    "id": "nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B"
   },
   {
-   "context": 202800,
-   "id": "nvidia/Nemotron-120B-A12B"
-  },
-  {
    "context": 128072,
    "id": "openai/gpt-oss-120b"
-  },
-  {
-   "context": 1048576,
-   "id": "thinkingmachines/inkling"
-  },
-  {
-   "context": 1048576,
-   "id": "thinkingmachines/inkling-small"
-  },
-  {
-   "context": 200000,
-   "id": "zai-org/GLM-4.7"
-  },
-  {
-   "context": 202800,
-   "id": "zai-org/GLM-5"
-  },
-  {
-   "context": 202800,
-   "id": "zai-org/GLM-5.1"
   },
   {
    "context": 1048576,

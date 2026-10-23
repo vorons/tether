@@ -1,5 +1,5 @@
 {
- "generated_at": 1792661019,
+ "generated_at": 1792747220,
  "id": "nearai",
  "models": [
   {
@@ -221,6 +221,10 @@
   {
    "context": 500000,
    "id": "x-ai/grok-4.7"
+  },
+  {
+   "context": 1000000,
+   "id": "z-ai/glm-5.3"
   },
   {
    "context": 1000000,

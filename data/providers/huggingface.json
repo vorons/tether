@@ -1,5 +1,5 @@
 {
- "generated_at": 1792661019,
+ "generated_at": 1792747220,
  "id": "huggingface",
  "models": [
   {
@@ -79,10 +79,6 @@
    "id": "Qwen/Qwen3-Next-80B-A3B-Instruct"
   },
   {
-   "context": 262144,
-   "id": "Qwen/Qwen3-Next-80B-A3B-Thinking"
-  },
-  {
    "context": 131072,
    "id": "Qwen/Qwen3-VL-235B-A22B-Instruct"
   },
@@ -129,10 +125,6 @@
   {
    "context": 262144,
    "id": "Qwen/Qwen3.8-27B"
-  },
-  {
-   "context": 262144,
-   "id": "XiaomiMiMo/MiMo-V2-Flash"
   },
   {
    "context": 262144,
@@ -289,10 +281,6 @@
   {
    "context": 65536,
    "id": "zai-org/AutoGLM-Phone-9B-Multilingual"
-  },
-  {
-   "context": 131072,
-   "id": "zai-org/GLM-4.5"
   },
   {
    "context": 131072,

@@ -1,5 +1,5 @@
 {
- "generated_at": 1792661019,
+ "generated_at": 1792747220,
  "id": "ofox",
  "models": [
   {
@@ -176,10 +176,6 @@
   },
   {
    "context": 1000000,
-   "id": "deepseek/deepseek-v4-flash-vision-exp"
-  },
-  {
-   "context": 1000000,
    "id": "deepseek/deepseek-v4-pro"
   },
   {
@@ -281,10 +277,6 @@
   {
    "context": 1048576,
    "id": "minimax/minimax-m3"
-  },
-  {
-   "context": 262144,
-   "id": "moonshotai/kimi-k2.5"
   },
   {
    "context": 262144,
@@ -501,22 +493,6 @@
   {
    "context": 1000000,
    "id": "qwen/qwen3.8-max-0902"
-  },
-  {
-   "context": 256000,
-   "id": "volcengine/doubao-seed-1-6"
-  },
-  {
-   "context": 256000,
-   "id": "volcengine/doubao-seed-1-6-flash"
-  },
-  {
-   "context": 256000,
-   "id": "volcengine/doubao-seed-1-6-vision"
-  },
-  {
-   "context": 256000,
-   "id": "volcengine/doubao-seed-1-8"
   },
   {
    "context": 256000,

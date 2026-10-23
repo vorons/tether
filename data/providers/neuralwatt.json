@@ -1,5 +1,5 @@
 {
- "generated_at": 1792661019,
+ "generated_at": 1792747220,
  "id": "neuralwatt",
  "models": [
   {
@@ -16,10 +16,6 @@
   },
   {
    "context": 1048560,
-   "id": "deepseek-v4-pro"
-  },
-  {
-   "context": 1048560,
    "id": "deepseek-v4.1-flash"
   },
   {
@@ -29,34 +25,6 @@
   {
    "context": 262128,
    "id": "gemma-4-31b"
-  },
-  {
-   "context": 1048560,
-   "id": "glm-5.2"
-  },
-  {
-   "context": 1048560,
-   "id": "glm-5.2-fast"
-  },
-  {
-   "context": 1048560,
-   "id": "glm-5.2-flex"
-  },
-  {
-   "context": 199984,
-   "id": "glm-5.2-short"
-  },
-  {
-   "context": 199984,
-   "id": "glm-5.2-short-fast"
-  },
-  {
-   "context": 199984,
-   "id": "glm-5.2-short-fast-flex"
-  },
-  {
-   "context": 199984,
-   "id": "glm-5.2-short-flex"
   },
   {
    "context": 1048560,

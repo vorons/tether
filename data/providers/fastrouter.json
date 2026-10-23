@@ -1,5 +1,5 @@
 {
- "generated_at": 1792661019,
+ "generated_at": 1792747220,
  "id": "fastrouter",
  "models": [
   {
@@ -11,20 +11,12 @@
    "id": "anthropic/claude-opus-4.8"
   },
   {
-   "context": 200000,
-   "id": "anthropic/claude-sonnet-4"
-  },
-  {
    "context": 1000000,
    "id": "anthropic/claude-sonnet-4.6"
   },
   {
    "context": 4096,
    "id": "bytedance/seedance-2"
-  },
-  {
-   "context": 131072,
-   "id": "deepseek-ai/deepseek-r1-distill-llama-70b"
   },
   {
    "context": 1000000,
@@ -87,10 +79,6 @@
    "id": "minimax/minimax-m2.7-highspeed"
   },
   {
-   "context": 131072,
-   "id": "moonshotai/kimi-k2"
-  },
-  {
    "context": 262144,
    "id": "moonshotai/kimi-k2.6"
   },
@@ -143,16 +131,8 @@
    "id": "openai/gpt-oss-20b"
   },
   {
-   "context": 262144,
-   "id": "qwen/qwen3-coder"
-  },
-  {
    "context": 131072,
    "id": "sarvam/sarvam-105b"
-  },
-  {
-   "context": 128000,
-   "id": "sarvam/sarvam-30b"
   },
   {
    "context": 400000,

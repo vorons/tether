@@ -1,5 +1,5 @@
 {
- "generated_at": 1792661019,
+ "generated_at": 1792747220,
  "id": "nvidia",
  "models": [
   {
@@ -57,6 +57,10 @@
   {
    "context": 131072,
    "id": "meta/muse-glimmer-30b"
+  },
+  {
+   "context": 262144,
+   "id": "minimaxai/minimax-m3.1-flash"
   },
   {
    "context": 32768,

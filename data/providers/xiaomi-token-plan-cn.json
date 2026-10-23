@@ -1,15 +1,7 @@
 {
- "generated_at": 1792661019,
+ "generated_at": 1792747220,
  "id": "xiaomi-token-plan-cn",
  "models": [
-  {
-   "context": 1048576,
-   "id": "mimo-v2-pro"
-  },
-  {
-   "context": 8192,
-   "id": "mimo-v2-tts"
-  },
   {
    "context": 1048576,
    "id": "mimo-v2.5"

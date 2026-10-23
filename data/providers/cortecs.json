@@ -1,5 +1,5 @@
 {
- "generated_at": 1792661019,
+ "generated_at": 1792747220,
  "id": "cortecs",
  "models": [
   {
@@ -251,6 +251,10 @@
    "id": "kimi-k3"
   },
   {
+   "context": 262144,
+   "id": "kolibri-1"
+  },
+  {
    "context": 131000,
    "id": "llama-3.3-70b-instruct"
   },
@@ -307,7 +311,7 @@
    "id": "mistral-medium-3.5"
   },
   {
-   "context": 128000,
+   "context": 118000,
    "id": "mistral-nemo-instruct-2407"
   },
   {
