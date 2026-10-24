@@ -1,5 +1,5 @@
 {
- "generated_at": 1792747220,
+ "generated_at": 1792831928,
  "id": "edenai",
  "models": [
   {
@@ -169,6 +169,46 @@
   {
    "context": 1000000,
    "id": "anthropic/claude-sonnet-latest"
+  },
+  {
+   "context": 262000,
+   "id": "arkanecloud/Qwen/Qwen3-235B-A22B-Instruct-2507"
+  },
+  {
+   "context": 1048576,
+   "id": "arkanecloud/deepseek-ai/DeepSeek-V4.1-Flash"
+  },
+  {
+   "context": 131072,
+   "id": "arkanecloud/meta-llama/Llama-3.1-70B-Instruct"
+  },
+  {
+   "context": 131072,
+   "id": "arkanecloud/meta-llama/Llama-3.1-8B-Instruct"
+  },
+  {
+   "context": 128000,
+   "id": "arkanecloud/meta-llama/Llama-3.3-70B-Instruct"
+  },
+  {
+   "context": 32768,
+   "id": "arkanecloud/ministral-14b"
+  },
+  {
+   "context": 256000,
+   "id": "arkanecloud/nvidia/nemotron-3-super-120b-a12b"
+  },
+  {
+   "context": 512288,
+   "id": "arkanecloud/nvidia/nemotron-3-ultra-550b-a55b"
+  },
+  {
+   "context": 131072,
+   "id": "arkanecloud/openai/gpt-oss-120b"
+  },
+  {
+   "context": 131072,
+   "id": "arkanecloud/openai/gpt-oss-20b"
   },
   {
    "context": 272000,
@@ -853,6 +893,10 @@
   {
    "context": 1048576,
    "id": "moonshot/kimi-k3"
+  },
+  {
+   "context": 1048576,
+   "id": "moonshot/kimi-k3.1-pro"
   },
   {
    "context": 262144,

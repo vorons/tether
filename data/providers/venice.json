@@ -1,7 +1,11 @@
 {
- "generated_at": 1792747220,
+ "generated_at": 1792831928,
  "id": "venice",
  "models": [
+  {
+   "context": 1000000,
+   "id": "abliteration-abliterated-model-large-flash"
+  },
   {
    "context": 1000000,
    "id": "abliteration-abliterated-model-large-v2"
@@ -97,6 +101,10 @@
   {
    "context": 1000000,
    "id": "deepseek-v4-1-flash-1017"
+  },
+  {
+   "context": 1000000,
+   "id": "deepseek-v4-1-flash-uncensored"
   },
   {
    "context": 1000000,
@@ -221,6 +229,14 @@
   {
    "context": 1000000,
    "id": "kimi-k3"
+  },
+  {
+   "context": 1000000,
+   "id": "kimi-k3-1-pro"
+  },
+  {
+   "context": 1000000,
+   "id": "kimi-k3-1-pro-highspeed"
   },
   {
    "context": 1000000,

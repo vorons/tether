@@ -1,5 +1,5 @@
 {
- "generated_at": 1792747220,
+ "generated_at": 1792831928,
  "providers": {
   "302ai": {
    "api_key_env": [
@@ -3761,7 +3761,7 @@
      "id": "ambient/small"
     },
     {
-     "context": 262144,
+     "context": 131072,
      "id": "minimax/minimax-m3"
     },
     {
@@ -5474,7 +5474,7 @@
     "CLINE_API_KEY"
    ],
    "base_url": "https://api.cline.bot/api/v1",
-   "model": "cline-pass/deepseek-v4.1-flash",
+   "model": "cline-pass/mimo-v2.6-pro",
    "models": [
     {
      "context": 1000000,
@@ -7857,6 +7857,10 @@
      "id": "minimax-m2.5"
     },
     {
+     "context": 1048576,
+     "id": "minimax-m3.1-flash"
+    },
+    {
      "context": 262144,
      "id": "mistral-3-14B"
     },
@@ -8128,7 +8132,7 @@
     "EDENAI_API_KEY"
    ],
    "base_url": "https://api.edenai.run/v3",
-   "model": "minimax/MiniMax-M3.1-Flash",
+   "model": "moonshot/kimi-k3.1-pro",
    "models": [
     {
      "context": 300000,
@@ -8297,6 +8301,46 @@
     {
      "context": 1000000,
      "id": "anthropic/claude-sonnet-latest"
+    },
+    {
+     "context": 262000,
+     "id": "arkanecloud/Qwen/Qwen3-235B-A22B-Instruct-2507"
+    },
+    {
+     "context": 1048576,
+     "id": "arkanecloud/deepseek-ai/DeepSeek-V4.1-Flash"
+    },
+    {
+     "context": 131072,
+     "id": "arkanecloud/meta-llama/Llama-3.1-70B-Instruct"
+    },
+    {
+     "context": 131072,
+     "id": "arkanecloud/meta-llama/Llama-3.1-8B-Instruct"
+    },
+    {
+     "context": 128000,
+     "id": "arkanecloud/meta-llama/Llama-3.3-70B-Instruct"
+    },
+    {
+     "context": 32768,
+     "id": "arkanecloud/ministral-14b"
+    },
+    {
+     "context": 256000,
+     "id": "arkanecloud/nvidia/nemotron-3-super-120b-a12b"
+    },
+    {
+     "context": 512288,
+     "id": "arkanecloud/nvidia/nemotron-3-ultra-550b-a55b"
+    },
+    {
+     "context": 131072,
+     "id": "arkanecloud/openai/gpt-oss-120b"
+    },
+    {
+     "context": 131072,
+     "id": "arkanecloud/openai/gpt-oss-20b"
     },
     {
      "context": 272000,
@@ -8981,6 +9025,10 @@
     {
      "context": 1048576,
      "id": "moonshot/kimi-k3"
+    },
+    {
+     "context": 1048576,
+     "id": "moonshot/kimi-k3.1-pro"
     },
     {
      "context": 262144,
@@ -10434,10 +10482,6 @@
    "base_url": "https://api.friendli.ai/serverless/v1",
    "model": "zai-org/GLM-5.3-Flash",
    "models": [
-    {
-     "context": 163840,
-     "id": "deepseek-ai/DeepSeek-V3.2"
-    },
     {
      "context": 262144,
      "id": "google/gemma-4-31B-it"
@@ -13809,7 +13853,7 @@
     "KILO_API_KEY"
    ],
    "base_url": "https://api.kilo.ai/api/gateway",
-   "model": "recursive/flint-v1.0:free",
+   "model": "moonshotai/kimi-k3.1-pro",
    "models": [
     {
      "context": 131072,
@@ -14466,6 +14510,10 @@
     {
      "context": 1048576,
      "id": "moonshotai/kimi-k3"
+    },
+    {
+     "context": 1048576,
+     "id": "moonshotai/kimi-k3.1-pro"
     },
     {
      "context": 262144,
@@ -15308,7 +15356,7 @@
      "id": "z-ai/glm-5.3"
     },
     {
-     "context": 1048576,
+     "context": 1048575,
      "id": "z-ai/glm-5.3-flash"
     },
     {
@@ -15407,7 +15455,7 @@
     "KIMI_API_KEY"
    ],
    "base_url": "https://api.kimi.com/coding/v1",
-   "model": "kimi-for-coding",
+   "model": "k3.1-pro-highspeed",
    "models": [
     {
      "context": 1048576,
@@ -15416,6 +15464,14 @@
     {
      "context": 262144,
      "id": "k3-256k"
+    },
+    {
+     "context": 1048576,
+     "id": "k3.1-pro"
+    },
+    {
+     "context": 1048576,
+     "id": "k3.1-pro-highspeed"
     },
     {
      "context": 1048576,
@@ -15433,7 +15489,7 @@
     "KIMI_API_KEY"
    ],
    "base_url": "https://api.kimi.ai/coding/v1",
-   "model": "kimi-for-coding",
+   "model": "k3.1-pro-highspeed",
    "models": [
     {
      "context": 1048576,
@@ -15442,6 +15498,14 @@
     {
      "context": 262144,
      "id": "k3-256k"
+    },
+    {
+     "context": 1048576,
+     "id": "k3.1-pro"
+    },
+    {
+     "context": 1048576,
+     "id": "k3.1-pro-highspeed"
     },
     {
      "context": 1048576,
@@ -15567,7 +15631,7 @@
     "LLMGATEWAY_API_KEY"
    ],
    "base_url": "https://api.llmgateway.io/v1",
-   "model": "minimax-m3.1-flash",
+   "model": "kimi-k3.1-pro-highspeed",
    "models": [
     {
      "context": 262000,
@@ -16050,6 +16114,14 @@
      "id": "kimi-k3-fast"
     },
     {
+     "context": 1048576,
+     "id": "kimi-k3.1-pro"
+    },
+    {
+     "context": 1048576,
+     "id": "kimi-k3.1-pro-highspeed"
+    },
+    {
      "context": 262144,
      "id": "ling-3.0-flash"
     },
@@ -16397,7 +16469,7 @@
     "LLMGATEWAY_API_KEY"
    ],
    "base_url": "https://api.llmgateway.io/v1",
-   "model": "minimax/minimax-m3.1-flash",
+   "model": "moonshot/kimi-k3.1-pro-highspeed",
    "models": [
     {
      "context": 1000000,
@@ -17057,10 +17129,6 @@
     },
     {
      "context": 1050000,
-     "id": "deepseek/deepseek-v4.1-flash"
-    },
-    {
-     "context": 1050000,
      "id": "deepseek/deepseek-v4.1-flash-1017"
     },
     {
@@ -17102,6 +17170,10 @@
     {
      "context": 1048576,
      "id": "entrim/deepseek-v4.1-flash"
+    },
+    {
+     "context": 1048576,
+     "id": "entrim/deepseek-v4.1-flash-1017"
     },
     {
      "context": 1048576,
@@ -17378,6 +17450,14 @@
     {
      "context": 1048576,
      "id": "moonshot/kimi-k3"
+    },
+    {
+     "context": 1048576,
+     "id": "moonshot/kimi-k3.1-pro"
+    },
+    {
+     "context": 1048576,
+     "id": "moonshot/kimi-k3.1-pro-highspeed"
     },
     {
      "context": 163840,
@@ -17746,6 +17826,10 @@
     {
      "context": 1048576,
      "id": "runware/deepseek-v4.1-flash"
+    },
+    {
+     "context": 1048576,
+     "id": "runware/deepseek-v4.1-flash-1017"
     },
     {
      "context": 262144,
@@ -19262,6 +19346,14 @@
     {
      "context": 1048576,
      "id": "kimi-k3"
+    },
+    {
+     "context": 1048576,
+     "id": "kimi-k3.1-pro"
+    },
+    {
+     "context": 1048576,
+     "id": "kimi-k3.1-pro-highspeed"
     }
    ],
    "wire": "openai"
@@ -19271,7 +19363,7 @@
     "MOONSHOT_API_KEY"
    ],
    "base_url": "https://api.moonshot.cn/v1",
-   "model": "kimi-k3",
+   "model": "kimi-k3.1-pro-highspeed",
    "models": [
     {
      "context": 262144,
@@ -19288,6 +19380,14 @@
     {
      "context": 1048576,
      "id": "kimi-k3"
+    },
+    {
+     "context": 1048576,
+     "id": "kimi-k3.1-pro"
+    },
+    {
+     "context": 1048576,
+     "id": "kimi-k3.1-pro-highspeed"
     }
    ],
    "wire": "openai"
@@ -19361,7 +19461,7 @@
     "NANO_GPT_API_KEY"
    ],
    "base_url": "https://nano-gpt.com/api/v1",
-   "model": "abliteration-ai/abliterated-model-large-flash",
+   "model": "xingchen-agi/xing4.0-29b-a4b",
    "models": [
     {
      "context": 32768,
@@ -19594,10 +19694,6 @@
     {
      "context": 128000,
      "id": "TEE/llama3-3-70b"
-    },
-    {
-     "context": 131072,
-     "id": "TEE/muse-glimmer-30b"
     },
     {
      "context": 262144,
@@ -20102,6 +20198,14 @@
     {
      "context": 1048576,
      "id": "deepseek/deepseek-v4.1-flash-1017:thinking"
+    },
+    {
+     "context": 1048576,
+     "id": "deepseek/deepseek-v4.1-flash-uncensored"
+    },
+    {
+     "context": 1048576,
+     "id": "deepseek/deepseek-v4.1-flash-uncensored:thinking"
     },
     {
      "context": 1000000,
@@ -20668,7 +20772,7 @@
      "id": "minimax/minimax-m3"
     },
     {
-     "context": 1000000,
+     "context": 1048576,
      "id": "minimax/minimax-m3.1-flash"
     },
     {
@@ -20822,6 +20926,14 @@
     {
      "context": 1048576,
      "id": "moonshotai/kimi-k3"
+    },
+    {
+     "context": 1048576,
+     "id": "moonshotai/kimi-k3.1-pro"
+    },
+    {
+     "context": 1048576,
+     "id": "moonshotai/kimi-k3.1-pro-highspeed"
     },
     {
      "context": 1048576,
@@ -21186,6 +21298,10 @@
     {
      "context": 262144,
      "id": "prism-ml/ternary-bonsai-2-27b"
+    },
+    {
+     "context": 262144,
+     "id": "prism-ml/ternary-bonsai-2-9b"
     },
     {
      "context": 128000,
@@ -21706,6 +21822,10 @@
     {
      "context": 1048576,
      "id": "xiaomi/mimo-v2.6-pro-ultraspeed"
+    },
+    {
+     "context": 262144,
+     "id": "xingchen-agi/xing4.0-29b-a4b"
     },
     {
      "context": 128000,
@@ -24753,6 +24873,10 @@
      "id": "kimi-k3"
     },
     {
+     "context": 1048576,
+     "id": "kimi-k3.1-pro"
+    },
+    {
      "context": 1000000,
      "id": "longcat-2.0"
     },
@@ -25499,6 +25623,10 @@
     {
      "context": 1048576,
      "id": "moonshotai/kimi-k3"
+    },
+    {
+     "context": 1048576,
+     "id": "moonshotai/kimi-k3.1-pro"
     },
     {
      "context": 262144,
@@ -28152,7 +28280,7 @@
     "PRIME_API_KEY"
    ],
    "base_url": "https://api.pinference.ai/api/v1",
-   "model": "deepseek/deepseek-v4.1-flash-1017",
+   "model": "moonshotai/kimi-k3.1-pro",
    "models": [
     {
      "context": 1000000,
@@ -28277,6 +28405,10 @@
     {
      "context": 1048576,
      "id": "moonshotai/kimi-k3"
+    },
+    {
+     "context": 1048576,
+     "id": "moonshotai/kimi-k3.1-pro"
     },
     {
      "context": 1047576,
@@ -29028,7 +29160,7 @@
     "REQUESTY_API_KEY"
    ],
    "base_url": "https://router.requesty.ai/v1",
-   "model": "minimax-m3.1-flash",
+   "model": "kimi-k3.1-pro-highspeed",
    "models": [
     {
      "context": 1000000,
@@ -29509,6 +29641,14 @@
     {
      "context": 1048576,
      "id": "kimi-k3"
+    },
+    {
+     "context": 1048576,
+     "id": "kimi-k3.1-pro"
+    },
+    {
+     "context": 1048576,
+     "id": "kimi-k3.1-pro-highspeed"
     },
     {
      "context": 1048576,
@@ -32625,6 +32765,10 @@
    "models": [
     {
      "context": 1000000,
+     "id": "abliteration-abliterated-model-large-flash"
+    },
+    {
+     "context": 1000000,
      "id": "abliteration-abliterated-model-large-v2"
     },
     {
@@ -32718,6 +32862,10 @@
     {
      "context": 1000000,
      "id": "deepseek-v4-1-flash-1017"
+    },
+    {
+     "context": 1000000,
+     "id": "deepseek-v4-1-flash-uncensored"
     },
     {
      "context": 1000000,
@@ -32842,6 +32990,14 @@
     {
      "context": 1000000,
      "id": "kimi-k3"
+    },
+    {
+     "context": 1000000,
+     "id": "kimi-k3-1-pro"
+    },
+    {
+     "context": 1000000,
+     "id": "kimi-k3-1-pro-highspeed"
     },
     {
      "context": 1000000,

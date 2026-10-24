@@ -1,5 +1,5 @@
 {
- "generated_at": 1792747220,
+ "generated_at": 1792831928,
  "id": "kilo",
  "models": [
   {
@@ -657,6 +657,10 @@
   {
    "context": 1048576,
    "id": "moonshotai/kimi-k3"
+  },
+  {
+   "context": 1048576,
+   "id": "moonshotai/kimi-k3.1-pro"
   },
   {
    "context": 262144,
@@ -1499,7 +1503,7 @@
    "id": "z-ai/glm-5.3"
   },
   {
-   "context": 1048576,
+   "context": 1048575,
    "id": "z-ai/glm-5.3-flash"
   },
   {

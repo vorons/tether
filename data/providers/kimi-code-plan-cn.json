@@ -1,5 +1,5 @@
 {
- "generated_at": 1792747220,
+ "generated_at": 1792831928,
  "id": "kimi-code-plan-cn",
  "models": [
   {
@@ -9,6 +9,14 @@
   {
    "context": 262144,
    "id": "k3-256k"
+  },
+  {
+   "context": 1048576,
+   "id": "k3.1-pro"
+  },
+  {
+   "context": 1048576,
+   "id": "k3.1-pro-highspeed"
   },
   {
    "context": 1048576,

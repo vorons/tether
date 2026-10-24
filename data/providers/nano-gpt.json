@@ -1,5 +1,5 @@
 {
- "generated_at": 1792747220,
+ "generated_at": 1792831928,
  "id": "nano-gpt",
  "models": [
   {
@@ -233,10 +233,6 @@
   {
    "context": 128000,
    "id": "TEE/llama3-3-70b"
-  },
-  {
-   "context": 131072,
-   "id": "TEE/muse-glimmer-30b"
   },
   {
    "context": 262144,
@@ -741,6 +737,14 @@
   {
    "context": 1048576,
    "id": "deepseek/deepseek-v4.1-flash-1017:thinking"
+  },
+  {
+   "context": 1048576,
+   "id": "deepseek/deepseek-v4.1-flash-uncensored"
+  },
+  {
+   "context": 1048576,
+   "id": "deepseek/deepseek-v4.1-flash-uncensored:thinking"
   },
   {
    "context": 1000000,
@@ -1307,7 +1311,7 @@
    "id": "minimax/minimax-m3"
   },
   {
-   "context": 1000000,
+   "context": 1048576,
    "id": "minimax/minimax-m3.1-flash"
   },
   {
@@ -1461,6 +1465,14 @@
   {
    "context": 1048576,
    "id": "moonshotai/kimi-k3"
+  },
+  {
+   "context": 1048576,
+   "id": "moonshotai/kimi-k3.1-pro"
+  },
+  {
+   "context": 1048576,
+   "id": "moonshotai/kimi-k3.1-pro-highspeed"
   },
   {
    "context": 1048576,
@@ -1825,6 +1837,10 @@
   {
    "context": 262144,
    "id": "prism-ml/ternary-bonsai-2-27b"
+  },
+  {
+   "context": 262144,
+   "id": "prism-ml/ternary-bonsai-2-9b"
   },
   {
    "context": 128000,
@@ -2345,6 +2361,10 @@
   {
    "context": 1048576,
    "id": "xiaomi/mimo-v2.6-pro-ultraspeed"
+  },
+  {
+   "context": 262144,
+   "id": "xingchen-agi/xing4.0-29b-a4b"
   },
   {
    "context": 128000,

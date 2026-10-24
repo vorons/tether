@@ -1,11 +1,7 @@
 {
- "generated_at": 1792747220,
+ "generated_at": 1792831928,
  "id": "friendli",
  "models": [
-  {
-   "context": 163840,
-   "id": "deepseek-ai/DeepSeek-V3.2"
-  },
   {
    "context": 262144,
    "id": "google/gemma-4-31B-it"

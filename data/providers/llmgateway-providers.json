@@ -1,5 +1,5 @@
 {
- "generated_at": 1792747220,
+ "generated_at": 1792831928,
  "id": "llmgateway-providers",
  "models": [
   {
@@ -660,10 +660,6 @@
   },
   {
    "context": 1050000,
-   "id": "deepseek/deepseek-v4.1-flash"
-  },
-  {
-   "context": 1050000,
    "id": "deepseek/deepseek-v4.1-flash-1017"
   },
   {
@@ -705,6 +701,10 @@
   {
    "context": 1048576,
    "id": "entrim/deepseek-v4.1-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "entrim/deepseek-v4.1-flash-1017"
   },
   {
    "context": 1048576,
@@ -981,6 +981,14 @@
   {
    "context": 1048576,
    "id": "moonshot/kimi-k3"
+  },
+  {
+   "context": 1048576,
+   "id": "moonshot/kimi-k3.1-pro"
+  },
+  {
+   "context": 1048576,
+   "id": "moonshot/kimi-k3.1-pro-highspeed"
   },
   {
    "context": 163840,
@@ -1349,6 +1357,10 @@
   {
    "context": 1048576,
    "id": "runware/deepseek-v4.1-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "runware/deepseek-v4.1-flash-1017"
   },
   {
    "context": 262144,
