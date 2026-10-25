@@ -1,5 +1,5 @@
 {
- "generated_at": 1792831928,
+ "generated_at": 1792919302,
  "id": "novita-ai",
  "models": [
   {
@@ -189,6 +189,14 @@
   {
    "context": 1048576,
    "id": "moonshotai/kimi-k3"
+  },
+  {
+   "context": 1048576,
+   "id": "moonshotai/kimi-k3.1-pro"
+  },
+  {
+   "context": 1048576,
+   "id": "moonshotai/kimi-k3.1-pro-highspeed"
   },
   {
    "context": 8192,

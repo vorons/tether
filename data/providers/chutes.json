@@ -1,5 +1,5 @@
 {
- "generated_at": 1792831928,
+ "generated_at": 1792919302,
  "id": "chutes",
  "models": [
   {
@@ -27,12 +27,20 @@
    "id": "Qwen/Qwen3.8-27B-TEE"
   },
   {
+   "context": 0,
+   "id": "Qwen/Qwen3.8-Max-0902"
+  },
+  {
    "context": 131072,
    "id": "deepseek-ai/DeepSeek-V3.2-TEE"
   },
   {
    "context": 1048576,
    "id": "deepseek-ai/DeepSeek-V4-Flash-0731-TEE"
+  },
+  {
+   "context": 0,
+   "id": "deepseek-ai/DeepSeek-V4-Pro-0813"
   },
   {
    "context": 131072,

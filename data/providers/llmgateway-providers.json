@@ -1,5 +1,5 @@
 {
- "generated_at": 1792831928,
+ "generated_at": 1792919302,
  "id": "llmgateway-providers",
  "models": [
   {
@@ -848,6 +848,10 @@
   },
   {
    "context": 1000000,
+   "id": "inference.net/minimax-m3.1-flash"
+  },
+  {
+   "context": 1000000,
    "id": "luminal/deepseek-v4.1-flash"
   },
   {
@@ -991,6 +995,10 @@
    "id": "moonshot/kimi-k3.1-pro-highspeed"
   },
   {
+   "context": 1048576,
+   "id": "nebius/minimax-m3.1-flash"
+  },
+  {
    "context": 163840,
    "id": "novita/deepseek-v3.2"
   },
@@ -1109,6 +1117,10 @@
   {
    "context": 204800,
    "id": "novita/minimax-m2.7"
+  },
+  {
+   "context": 1000000,
+   "id": "novita/minimax-m3.1-flash"
   },
   {
    "context": 40960,
@@ -1549,6 +1561,10 @@
   {
    "context": 524288,
    "id": "together-ai/minimax-m3"
+  },
+  {
+   "context": 1048576,
+   "id": "together-ai/minimax-m3.1-flash"
   },
   {
    "context": 131072,

@@ -1,0 +1,27 @@
+{
+ "generated_at": 1792919302,
+ "id": "munito",
+ "models": [
+  {
+   "context": 1048576,
+   "id": "aleph-alpha/kolibri-1"
+  },
+  {
+   "context": 1048576,
+   "id": "deepseek-ai/deepseek-v4-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "deepseek-ai/deepseek-v4.1-flash-1017"
+  },
+  {
+   "context": 262144,
+   "id": "qwen/qwen3.8-27b"
+  },
+  {
+   "context": 1048576,
+   "id": "zai-org/glm-5.3-flash"
+  }
+ ],
+ "schema": 1
+}

@@ -1,5 +1,5 @@
 {
- "generated_at": 1792831928,
+ "generated_at": 1792919302,
  "id": "aimlapi",
  "models": [
   {
@@ -557,6 +557,10 @@
   {
    "context": 200000,
    "id": "openai/o3-pro"
+  },
+  {
+   "context": 36864,
+   "id": "perceptron/perceptron-mk1.5"
   },
   {
    "context": 128000,
