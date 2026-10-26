@@ -1,5 +1,5 @@
 {
- "generated_at": 1792919302,
+ "generated_at": 1793009154,
  "id": "amazon-bedrock",
  "models": [
   {
@@ -133,6 +133,10 @@
   {
    "context": 1000000,
    "id": "au.anthropic.claude-sonnet-5"
+  },
+  {
+   "context": 1000000,
+   "id": "au.anthropic.claude-sonnet-5-5"
   },
   {
    "context": 300000,

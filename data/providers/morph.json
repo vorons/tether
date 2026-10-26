@@ -1,5 +1,5 @@
 {
- "generated_at": 1792919302,
+ "generated_at": 1793009154,
  "id": "morph",
  "models": [
   {
@@ -7,11 +7,43 @@
    "id": "auto"
   },
   {
-   "context": 16000,
+   "context": 1048576,
+   "id": "morph-dsv41flash"
+  },
+  {
+   "context": 1048576,
+   "id": "morph-dsv41flash-1017"
+  },
+  {
+   "context": 1048576,
+   "id": "morph-dsv4flash"
+  },
+  {
+   "context": 1048576,
+   "id": "morph-glm52-744b"
+  },
+  {
+   "context": 1048576,
+   "id": "morph-glm53-744b"
+  },
+  {
+   "context": 1048576,
+   "id": "morph-glm53flash"
+  },
+  {
+   "context": 1048576,
+   "id": "morph-kimik3"
+  },
+  {
+   "context": 1048576,
+   "id": "morph-kimik3-fast"
+  },
+  {
+   "context": 262144,
    "id": "morph-v3-fast"
   },
   {
-   "context": 32000,
+   "context": 262144,
    "id": "morph-v3-large"
   }
  ],

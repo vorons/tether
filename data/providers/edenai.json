@@ -1,5 +1,5 @@
 {
- "generated_at": 1792919302,
+ "generated_at": 1793009154,
  "id": "edenai",
  "models": [
   {
@@ -209,6 +209,14 @@
   {
    "context": 131072,
    "id": "arkanecloud/openai/gpt-oss-20b"
+  },
+  {
+   "context": 1047576,
+   "id": "azure/gpt-4.1-nano"
+  },
+  {
+   "context": 1047576,
+   "id": "azure/gpt-4.1-nano@eu"
   },
   {
    "context": 272000,
@@ -779,6 +787,14 @@
    "id": "meta/muse-wonder-1.0"
   },
   {
+   "context": 8191,
+   "id": "microsoft/gpt-4"
+  },
+  {
+   "context": 200000,
+   "id": "microsoft/o3-mini"
+  },
+  {
    "context": 204800,
    "id": "minimax/MiniMax-M2"
   },
@@ -943,28 +959,12 @@
    "id": "nebius/openai/gpt-oss-120b"
   },
   {
-   "context": 16385,
-   "id": "openai/gpt-3.5-turbo"
-  },
-  {
-   "context": 8191,
-   "id": "openai/gpt-4"
-  },
-  {
-   "context": 128000,
-   "id": "openai/gpt-4-turbo"
-  },
-  {
    "context": 1047576,
    "id": "openai/gpt-4.1"
   },
   {
    "context": 1047576,
    "id": "openai/gpt-4.1-mini"
-  },
-  {
-   "context": 1047576,
-   "id": "openai/gpt-4.1-nano"
   },
   {
    "context": 128000,
@@ -1084,10 +1084,6 @@
   },
   {
    "context": 200000,
-   "id": "openai/o1"
-  },
-  {
-   "context": 200000,
    "id": "openai/o1-pro"
   },
   {
@@ -1096,15 +1092,7 @@
   },
   {
    "context": 200000,
-   "id": "openai/o3-mini"
-  },
-  {
-   "context": 200000,
    "id": "openai/o3-pro"
-  },
-  {
-   "context": 200000,
-   "id": "openai/o4-mini"
   },
   {
    "context": 131072,

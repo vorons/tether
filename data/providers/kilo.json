@@ -1,5 +1,5 @@
 {
- "generated_at": 1792919302,
+ "generated_at": 1793009154,
  "id": "kilo",
  "models": [
   {
@@ -1499,7 +1499,7 @@
    "id": "z-ai/glm-5.3"
   },
   {
-   "context": 1048576,
+   "context": 1048575,
    "id": "z-ai/glm-5.3-flash"
   },
   {
