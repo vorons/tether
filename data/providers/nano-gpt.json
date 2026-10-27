@@ -1,5 +1,5 @@
 {
- "generated_at": 1793009154,
+ "generated_at": 1793094483,
  "id": "nano-gpt",
  "models": [
   {
@@ -436,11 +436,11 @@
   },
   {
    "context": 131072,
-   "id": "aisingapore/Gemma-SEA-LION-v4-27B-IT"
+   "id": "aisingapore/gemma-sea-lion-v4-27b-it"
   },
   {
    "context": 131072,
-   "id": "aisingapore/Qwen-SEA-LION-v4-32B-IT"
+   "id": "aisingapore/qwen-sea-lion-v4-32b-it"
   },
   {
    "context": 1048576,
@@ -791,8 +791,24 @@
    "id": "deepseek/deepseek-v4.1-flash"
   },
   {
+   "context": 524288,
+   "id": "deepseek/deepseek-v4.1-flash-0910-uncensored"
+  },
+  {
+   "context": 524288,
+   "id": "deepseek/deepseek-v4.1-flash-0910-uncensored:thinking"
+  },
+  {
    "context": 1048576,
    "id": "deepseek/deepseek-v4.1-flash-1017"
+  },
+  {
+   "context": 1048576,
+   "id": "deepseek/deepseek-v4.1-flash-1017-uncensored"
+  },
+  {
+   "context": 1048576,
+   "id": "deepseek/deepseek-v4.1-flash-1017-uncensored:thinking"
   },
   {
    "context": 1048576,
@@ -1263,10 +1279,6 @@
    "id": "longcat-2.0:thinking"
   },
   {
-   "context": 1000000,
-   "id": "longcat-2.5-preview"
-  },
-  {
    "context": 16384,
    "id": "meganova-ai/manta-flash-1.0"
   },
@@ -1277,6 +1289,10 @@
   {
    "context": 65536,
    "id": "meganova-ai/manta-pro-1.0"
+  },
+  {
+   "context": 1000000,
+   "id": "meituan/longcat-2.5-preview"
   },
   {
    "context": 128000,
@@ -1627,10 +1643,6 @@
    "id": "nvidia/nemotron-3.5-super-vl"
   },
   {
-   "context": 16385,
-   "id": "openai/gpt-3.5-turbo"
-  },
-  {
    "context": 128000,
    "id": "openai/gpt-4-turbo"
   },
@@ -1781,6 +1793,14 @@
   {
    "context": 1050000,
    "id": "openai/gpt-6.1-sol-pro"
+  },
+  {
+   "context": 1050000,
+   "id": "openai/gpt-6.1-terra"
+  },
+  {
+   "context": 1050000,
+   "id": "openai/gpt-6.1-terra-pro"
   },
   {
    "context": 1050000,
@@ -1985,14 +2005,6 @@
   {
    "context": 262144,
    "id": "qwen/qwen3-coder-next"
-  },
-  {
-   "context": 256000,
-   "id": "qwen/qwen3-max"
-  },
-  {
-   "context": 256000,
-   "id": "qwen/qwen3-max-2026-01-23"
   },
   {
    "context": 262144,
@@ -2264,7 +2276,7 @@
   },
   {
    "context": 32768,
-   "id": "speakleash/Bielik-11B-v3.0-Instruct"
+   "id": "speakleash/bielik-11b-v3.0-instruct"
   },
   {
    "context": 262144,

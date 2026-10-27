@@ -1,5 +1,5 @@
 {
- "generated_at": 1793009154,
+ "generated_at": 1793094483,
  "id": "nearai",
  "models": [
   {
@@ -117,6 +117,10 @@
   {
    "context": 1048576,
    "id": "moonshotai/kimi-k3"
+  },
+  {
+   "context": 1048576,
+   "id": "moonshotai/kimi-k3.1-pro"
   },
   {
    "context": 1047576,

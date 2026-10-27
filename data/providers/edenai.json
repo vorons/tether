@@ -1,5 +1,5 @@
 {
- "generated_at": 1793009154,
+ "generated_at": 1793094483,
  "id": "edenai",
  "models": [
   {
@@ -1072,6 +1072,10 @@
   },
   {
    "context": 1050000,
+   "id": "openai/gpt-6.1-terra"
+  },
+  {
+   "context": 1050000,
    "id": "openai/gpt-latest"
   },
   {
@@ -1213,6 +1217,10 @@
   {
    "context": 1000000,
    "id": "tencent/deepseek-v4.1-flash"
+  },
+  {
+   "context": 1000000,
+   "id": "tencent/deepseek-v4.1-flash-1017"
   },
   {
    "context": 256000,

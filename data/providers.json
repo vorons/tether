@@ -1,5 +1,5 @@
 {
- "generated_at": 1793009154,
+ "generated_at": 1793094483,
  "providers": {
   "302ai": {
    "api_key_env": [
@@ -1147,10 +1147,6 @@
    "models": [
     {
      "context": 1048576,
-     "id": "deepseek-ai/deepseek-v4-flash"
-    },
-    {
-     "context": 1048576,
      "id": "deepseek-ai/deepseek-v4-pro"
     },
     {
@@ -1160,10 +1156,6 @@
     {
      "context": 262144,
      "id": "google/gemma-4-31b-it"
-    },
-    {
-     "context": 262144,
-     "id": "moonshotai/kimi-k2.7-code"
     },
     {
      "context": 1048576,
@@ -1187,10 +1179,6 @@
     },
     {
      "context": 1048576,
-     "id": "zai-org/glm-5.2"
-    },
-    {
-     "context": 1048576,
      "id": "zai-org/glm-5.3"
     },
     {
@@ -1205,7 +1193,7 @@
     "AIMLAPI_API_KEY"
    ],
    "base_url": "https://api.aimlapi.com/v1",
-   "model": "anthropic/claude-haiku-5.5",
+   "model": "openai/gpt-6.1-terra",
    "models": [
     {
      "context": 32768,
@@ -1588,28 +1576,12 @@
      "id": "nousresearch/hermes-3-llama-3.1-70b"
     },
     {
-     "context": 16000,
-     "id": "openai/gpt-3.5-turbo"
-    },
-    {
-     "context": 8000,
-     "id": "openai/gpt-4"
-    },
-    {
-     "context": 128000,
-     "id": "openai/gpt-4-turbo"
-    },
-    {
      "context": 1047576,
      "id": "openai/gpt-4.1"
     },
     {
      "context": 1000000,
      "id": "openai/gpt-4.1-mini"
-    },
-    {
-     "context": 1000000,
-     "id": "openai/gpt-4.1-nano"
     },
     {
      "context": 128000,
@@ -1736,6 +1708,10 @@
      "id": "openai/gpt-6.1-sol"
     },
     {
+     "context": 1050000,
+     "id": "openai/gpt-6.1-terra"
+    },
+    {
      "context": 131000,
      "id": "openai/gpt-oss-120b"
     },
@@ -1746,18 +1722,6 @@
     {
      "context": 131072,
      "id": "openai/gpt-oss-safeguard-20b"
-    },
-    {
-     "context": 128000,
-     "id": "openai/o1"
-    },
-    {
-     "context": 200000,
-     "id": "openai/o1-pro"
-    },
-    {
-     "context": 200000,
-     "id": "openai/o3-mini"
     },
     {
      "context": 200000,
@@ -4234,7 +4198,7 @@
     "AZURE_API_KEY"
    ],
    "base_url": "",
-   "model": "claude-haiku-5-5",
+   "model": "gpt-6.1-terra",
    "models": [
     {
      "context": 1000000,
@@ -4475,6 +4439,10 @@
     {
      "context": 1050000,
      "id": "gpt-6.1-sol"
+    },
+    {
+     "context": 1050000,
+     "id": "gpt-6.1-terra"
     },
     {
      "context": 400000,
@@ -4625,7 +4593,7 @@
     "AZURE_COGNITIVE_SERVICES_API_KEY"
    ],
    "base_url": "",
-   "model": "claude-haiku-5-5",
+   "model": "gpt-6.1-terra",
    "models": [
     {
      "context": 1000000,
@@ -4866,6 +4834,10 @@
     {
      "context": 1050000,
      "id": "gpt-6.1-sol"
+    },
+    {
+     "context": 1050000,
+     "id": "gpt-6.1-terra"
     },
     {
      "context": 400000,
@@ -5340,20 +5312,8 @@
     "CHUTES_API_KEY"
    ],
    "base_url": "https://llm.chutes.ai/v1",
-   "model": "deepseek-ai/DeepSeek-V4-Pro-0813",
+   "model": "zai-org/GLM-5.3",
    "models": [
-    {
-     "context": 131072,
-     "id": "Nemotron-3-Nano-Omni-30B-TEE"
-    },
-    {
-     "context": 262144,
-     "id": "Qwen/Qwen3-235B-A22B-Thinking-2507-TEE"
-    },
-    {
-     "context": 40960,
-     "id": "Qwen/Qwen3-32B-TEE"
-    },
     {
      "context": 262144,
      "id": "Qwen/Qwen3.5-397B-A17B-TEE"
@@ -5361,6 +5321,10 @@
     {
      "context": 262144,
      "id": "Qwen/Qwen3.6-27B-TEE"
+    },
+    {
+     "context": 0,
+     "id": "Qwen/Qwen3.8-2.4T-A95B"
     },
     {
      "context": 262144,
@@ -5383,6 +5347,10 @@
      "id": "deepseek-ai/DeepSeek-V4-Pro-0813"
     },
     {
+     "context": 0,
+     "id": "deepseek-ai/DeepSeek-V4.1-Flash-1017"
+    },
+    {
      "context": 131072,
      "id": "google/gemma-4-31B-turbo-TEE"
     },
@@ -5391,20 +5359,28 @@
      "id": "moonshotai/Kimi-K2.6-TEE"
     },
     {
-     "context": 1048576,
-     "id": "moonshotai/Kimi-K3-TEE"
+     "context": 0,
+     "id": "moonshotai/Kimi-K2.7-Code"
     },
     {
-     "context": 131072,
-     "id": "unsloth/Mistral-Nemo-Instruct-2407-TEE"
+     "context": 1048576,
+     "id": "moonshotai/Kimi-K3-TEE"
     },
     {
      "context": 202752,
      "id": "zai-org/GLM-5.1-TEE"
     },
     {
+     "context": 0,
+     "id": "zai-org/GLM-5.2-Fast"
+    },
+    {
      "context": 1048576,
      "id": "zai-org/GLM-5.2-TEE"
+    },
+    {
+     "context": 0,
+     "id": "zai-org/GLM-5.3"
     }
    ],
    "wire": "openai"
@@ -6107,7 +6083,7 @@
     "CMD_API_KEY"
    ],
    "base_url": "https://api.commandcode.ai/provider/v1",
-   "model": "google/gemini-4-argon",
+   "model": "gpt-6.1-terra",
    "models": [
     {
      "context": 200000,
@@ -6280,6 +6256,10 @@
     {
      "context": 1050000,
      "id": "gpt-6.1-sol"
+    },
+    {
+     "context": 1050000,
+     "id": "gpt-6.1-terra"
     },
     {
      "context": 262144,
@@ -8152,7 +8132,7 @@
     "EDENAI_API_KEY"
    ],
    "base_url": "https://api.edenai.run/v3",
-   "model": "moonshot/kimi-k3.1-pro",
+   "model": "openai/gpt-6.1-terra",
    "models": [
     {
      "context": 300000,
@@ -9224,6 +9204,10 @@
     },
     {
      "context": 1050000,
+     "id": "openai/gpt-6.1-terra"
+    },
+    {
+     "context": 1050000,
      "id": "openai/gpt-latest"
     },
     {
@@ -9365,6 +9349,10 @@
     {
      "context": 1000000,
      "id": "tencent/deepseek-v4.1-flash"
+    },
+    {
+     "context": 1000000,
+     "id": "tencent/deepseek-v4.1-flash-1017"
     },
     {
      "context": 256000,
@@ -9640,10 +9628,6 @@
    "base_url": "https://api.empiriolabs.ai/v1",
    "model": "minimax-m3-1-flash",
    "models": [
-    {
-     "context": 1000000,
-     "id": "deepseek-v4-1-flash"
-    },
     {
      "context": 1000000,
      "id": "deepseek-v4-1-flash-1017"
@@ -10915,6 +10899,10 @@
      "id": "gpt-6.1-sol"
     },
     {
+     "context": 1050000,
+     "id": "gpt-6.1-terra"
+    },
+    {
      "context": 500000,
      "id": "grok-4.5"
     },
@@ -12139,6 +12127,10 @@
     {
      "context": 524288,
      "id": "MiniMaxAI/MiniMax-M3"
+    },
+    {
+     "context": 1000000,
+     "id": "MiniMaxAI/MiniMax-M3.1-Flash"
     },
     {
      "context": 131072,
@@ -13861,7 +13853,7 @@
     "KILO_API_KEY"
    ],
    "base_url": "https://api.kilo.ai/api/gateway",
-   "model": "moonshotai/kimi-k3.1-pro",
+   "model": "openai/gpt-6.1-terra-pro",
    "models": [
     {
      "context": 131072,
@@ -13973,10 +13965,6 @@
     },
     {
      "context": 262144,
-     "id": "arcee-ai/trinity-large-thinking"
-    },
-    {
-     "context": 262144,
      "id": "bytedance-seed/seed-1.6"
     },
     {
@@ -14060,7 +14048,7 @@
      "id": "deepseek/deepseek-v3.2-exp"
     },
     {
-     "context": 1048575,
+     "context": 1048576,
      "id": "deepseek/deepseek-v4-flash"
     },
     {
@@ -14222,10 +14210,6 @@
     {
      "context": 4096,
      "id": "gryphe/mythomax-l2-13b"
-    },
-    {
-     "context": 131000,
-     "id": "ibm-granite/granite-4.0-h-micro"
     },
     {
      "context": 131072,
@@ -14568,10 +14552,6 @@
      "id": "nvidia/nemotron-3-super-120b-a12b"
     },
     {
-     "context": 262144,
-     "id": "nvidia/nemotron-3-super-120b-a12b:free"
-    },
-    {
      "context": 202800,
      "id": "nvidia/nemotron-3-ultra-550b-a55b"
     },
@@ -14798,6 +14778,14 @@
     {
      "context": 1050000,
      "id": "openai/gpt-6.1-sol-pro"
+    },
+    {
+     "context": 1050000,
+     "id": "openai/gpt-6.1-terra"
+    },
+    {
+     "context": 1050000,
+     "id": "openai/gpt-6.1-terra-pro"
     },
     {
      "context": 128000,
@@ -15288,11 +15276,11 @@
      "id": "x-ai/grok-build-0.1"
     },
     {
-     "context": 1050000,
+     "context": 1000000,
      "id": "xiaomi/mimo-v2.5"
     },
     {
-     "context": 1050000,
+     "context": 262144,
      "id": "xiaomi/mimo-v2.5-pro"
     },
     {
@@ -15348,7 +15336,7 @@
      "id": "z-ai/glm-5-turbo"
     },
     {
-     "context": 202752,
+     "context": 200000,
      "id": "z-ai/glm-5.1"
     },
     {
@@ -15635,7 +15623,7 @@
     "LLMGATEWAY_API_KEY"
    ],
    "base_url": "https://api.llmgateway.io/v1",
-   "model": "kimi-k3.1-pro-highspeed",
+   "model": "gpt-6.1-terra",
    "models": [
     {
      "context": 262000,
@@ -15734,7 +15722,7 @@
      "id": "deepseek-v4.1-flash"
     },
     {
-     "context": 1050000,
+     "context": 1056784,
      "id": "deepseek-v4.1-flash-1017"
     },
     {
@@ -16008,6 +15996,10 @@
     {
      "context": 1050000,
      "id": "gpt-6.1-sol"
+    },
+    {
+     "context": 1050000,
+     "id": "gpt-6.1-terra"
     },
     {
      "context": 0,
@@ -16350,10 +16342,6 @@
      "id": "qwen3-vl-235b-a22b-instruct"
     },
     {
-     "context": 131072,
-     "id": "qwen3-vl-235b-a22b-thinking"
-    },
-    {
      "context": 262144,
      "id": "qwen3-vl-30b-a3b-instruct"
     },
@@ -16473,7 +16461,7 @@
     "LLMGATEWAY_API_KEY"
    ],
    "base_url": "https://api.llmgateway.io/v1",
-   "model": "moonshot/kimi-k3.1-pro-highspeed",
+   "model": "openai/gpt-6.1-terra",
    "models": [
     {
      "context": 1000000,
@@ -17625,14 +17613,6 @@
     },
     {
      "context": 131072,
-     "id": "novita/qwen3-vl-235b-a22b-instruct"
-    },
-    {
-     "context": 131072,
-     "id": "novita/qwen3-vl-235b-a22b-thinking"
-    },
-    {
-     "context": 131072,
      "id": "novita/qwen3-vl-30b-a3b-instruct"
     },
     {
@@ -17780,6 +17760,10 @@
      "id": "openai/gpt-6.1-sol"
     },
     {
+     "context": 1050000,
+     "id": "openai/gpt-6.1-terra"
+    },
+    {
      "context": 0,
      "id": "openai/gpt-live-transcribe"
     },
@@ -17886,6 +17870,10 @@
     {
      "context": 1000000,
      "id": "sakana/fugu-ultra-v2.0"
+    },
+    {
+     "context": 1056784,
+     "id": "sciforium/deepseek-v4.1-flash-1017"
     },
     {
      "context": 1000000,
@@ -18395,7 +18383,7 @@
     "LOWROUTER_API_KEY"
    ],
    "base_url": "https://api.lowrouter.ai/v1",
-   "model": "auto/mistralai/mistral-large-4",
+   "model": "auto/openai/gpt-6.1-terra",
    "models": [
     {
      "context": 128000,
@@ -18500,6 +18488,10 @@
     {
      "context": 1050000,
      "id": "auto/openai/gpt-6.1-sol"
+    },
+    {
+     "context": 1050000,
+     "id": "auto/openai/gpt-6.1-terra"
     },
     {
      "context": 131072,
@@ -19569,7 +19561,7 @@
     "NANO_GPT_API_KEY"
    ],
    "base_url": "https://nano-gpt.com/api/v1",
-   "model": "xingchen-agi/xing4.0-29b-a4b",
+   "model": "openai/gpt-6.1-terra-pro",
    "models": [
     {
      "context": 32768,
@@ -20005,11 +19997,11 @@
     },
     {
      "context": 131072,
-     "id": "aisingapore/Gemma-SEA-LION-v4-27B-IT"
+     "id": "aisingapore/gemma-sea-lion-v4-27b-it"
     },
     {
      "context": 131072,
-     "id": "aisingapore/Qwen-SEA-LION-v4-32B-IT"
+     "id": "aisingapore/qwen-sea-lion-v4-32b-it"
     },
     {
      "context": 1048576,
@@ -20360,8 +20352,24 @@
      "id": "deepseek/deepseek-v4.1-flash"
     },
     {
+     "context": 524288,
+     "id": "deepseek/deepseek-v4.1-flash-0910-uncensored"
+    },
+    {
+     "context": 524288,
+     "id": "deepseek/deepseek-v4.1-flash-0910-uncensored:thinking"
+    },
+    {
      "context": 1048576,
      "id": "deepseek/deepseek-v4.1-flash-1017"
+    },
+    {
+     "context": 1048576,
+     "id": "deepseek/deepseek-v4.1-flash-1017-uncensored"
+    },
+    {
+     "context": 1048576,
+     "id": "deepseek/deepseek-v4.1-flash-1017-uncensored:thinking"
     },
     {
      "context": 1048576,
@@ -20832,10 +20840,6 @@
      "id": "longcat-2.0:thinking"
     },
     {
-     "context": 1000000,
-     "id": "longcat-2.5-preview"
-    },
-    {
      "context": 16384,
      "id": "meganova-ai/manta-flash-1.0"
     },
@@ -20846,6 +20850,10 @@
     {
      "context": 65536,
      "id": "meganova-ai/manta-pro-1.0"
+    },
+    {
+     "context": 1000000,
+     "id": "meituan/longcat-2.5-preview"
     },
     {
      "context": 128000,
@@ -21196,10 +21204,6 @@
      "id": "nvidia/nemotron-3.5-super-vl"
     },
     {
-     "context": 16385,
-     "id": "openai/gpt-3.5-turbo"
-    },
-    {
      "context": 128000,
      "id": "openai/gpt-4-turbo"
     },
@@ -21350,6 +21354,14 @@
     {
      "context": 1050000,
      "id": "openai/gpt-6.1-sol-pro"
+    },
+    {
+     "context": 1050000,
+     "id": "openai/gpt-6.1-terra"
+    },
+    {
+     "context": 1050000,
+     "id": "openai/gpt-6.1-terra-pro"
     },
     {
      "context": 1050000,
@@ -21554,14 +21566,6 @@
     {
      "context": 262144,
      "id": "qwen/qwen3-coder-next"
-    },
-    {
-     "context": 256000,
-     "id": "qwen/qwen3-max"
-    },
-    {
-     "context": 256000,
-     "id": "qwen/qwen3-max-2026-01-23"
     },
     {
      "context": 262144,
@@ -21833,7 +21837,7 @@
     },
     {
      "context": 32768,
-     "id": "speakleash/Bielik-11B-v3.0-Instruct"
+     "id": "speakleash/bielik-11b-v3.0-instruct"
     },
     {
      "context": 262144,
@@ -22175,7 +22179,7 @@
     "NEARAI_API_KEY"
    ],
    "base_url": "https://cloud-api.near.ai/v1",
-   "model": "deepseek/deepseek-v4.1-flash-1017",
+   "model": "moonshotai/kimi-k3.1-pro",
    "models": [
     {
      "context": 32768,
@@ -22292,6 +22296,10 @@
     {
      "context": 1048576,
      "id": "moonshotai/kimi-k3"
+    },
+    {
+     "context": 1048576,
+     "id": "moonshotai/kimi-k3.1-pro"
     },
     {
      "context": 1047576,
@@ -22524,7 +22532,7 @@
     "NEON_AI_GATEWAY_TOKEN"
    ],
    "base_url": "{NEON_AI_GATEWAY_BASE_URL}/v1",
-   "model": "claude-haiku-5-5",
+   "model": "gemini-4-argon",
    "models": [
     {
      "context": 1000000,
@@ -22621,6 +22629,10 @@
     {
      "context": 1048576,
      "id": "gemini-3-flash"
+    },
+    {
+     "context": 1048576,
+     "id": "gemini-4-argon"
     },
     {
      "context": 131072,
@@ -24395,6 +24407,10 @@
     },
     {
      "context": 1050000,
+     "id": "gpt-6.1-terra"
+    },
+    {
+     "context": 1050000,
      "id": "gpt-daybreak-blue-latest"
     },
     {
@@ -25294,10 +25310,6 @@
     },
     {
      "context": 262144,
-     "id": "arcee-ai/trinity-large-thinking"
-    },
-    {
-     "context": 262144,
      "id": "bytedance-seed/seed-1.6"
     },
     {
@@ -25551,10 +25563,6 @@
     {
      "context": 8192,
      "id": "gryphe/mythomax-l2-13b"
-    },
-    {
-     "context": 131000,
-     "id": "ibm-granite/granite-4.0-h-micro"
     },
     {
      "context": 131072,
@@ -25878,10 +25886,6 @@
     },
     {
      "context": 262144,
-     "id": "nvidia/nemotron-3-super-120b-a12b:free"
-    },
-    {
-     "context": 262144,
      "id": "nvidia/nemotron-3-ultra-550b-a55b"
     },
     {
@@ -26107,6 +26111,14 @@
     {
      "context": 1050000,
      "id": "openai/gpt-6.1-sol-pro"
+    },
+    {
+     "context": 1050000,
+     "id": "openai/gpt-6.1-terra"
+    },
+    {
+     "context": 1050000,
+     "id": "openai/gpt-6.1-terra-pro"
     },
     {
      "context": 128000,
@@ -29360,7 +29372,7 @@
     "REQUESTY_API_KEY"
    ],
    "base_url": "https://router.requesty.ai/v1",
-   "model": "kimi-k3.1-pro-highspeed",
+   "model": "gpt-6.1-terra@eu",
    "models": [
     {
      "context": 1000000,
@@ -29777,6 +29789,14 @@
     {
      "context": 1050000,
      "id": "gpt-6.1-sol@eu"
+    },
+    {
+     "context": 1050000,
+     "id": "gpt-6.1-terra"
+    },
+    {
+     "context": 1050000,
+     "id": "gpt-6.1-terra@eu"
     },
     {
      "context": 2000000,
@@ -33354,6 +33374,10 @@
     {
      "context": 1050000,
      "id": "openai-gpt-61-sol-ultrafast"
+    },
+    {
+     "context": 1050000,
+     "id": "openai-gpt-61-terra"
     },
     {
      "context": 128000,

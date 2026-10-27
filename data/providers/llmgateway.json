@@ -1,5 +1,5 @@
 {
- "generated_at": 1793009154,
+ "generated_at": 1793094483,
  "id": "llmgateway",
  "models": [
   {
@@ -99,7 +99,7 @@
    "id": "deepseek-v4.1-flash"
   },
   {
-   "context": 1050000,
+   "context": 1056784,
    "id": "deepseek-v4.1-flash-1017"
   },
   {
@@ -373,6 +373,10 @@
   {
    "context": 1050000,
    "id": "gpt-6.1-sol"
+  },
+  {
+   "context": 1050000,
+   "id": "gpt-6.1-terra"
   },
   {
    "context": 0,
@@ -713,10 +717,6 @@
   {
    "context": 262144,
    "id": "qwen3-vl-235b-a22b-instruct"
-  },
-  {
-   "context": 131072,
-   "id": "qwen3-vl-235b-a22b-thinking"
   },
   {
    "context": 262144,

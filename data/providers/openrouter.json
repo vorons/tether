@@ -1,5 +1,5 @@
 {
- "generated_at": 1793009154,
+ "generated_at": 1793094483,
  "id": "openrouter",
  "models": [
   {
@@ -109,10 +109,6 @@
   {
    "context": 1000000,
    "id": "anthropic/claude-sonnet-5.5"
-  },
-  {
-   "context": 262144,
-   "id": "arcee-ai/trinity-large-thinking"
   },
   {
    "context": 262144,
@@ -369,10 +365,6 @@
   {
    "context": 8192,
    "id": "gryphe/mythomax-l2-13b"
-  },
-  {
-   "context": 131000,
-   "id": "ibm-granite/granite-4.0-h-micro"
   },
   {
    "context": 131072,
@@ -696,10 +688,6 @@
   },
   {
    "context": 262144,
-   "id": "nvidia/nemotron-3-super-120b-a12b:free"
-  },
-  {
-   "context": 262144,
    "id": "nvidia/nemotron-3-ultra-550b-a55b"
   },
   {
@@ -925,6 +913,14 @@
   {
    "context": 1050000,
    "id": "openai/gpt-6.1-sol-pro"
+  },
+  {
+   "context": 1050000,
+   "id": "openai/gpt-6.1-terra"
+  },
+  {
+   "context": 1050000,
+   "id": "openai/gpt-6.1-terra-pro"
   },
   {
    "context": 128000,

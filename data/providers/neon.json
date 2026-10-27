@@ -1,5 +1,5 @@
 {
- "generated_at": 1793009154,
+ "generated_at": 1793094483,
  "id": "neon",
  "models": [
   {
@@ -97,6 +97,10 @@
   {
    "context": 1048576,
    "id": "gemini-3-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini-4-argon"
   },
   {
    "context": 131072,

@@ -1,5 +1,5 @@
 {
- "generated_at": 1793009154,
+ "generated_at": 1793094483,
  "id": "kilo",
  "models": [
   {
@@ -112,10 +112,6 @@
   },
   {
    "context": 262144,
-   "id": "arcee-ai/trinity-large-thinking"
-  },
-  {
-   "context": 262144,
    "id": "bytedance-seed/seed-1.6"
   },
   {
@@ -199,7 +195,7 @@
    "id": "deepseek/deepseek-v3.2-exp"
   },
   {
-   "context": 1048575,
+   "context": 1048576,
    "id": "deepseek/deepseek-v4-flash"
   },
   {
@@ -361,10 +357,6 @@
   {
    "context": 4096,
    "id": "gryphe/mythomax-l2-13b"
-  },
-  {
-   "context": 131000,
-   "id": "ibm-granite/granite-4.0-h-micro"
   },
   {
    "context": 131072,
@@ -707,10 +699,6 @@
    "id": "nvidia/nemotron-3-super-120b-a12b"
   },
   {
-   "context": 262144,
-   "id": "nvidia/nemotron-3-super-120b-a12b:free"
-  },
-  {
    "context": 202800,
    "id": "nvidia/nemotron-3-ultra-550b-a55b"
   },
@@ -937,6 +925,14 @@
   {
    "context": 1050000,
    "id": "openai/gpt-6.1-sol-pro"
+  },
+  {
+   "context": 1050000,
+   "id": "openai/gpt-6.1-terra"
+  },
+  {
+   "context": 1050000,
+   "id": "openai/gpt-6.1-terra-pro"
   },
   {
    "context": 128000,
@@ -1427,11 +1423,11 @@
    "id": "x-ai/grok-build-0.1"
   },
   {
-   "context": 1050000,
+   "context": 1000000,
    "id": "xiaomi/mimo-v2.5"
   },
   {
-   "context": 1050000,
+   "context": 262144,
    "id": "xiaomi/mimo-v2.5-pro"
   },
   {
@@ -1487,7 +1483,7 @@
    "id": "z-ai/glm-5-turbo"
   },
   {
-   "context": 202752,
+   "context": 200000,
    "id": "z-ai/glm-5.1"
   },
   {

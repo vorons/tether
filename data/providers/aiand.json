@@ -1,11 +1,7 @@
 {
- "generated_at": 1793009154,
+ "generated_at": 1793094483,
  "id": "aiand",
  "models": [
-  {
-   "context": 1048576,
-   "id": "deepseek-ai/deepseek-v4-flash"
-  },
   {
    "context": 1048576,
    "id": "deepseek-ai/deepseek-v4-pro"
@@ -17,10 +13,6 @@
   {
    "context": 262144,
    "id": "google/gemma-4-31b-it"
-  },
-  {
-   "context": 262144,
-   "id": "moonshotai/kimi-k2.7-code"
   },
   {
    "context": 1048576,
@@ -41,10 +33,6 @@
   {
    "context": 262144,
    "id": "qwen/qwen3.8-27b"
-  },
-  {
-   "context": 1048576,
-   "id": "zai-org/glm-5.2"
   },
   {
    "context": 1048576,

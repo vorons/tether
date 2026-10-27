@@ -1,5 +1,5 @@
 {
- "generated_at": 1793009154,
+ "generated_at": 1793094483,
  "id": "github-copilot",
  "models": [
   {
@@ -117,6 +117,10 @@
   {
    "context": 1050000,
    "id": "gpt-6.1-sol"
+  },
+  {
+   "context": 1050000,
+   "id": "gpt-6.1-terra"
   },
   {
    "context": 500000,

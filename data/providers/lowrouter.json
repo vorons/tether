@@ -1,5 +1,5 @@
 {
- "generated_at": 1793009154,
+ "generated_at": 1793094483,
  "id": "lowrouter",
  "models": [
   {
@@ -105,6 +105,10 @@
   {
    "context": 1050000,
    "id": "auto/openai/gpt-6.1-sol"
+  },
+  {
+   "context": 1050000,
+   "id": "auto/openai/gpt-6.1-terra"
   },
   {
    "context": 131072,
