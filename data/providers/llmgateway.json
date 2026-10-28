@@ -1,5 +1,5 @@
 {
- "generated_at": 1793094483,
+ "generated_at": 1793183625,
  "id": "llmgateway",
  "models": [
   {
@@ -212,10 +212,6 @@
   },
   {
    "context": 200000,
-   "id": "glm-4.7-flash"
-  },
-  {
-   "context": 200000,
    "id": "glm-4.7-flashx"
   },
   {
@@ -404,10 +400,6 @@
   },
   {
    "context": 2000000,
-   "id": "grok-4-1-fast-non-reasoning"
-  },
-  {
-   "context": 2000000,
    "id": "grok-4-1-fast-reasoning"
   },
   {
@@ -513,10 +505,6 @@
   {
    "context": 128000,
    "id": "llama-3.2-11b-instruct"
-  },
-  {
-   "context": 32768,
-   "id": "llama-3.2-3b-instruct"
   },
   {
    "context": 131072,
@@ -675,10 +663,6 @@
    "id": "qwen3-235b-a22b-fp8"
   },
   {
-   "context": 262144,
-   "id": "qwen3-235b-a22b-instruct-2507"
-  },
-  {
    "context": 262000,
    "id": "qwen3-235b-a22b-thinking-2507"
   },
@@ -701,10 +685,6 @@
   {
    "context": 997952,
    "id": "qwen3-coder-flash"
-  },
-  {
-   "context": 262144,
-   "id": "qwen3-coder-next"
   },
   {
    "context": 262144,
@@ -781,6 +761,10 @@
   {
    "context": 1000000,
    "id": "qwen3.8-max"
+  },
+  {
+   "context": 983616,
+   "id": "qwen3.8-omni-flash"
   },
   {
    "context": 262144,

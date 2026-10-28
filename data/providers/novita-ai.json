@@ -1,5 +1,5 @@
 {
- "generated_at": 1793094483,
+ "generated_at": 1793183625,
  "id": "novita-ai",
  "models": [
   {
@@ -103,7 +103,7 @@
    "id": "inclusionai/ling-3.0-flash-vl"
   },
   {
-   "context": 262144,
+   "context": 1000000,
    "id": "inclusionai/ling-3.1-flash"
   },
   {

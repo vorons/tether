@@ -1,5 +1,5 @@
 {
- "generated_at": 1793094483,
+ "generated_at": 1793183625,
  "id": "kilo",
  "models": [
   {
@@ -195,7 +195,7 @@
    "id": "deepseek/deepseek-v3.2-exp"
   },
   {
-   "context": 1048576,
+   "context": 1048575,
    "id": "deepseek/deepseek-v4-flash"
   },
   {
@@ -383,7 +383,7 @@
    "id": "inclusionai/ling-3.0-flash-vl"
   },
   {
-   "context": 262144,
+   "context": 1000000,
    "id": "inclusionai/ling-3.1-flash"
   },
   {
@@ -1055,6 +1055,10 @@
    "id": "prism-ml/ternary-bonsai-2-27b"
   },
   {
+   "context": 262144,
+   "id": "prism-ml/ternary-bonsai-2-9b"
+  },
+  {
    "context": 32768,
    "id": "qwen/qwen-2.5-72b-instruct"
   },
@@ -1483,7 +1487,7 @@
    "id": "z-ai/glm-5-turbo"
   },
   {
-   "context": 200000,
+   "context": 202752,
    "id": "z-ai/glm-5.1"
   },
   {

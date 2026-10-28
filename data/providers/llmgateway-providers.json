@@ -1,5 +1,5 @@
 {
- "generated_at": 1793094483,
+ "generated_at": 1793183625,
  "id": "llmgateway-providers",
  "models": [
   {
@@ -105,6 +105,10 @@
   {
    "context": 983616,
    "id": "alibaba/qwen3.8-max"
+  },
+  {
+   "context": 983616,
+   "id": "alibaba/qwen3.8-omni-flash"
   },
   {
    "context": 262144,
@@ -284,10 +288,6 @@
   },
   {
    "context": 2000000,
-   "id": "azure-ai-foundry/grok-4-1-fast-non-reasoning"
-  },
-  {
-   "context": 2000000,
    "id": "azure-ai-foundry/grok-4-1-fast-reasoning"
   },
   {
@@ -443,6 +443,10 @@
    "id": "baidu/deepseek-v4.1-flash"
   },
   {
+   "context": 1048576,
+   "id": "baidu/deepseek-v4.1-flash-1017"
+  },
+  {
    "context": 202752,
    "id": "baidu/glm-5.1"
   },
@@ -453,6 +457,10 @@
   {
    "context": 1048576,
    "id": "baidu/glm-5.3"
+  },
+  {
+   "context": 1048576,
+   "id": "baidu/glm-5.3-flash"
   },
   {
    "context": 262144,
@@ -551,8 +559,24 @@
    "id": "cerebras/llama-3.3-70b-instruct"
   },
   {
-   "context": 262000,
-   "id": "cerebras/qwen3-235b-a22b-instruct-2507"
+   "context": 1048576,
+   "id": "cloudflare/deepseek-v4-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "cloudflare/deepseek-v4-pro"
+  },
+  {
+   "context": 1048576,
+   "id": "cloudflare/deepseek-v4.1-flash-1017"
+  },
+  {
+   "context": 1048576,
+   "id": "cloudflare/glm-5.3"
+  },
+  {
+   "context": 1048576,
+   "id": "cloudflare/glm-5.3-flash"
   },
   {
    "context": 262000,
@@ -663,42 +687,6 @@
    "id": "deepseek/deepseek-v4.1-flash-1017"
   },
   {
-   "context": 131000,
-   "id": "embercloud/glm-4.5"
-  },
-  {
-   "context": 131000,
-   "id": "embercloud/glm-4.5-air"
-  },
-  {
-   "context": 200000,
-   "id": "embercloud/glm-4.7"
-  },
-  {
-   "context": 200000,
-   "id": "embercloud/glm-4.7-flash"
-  },
-  {
-   "context": 203000,
-   "id": "embercloud/glm-5"
-  },
-  {
-   "context": 203000,
-   "id": "embercloud/glm-5.1"
-  },
-  {
-   "context": 203000,
-   "id": "embercloud/glm-5.2"
-  },
-  {
-   "context": 262144,
-   "id": "embercloud/kimi-k2.5"
-  },
-  {
-   "context": 262144,
-   "id": "embercloud/qwen3-coder-next"
-  },
-  {
    "context": 1048576,
    "id": "entrim/deepseek-v4.1-flash"
   },
@@ -733,10 +721,6 @@
   {
    "context": 1040384,
    "id": "fireworks/kimi-k3-fast"
-  },
-  {
-   "context": 204800,
-   "id": "gonka24/minimax-m2.7"
   },
   {
    "context": 1048576,
@@ -1091,10 +1075,6 @@
    "id": "novita/llama-3-70b-instruct"
   },
   {
-   "context": 32768,
-   "id": "novita/llama-3.2-3b-instruct"
-  },
-  {
    "context": 131072,
    "id": "novita/llama-3.3-70b-instruct"
   },
@@ -1125,10 +1105,6 @@
   {
    "context": 40960,
    "id": "novita/qwen3-235b-a22b-fp8"
-  },
-  {
-   "context": 131072,
-   "id": "novita/qwen3-235b-a22b-instruct-2507"
   },
   {
    "context": 131072,
@@ -1325,10 +1301,6 @@
   {
    "context": 1000000,
    "id": "ranoai/deepseek-v4-flash"
-  },
-  {
-   "context": 1048576,
-   "id": "reka-ai/deepseek-v4-pro"
   },
   {
    "context": 1048576,

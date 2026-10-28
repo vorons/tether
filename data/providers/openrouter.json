@@ -1,5 +1,5 @@
 {
- "generated_at": 1793094483,
+ "generated_at": 1793183625,
  "id": "openrouter",
  "models": [
   {
@@ -391,7 +391,7 @@
    "id": "inclusionai/ling-3.0-flash-vl"
   },
   {
-   "context": 262144,
+   "context": 1000000,
    "id": "inclusionai/ling-3.1-flash"
   },
   {
@@ -1045,6 +1045,10 @@
   {
    "context": 262144,
    "id": "prism-ml/ternary-bonsai-2-27b"
+  },
+  {
+   "context": 262144,
+   "id": "prism-ml/ternary-bonsai-2-9b"
   },
   {
    "context": 32768,

@@ -1,5 +1,5 @@
 {
- "generated_at": 1793094483,
+ "generated_at": 1793183625,
  "id": "venice",
  "models": [
   {
@@ -101,6 +101,10 @@
   {
    "context": 1000000,
    "id": "deepseek-v4-1-flash-1017"
+  },
+  {
+   "context": 1000000,
+   "id": "deepseek-v4-1-flash-1017-uncensored"
   },
   {
    "context": 1000000,

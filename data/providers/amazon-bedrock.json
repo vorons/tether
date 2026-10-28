@@ -1,5 +1,5 @@
 {
- "generated_at": 1793094483,
+ "generated_at": 1793183625,
  "id": "amazon-bedrock",
  "models": [
   {
@@ -327,6 +327,10 @@
    "id": "global.openai.gpt-6.1-sol"
   },
   {
+   "context": 1050000,
+   "id": "global.openai.gpt-6.1-terra"
+  },
+  {
    "context": 500000,
    "id": "global.xai.grok-4.6"
   },
@@ -551,6 +555,10 @@
    "id": "openai.gpt-6.1-sol"
   },
   {
+   "context": 1050000,
+   "id": "openai.gpt-6.1-terra"
+  },
+  {
    "context": 131072,
    "id": "openai.gpt-oss-120b"
   },
@@ -753,6 +761,10 @@
   {
    "context": 1050000,
    "id": "us.openai.gpt-6.1-sol"
+  },
+  {
+   "context": 1050000,
+   "id": "us.openai.gpt-6.1-terra"
   },
   {
    "context": 122880,
