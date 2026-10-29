@@ -1,5 +1,5 @@
 {
- "generated_at": 1793183625,
+ "generated_at": 1793271191,
  "id": "llmgateway-providers",
  "models": [
   {
@@ -463,10 +463,6 @@
    "id": "baidu/glm-5.3-flash"
   },
   {
-   "context": 262144,
-   "id": "baidu/kimi-k2.6"
-  },
-  {
    "context": 131072,
    "id": "bytedance/deepseek-v3.2"
   },
@@ -544,19 +540,7 @@
   },
   {
    "context": 131072,
-   "id": "cerebras/gemma-4-31b-it"
-  },
-  {
-   "context": 200000,
-   "id": "cerebras/glm-4.7"
-  },
-  {
-   "context": 131072,
    "id": "cerebras/gpt-oss-120b"
-  },
-  {
-   "context": 128000,
-   "id": "cerebras/llama-3.3-70b-instruct"
   },
   {
    "context": 1048576,
@@ -819,6 +803,10 @@
    "id": "inference.net/deepseek-v4.1-flash-1017"
   },
   {
+   "context": 1040000,
+   "id": "inference.net/deepseek-v4.1-flash-cyber"
+  },
+  {
    "context": 1048576,
    "id": "inference.net/glm-5.3"
   },
@@ -983,10 +971,6 @@
    "id": "nebius/minimax-m3.1-flash"
   },
   {
-   "context": 163840,
-   "id": "novita/deepseek-v3.2"
-  },
-  {
    "context": 1050000,
    "id": "novita/deepseek-v4-flash"
   },
@@ -997,10 +981,6 @@
   {
    "context": 1048576,
    "id": "novita/deepseek-v4.1-flash-1017"
-  },
-  {
-   "context": 123000,
-   "id": "novita/ernie-4.5-vl-424b-a47b"
   },
   {
    "context": 262144,
@@ -1071,10 +1051,6 @@
    "id": "novita/ling-3.0-flash"
   },
   {
-   "context": 8192,
-   "id": "novita/llama-3-70b-instruct"
-  },
-  {
    "context": 131072,
    "id": "novita/llama-3.3-70b-instruct"
   },
@@ -1088,10 +1064,6 @@
   },
   {
    "context": 204800,
-   "id": "novita/minimax-m2.1"
-  },
-  {
-   "context": 204800,
    "id": "novita/minimax-m2.5"
   },
   {
@@ -1101,30 +1073,6 @@
   {
    "context": 1000000,
    "id": "novita/minimax-m3.1-flash"
-  },
-  {
-   "context": 40960,
-   "id": "novita/qwen3-235b-a22b-fp8"
-  },
-  {
-   "context": 131072,
-   "id": "novita/qwen3-235b-a22b-thinking-2507"
-  },
-  {
-   "context": 160000,
-   "id": "novita/qwen3-coder-30b-a3b-instruct"
-  },
-  {
-   "context": 262144,
-   "id": "novita/qwen3-coder-480b-a35b-instruct"
-  },
-  {
-   "context": 262144,
-   "id": "novita/qwen3-max"
-  },
-  {
-   "context": 131072,
-   "id": "novita/qwen3-next-80b-a3b-instruct"
   },
   {
    "context": 131072,
@@ -1315,7 +1263,7 @@
    "id": "reka-ai/glm-5.3"
   },
   {
-   "context": 262144,
+   "context": 1048576,
    "id": "reka-ai/glm-5.3-flash"
   },
   {

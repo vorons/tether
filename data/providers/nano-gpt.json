@@ -1,5 +1,5 @@
 {
- "generated_at": 1793183625,
+ "generated_at": 1793271191,
  "id": "nano-gpt",
  "models": [
   {
@@ -325,18 +325,6 @@
   {
    "context": 262144,
    "id": "TEE/qwen3.8-27b"
-  },
-  {
-   "context": 128000,
-   "id": "THUDM/GLM-4-32B-0414"
-  },
-  {
-   "context": 32000,
-   "id": "THUDM/GLM-4-9B-0414"
-  },
-  {
-   "context": 32000,
-   "id": "THUDM/GLM-Z1-9B-0414"
   },
   {
    "context": 65536,
@@ -828,18 +816,6 @@
   },
   {
    "context": 256000,
-   "id": "doubao-1.5-pro-256k"
-  },
-  {
-   "context": 32000,
-   "id": "doubao-1.5-pro-32k"
-  },
-  {
-   "context": 32000,
-   "id": "doubao-1.5-vision-pro-32k"
-  },
-  {
-   "context": 256000,
    "id": "doubao-seed-2-0-code-preview-260215"
   },
   {
@@ -1051,28 +1027,8 @@
    "id": "gemma-4-31b-it-scarlet"
   },
   {
-   "context": 128000,
-   "id": "glm-4-air-0111"
-  },
-  {
    "context": 1000000,
    "id": "glm-4-long"
-  },
-  {
-   "context": 128000,
-   "id": "glm-4-plus-0111"
-  },
-  {
-   "context": 64000,
-   "id": "glm-4.1v-thinking-flash"
-  },
-  {
-   "context": 64000,
-   "id": "glm-4.1v-thinking-flashx"
-  },
-  {
-   "context": 32000,
-   "id": "glm-z1-airx"
   },
   {
    "context": 262144,
@@ -1619,7 +1575,7 @@
    "id": "nvidia/nemotron-3-super-120b-a12b:thinking"
   },
   {
-   "context": 1000000,
+   "context": 512288,
    "id": "nvidia/nemotron-3-ultra-550b-a55b"
   },
   {
@@ -1891,6 +1847,10 @@
    "id": "pamanseau/OpenReasoning-Nemotron-32B"
   },
   {
+   "context": 1048576,
+   "id": "particle-ai/particle-1"
+  },
+  {
    "context": 32768,
    "id": "perceptron/perceptron-mk1"
   },
@@ -1925,10 +1885,6 @@
   {
    "context": 262144,
    "id": "prism-ml/ternary-bonsai-2-9b"
-  },
-  {
-   "context": 128000,
-   "id": "qvq-max"
   },
   {
    "context": 131072,

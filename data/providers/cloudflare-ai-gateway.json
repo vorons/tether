@@ -1,5 +1,5 @@
 {
- "generated_at": 1793183625,
+ "generated_at": 1793271191,
  "id": "cloudflare-ai-gateway",
  "models": [
   {
@@ -249,6 +249,10 @@
   {
    "context": 1050000,
    "id": "openai/gpt-6.1-sol"
+  },
+  {
+   "context": 1050000,
+   "id": "openai/gpt-6.1-terra"
   },
   {
    "context": 200000,

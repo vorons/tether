@@ -1,5 +1,5 @@
 {
- "generated_at": 1793183625,
+ "generated_at": 1793271191,
  "id": "empiriolabs",
  "models": [
   {
@@ -53,6 +53,10 @@
   {
    "context": 200000,
    "id": "glm-4-7-flash"
+  },
+  {
+   "context": 200000,
+   "id": "glm-4-7-flashx"
   },
   {
    "context": 202000,

@@ -1,5 +1,5 @@
 {
- "generated_at": 1793183625,
+ "generated_at": 1793271191,
  "id": "openai",
  "models": [
   {
@@ -153,10 +153,6 @@
   {
    "context": 400000,
    "id": "gpt-daybreak-red-latest"
-  },
-  {
-   "context": 0,
-   "id": "gpt-image-1"
   },
   {
    "context": 0,

@@ -1,5 +1,5 @@
 {
- "generated_at": 1793183625,
+ "generated_at": 1793271191,
  "id": "mistral",
  "models": [
   {
@@ -9,6 +9,10 @@
   {
    "context": 256000,
    "id": "codestral-latest"
+  },
+  {
+   "context": 1048576,
+   "id": "deepseek-v4-1-flash-1017"
   },
   {
    "context": 262144,

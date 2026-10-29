@@ -1,5 +1,5 @@
 {
- "generated_at": 1793183625,
+ "generated_at": 1793271191,
  "id": "kilo",
  "models": [
   {
@@ -695,7 +695,7 @@
    "id": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
   },
   {
-   "context": 262144,
+   "context": 1048576,
    "id": "nvidia/nemotron-3-super-120b-a12b"
   },
   {
@@ -741,10 +741,6 @@
   {
    "context": 8191,
    "id": "openai/gpt-4"
-  },
-  {
-   "context": 128000,
-   "id": "openai/gpt-4-turbo"
   },
   {
    "context": 1047576,
@@ -825,10 +821,6 @@
   {
    "context": 400000,
    "id": "openai/gpt-5.2"
-  },
-  {
-   "context": 128000,
-   "id": "openai/gpt-5.2-chat"
   },
   {
    "context": 400000,
@@ -960,35 +952,11 @@
   },
   {
    "context": 200000,
-   "id": "openai/o1"
-  },
-  {
-   "context": 200000,
-   "id": "openai/o1-pro"
-  },
-  {
-   "context": 200000,
    "id": "openai/o3"
   },
   {
    "context": 200000,
-   "id": "openai/o3-mini"
-  },
-  {
-   "context": 200000,
-   "id": "openai/o3-mini-high"
-  },
-  {
-   "context": 200000,
    "id": "openai/o3-pro"
-  },
-  {
-   "context": 200000,
-   "id": "openai/o4-mini"
-  },
-  {
-   "context": 200000,
-   "id": "openai/o4-mini-high"
   },
   {
    "context": 2000000,
@@ -1005,6 +973,10 @@
   {
    "context": 200000,
    "id": "openrouter/pareto-code"
+  },
+  {
+   "context": 1048576,
+   "id": "particle-ai/particle-1"
   },
   {
    "context": 32768,
@@ -1121,10 +1093,6 @@
   {
    "context": 262144,
    "id": "qwen/qwen3-next-80b-a3b-instruct"
-  },
-  {
-   "context": 262144,
-   "id": "qwen/qwen3-next-80b-a3b-thinking"
   },
   {
    "context": 131072,
@@ -1287,28 +1255,8 @@
    "id": "scaledown/summarize"
   },
   {
-   "context": 1000000,
-   "id": "stealth/claude-opus-4.6"
-  },
-  {
-   "context": 1000000,
-   "id": "stealth/claude-opus-4.7"
-  },
-  {
-   "context": 1000000,
-   "id": "stealth/claude-opus-4.8"
-  },
-  {
-   "context": 1000000,
-   "id": "stealth/claude-sonnet-4.6"
-  },
-  {
    "context": 256000,
    "id": "stealth/glyph-cluster"
-  },
-  {
-   "context": 1000000,
-   "id": "stealth/qwen3.6-plus"
   },
   {
    "context": 262144,
@@ -1463,7 +1411,7 @@
    "id": "z-ai/glm-4.5v"
   },
   {
-   "context": 204800,
+   "context": 202752,
    "id": "z-ai/glm-4.6"
   },
   {
@@ -1499,7 +1447,7 @@
    "id": "z-ai/glm-5.3"
   },
   {
-   "context": 1048575,
+   "context": 1048576,
    "id": "z-ai/glm-5.3-flash"
   },
   {

@@ -1,5 +1,5 @@
 {
- "generated_at": 1793183625,
+ "generated_at": 1793271191,
  "id": "google",
  "models": [
   {
@@ -48,15 +48,7 @@
   },
   {
    "context": 131072,
-   "id": "gemini-3-pro-image-preview"
-  },
-  {
-   "context": 131072,
    "id": "gemini-3.1-flash-image"
-  },
-  {
-   "context": 65536,
-   "id": "gemini-3.1-flash-image-preview"
   },
   {
    "context": 1048576,

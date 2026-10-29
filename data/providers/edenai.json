@@ -1,5 +1,5 @@
 {
- "generated_at": 1793183625,
+ "generated_at": 1793271191,
  "id": "edenai",
  "models": [
   {
@@ -176,7 +176,15 @@
   },
   {
    "context": 1048576,
+   "id": "arkanecloud/deepseek-ai/DeepSeek-V4-Flash-0731"
+  },
+  {
+   "context": 1048576,
    "id": "arkanecloud/deepseek-ai/DeepSeek-V4.1-Flash"
+  },
+  {
+   "context": 1048576,
+   "id": "arkanecloud/deepseek-ai/DeepSeek-V4.1-Flash-1017"
   },
   {
    "context": 131072,
@@ -592,10 +600,6 @@
   },
   {
    "context": 1048576,
-   "id": "flexai/DeepSeek-V4.1-Flash"
-  },
-  {
-   "context": 1048576,
    "id": "flexai/DeepSeek-V4.1-Flash-1017"
   },
   {
@@ -820,7 +824,15 @@
   },
   {
    "context": 256000,
+   "id": "mistral/codestral-2508@eu"
+  },
+  {
+   "context": 256000,
    "id": "mistral/codestral-latest"
+  },
+  {
+   "context": 256000,
+   "id": "mistral/codestral-latest@eu"
   },
   {
    "context": 262144,
@@ -828,7 +840,15 @@
   },
   {
    "context": 262144,
+   "id": "mistral/devstral-2512@eu"
+  },
+  {
+   "context": 262144,
    "id": "mistral/devstral-medium-latest"
+  },
+  {
+   "context": 262144,
+   "id": "mistral/devstral-medium-latest@eu"
   },
   {
    "context": 262144,
@@ -836,19 +856,39 @@
   },
   {
    "context": 262144,
+   "id": "mistral/magistral-medium-latest@eu"
+  },
+  {
+   "context": 262144,
    "id": "mistral/ministral-14b-2512"
+  },
+  {
+   "context": 262144,
+   "id": "mistral/ministral-14b-2512@eu"
   },
   {
    "context": 131072,
    "id": "mistral/ministral-3b-2512"
   },
   {
+   "context": 131072,
+   "id": "mistral/ministral-3b-2512@eu"
+  },
+  {
    "context": 262144,
    "id": "mistral/ministral-8b-2512"
   },
   {
+   "context": 262144,
+   "id": "mistral/ministral-8b-2512@eu"
+  },
+  {
    "context": 131072,
    "id": "mistral/mistral-large-2407"
+  },
+  {
+   "context": 131072,
+   "id": "mistral/mistral-large-2407@eu"
   },
   {
    "context": 262144,
@@ -856,15 +896,35 @@
   },
   {
    "context": 262144,
+   "id": "mistral/mistral-large-2512@eu"
+  },
+  {
+   "context": 524288,
+   "id": "mistral/mistral-large-4@eu"
+  },
+  {
+   "context": 262144,
    "id": "mistral/mistral-large-latest"
+  },
+  {
+   "context": 262144,
+   "id": "mistral/mistral-large-latest@eu"
   },
   {
    "context": 131072,
    "id": "mistral/mistral-medium-2505"
   },
   {
+   "context": 131072,
+   "id": "mistral/mistral-medium-2505@eu"
+  },
+  {
    "context": 262144,
    "id": "mistral/mistral-medium-2604"
+  },
+  {
+   "context": 262144,
+   "id": "mistral/mistral-medium-2604@eu"
   },
   {
    "context": 262144,
@@ -876,7 +936,19 @@
   },
   {
    "context": 262144,
+   "id": "mistral/mistral-medium-3-5@eu"
+  },
+  {
+   "context": 262144,
+   "id": "mistral/mistral-medium-3@eu"
+  },
+  {
+   "context": 262144,
    "id": "mistral/mistral-medium-latest"
+  },
+  {
+   "context": 262144,
+   "id": "mistral/mistral-medium-latest@eu"
   },
   {
    "context": 262144,
@@ -884,11 +956,23 @@
   },
   {
    "context": 262144,
+   "id": "mistral/mistral-small-2603@eu"
+  },
+  {
+   "context": 262144,
    "id": "mistral/mistral-small-latest"
+  },
+  {
+   "context": 262144,
+   "id": "mistral/mistral-small-latest@eu"
   },
   {
    "context": 32768,
    "id": "mistral/voxtral-small-latest"
+  },
+  {
+   "context": 32768,
+   "id": "mistral/voxtral-small-latest@eu"
   },
   {
    "context": 262144,

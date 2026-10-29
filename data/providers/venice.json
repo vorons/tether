@@ -1,5 +1,5 @@
 {
- "generated_at": 1793183625,
+ "generated_at": 1793271191,
  "id": "venice",
  "models": [
   {
@@ -213,10 +213,6 @@
   {
    "context": 1048576,
    "id": "hy4-preview"
-  },
-  {
-   "context": 524288,
-   "id": "inkling"
   },
   {
    "context": 256000,
