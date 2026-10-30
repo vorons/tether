@@ -1,5 +1,5 @@
 {
- "generated_at": 1793271191,
+ "generated_at": 1793357472,
  "id": "nearai",
  "models": [
   {
@@ -21,6 +21,10 @@
   {
    "context": 262144,
    "id": "Qwen/Qwen3.8-27B"
+  },
+  {
+   "context": 262144,
+   "id": "Qwen/Qwen3.8-27B-abliterated"
   },
   {
    "context": 1000000,
@@ -77,6 +81,14 @@
   {
    "context": 0,
    "id": "black-forest-labs/FLUX.2-klein-4B"
+  },
+  {
+   "context": 1000000,
+   "id": "deepseek-ai/DeepSeek-V4.1-Flash-1017"
+  },
+  {
+   "context": 1048576,
+   "id": "deepseek-ai/DeepSeek-V4.1-Flash-1017-abliterated"
   },
   {
    "context": 128000,

@@ -1,5 +1,5 @@
 {
- "generated_at": 1793271191,
+ "generated_at": 1793357472,
  "id": "kilo",
  "models": [
   {
@@ -1171,7 +1171,7 @@
    "id": "qwen/qwen3.7-plus"
   },
   {
-   "context": 1010000,
+   "context": 1000000,
    "id": "qwen/qwen3.8-2.4t-a95b"
   },
   {
@@ -1335,10 +1335,6 @@
    "id": "upstage/solar-mini4"
   },
   {
-   "context": 131072,
-   "id": "upstage/solar-pro-3"
-  },
-  {
    "context": 524288,
    "id": "upstage/solar-pro4"
   },
@@ -1447,7 +1443,7 @@
    "id": "z-ai/glm-5.3"
   },
   {
-   "context": 1048576,
+   "context": 1048575,
    "id": "z-ai/glm-5.3-flash"
   },
   {

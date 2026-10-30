@@ -1,5 +1,5 @@
 {
- "generated_at": 1793271191,
+ "generated_at": 1793357472,
  "id": "mistral",
  "models": [
   {
@@ -73,6 +73,10 @@
   {
    "context": 1048576,
    "id": "mistral-large-4"
+  },
+  {
+   "context": 1048576,
+   "id": "mistral-large-4-0-8"
   },
   {
    "context": 262144,

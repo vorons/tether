@@ -1,5 +1,5 @@
 {
- "generated_at": 1793271191,
+ "generated_at": 1793357472,
  "id": "llmgateway",
  "models": [
   {
@@ -247,6 +247,10 @@
    "id": "glm-5.3-flash"
   },
   {
+   "context": 1000000,
+   "id": "glm-5.3-flashx"
+  },
+  {
    "context": 200000,
    "id": "glm-5v-turbo"
   },
@@ -469,6 +473,10 @@
   {
    "context": 262144,
    "id": "kimi-k2.7-code-highspeed"
+  },
+  {
+   "context": 1000000,
+   "id": "kimi-k2.8-preview"
   },
   {
    "context": 1048576,
@@ -785,6 +793,10 @@
   {
    "context": 262144,
    "id": "step-3.7-flash"
+  },
+  {
+   "context": 1000000,
+   "id": "step-5-preview"
   }
  ],
  "schema": 1

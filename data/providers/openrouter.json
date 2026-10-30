@@ -1,5 +1,5 @@
 {
- "generated_at": 1793271191,
+ "generated_at": 1793357472,
  "id": "openrouter",
  "models": [
   {
@@ -1251,7 +1251,7 @@
    "id": "stepfun/step-3.7-flash"
   },
   {
-   "context": 1000000,
+   "context": 1048576,
    "id": "stepfun/step-5-preview"
   },
   {
@@ -1325,10 +1325,6 @@
   {
    "context": 524288,
    "id": "upstage/solar-mini4"
-  },
-  {
-   "context": 131072,
-   "id": "upstage/solar-pro-3"
   },
   {
    "context": 524288,

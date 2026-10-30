@@ -1,5 +1,5 @@
 {
- "generated_at": 1793271191,
+ "generated_at": 1793357472,
  "id": "nano-gpt",
  "models": [
   {
@@ -1831,6 +1831,10 @@
    "id": "openai/o4-mini-high"
   },
   {
+   "context": 999488,
+   "id": "orca/orcacyber-zero-1.5"
+  },
+  {
    "context": 262144,
    "id": "ornith-ai/ornith-1.5-122b"
   },
@@ -2217,10 +2221,6 @@
   {
    "context": 32768,
    "id": "shisa-ai/shisa-v2.1-llama3.3-70b"
-  },
-  {
-   "context": 32768,
-   "id": "soob3123/GrayLine-Qwen3-8B"
   },
   {
    "context": 32768,

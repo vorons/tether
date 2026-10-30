@@ -1,5 +1,5 @@
 {
- "generated_at": 1793271191,
+ "generated_at": 1793357472,
  "id": "edenai",
  "models": [
   {
@@ -91,7 +91,7 @@
    "id": "amazon/openai.gpt-oss-safeguard-20b@us"
   },
   {
-   "context": 256000,
+   "context": 262144,
    "id": "amazon/qwen.qwen3-coder-next"
   },
   {
@@ -1257,6 +1257,10 @@
   {
    "context": 256000,
    "id": "scaleway/deepseek-v4.1-flash"
+  },
+  {
+   "context": 1000000,
+   "id": "scaleway/deepseek-v4.1-flash-1017"
   },
   {
    "context": 40000,

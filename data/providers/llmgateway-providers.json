@@ -1,5 +1,5 @@
 {
- "generated_at": 1793271191,
+ "generated_at": 1793357472,
  "id": "llmgateway-providers",
  "models": [
   {
@@ -669,10 +669,6 @@
   {
    "context": 1050000,
    "id": "deepseek/deepseek-v4.1-flash-1017"
-  },
-  {
-   "context": 1048576,
-   "id": "entrim/deepseek-v4.1-flash"
   },
   {
    "context": 1048576,
@@ -1391,6 +1387,14 @@
    "id": "tencent/deepseek-v4-pro"
   },
   {
+   "context": 1000000,
+   "id": "tencent/deepseek-v4.1-flash"
+  },
+  {
+   "context": 1000000,
+   "id": "tencent/deepseek-v4.1-flash-1017"
+  },
+  {
    "context": 200000,
    "id": "tencent/glm-5"
   },
@@ -1405,6 +1409,18 @@
   {
    "context": 1000000,
    "id": "tencent/glm-5.2"
+  },
+  {
+   "context": 1000000,
+   "id": "tencent/glm-5.3"
+  },
+  {
+   "context": 1000000,
+   "id": "tencent/glm-5.3-flash"
+  },
+  {
+   "context": 1000000,
+   "id": "tencent/glm-5.3-flashx"
   },
   {
    "context": 200000,
@@ -1435,8 +1451,20 @@
    "id": "tencent/kimi-k2.7-code-highspeed"
   },
   {
+   "context": 1000000,
+   "id": "tencent/kimi-k2.8-preview"
+  },
+  {
    "context": 1048576,
    "id": "tencent/kimi-k3"
+  },
+  {
+   "context": 1000000,
+   "id": "tencent/mimo-v2.6-flash"
+  },
+  {
+   "context": 1000000,
+   "id": "tencent/mimo-v2.6-pro"
   },
   {
    "context": 200000,
@@ -1445,6 +1473,10 @@
   {
    "context": 1000000,
    "id": "tencent/minimax-m3"
+  },
+  {
+   "context": 1000000,
+   "id": "tencent/step-5-preview"
   },
   {
    "context": 1048576,

@@ -1,5 +1,5 @@
 {
- "generated_at": 1793271191,
+ "generated_at": 1793357472,
  "id": "scaleway",
  "models": [
   {
@@ -12,7 +12,7 @@
   },
   {
    "context": 256000,
-   "id": "deepseek-v4.1-flash"
+   "id": "deepseek-v4.1-flash-1017"
   },
   {
    "context": 256000,

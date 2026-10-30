@@ -1,5 +1,5 @@
 {
- "generated_at": 1793271191,
+ "generated_at": 1793357472,
  "id": "aiand",
  "models": [
   {
@@ -11,8 +11,16 @@
    "id": "deepseek-ai/deepseek-v4.1-flash"
   },
   {
+   "context": 1048576,
+   "id": "deepseek-ai/deepseek-v4.1-flash-1017"
+  },
+  {
    "context": 262144,
    "id": "google/gemma-4-31b-it"
+  },
+  {
+   "context": 1048576,
+   "id": "meta/muse-spark-open"
   },
   {
    "context": 1048576,

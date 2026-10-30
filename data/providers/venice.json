@@ -1,5 +1,5 @@
 {
- "generated_at": 1793271191,
+ "generated_at": 1793357472,
  "id": "venice",
  "models": [
   {
@@ -73,10 +73,6 @@
   {
    "context": 1000000,
    "id": "claude-opus-5-fast"
-  },
-  {
-   "context": 198000,
-   "id": "claude-sonnet-4-5"
   },
   {
    "context": 1000000,
