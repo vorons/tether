@@ -1,5 +1,5 @@
 {
- "generated_at": 1793357472,
+ "generated_at": 1793442189,
  "id": "digitalocean",
  "models": [
   {
@@ -273,6 +273,10 @@
   {
    "context": 1050000,
    "id": "openai-gpt-6-sol"
+  },
+  {
+   "context": 1050000,
+   "id": "openai-gpt-6.1-terra"
   },
   {
    "context": 0,

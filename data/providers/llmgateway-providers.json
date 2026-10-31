@@ -1,5 +1,5 @@
 {
- "generated_at": 1793357472,
+ "generated_at": 1793442189,
  "id": "llmgateway-providers",
  "models": [
   {
@@ -287,7 +287,7 @@
    "id": "aws-mantle/gpt-6-astra"
   },
   {
-   "context": 2000000,
+   "context": 128000,
    "id": "azure-ai-foundry/grok-4-1-fast-reasoning"
   },
   {
@@ -353,6 +353,10 @@
   {
    "context": 400000,
    "id": "azure/gpt-5-nano"
+  },
+  {
+   "context": 400000,
+   "id": "azure/gpt-5-pro"
   },
   {
    "context": 400000,
@@ -427,8 +431,20 @@
    "id": "azure/gpt-6.1-sol"
   },
   {
+   "context": 1050000,
+   "id": "azure/gpt-6.1-terra"
+  },
+  {
    "context": 131072,
    "id": "azure/gpt-oss-120b"
+  },
+  {
+   "context": 128000,
+   "id": "azure/grok-4-1-fast-reasoning"
+  },
+  {
+   "context": 200000,
+   "id": "azure/grok-4-3"
   },
   {
    "context": 1048576,
@@ -1303,14 +1319,6 @@
    "id": "runware/glm-5.3-flash"
   },
   {
-   "context": 131072,
-   "id": "runware/gpt-oss-120b"
-  },
-  {
-   "context": 262144,
-   "id": "runware/kimi-k2.6"
-  },
-  {
    "context": 1048576,
    "id": "runware/kimi-k3"
   },
@@ -1327,7 +1335,7 @@
    "id": "sakana/fugu-ultra-v2.0"
   },
   {
-   "context": 1056784,
+   "context": 1048576,
    "id": "sciforium/deepseek-v4.1-flash-1017"
   },
   {

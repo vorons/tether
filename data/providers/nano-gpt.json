@@ -1,5 +1,5 @@
 {
- "generated_at": 1793357472,
+ "generated_at": 1793442189,
  "id": "nano-gpt",
  "models": [
   {
@@ -1883,6 +1883,14 @@
    "id": "poolside/laguna-s-2.1:thinking"
   },
   {
+   "context": 512000,
+   "id": "pqhaz/DeepSeek-V4.1-Flash-1017-heretic"
+  },
+  {
+   "context": 512000,
+   "id": "pqhaz/DeepSeek-V4.1-Flash-1017-heretic:thinking"
+  },
+  {
    "context": 262144,
    "id": "prism-ml/ternary-bonsai-2-27b"
   },
@@ -2159,7 +2167,7 @@
    "id": "qwen/qwen3.8-27b:thinking"
   },
   {
-   "context": 991808,
+   "context": 1000000,
    "id": "qwen/qwen3.8-flash"
   },
   {

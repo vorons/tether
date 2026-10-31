@@ -1,0 +1,39 @@
+{
+ "generated_at": 1793442189,
+ "id": "wally",
+ "models": [
+  {
+   "context": 1048576,
+   "id": "deepseek-v4-flash-0731"
+  },
+  {
+   "context": 1048576,
+   "id": "deepseek-v4-pro-fast"
+  },
+  {
+   "context": 1048576,
+   "id": "deepseek-v4.1-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "deepseek-v4.1-flash-fast"
+  },
+  {
+   "context": 1048576,
+   "id": "glm-5.3-fast"
+  },
+  {
+   "context": 1048576,
+   "id": "glm-5.3-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "kimi-k3"
+  },
+  {
+   "context": 524287,
+   "id": "minimax-m3"
+  }
+ ],
+ "schema": 1
+}

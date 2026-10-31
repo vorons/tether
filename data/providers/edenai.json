@@ -1,5 +1,5 @@
 {
- "generated_at": 1793357472,
+ "generated_at": 1793442189,
  "id": "edenai",
  "models": [
   {
@@ -319,10 +319,6 @@
    "id": "databricks/databricks-deepseek-v4-flash-0731"
   },
   {
-   "context": 1000000,
-   "id": "databricks/databricks-deepseek-v4-pro-0813"
-  },
-  {
    "context": 131072,
    "id": "databricks/databricks-gpt-oss-120b"
   },
@@ -337,10 +333,6 @@
   {
    "context": 131072,
    "id": "databricks/databricks-gpt-oss-20b@eu"
-  },
-  {
-   "context": 1000000,
-   "id": "databricks/databricks-inkling"
   },
   {
    "context": 262144,
@@ -1003,15 +995,15 @@
    "id": "nebius/Qwen/Qwen3-30B-A3B-Instruct-2507"
   },
   {
-   "context": 1024000,
+   "context": 1048576,
    "id": "nebius/deepseek-ai/DeepSeek-V4-Flash-0731"
   },
   {
-   "context": 979000,
+   "context": 1048576,
    "id": "nebius/deepseek-ai/DeepSeek-V4-Pro-0813"
   },
   {
-   "context": 1048000,
+   "context": 1048576,
    "id": "nebius/deepseek-ai/DeepSeek-V4.1-Flash"
   },
   {

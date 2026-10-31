@@ -1,0 +1,15 @@
+{
+ "generated_at": 1793442189,
+ "id": "hopper",
+ "models": [
+  {
+   "context": 1048576,
+   "id": "deepseek-v4.1-flash-1017"
+  },
+  {
+   "context": 1048576,
+   "id": "deepseek-v4.1-flash-1017-abliterated"
+  }
+ ],
+ "schema": 1
+}

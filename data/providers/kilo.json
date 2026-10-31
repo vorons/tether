@@ -1,5 +1,5 @@
 {
- "generated_at": 1793357472,
+ "generated_at": 1793442189,
  "id": "kilo",
  "models": [
   {
@@ -187,7 +187,7 @@
    "id": "deepseek/deepseek-v3.1-terminus"
   },
   {
-   "context": 131072,
+   "context": 163840,
    "id": "deepseek/deepseek-v3.2"
   },
   {
@@ -207,7 +207,7 @@
    "id": "deepseek/deepseek-v4-flash-vision-exp"
   },
   {
-   "context": 1024000,
+   "context": 1048576,
    "id": "deepseek/deepseek-v4-pro"
   },
   {
@@ -387,6 +387,10 @@
    "id": "inclusionai/ling-3.1-flash"
   },
   {
+   "context": 1000000,
+   "id": "inclusionai/ling-3.1-flash-1019-free"
+  },
+  {
    "context": 128000,
    "id": "inference-net/schematron-v2-small"
   },
@@ -523,7 +527,7 @@
    "id": "minimax/minimax-m2.1"
   },
   {
-   "context": 204800,
+   "context": 198000,
    "id": "minimax/minimax-m2.5"
   },
   {
@@ -1443,7 +1447,7 @@
    "id": "z-ai/glm-5.3"
   },
   {
-   "context": 1048575,
+   "context": 1048576,
    "id": "z-ai/glm-5.3-flash"
   },
   {
