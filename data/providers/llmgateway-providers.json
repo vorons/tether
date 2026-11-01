@@ -1,5 +1,5 @@
 {
- "generated_at": 1793442189,
+ "generated_at": 1793531717,
  "id": "llmgateway-providers",
  "models": [
   {
@@ -1283,8 +1283,20 @@
    "id": "reka-ai/reka-edge-2603"
   },
   {
+   "context": 262144,
+   "id": "runpod/glm-5.3"
+  },
+  {
    "context": 1048576,
    "id": "runpod/kimi-k3"
+  },
+  {
+   "context": 1048576,
+   "id": "runpod/kimi-k3.1-pro"
+  },
+  {
+   "context": 1048576,
+   "id": "runpod/kimi-k3.1-pro-highspeed"
   },
   {
    "context": 1048576,

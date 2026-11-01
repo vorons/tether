@@ -1,5 +1,5 @@
 {
- "generated_at": 1793442189,
+ "generated_at": 1793531717,
  "id": "kilo",
  "models": [
   {
@@ -1011,22 +1011,6 @@
    "id": "perplexity/sonar-reasoning-pro"
   },
   {
-   "context": 1048576,
-   "id": "poolside/laguna-s-2.1"
-  },
-  {
-   "context": 262144,
-   "id": "poolside/laguna-s-2.1:free"
-  },
-  {
-   "context": 262144,
-   "id": "poolside/laguna-xs-2.1"
-  },
-  {
-   "context": 262144,
-   "id": "poolside/laguna-xs-2.1:free"
-  },
-  {
    "context": 262144,
    "id": "prism-ml/ternary-bonsai-2-27b"
   },
@@ -1419,7 +1403,7 @@
    "id": "z-ai/glm-4.6v"
   },
   {
-   "context": 204800,
+   "context": 202752,
    "id": "z-ai/glm-4.7"
   },
   {

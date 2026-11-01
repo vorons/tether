@@ -1,5 +1,5 @@
 {
- "generated_at": 1793442189,
+ "generated_at": 1793531717,
  "id": "nano-gpt",
  "models": [
   {
@@ -1783,7 +1783,7 @@
    "id": "openai/gpt-oss-20b"
   },
   {
-   "context": 128000,
+   "context": 131072,
    "id": "openai/gpt-oss-safeguard-20b"
   },
   {
@@ -1991,11 +1991,11 @@
    "id": "qwen/qwen3-vl-235b-a22b-thinking"
   },
   {
-   "context": 262144,
+   "context": 131072,
    "id": "qwen/qwen3.5-122b-a10b"
   },
   {
-   "context": 262144,
+   "context": 131072,
    "id": "qwen/qwen3.5-122b-a10b:thinking"
   },
   {

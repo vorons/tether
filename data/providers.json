@@ -1,5 +1,5 @@
 {
- "generated_at": 1793442189,
+ "generated_at": 1793531717,
  "providers": {
   "302ai": {
    "api_key_env": [
@@ -9773,7 +9773,7 @@
      "id": "gemma-4-26b-a4b"
     },
     {
-     "context": 200000,
+     "context": 131072,
      "id": "glm-4-5-flash"
     },
     {
@@ -9781,11 +9781,11 @@
      "id": "glm-4-6v-flash"
     },
     {
-     "context": 200000,
+     "context": 202752,
      "id": "glm-4-7-flash"
     },
     {
-     "context": 200000,
+     "context": 202752,
      "id": "glm-4-7-flashx"
     },
     {
@@ -9793,15 +9793,15 @@
      "id": "glm-5-1"
     },
     {
-     "context": 1000000,
+     "context": 1048576,
      "id": "glm-5-2"
     },
     {
-     "context": 1000000,
+     "context": 1048576,
      "id": "glm-5-3"
     },
     {
-     "context": 1000000,
+     "context": 1048576,
      "id": "glm-5-3-flash"
     },
     {
@@ -9841,11 +9841,11 @@
      "id": "minimax-m2-7-highspeed"
     },
     {
-     "context": 1000000,
+     "context": 1048576,
      "id": "minimax-m3"
     },
     {
-     "context": 1000000,
+     "context": 1048576,
      "id": "minimax-m3-1-flash"
     },
     {
@@ -9909,7 +9909,7 @@
      "id": "qwen3-6-35b-a3b"
     },
     {
-     "context": 1000000,
+     "context": 983616,
      "id": "qwen3-6-flash"
     },
     {
@@ -9949,23 +9949,23 @@
      "id": "qwen3-8-omni-flash"
     },
     {
-     "context": 256000,
+     "context": 229096,
      "id": "seed-2-0-code"
     },
     {
-     "context": 256000,
+     "context": 229096,
      "id": "seed-2-0-lite"
     },
     {
-     "context": 256000,
+     "context": 229156,
      "id": "seed-2-0-mini"
     },
     {
-     "context": 256000,
+     "context": 229096,
      "id": "seed-2-0-pro"
     },
     {
-     "context": 256000,
+     "context": 229093,
      "id": "seed-2-1-turbo"
     },
     {
@@ -14974,22 +14974,6 @@
      "id": "perplexity/sonar-reasoning-pro"
     },
     {
-     "context": 1048576,
-     "id": "poolside/laguna-s-2.1"
-    },
-    {
-     "context": 262144,
-     "id": "poolside/laguna-s-2.1:free"
-    },
-    {
-     "context": 262144,
-     "id": "poolside/laguna-xs-2.1"
-    },
-    {
-     "context": 262144,
-     "id": "poolside/laguna-xs-2.1:free"
-    },
-    {
      "context": 262144,
      "id": "prism-ml/ternary-bonsai-2-27b"
     },
@@ -15382,7 +15366,7 @@
      "id": "z-ai/glm-4.6v"
     },
     {
-     "context": 204800,
+     "context": 202752,
      "id": "z-ai/glm-4.7"
     },
     {
@@ -17774,8 +17758,20 @@
      "id": "reka-ai/reka-edge-2603"
     },
     {
+     "context": 262144,
+     "id": "runpod/glm-5.3"
+    },
+    {
      "context": 1048576,
      "id": "runpod/kimi-k3"
+    },
+    {
+     "context": 1048576,
+     "id": "runpod/kimi-k3.1-pro"
+    },
+    {
+     "context": 1048576,
+     "id": "runpod/kimi-k3.1-pro-highspeed"
     },
     {
      "context": 1048576,
@@ -21348,7 +21344,7 @@
      "id": "openai/gpt-oss-20b"
     },
     {
-     "context": 128000,
+     "context": 131072,
      "id": "openai/gpt-oss-safeguard-20b"
     },
     {
@@ -21556,11 +21552,11 @@
      "id": "qwen/qwen3-vl-235b-a22b-thinking"
     },
     {
-     "context": 262144,
+     "context": 131072,
      "id": "qwen/qwen3.5-122b-a10b"
     },
     {
-     "context": 262144,
+     "context": 131072,
      "id": "qwen/qwen3.5-122b-a10b:thinking"
     },
     {
@@ -24208,6 +24204,14 @@
      "id": "kimi-k3"
     },
     {
+     "context": 1048576,
+     "id": "mimo-v2.6-flash"
+    },
+    {
+     "context": 1048576,
+     "id": "mimo-v2.6-pro"
+    },
+    {
      "context": 196608,
      "id": "minimax-m2.7"
     },
@@ -26179,22 +26183,6 @@
     {
      "context": 128000,
      "id": "perplexity/sonar-reasoning-pro"
-    },
-    {
-     "context": 1048576,
-     "id": "poolside/laguna-s-2.1"
-    },
-    {
-     "context": 262144,
-     "id": "poolside/laguna-s-2.1:free"
-    },
-    {
-     "context": 262144,
-     "id": "poolside/laguna-xs-2.1"
-    },
-    {
-     "context": 262144,
-     "id": "poolside/laguna-xs-2.1:free"
     },
     {
      "context": 262144,
@@ -30726,7 +30714,7 @@
     "SILICONFLOW_CN_API_KEY"
    ],
    "base_url": "https://api.siliconflow.cn/v1",
-   "model": "zai-org/GLM-5.2",
+   "model": "zai-org/GLM-5.3-Flash",
    "models": [
     {
      "context": 262000,
@@ -30838,7 +30826,15 @@
     },
     {
      "context": 262144,
+     "id": "Qwen/Qwen3.6-27B"
+    },
+    {
+     "context": 262144,
      "id": "Qwen/Qwen3.6-35B-A3B"
+    },
+    {
+     "context": 262144,
+     "id": "Qwen/Qwen3.8-27B"
     },
     {
      "context": 8192,
@@ -30885,8 +30881,20 @@
      "id": "zai-org/GLM-4.5-Air"
     },
     {
+     "context": 65536,
+     "id": "zai-org/GLM-4.5V"
+    },
+    {
      "context": 1049000,
      "id": "zai-org/GLM-5.2"
+    },
+    {
+     "context": 1048576,
+     "id": "zai-org/GLM-5.3"
+    },
+    {
+     "context": 1048576,
+     "id": "zai-org/GLM-5.3-Flash"
     }
    ],
    "wire": "openai"

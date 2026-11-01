@@ -1,5 +1,5 @@
 {
- "generated_at": 1793442189,
+ "generated_at": 1793531717,
  "id": "ollama-cloud",
  "models": [
   {
@@ -57,6 +57,14 @@
   {
    "context": 1048576,
    "id": "kimi-k3"
+  },
+  {
+   "context": 1048576,
+   "id": "mimo-v2.6-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "mimo-v2.6-pro"
   },
   {
    "context": 196608,
