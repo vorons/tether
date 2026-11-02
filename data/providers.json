@@ -1,5 +1,5 @@
 {
- "generated_at": 1793531717,
+ "generated_at": 1793622119,
  "providers": {
   "302ai": {
    "api_key_env": [
@@ -14414,7 +14414,7 @@
      "id": "meta-llama/llama-3.2-1b-instruct"
     },
     {
-     "context": 131072,
+     "context": 80000,
      "id": "meta-llama/llama-3.2-3b-instruct"
     },
     {
@@ -20888,10 +20888,6 @@
      "id": "minimax/minimax-m2"
     },
     {
-     "context": 65532,
-     "id": "minimax/minimax-m2-her"
-    },
-    {
      "context": 200000,
      "id": "minimax/minimax-m2.1"
     },
@@ -21160,10 +21156,6 @@
      "id": "nvidia/nemotron-3.5-super-vl"
     },
     {
-     "context": 128000,
-     "id": "openai/gpt-4-turbo"
-    },
-    {
      "context": 1047576,
      "id": "openai/gpt-4.1"
     },
@@ -21369,27 +21361,11 @@
     },
     {
      "context": 200000,
-     "id": "openai/o3-mini"
-    },
-    {
-     "context": 200000,
-     "id": "openai/o3-mini-high"
-    },
-    {
-     "context": 200000,
      "id": "openai/o3-mini-low"
     },
     {
      "context": 200000,
      "id": "openai/o3-pro-2025-06-10"
-    },
-    {
-     "context": 200000,
-     "id": "openai/o4-mini"
-    },
-    {
-     "context": 200000,
-     "id": "openai/o4-mini-high"
     },
     {
      "context": 999488,
@@ -21434,14 +21410,6 @@
     {
      "context": 10000000,
      "id": "pokee-isaac"
-    },
-    {
-     "context": 1048576,
-     "id": "poolside/laguna-s-2.1"
-    },
-    {
-     "context": 1048576,
-     "id": "poolside/laguna-s-2.1:thinking"
     },
     {
      "context": 512000,
@@ -26337,7 +26305,7 @@
      "id": "qwen/qwen3.8-2.4t-a95b"
     },
     {
-     "context": 1000000,
+     "context": 1024000,
      "id": "qwen/qwen3.8-27b"
     },
     {

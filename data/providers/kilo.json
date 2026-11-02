@@ -1,5 +1,5 @@
 {
- "generated_at": 1793531717,
+ "generated_at": 1793622119,
  "id": "kilo",
  "models": [
   {
@@ -451,7 +451,7 @@
    "id": "meta-llama/llama-3.2-1b-instruct"
   },
   {
-   "context": 131072,
+   "context": 80000,
    "id": "meta-llama/llama-3.2-3b-instruct"
   },
   {
