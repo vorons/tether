@@ -1,5 +1,5 @@
 {
- "generated_at": 1793622119,
+ "generated_at": 1793706899,
  "providers": {
   "302ai": {
    "api_key_env": [
@@ -6426,10 +6426,6 @@
    "model": "gpt-6.1-terra",
    "models": [
     {
-     "context": 65536,
-     "id": "apertus-70b"
-    },
-    {
      "context": 200000,
      "id": "claude-4-5-sonnet"
     },
@@ -6702,7 +6698,7 @@
      "id": "minimax-m2.5"
     },
     {
-     "context": 1048576,
+     "context": 1000000,
      "id": "minimax-m3"
     },
     {
@@ -6840,10 +6836,6 @@
     {
      "context": 1000000,
      "id": "qwen3.8-27b"
-    },
-    {
-     "context": 262144,
-     "id": "qwen3.8-flash-next"
     },
     {
      "context": 32000,
@@ -13963,7 +13955,7 @@
     "KILO_API_KEY"
    ],
    "base_url": "https://api.kilo.ai/api/gateway",
-   "model": "particle-ai/particle-1",
+   "model": "z-ai/glm-5.3-flashx-legal",
    "models": [
     {
      "context": 131072,
@@ -14310,6 +14302,10 @@
      "id": "google/gemma-4-31b-it"
     },
     {
+     "context": 262144,
+     "id": "google/gemma-4-31b-it:free"
+    },
+    {
      "context": 1048576,
      "id": "google/lyria-3-clip-preview"
     },
@@ -14348,10 +14344,6 @@
     {
      "context": 1000000,
      "id": "inclusionai/ling-3.1-flash"
-    },
-    {
-     "context": 1000000,
-     "id": "inclusionai/ling-3.1-flash-1019-free"
     },
     {
      "context": 128000,
@@ -14640,14 +14632,6 @@
     {
      "context": 262144,
      "id": "nex-agi/nex-n2.5-pro"
-    },
-    {
-     "context": 131072,
-     "id": "nousresearch/hermes-3-llama-3.1-405b"
-    },
-    {
-     "context": 131072,
-     "id": "nousresearch/hermes-3-llama-3.1-70b"
     },
     {
      "context": 131072,
@@ -15271,6 +15255,14 @@
     },
     {
      "context": 1048576,
+     "id": "thinkingmachines/inkling-small:free"
+    },
+    {
+     "context": 1048576,
+     "id": "thinkingmachines/inkling:free"
+    },
+    {
+     "context": 1048576,
      "id": "unbiased/pareto-26.10"
     },
     {
@@ -15400,6 +15392,10 @@
     {
      "context": 1048576,
      "id": "z-ai/glm-5.3-flashx"
+    },
+    {
+     "context": 1048576,
+     "id": "z-ai/glm-5.3-flashx-legal"
     },
     {
      "context": 1000000,
@@ -19561,7 +19557,7 @@
     "NANO_GPT_API_KEY"
    ],
    "base_url": "https://nano-gpt.com/api/v1",
-   "model": "pqhaz/DeepSeek-V4.1-Flash-1017-heretic:thinking",
+   "model": "z-ai/glm-5.3-flashx-legal",
    "models": [
     {
      "context": 32768,
@@ -21368,6 +21364,14 @@
      "id": "openai/o3-pro-2025-06-10"
     },
     {
+     "context": 261632,
+     "id": "orca/orcacyber-minimax-m3.1-flash"
+    },
+    {
+     "context": 261632,
+     "id": "orca/orcacyber-qwen3.8-flash-next"
+    },
+    {
      "context": 999488,
      "id": "orca/orcacyber-zero-1.5"
     },
@@ -21761,6 +21765,10 @@
     },
     {
      "context": 32768,
+     "id": "soob3123/GrayLine-Qwen3-8B"
+    },
+    {
+     "context": 32768,
      "id": "soob3123/Veiled-Calla-12B"
     },
     {
@@ -22078,6 +22086,10 @@
     {
      "context": 1048576,
      "id": "z-ai/glm-5.3-flash-uncensored"
+    },
+    {
+     "context": 1048576,
+     "id": "z-ai/glm-5.3-flashx-legal"
     },
     {
      "context": 1048576,
@@ -24923,6 +24935,10 @@
      "id": "north-mini-code-free"
     },
     {
+     "context": 1048576,
+     "id": "pulse-alpha-free"
+    },
+    {
      "context": 262144,
      "id": "qwen3-coder"
     },
@@ -25818,14 +25834,6 @@
     },
     {
      "context": 131072,
-     "id": "nousresearch/hermes-3-llama-3.1-405b"
-    },
-    {
-     "context": 131072,
-     "id": "nousresearch/hermes-3-llama-3.1-70b"
-    },
-    {
-     "context": 131072,
      "id": "nousresearch/hermes-4-405b"
     },
     {
@@ -26579,6 +26587,10 @@
     {
      "context": 1048576,
      "id": "z-ai/glm-5.3-flashx"
+    },
+    {
+     "context": 1048576,
+     "id": "z-ai/glm-5.3-flashx-legal"
     },
     {
      "context": 1000000,
@@ -33116,10 +33128,6 @@
      "id": "grok-build-0-1"
     },
     {
-     "context": 128000,
-     "id": "hermes-3-llama-3.1-405b"
-    },
-    {
      "context": 1048576,
      "id": "hy4-preview"
     },
@@ -34047,10 +34055,6 @@
     {
      "context": 16000,
      "id": "grok-imagine-image"
-    },
-    {
-     "context": 16000,
-     "id": "grok-imagine-image-quality"
     },
     {
      "context": 1024,

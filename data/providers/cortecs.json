@@ -1,11 +1,7 @@
 {
- "generated_at": 1793622119,
+ "generated_at": 1793706899,
  "id": "cortecs",
  "models": [
-  {
-   "context": 65536,
-   "id": "apertus-70b"
-  },
   {
    "context": 200000,
    "id": "claude-4-5-sonnet"
@@ -279,7 +275,7 @@
    "id": "minimax-m2.5"
   },
   {
-   "context": 1048576,
+   "context": 1000000,
    "id": "minimax-m3"
   },
   {
@@ -417,10 +413,6 @@
   {
    "context": 1000000,
    "id": "qwen3.8-27b"
-  },
-  {
-   "context": 262144,
-   "id": "qwen3.8-flash-next"
   },
   {
    "context": 32000,

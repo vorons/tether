@@ -1,5 +1,5 @@
 {
- "generated_at": 1793622119,
+ "generated_at": 1793706899,
  "id": "opencode",
  "models": [
   {
@@ -477,6 +477,10 @@
   {
    "context": 256000,
    "id": "north-mini-code-free"
+  },
+  {
+   "context": 1048576,
+   "id": "pulse-alpha-free"
   },
   {
    "context": 262144,

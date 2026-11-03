@@ -1,5 +1,5 @@
 {
- "generated_at": 1793622119,
+ "generated_at": 1793706899,
  "id": "nano-gpt",
  "models": [
   {
@@ -1807,6 +1807,14 @@
    "id": "openai/o3-pro-2025-06-10"
   },
   {
+   "context": 261632,
+   "id": "orca/orcacyber-minimax-m3.1-flash"
+  },
+  {
+   "context": 261632,
+   "id": "orca/orcacyber-qwen3.8-flash-next"
+  },
+  {
    "context": 999488,
    "id": "orca/orcacyber-zero-1.5"
   },
@@ -2200,6 +2208,10 @@
   },
   {
    "context": 32768,
+   "id": "soob3123/GrayLine-Qwen3-8B"
+  },
+  {
+   "context": 32768,
    "id": "soob3123/Veiled-Calla-12B"
   },
   {
@@ -2517,6 +2529,10 @@
   {
    "context": 1048576,
    "id": "z-ai/glm-5.3-flash-uncensored"
+  },
+  {
+   "context": 1048576,
+   "id": "z-ai/glm-5.3-flashx-legal"
   },
   {
    "context": 1048576,

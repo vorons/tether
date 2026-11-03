@@ -1,5 +1,5 @@
 {
- "generated_at": 1793622119,
+ "generated_at": 1793706899,
  "id": "xai",
  "models": [
   {
@@ -37,10 +37,6 @@
   {
    "context": 16000,
    "id": "grok-imagine-image"
-  },
-  {
-   "context": 16000,
-   "id": "grok-imagine-image-quality"
   },
   {
    "context": 1024,

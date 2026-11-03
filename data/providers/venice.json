@@ -1,5 +1,5 @@
 {
- "generated_at": 1793622119,
+ "generated_at": 1793706899,
  "id": "venice",
  "models": [
   {
@@ -201,10 +201,6 @@
   {
    "context": 256000,
    "id": "grok-build-0-1"
-  },
-  {
-   "context": 128000,
-   "id": "hermes-3-llama-3.1-405b"
   },
   {
    "context": 1048576,

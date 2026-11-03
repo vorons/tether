@@ -1,5 +1,5 @@
 {
- "generated_at": 1793622119,
+ "generated_at": 1793706899,
  "id": "kilo",
  "models": [
   {
@@ -347,6 +347,10 @@
    "id": "google/gemma-4-31b-it"
   },
   {
+   "context": 262144,
+   "id": "google/gemma-4-31b-it:free"
+  },
+  {
    "context": 1048576,
    "id": "google/lyria-3-clip-preview"
   },
@@ -385,10 +389,6 @@
   {
    "context": 1000000,
    "id": "inclusionai/ling-3.1-flash"
-  },
-  {
-   "context": 1000000,
-   "id": "inclusionai/ling-3.1-flash-1019-free"
   },
   {
    "context": 128000,
@@ -677,14 +677,6 @@
   {
    "context": 262144,
    "id": "nex-agi/nex-n2.5-pro"
-  },
-  {
-   "context": 131072,
-   "id": "nousresearch/hermes-3-llama-3.1-405b"
-  },
-  {
-   "context": 131072,
-   "id": "nousresearch/hermes-3-llama-3.1-70b"
   },
   {
    "context": 131072,
@@ -1308,6 +1300,14 @@
   },
   {
    "context": 1048576,
+   "id": "thinkingmachines/inkling-small:free"
+  },
+  {
+   "context": 1048576,
+   "id": "thinkingmachines/inkling:free"
+  },
+  {
+   "context": 1048576,
    "id": "unbiased/pareto-26.10"
   },
   {
@@ -1437,6 +1437,10 @@
   {
    "context": 1048576,
    "id": "z-ai/glm-5.3-flashx"
+  },
+  {
+   "context": 1048576,
+   "id": "z-ai/glm-5.3-flashx-legal"
   },
   {
    "context": 1000000,
