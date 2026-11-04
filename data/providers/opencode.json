@@ -1,5 +1,5 @@
 {
- "generated_at": 1793706899,
+ "generated_at": 1793793989,
  "id": "opencode",
  "models": [
   {
@@ -81,6 +81,10 @@
   {
    "context": 1000000,
    "id": "claude-sonnet-5-5"
+  },
+  {
+   "context": 1048576,
+   "id": "crouton-alpha-free"
   },
   {
    "context": 1000000,

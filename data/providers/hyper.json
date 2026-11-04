@@ -1,5 +1,5 @@
 {
- "generated_at": 1793706899,
+ "generated_at": 1793793989,
  "id": "hyper",
  "models": [
   {
@@ -61,6 +61,10 @@
   {
    "context": 512000,
    "id": "minimax-m3"
+  },
+  {
+   "context": 1048576,
+   "id": "muse-spark-open"
   },
   {
    "context": 1000000,

@@ -1,5 +1,5 @@
 {
- "generated_at": 1793706899,
+ "generated_at": 1793793989,
  "id": "nano-gpt",
  "models": [
   {
@@ -1855,7 +1855,7 @@
    "id": "phi-4-multimodal-instruct"
   },
   {
-   "context": 10000000,
+   "context": 250000,
    "id": "pokee-isaac"
   },
   {
@@ -1877,10 +1877,6 @@
   {
    "context": 131072,
    "id": "qwen/qwen-2.5-72b-instruct"
-  },
-  {
-   "context": 10000000,
-   "id": "qwen/qwen-long"
   },
   {
    "context": 32000,
@@ -2205,6 +2201,10 @@
   {
    "context": 32768,
    "id": "shisa-ai/shisa-v2.1-llama3.3-70b"
+  },
+  {
+   "context": 40960,
+   "id": "sicariussicariistuff/assistant-pepe-32b"
   },
   {
    "context": 32768,

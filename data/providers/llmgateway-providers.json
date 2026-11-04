@@ -1,5 +1,5 @@
 {
- "generated_at": 1793706899,
+ "generated_at": 1793793989,
  "id": "llmgateway-providers",
  "models": [
   {
@@ -477,6 +477,10 @@
   {
    "context": 1048576,
    "id": "baidu/glm-5.3-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "baidu/kimi-k3"
   },
   {
    "context": 131072,
@@ -1541,10 +1545,6 @@
   {
    "context": 131072,
    "id": "together-ai/muse-glimmer-30b"
-  },
-  {
-   "context": 1010000,
-   "id": "together-ai/qwen3.8-2.4t-a95b"
   },
   {
    "context": 200000,

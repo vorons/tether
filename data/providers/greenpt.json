@@ -1,5 +1,5 @@
 {
- "generated_at": 1793706899,
+ "generated_at": 1793793989,
  "id": "greenpt",
  "models": [
   {
@@ -9,6 +9,10 @@
   {
    "context": 1000000,
    "id": "deepseek-v4.1-flash"
+  },
+  {
+   "context": 1000000,
+   "id": "deepseek-v4.1-flash-1017"
   },
   {
    "context": 200000,

@@ -1,5 +1,5 @@
 {
- "generated_at": 1793706899,
+ "generated_at": 1793793989,
  "id": "modular",
  "models": [
   {
@@ -8,7 +8,7 @@
   },
   {
    "context": 1048576,
-   "id": "deepseek/deepseek-v4.1-flash"
+   "id": "deepseek/deepseek-v4.1-flash-1017"
   },
   {
    "context": 262144,

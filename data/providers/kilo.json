@@ -1,5 +1,5 @@
 {
- "generated_at": 1793706899,
+ "generated_at": 1793793989,
  "id": "kilo",
  "models": [
   {
@@ -347,10 +347,6 @@
    "id": "google/gemma-4-31b-it"
   },
   {
-   "context": 262144,
-   "id": "google/gemma-4-31b-it:free"
-  },
-  {
    "context": 1048576,
    "id": "google/lyria-3-clip-preview"
   },
@@ -421,10 +417,6 @@
   {
    "context": 128000,
    "id": "liquid/lfm-2.5-2.6b"
-  },
-  {
-   "context": 65536,
-   "id": "liquid/lfm-2.5-2.6b:free"
   },
   {
    "context": 128000,
@@ -707,10 +699,6 @@
    "id": "nvidia/nemotron-3.5-content-safety"
   },
   {
-   "context": 128000,
-   "id": "nvidia/nemotron-3.5-content-safety:free"
-  },
-  {
    "context": 262144,
    "id": "nvidia/nemotron-3.5-lightning"
   },
@@ -719,7 +707,7 @@
    "id": "nvidia/nemotron-3.5-lightning:free"
   },
   {
-   "context": 262144,
+   "context": 1048576,
    "id": "nvidia/nemotron-3.5-super-vl"
   },
   {
@@ -1035,7 +1023,7 @@
    "id": "qwen/qwen3-14b"
   },
   {
-   "context": 262144,
+   "context": 131072,
    "id": "qwen/qwen3-235b-a22b-2507"
   },
   {
@@ -1175,10 +1163,6 @@
    "id": "qwen/qwen3.8-omni-flash"
   },
   {
-   "context": 262144,
-   "id": "recursive/flint-v1.0:free"
-  },
-  {
    "context": 1048576,
    "id": "reflection/beam-1.0-501b-a23b"
   },
@@ -1235,6 +1219,10 @@
    "id": "scaledown/summarize"
   },
   {
+   "context": 1048576,
+   "id": "stealth/crouton-alpha"
+  },
+  {
    "context": 256000,
    "id": "stealth/glyph-cluster"
   },
@@ -1276,6 +1264,10 @@
   },
   {
    "context": 1048576,
+   "id": "tencent/hy4"
+  },
+  {
+   "context": 1048576,
    "id": "tencent/hy4-preview"
   },
   {
@@ -1297,14 +1289,6 @@
   {
    "context": 524288,
    "id": "thinkingmachines/inkling-small"
-  },
-  {
-   "context": 1048576,
-   "id": "thinkingmachines/inkling-small:free"
-  },
-  {
-   "context": 1048576,
-   "id": "thinkingmachines/inkling:free"
   },
   {
    "context": 1048576,
@@ -1377,10 +1361,6 @@
   {
    "context": 1048576,
    "id": "xiaomi/mimo-v2.6-pro-ultraspeed"
-  },
-  {
-   "context": 262144,
-   "id": "xingchen-agi/xing4.0-29b-a4b:free"
   },
   {
    "context": 131072,

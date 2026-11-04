@@ -1,5 +1,5 @@
 {
- "generated_at": 1793706899,
+ "generated_at": 1793793989,
  "id": "aimlapi",
  "models": [
   {
@@ -233,10 +233,6 @@
   {
    "context": 4096,
    "id": "gryphe/mythomax-l2-13b"
-  },
-  {
-   "context": 131000,
-   "id": "ibm-granite/granite-4.0-h-micro"
   },
   {
    "context": 128000,
@@ -579,10 +575,6 @@
    "id": "sao10k/l3.1-euryale-70b"
   },
   {
-   "context": 131072,
-   "id": "sao10k/l3.3-euryale-70b"
-  },
-  {
    "context": 1000000,
    "id": "stepfun/step-5-preview"
   },
@@ -633,10 +625,6 @@
   {
    "context": 6144,
    "id": "undi95/remm-slerp-l2-13b"
-  },
-  {
-   "context": 128000,
-   "id": "upstage/solar-pro-3"
   },
   {
    "context": 524288,
