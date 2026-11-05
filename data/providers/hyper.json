@@ -1,5 +1,5 @@
 {
- "generated_at": 1793793989,
+ "generated_at": 1793881095,
  "id": "hyper",
  "models": [
   {
@@ -55,6 +55,10 @@
    "id": "kimi-k3"
   },
   {
+   "context": 1000000,
+   "id": "kimi-k3.1-pro"
+  },
+  {
    "context": 262100,
    "id": "minimax-m2.7"
   },
@@ -69,6 +73,10 @@
   {
    "context": 1000000,
    "id": "prism"
+  },
+  {
+   "context": 1000000,
+   "id": "prism-core"
   },
   {
    "context": 1000000,

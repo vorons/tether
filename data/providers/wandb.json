@@ -1,5 +1,5 @@
 {
- "generated_at": 1793793989,
+ "generated_at": 1793881095,
  "id": "wandb",
  "models": [
   {
@@ -29,6 +29,10 @@
   {
    "context": 1048576,
    "id": "deepseek-ai/DeepSeek-V4.1-Flash"
+  },
+  {
+   "context": 1048576,
+   "id": "deepseek-ai/DeepSeek-V4.1-Flash-1017"
   },
   {
    "context": 262144,

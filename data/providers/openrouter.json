@@ -1,5 +1,5 @@
 {
- "generated_at": 1793793989,
+ "generated_at": 1793881095,
  "id": "openrouter",
  "models": [
   {
@@ -389,6 +389,10 @@
   {
    "context": 131072,
    "id": "inclusionai/ling-3.0-flash-vl"
+  },
+  {
+   "context": 262144,
+   "id": "inclusionai/ling-3.0-tiny"
   },
   {
    "context": 1000000,
@@ -1187,6 +1191,10 @@
    "id": "relace/relace-search"
   },
   {
+   "context": 1048576,
+   "id": "ricursiveai/ripple-65b-preview"
+  },
+  {
    "context": 1000000,
    "id": "sakana/fugu-max"
   },
@@ -1217,6 +1225,10 @@
   {
    "context": 1000000,
    "id": "scaledown/summarize"
+  },
+  {
+   "context": 1048576,
+   "id": "stealth/crouton-alpha"
   },
   {
    "context": 262144,
@@ -1256,6 +1268,10 @@
   },
   {
    "context": 1048576,
+   "id": "tencent/hy4"
+  },
+  {
+   "context": 1048576,
    "id": "tencent/hy4-preview"
   },
   {
@@ -1277,14 +1293,6 @@
   {
    "context": 524288,
    "id": "thinkingmachines/inkling-small"
-  },
-  {
-   "context": 1048576,
-   "id": "thinkingmachines/inkling-small:free"
-  },
-  {
-   "context": 1048576,
-   "id": "thinkingmachines/inkling:free"
   },
   {
    "context": 1048576,
@@ -1339,7 +1347,7 @@
    "id": "x-ai/grok-build-0.1"
   },
   {
-   "context": 1050000,
+   "context": 1000000,
    "id": "xiaomi/mimo-v2.5"
   },
   {

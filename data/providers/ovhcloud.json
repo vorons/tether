@@ -1,5 +1,5 @@
 {
- "generated_at": 1793793989,
+ "generated_at": 1793881095,
  "id": "ovhcloud",
  "models": [
   {
@@ -13,10 +13,6 @@
   {
    "context": 131072,
    "id": "meta-llama-3_3-70b-instruct"
-  },
-  {
-   "context": 65536,
-   "id": "mistral-nemo-instruct-2407"
   },
   {
    "context": 131072,

@@ -1,5 +1,5 @@
 {
- "generated_at": 1793793989,
+ "generated_at": 1793881095,
  "id": "nano-gpt",
  "models": [
   {
@@ -159,18 +159,6 @@
    "id": "NeverSleep/Lumimaid-v0.2-70B"
   },
   {
-   "context": 65536,
-   "id": "NousResearch/hermes-3-llama-3.1-70b"
-  },
-  {
-   "context": 128000,
-   "id": "NousResearch/hermes-4-405b"
-  },
-  {
-   "context": 128000,
-   "id": "NousResearch/hermes-4-405b:thinking"
-  },
-  {
    "context": 262144,
    "id": "Qwen3.5-27B-Blossom-V6.4-Derestricted"
   },
@@ -287,20 +275,12 @@
    "id": "TEE/kimi-k2.6"
   },
   {
-   "context": 262144,
-   "id": "TEE/kimi-k2.7-code"
-  },
-  {
    "context": 1048576,
    "id": "TEE/kimi-k3"
   },
   {
    "context": 128000,
    "id": "TEE/llama3-3-70b"
-  },
-  {
-   "context": 262144,
-   "id": "TEE/nemotron-3.5-lightning"
   },
   {
    "context": 65536,
@@ -775,7 +755,7 @@
    "id": "deepseek/deepseek-v4-pro:thinking"
   },
   {
-   "context": 1000000,
+   "context": 1048576,
    "id": "deepseek/deepseek-v4.1-flash"
   },
   {
@@ -811,7 +791,7 @@
    "id": "deepseek/deepseek-v4.1-flash-uncensored:thinking"
   },
   {
-   "context": 1000000,
+   "context": 1048576,
    "id": "deepseek/deepseek-v4.1-flash:thinking"
   },
   {
@@ -2179,6 +2159,10 @@
    "id": "reka/reka-flash-3"
   },
   {
+   "context": 16384,
+   "id": "ricursiveai/ripple-65b-preview"
+  },
+  {
    "context": 1000000,
    "id": "sakana/fugu-max"
   },
@@ -2249,6 +2233,10 @@
   {
    "context": 262144,
    "id": "tencent/hy3"
+  },
+  {
+   "context": 1048576,
+   "id": "tencent/hy4"
   },
   {
    "context": 1048576,

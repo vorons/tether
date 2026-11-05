@@ -1,5 +1,5 @@
 {
- "generated_at": 1793793989,
+ "generated_at": 1793881095,
  "id": "kilo",
  "models": [
   {
@@ -383,6 +383,10 @@
    "id": "inclusionai/ling-3.0-flash-vl"
   },
   {
+   "context": 262144,
+   "id": "inclusionai/ling-3.0-tiny"
+  },
+  {
    "context": 1000000,
    "id": "inclusionai/ling-3.1-flash"
   },
@@ -451,7 +455,7 @@
    "id": "meta-llama/llama-3.3-70b-instruct"
   },
   {
-   "context": 128000,
+   "context": 524288,
    "id": "meta-llama/llama-4-maverick"
   },
   {
@@ -1139,7 +1143,7 @@
    "id": "qwen/qwen3.7-plus"
   },
   {
-   "context": 1000000,
+   "context": 1048576,
    "id": "qwen/qwen3.8-2.4t-a95b"
   },
   {
@@ -1185,6 +1189,10 @@
   {
    "context": 256000,
    "id": "relace/relace-search"
+  },
+  {
+   "context": 1048576,
+   "id": "ricursiveai/ripple-65b-preview"
   },
   {
    "context": 1000000,
@@ -1411,7 +1419,7 @@
    "id": "z-ai/glm-5.3"
   },
   {
-   "context": 1048576,
+   "context": 1048575,
    "id": "z-ai/glm-5.3-flash"
   },
   {

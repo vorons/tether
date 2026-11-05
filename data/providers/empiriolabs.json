@@ -1,5 +1,5 @@
 {
- "generated_at": 1793793989,
+ "generated_at": 1793881095,
  "id": "empiriolabs",
  "models": [
   {
@@ -89,6 +89,10 @@
   {
    "context": 1048576,
    "id": "kimi-k3"
+  },
+  {
+   "context": 1048576,
+   "id": "kimi-k3-1-pro"
   },
   {
    "context": 1048576,

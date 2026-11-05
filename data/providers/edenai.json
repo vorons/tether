@@ -1,5 +1,5 @@
 {
- "generated_at": 1793793989,
+ "generated_at": 1793881095,
  "id": "edenai",
  "models": [
   {
@@ -1297,6 +1297,10 @@
   {
    "context": 256000,
    "id": "tencent/hy3"
+  },
+  {
+   "context": 1000000,
+   "id": "tencent/hy4"
   },
   {
    "context": 1000000,

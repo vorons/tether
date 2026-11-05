@@ -1,5 +1,5 @@
 {
- "generated_at": 1793793989,
+ "generated_at": 1793881095,
  "id": "tencent-tokenhub",
  "models": [
   {
@@ -9,6 +9,10 @@
   {
    "context": 256000,
    "id": "hy3-preview"
+  },
+  {
+   "context": 1048576,
+   "id": "hy4"
   },
   {
    "context": 1024000,

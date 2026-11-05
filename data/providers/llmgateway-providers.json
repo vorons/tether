@@ -1,5 +1,5 @@
 {
- "generated_at": 1793793989,
+ "generated_at": 1793881095,
  "id": "llmgateway-providers",
  "models": [
   {
@@ -539,14 +539,6 @@
    "id": "bytedance/seed-2-0-pro-260328"
   },
   {
-   "context": 1000000,
-   "id": "canopywave/deepseek-v4-flash"
-  },
-  {
-   "context": 1000000,
-   "id": "canopywave/deepseek-v4-pro"
-  },
-  {
    "context": 200000,
    "id": "canopywave/glm-5.2"
   },
@@ -557,6 +549,14 @@
   {
    "context": 1048576,
    "id": "canopywave/kimi-k3"
+  },
+  {
+   "context": 1000000,
+   "id": "canopywave/minimax-m3.1-flash"
+  },
+  {
+   "context": 1000000,
+   "id": "canopywave/qwen3.8-flash"
   },
   {
    "context": 131072,
@@ -721,6 +721,22 @@
   {
    "context": 1040384,
    "id": "fireworks/kimi-k3-fast"
+  },
+  {
+   "context": 1048576,
+   "id": "flexai/deepseek-v4-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "flexai/deepseek-v4.1-flash-1017"
+  },
+  {
+   "context": 1048576,
+   "id": "flexai/glm-5.2"
+  },
+  {
+   "context": 1048576,
+   "id": "flexai/glm-5.3-flash"
   },
   {
    "context": 1048576,
@@ -1385,6 +1401,10 @@
   {
    "context": 1048576,
    "id": "scx-ai-gp/kimi-k3"
+  },
+  {
+   "context": 1048576,
+   "id": "scx-ai-gp/kimi-k3.1-pro"
   },
   {
    "context": 1000000,
