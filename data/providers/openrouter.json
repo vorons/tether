@@ -1,5 +1,5 @@
 {
- "generated_at": 1793881095,
+ "generated_at": 1793966713,
  "id": "openrouter",
  "models": [
   {
@@ -323,6 +323,14 @@
    "id": "google/gemini-nano-banana-2.1"
   },
   {
+   "context": 131072,
+   "id": "google/gemini-omni-1.1-flash"
+  },
+  {
+   "context": 131072,
+   "id": "google/gemini-omni-1.2-flash"
+  },
+  {
    "context": 8192,
    "id": "google/gemma-2-27b-it"
   },
@@ -495,24 +503,8 @@
    "id": "microsoft/phi-4"
   },
   {
-   "context": 1000192,
-   "id": "minimax/minimax-01"
-  },
-  {
    "context": 1000000,
    "id": "minimax/minimax-m1"
-  },
-  {
-   "context": 204800,
-   "id": "minimax/minimax-m2"
-  },
-  {
-   "context": 65536,
-   "id": "minimax/minimax-m2-her"
-  },
-  {
-   "context": 204800,
-   "id": "minimax/minimax-m2.1"
   },
   {
    "context": 204800,
@@ -693,10 +685,6 @@
   {
    "context": 131072,
    "id": "nvidia/nemotron-3.5-content-safety"
-  },
-  {
-   "context": 128000,
-   "id": "nvidia/nemotron-3.5-content-safety:free"
   },
   {
    "context": 262144,

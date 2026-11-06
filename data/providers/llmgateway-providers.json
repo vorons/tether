@@ -1,5 +1,5 @@
 {
- "generated_at": 1793881095,
+ "generated_at": 1793966713,
  "id": "llmgateway-providers",
  "models": [
   {
@@ -343,6 +343,14 @@
    "id": "azure/gpt-4o"
   },
   {
+   "context": 16000,
+   "id": "azure/gpt-4o-mini-transcribe"
+  },
+  {
+   "context": 16000,
+   "id": "azure/gpt-4o-transcribe"
+  },
+  {
    "context": 400000,
    "id": "azure/gpt-5"
   },
@@ -435,8 +443,16 @@
    "id": "azure/gpt-6.1-terra"
   },
   {
+   "context": 0,
+   "id": "azure/gpt-live-transcribe"
+  },
+  {
    "context": 131072,
    "id": "azure/gpt-oss-120b"
+  },
+  {
+   "context": 0,
+   "id": "azure/gpt-transcribe"
   },
   {
    "context": 128000,
@@ -543,6 +559,10 @@
    "id": "canopywave/glm-5.2"
   },
   {
+   "context": 1000000,
+   "id": "canopywave/glm-5.3-flash"
+  },
+  {
    "context": 262144,
    "id": "canopywave/kimi-k2.6"
   },
@@ -553,10 +573,6 @@
   {
    "context": 1000000,
    "id": "canopywave/minimax-m3.1-flash"
-  },
-  {
-   "context": 1000000,
-   "id": "canopywave/qwen3.8-flash"
   },
   {
    "context": 131072,
@@ -607,14 +623,6 @@
    "id": "consensusprotocol/gpt-oss-20b"
   },
   {
-   "context": 1048576,
-   "id": "consensusprotocol/mimo-v2.6-flash"
-  },
-  {
-   "context": 1048576,
-   "id": "consensusprotocol/minimax-m3"
-  },
-  {
    "context": 160000,
    "id": "deepinfra/deepseek-v3.2"
   },
@@ -661,6 +669,10 @@
   {
    "context": 1048576,
    "id": "deepinfra/mimo-v2.6-pro"
+  },
+  {
+   "context": 524288,
+   "id": "deepinfra/minimax-m3"
   },
   {
    "context": 131072,
@@ -737,6 +749,10 @@
   {
    "context": 1048576,
    "id": "flexai/glm-5.3-flash"
+  },
+  {
+   "context": 131072,
+   "id": "flexai/gpt-oss-120b"
   },
   {
    "context": 1048576,
@@ -1104,6 +1120,10 @@
   },
   {
    "context": 1000000,
+   "id": "novita/minimax-m3"
+  },
+  {
+   "context": 1000000,
    "id": "novita/minimax-m3.1-flash"
   },
   {
@@ -1375,6 +1395,10 @@
    "id": "scx-ai-gp/deepseek-v4.1-flash"
   },
   {
+   "context": 1050000,
+   "id": "scx-ai-gp/deepseek-v4.1-flash-1017"
+  },
+  {
    "context": 1000000,
    "id": "scx-ai-gp/glm-5.2"
   },
@@ -1553,10 +1577,6 @@
   {
    "context": 1000000,
    "id": "together-ai/kimi-k3"
-  },
-  {
-   "context": 524288,
-   "id": "together-ai/minimax-m3"
   },
   {
    "context": 1048576,

@@ -1,5 +1,5 @@
 {
- "generated_at": 1793881095,
+ "generated_at": 1793966713,
  "id": "kilo",
  "models": [
   {
@@ -167,7 +167,7 @@
    "id": "cohere/north-mini-code:free"
   },
   {
-   "context": 128000,
+   "context": 163840,
    "id": "deepseek/deepseek-chat"
   },
   {
@@ -203,11 +203,11 @@
    "id": "deepseek/deepseek-v4-flash-0731"
   },
   {
-   "context": 1048576,
+   "context": 1048575,
    "id": "deepseek/deepseek-v4-flash-vision-exp"
   },
   {
-   "context": 1048576,
+   "context": 1024000,
    "id": "deepseek/deepseek-v4-pro"
   },
   {
@@ -321,6 +321,14 @@
   {
    "context": 65536,
    "id": "google/gemini-nano-banana-2.1"
+  },
+  {
+   "context": 131072,
+   "id": "google/gemini-omni-1.1-flash"
+  },
+  {
+   "context": 131072,
+   "id": "google/gemini-omni-1.2-flash"
   },
   {
    "context": 8192,
@@ -503,31 +511,15 @@
    "id": "microsoft/phi-4"
   },
   {
-   "context": 1000192,
-   "id": "minimax/minimax-01"
-  },
-  {
    "context": 1000000,
    "id": "minimax/minimax-m1"
-  },
-  {
-   "context": 204800,
-   "id": "minimax/minimax-m2"
-  },
-  {
-   "context": 65536,
-   "id": "minimax/minimax-m2-her"
-  },
-  {
-   "context": 204800,
-   "id": "minimax/minimax-m2.1"
   },
   {
    "context": 198000,
    "id": "minimax/minimax-m2.5"
   },
   {
-   "context": 204800,
+   "context": 196608,
    "id": "minimax/minimax-m2.7"
   },
   {
@@ -687,7 +679,7 @@
    "id": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
   },
   {
-   "context": 1048576,
+   "context": 262144,
    "id": "nvidia/nemotron-3-super-120b-a12b"
   },
   {

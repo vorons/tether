@@ -1,5 +1,5 @@
 {
- "generated_at": 1793881095,
+ "generated_at": 1793966713,
  "id": "edenai",
  "models": [
   {
@@ -187,18 +187,6 @@
    "id": "arkanecloud/deepseek-ai/DeepSeek-V4.1-Flash-1017"
   },
   {
-   "context": 131072,
-   "id": "arkanecloud/meta-llama/Llama-3.1-70B-Instruct"
-  },
-  {
-   "context": 131072,
-   "id": "arkanecloud/meta-llama/Llama-3.1-8B-Instruct"
-  },
-  {
-   "context": 128000,
-   "id": "arkanecloud/meta-llama/Llama-3.3-70B-Instruct"
-  },
-  {
    "context": 32768,
    "id": "arkanecloud/ministral-14b"
   },
@@ -213,10 +201,6 @@
   {
    "context": 131072,
    "id": "arkanecloud/openai/gpt-oss-120b"
-  },
-  {
-   "context": 131072,
-   "id": "arkanecloud/openai/gpt-oss-20b"
   },
   {
    "context": 1047576,
@@ -313,10 +297,6 @@
   {
    "context": 132000,
    "id": "cohere/command-r7b-12-2024"
-  },
-  {
-   "context": 1000000,
-   "id": "databricks/databricks-deepseek-v4-flash-0731"
   },
   {
    "context": 131072,

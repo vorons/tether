@@ -1,5 +1,5 @@
 {
- "generated_at": 1793881095,
+ "generated_at": 1793966713,
  "id": "opencode-go",
  "models": [
   {
@@ -13,6 +13,10 @@
   {
    "context": 1000000,
    "id": "claude-haiku-5-5"
+  },
+  {
+   "context": 1048576,
+   "id": "crouton-alpha-free"
   },
   {
    "context": 1000000,
