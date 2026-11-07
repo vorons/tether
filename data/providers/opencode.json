@@ -1,5 +1,5 @@
 {
- "generated_at": 1793966713,
+ "generated_at": 1794049363,
  "id": "opencode",
  "models": [
   {
@@ -321,6 +321,14 @@
   {
    "context": 256000,
    "id": "hy3-preview-free"
+  },
+  {
+   "context": 262144,
+   "id": "iceman-free"
+  },
+  {
+   "context": 1048576,
+   "id": "inkling-2-small-free"
   },
   {
    "context": 262144,

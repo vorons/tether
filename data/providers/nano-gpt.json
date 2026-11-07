@@ -1,5 +1,5 @@
 {
- "generated_at": 1793966713,
+ "generated_at": 1794049363,
  "id": "nano-gpt",
  "models": [
   {
@@ -341,6 +341,10 @@
   {
    "context": 8192,
    "id": "TheDrummer/UnslopNemo-12B-v4.1"
+  },
+  {
+   "context": 65536,
+   "id": "TheDrummer/artemis-31b-v1.2"
   },
   {
    "context": 32768,
@@ -1172,6 +1176,14 @@
   },
   {
    "context": 262144,
+   "id": "inclusionai/ling-3.0-tiny"
+  },
+  {
+   "context": 262144,
+   "id": "inclusionai/ling-3.0-tiny:thinking"
+  },
+  {
+   "context": 262144,
    "id": "inclusionai/ling-3.1-flash"
   },
   {
@@ -1201,6 +1213,10 @@
   {
    "context": 128000,
    "id": "liquid/lfm-2.5-24b-a2b"
+  },
+  {
+   "context": 262144,
+   "id": "liquid/lfm-3-1.7b"
   },
   {
    "context": 1000000,
@@ -2385,6 +2401,10 @@
   {
    "context": 262144,
    "id": "xingchen-agi/xing4.0-29b-a4b"
+  },
+  {
+   "context": 32768,
+   "id": "xtools-at/deepseek-v4-pro-qwen3.5-9b-uncensored-heretic"
   },
   {
    "context": 128000,

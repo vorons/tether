@@ -1,5 +1,5 @@
 {
- "generated_at": 1793966713,
+ "generated_at": 1794049363,
  "providers": {
   "302ai": {
    "api_key_env": [
@@ -9387,7 +9387,7 @@
      "id": "scaleway/deepseek-v4.1-flash"
     },
     {
-     "context": 1000000,
+     "context": 256000,
      "id": "scaleway/deepseek-v4.1-flash-1017"
     },
     {
@@ -12530,19 +12530,11 @@
     "HYPER_API_KEY"
    ],
    "base_url": "https://hyper.charm.land/v1",
-   "model": "prism-core",
+   "model": "prism-flash",
    "models": [
     {
      "context": 1000000,
-     "id": "deepseek-v4-flash-0731"
-    },
-    {
-     "context": 1000000,
      "id": "deepseek-v4-pro-0813"
-    },
-    {
-     "context": 1048576,
-     "id": "deepseek-v4.1-flash"
     },
     {
      "context": 1000000,
@@ -12551,10 +12543,6 @@
     {
      "context": 256000,
      "id": "gemma-4-26b-a4b-it"
-    },
-    {
-     "context": 1000000,
-     "id": "glm-5.2"
     },
     {
      "context": 1000000,
@@ -12573,24 +12561,12 @@
      "id": "inkling"
     },
     {
-     "context": 262144,
-     "id": "kimi-k2-thinking"
-    },
-    {
-     "context": 256000,
-     "id": "kimi-k2.7-code"
-    },
-    {
      "context": 1048576,
      "id": "kimi-k3"
     },
     {
      "context": 1000000,
      "id": "kimi-k3.1-pro"
-    },
-    {
-     "context": 262100,
-     "id": "minimax-m2.7"
     },
     {
      "context": 512000,
@@ -12610,15 +12586,7 @@
     },
     {
      "context": 1000000,
-     "id": "qwen3.7-flash"
-    },
-    {
-     "context": 1000000,
-     "id": "qwen3.7-max"
-    },
-    {
-     "context": 1000000,
-     "id": "qwen3.7-plus"
+     "id": "prism-flash"
     },
     {
      "context": 1000000,
@@ -13955,7 +13923,7 @@
     "KILO_API_KEY"
    ],
    "base_url": "https://api.kilo.ai/api/gateway",
-   "model": "google/gemini-omni-1.2-flash",
+   "model": "liquid/lfm-3-1.7b:free",
    "models": [
     {
      "context": 131072,
@@ -14390,6 +14358,14 @@
      "id": "liquid/lfm-2.5-24b-a2b"
     },
     {
+     "context": 262144,
+     "id": "liquid/lfm-3-1.7b"
+    },
+    {
+     "context": 262144,
+     "id": "liquid/lfm-3-1.7b:free"
+    },
+    {
      "context": 8000,
      "id": "mancer/weaver"
     },
@@ -14470,7 +14446,7 @@
      "id": "minimax/minimax-m1"
     },
     {
-     "context": 198000,
+     "context": 65536,
      "id": "minimax/minimax-m2.5"
     },
     {
@@ -16738,14 +16714,6 @@
      "id": "aws-mantle/gpt-6-astra"
     },
     {
-     "context": 128000,
-     "id": "azure-ai-foundry/grok-4-1-fast-reasoning"
-    },
-    {
-     "context": 20000,
-     "id": "azure-ai-foundry/grok-4-3"
-    },
-    {
      "context": 1000000,
      "id": "azure-anthropic/claude-fable-5"
     },
@@ -16792,6 +16760,10 @@
     {
      "context": 128000,
      "id": "azure/gpt-4o"
+    },
+    {
+     "context": 128000,
+     "id": "azure/gpt-4o-mini"
     },
     {
      "context": 16000,
@@ -17312,6 +17284,10 @@
     {
      "context": 1048576,
      "id": "inference.net/glm-5.3-flash"
+    },
+    {
+     "context": 1048576,
+     "id": "inference.net/kimi-k3.1-pro"
     },
     {
      "context": 128000,
@@ -19577,7 +19553,7 @@
     "NANO_GPT_API_KEY"
    ],
    "base_url": "https://nano-gpt.com/api/v1",
-   "model": "ricursiveai/ripple-65b-preview",
+   "model": "xtools-at/deepseek-v4-pro-qwen3.5-9b-uncensored-heretic",
    "models": [
     {
      "context": 32768,
@@ -19918,6 +19894,10 @@
     {
      "context": 8192,
      "id": "TheDrummer/UnslopNemo-12B-v4.1"
+    },
+    {
+     "context": 65536,
+     "id": "TheDrummer/artemis-31b-v1.2"
     },
     {
      "context": 32768,
@@ -20749,6 +20729,14 @@
     },
     {
      "context": 262144,
+     "id": "inclusionai/ling-3.0-tiny"
+    },
+    {
+     "context": 262144,
+     "id": "inclusionai/ling-3.0-tiny:thinking"
+    },
+    {
+     "context": 262144,
      "id": "inclusionai/ling-3.1-flash"
     },
     {
@@ -20778,6 +20766,10 @@
     {
      "context": 128000,
      "id": "liquid/lfm-2.5-24b-a2b"
+    },
+    {
+     "context": 262144,
+     "id": "liquid/lfm-3-1.7b"
     },
     {
      "context": 1000000,
@@ -21962,6 +21954,10 @@
     {
      "context": 262144,
      "id": "xingchen-agi/xing4.0-29b-a4b"
+    },
+    {
+     "context": 32768,
+     "id": "xtools-at/deepseek-v4-pro-qwen3.5-9b-uncensored-heretic"
     },
     {
      "context": 128000,
@@ -24788,6 +24784,14 @@
     },
     {
      "context": 262144,
+     "id": "iceman-free"
+    },
+    {
+     "context": 1048576,
+     "id": "inkling-2-small-free"
+    },
+    {
+     "context": 262144,
      "id": "kimi-k2"
     },
     {
@@ -25615,6 +25619,14 @@
     {
      "context": 128000,
      "id": "liquid/lfm-2.5-24b-a2b"
+    },
+    {
+     "context": 262144,
+     "id": "liquid/lfm-3-1.7b"
+    },
+    {
+     "context": 262144,
+     "id": "liquid/lfm-3-1.7b:free"
     },
     {
      "context": 8000,

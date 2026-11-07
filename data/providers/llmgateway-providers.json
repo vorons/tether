@@ -1,5 +1,5 @@
 {
- "generated_at": 1793966713,
+ "generated_at": 1794049363,
  "id": "llmgateway-providers",
  "models": [
   {
@@ -287,14 +287,6 @@
    "id": "aws-mantle/gpt-6-astra"
   },
   {
-   "context": 128000,
-   "id": "azure-ai-foundry/grok-4-1-fast-reasoning"
-  },
-  {
-   "context": 20000,
-   "id": "azure-ai-foundry/grok-4-3"
-  },
-  {
    "context": 1000000,
    "id": "azure-anthropic/claude-fable-5"
   },
@@ -341,6 +333,10 @@
   {
    "context": 128000,
    "id": "azure/gpt-4o"
+  },
+  {
+   "context": 128000,
+   "id": "azure/gpt-4o-mini"
   },
   {
    "context": 16000,
@@ -861,6 +857,10 @@
   {
    "context": 1048576,
    "id": "inference.net/glm-5.3-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "inference.net/kimi-k3.1-pro"
   },
   {
    "context": 128000,

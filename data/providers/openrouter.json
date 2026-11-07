@@ -1,5 +1,5 @@
 {
- "generated_at": 1793966713,
+ "generated_at": 1794049363,
  "id": "openrouter",
  "models": [
   {
@@ -425,6 +425,14 @@
   {
    "context": 128000,
    "id": "liquid/lfm-2.5-24b-a2b"
+  },
+  {
+   "context": 262144,
+   "id": "liquid/lfm-3-1.7b"
+  },
+  {
+   "context": 262144,
+   "id": "liquid/lfm-3-1.7b:free"
   },
   {
    "context": 8000,

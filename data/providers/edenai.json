@@ -1,5 +1,5 @@
 {
- "generated_at": 1793966713,
+ "generated_at": 1794049363,
  "id": "edenai",
  "models": [
   {
@@ -1231,7 +1231,7 @@
    "id": "scaleway/deepseek-v4.1-flash"
   },
   {
-   "context": 1000000,
+   "context": 256000,
    "id": "scaleway/deepseek-v4.1-flash-1017"
   },
   {

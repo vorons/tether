@@ -1,5 +1,5 @@
 {
- "generated_at": 1793966713,
+ "generated_at": 1794049363,
  "id": "kilo",
  "models": [
   {
@@ -435,6 +435,14 @@
    "id": "liquid/lfm-2.5-24b-a2b"
   },
   {
+   "context": 262144,
+   "id": "liquid/lfm-3-1.7b"
+  },
+  {
+   "context": 262144,
+   "id": "liquid/lfm-3-1.7b:free"
+  },
+  {
    "context": 8000,
    "id": "mancer/weaver"
   },
@@ -515,7 +523,7 @@
    "id": "minimax/minimax-m1"
   },
   {
-   "context": 198000,
+   "context": 65536,
    "id": "minimax/minimax-m2.5"
   },
   {
