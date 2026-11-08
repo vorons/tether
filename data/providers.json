@@ -1,5 +1,5 @@
 {
- "generated_at": 1794049363,
+ "generated_at": 1794136553,
  "providers": {
   "302ai": {
    "api_key_env": [
@@ -10277,16 +10277,12 @@
      "id": "accounts/fireworks/models/glm-5p3-flash"
     },
     {
-     "context": 131072,
-     "id": "accounts/fireworks/models/gpt-oss-120b"
-    },
-    {
-     "context": 1048576,
-     "id": "accounts/fireworks/models/inkling"
-    },
-    {
      "context": 1048576,
      "id": "accounts/fireworks/models/kimi-k3"
+    },
+    {
+     "context": 1048576,
+     "id": "accounts/fireworks/models/kimi-k3p1-pro"
     },
     {
      "context": 512000,
@@ -10299,14 +10295,6 @@
     {
      "context": 1048576,
      "id": "accounts/fireworks/models/muse-spark-open"
-    },
-    {
-     "context": 262144,
-     "id": "accounts/fireworks/models/nemotron-3-ultra-nvfp4"
-    },
-    {
-     "context": 262144,
-     "id": "accounts/fireworks/models/nemotron-lightning-3p5-30b-a3b"
     },
     {
      "context": 262144,
@@ -10323,6 +10311,10 @@
     {
      "context": 1000000,
      "id": "accounts/fireworks/routers/deepseek-v4p1-flash-1017-spot"
+    },
+    {
+     "context": 1000000,
+     "id": "accounts/fireworks/routers/deepseek-v4p1-flash-1017-ultrafast"
     },
     {
      "context": 1000000,
@@ -10380,7 +10372,7 @@
     "FIREWORKS_API_KEY"
    ],
    "base_url": "https://api.fireworks.ai/inference/v1",
-   "model": "accounts/fireworks/models/minimax-m3p1-flash",
+   "model": "accounts/fireworks/models/kimi-k3p1-pro",
    "models": [
     {
      "context": 1000000,
@@ -10403,16 +10395,12 @@
      "id": "accounts/fireworks/models/glm-5p3-flash"
     },
     {
-     "context": 131072,
-     "id": "accounts/fireworks/models/gpt-oss-120b"
-    },
-    {
-     "context": 1048576,
-     "id": "accounts/fireworks/models/inkling"
-    },
-    {
      "context": 1048576,
      "id": "accounts/fireworks/models/kimi-k3"
+    },
+    {
+     "context": 1048576,
+     "id": "accounts/fireworks/models/kimi-k3p1-pro"
     },
     {
      "context": 512000,
@@ -10425,14 +10413,6 @@
     {
      "context": 1048576,
      "id": "accounts/fireworks/models/muse-spark-open"
-    },
-    {
-     "context": 262144,
-     "id": "accounts/fireworks/models/nemotron-3-ultra-nvfp4"
-    },
-    {
-     "context": 262144,
-     "id": "accounts/fireworks/models/nemotron-lightning-3p5-30b-a3b"
     },
     {
      "context": 262144,
@@ -10449,6 +10429,10 @@
     {
      "context": 1000000,
      "id": "accounts/fireworks/routers/deepseek-v4p1-flash-1017-spot"
+    },
+    {
+     "context": 1000000,
+     "id": "accounts/fireworks/routers/deepseek-v4p1-flash-1017-ultrafast"
     },
     {
      "context": 1000000,
@@ -14294,18 +14278,6 @@
      "id": "ibm-granite/granite-4.2-8b"
     },
     {
-     "context": 128000,
-     "id": "inception/mercury-2"
-    },
-    {
-     "context": 260000,
-     "id": "inception/mercury-2.5"
-    },
-    {
-     "context": 1000000,
-     "id": "inception/mercury-3"
-    },
-    {
      "context": 262144,
      "id": "inclusionai/ling-3.0-flash"
     },
@@ -14386,7 +14358,7 @@
      "id": "meta-llama/llama-3.2-1b-instruct"
     },
     {
-     "context": 80000,
+     "context": 131072,
      "id": "meta-llama/llama-3.2-3b-instruct"
     },
     {
@@ -14562,7 +14534,7 @@
      "id": "moonshotai/kimi-k2-thinking"
     },
     {
-     "context": 262144,
+     "context": 256000,
      "id": "moonshotai/kimi-k2.5"
     },
     {
@@ -15342,7 +15314,7 @@
      "id": "z-ai/glm-5.3"
     },
     {
-     "context": 1048575,
+     "context": 1048576,
      "id": "z-ai/glm-5.3-flash"
     },
     {
@@ -19401,7 +19373,7 @@
     "MORPH_API_KEY"
    ],
    "base_url": "https://api.morphllm.com/v1",
-   "model": "morph-dsv41flash-1017",
+   "model": "morph-kimik31",
    "models": [
     {
      "context": 32000,
@@ -19438,6 +19410,10 @@
     {
      "context": 1048576,
      "id": "morph-kimik3-fast"
+    },
+    {
+     "context": 1048576,
+     "id": "morph-kimik31"
     },
     {
      "context": 262144,
@@ -22880,7 +22856,7 @@
     "NOVITA_API_KEY"
    ],
    "base_url": "https://api.novita.ai/openai",
-   "model": "moonshotai/kimi-k3.1-pro-highspeed",
+   "model": "tencent/hy4",
    "models": [
     {
      "context": 262144,
@@ -23172,6 +23148,10 @@
     },
     {
      "context": 1000000,
+     "id": "tencent/hy4"
+    },
+    {
+     "context": 1000000,
      "id": "tencent/hy4-preview"
     },
     {
@@ -23237,6 +23217,10 @@
     {
      "context": 1048576,
      "id": "zai-org/glm-5.3-flash"
+    },
+    {
+     "context": 1048576,
+     "id": "zai-org/glm-5.3-flashX"
     }
    ],
    "wire": "openai"
@@ -24129,7 +24113,7 @@
     "OLLAMA_API_KEY"
    ],
    "base_url": "https://ollama.com/v1",
-   "model": "minimax-m3.1-flash",
+   "model": "kimi-k3.1-pro",
    "models": [
     {
      "context": 1048576,
@@ -24186,6 +24170,10 @@
     {
      "context": 1048576,
      "id": "kimi-k3"
+    },
+    {
+     "context": 1048576,
+     "id": "kimi-k3.1-pro"
     },
     {
      "context": 1048576,
@@ -25571,18 +25559,6 @@
     {
      "context": 131072,
      "id": "ibm-granite/granite-4.2-8b"
-    },
-    {
-     "context": 128000,
-     "id": "inception/mercury-2"
-    },
-    {
-     "context": 260000,
-     "id": "inception/mercury-2.5"
-    },
-    {
-     "context": 1000000,
-     "id": "inception/mercury-3"
     },
     {
      "context": 262144,
@@ -32263,7 +32239,7 @@
     "TINFOIL_API_KEY"
    ],
    "base_url": "https://inference.tinfoil.sh/v1",
-   "model": "deepseek-v4-1-flash",
+   "model": "kimi-k3-1-pro",
    "models": [
     {
      "context": 1048576,
@@ -32288,6 +32264,10 @@
     {
      "context": 262144,
      "id": "kimi-k3"
+    },
+    {
+     "context": 262144,
+     "id": "kimi-k3-1-pro"
     },
     {
      "context": 131072,

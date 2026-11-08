@@ -1,5 +1,5 @@
 {
- "generated_at": 1794049363,
+ "generated_at": 1794136553,
  "id": "tinfoil",
  "models": [
   {
@@ -25,6 +25,10 @@
   {
    "context": 262144,
    "id": "kimi-k3"
+  },
+  {
+   "context": 262144,
+   "id": "kimi-k3-1-pro"
   },
   {
    "context": 131072,

@@ -1,5 +1,5 @@
 {
- "generated_at": 1794049363,
+ "generated_at": 1794136553,
  "id": "novita-ai",
  "models": [
   {
@@ -292,6 +292,10 @@
   },
   {
    "context": 1000000,
+   "id": "tencent/hy4"
+  },
+  {
+   "context": 1000000,
    "id": "tencent/hy4-preview"
   },
   {
@@ -357,6 +361,10 @@
   {
    "context": 1048576,
    "id": "zai-org/glm-5.3-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "zai-org/glm-5.3-flashX"
   }
  ],
  "schema": 1

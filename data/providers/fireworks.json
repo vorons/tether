@@ -1,5 +1,5 @@
 {
- "generated_at": 1794049363,
+ "generated_at": 1794136553,
  "id": "fireworks",
  "models": [
   {
@@ -23,16 +23,12 @@
    "id": "accounts/fireworks/models/glm-5p3-flash"
   },
   {
-   "context": 131072,
-   "id": "accounts/fireworks/models/gpt-oss-120b"
-  },
-  {
-   "context": 1048576,
-   "id": "accounts/fireworks/models/inkling"
-  },
-  {
    "context": 1048576,
    "id": "accounts/fireworks/models/kimi-k3"
+  },
+  {
+   "context": 1048576,
+   "id": "accounts/fireworks/models/kimi-k3p1-pro"
   },
   {
    "context": 512000,
@@ -45,14 +41,6 @@
   {
    "context": 1048576,
    "id": "accounts/fireworks/models/muse-spark-open"
-  },
-  {
-   "context": 262144,
-   "id": "accounts/fireworks/models/nemotron-3-ultra-nvfp4"
-  },
-  {
-   "context": 262144,
-   "id": "accounts/fireworks/models/nemotron-lightning-3p5-30b-a3b"
   },
   {
    "context": 262144,
@@ -69,6 +57,10 @@
   {
    "context": 1000000,
    "id": "accounts/fireworks/routers/deepseek-v4p1-flash-1017-spot"
+  },
+  {
+   "context": 1000000,
+   "id": "accounts/fireworks/routers/deepseek-v4p1-flash-1017-ultrafast"
   },
   {
    "context": 1000000,
