@@ -1,5 +1,5 @@
 {
- "generated_at": 1794136553,
+ "generated_at": 1794228642,
  "id": "venice",
  "models": [
   {
@@ -245,18 +245,6 @@
   {
    "context": 128000,
    "id": "llama-3.3-70b"
-  },
-  {
-   "context": 128000,
-   "id": "mercury-2"
-  },
-  {
-   "context": 260000,
-   "id": "mercury-2-5"
-  },
-  {
-   "context": 1000000,
-   "id": "mercury-3"
   },
   {
    "context": 198000,

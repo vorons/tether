@@ -1,5 +1,5 @@
 {
- "generated_at": 1794136553,
+ "generated_at": 1794228642,
  "id": "nano-gpt",
  "models": [
   {
@@ -277,6 +277,10 @@
   {
    "context": 1048576,
    "id": "TEE/kimi-k3"
+  },
+  {
+   "context": 262144,
+   "id": "TEE/kimi-k3.1-pro"
   },
   {
    "context": 128000,
@@ -772,23 +776,7 @@
   },
   {
    "context": 1048576,
-   "id": "deepseek/deepseek-v4.1-flash-1017-uncensored"
-  },
-  {
-   "context": 1048576,
-   "id": "deepseek/deepseek-v4.1-flash-1017-uncensored:thinking"
-  },
-  {
-   "context": 1048576,
    "id": "deepseek/deepseek-v4.1-flash-1017:thinking"
-  },
-  {
-   "context": 1048576,
-   "id": "deepseek/deepseek-v4.1-flash-uncensored"
-  },
-  {
-   "context": 1048576,
-   "id": "deepseek/deepseek-v4.1-flash-uncensored:thinking"
   },
   {
    "context": 1048576,
@@ -1800,7 +1788,23 @@
   },
   {
    "context": 1048064,
+   "id": "orca/orcacyber-flash-1.0"
+  },
+  {
+   "context": 1048064,
+   "id": "orca/orcacyber-flash-1.0:thinking"
+  },
+  {
+   "context": 1048064,
+   "id": "orca/orcacyber-glm-5.3-flash"
+  },
+  {
+   "context": 1048064,
    "id": "orca/orcacyber-k3.1-pro"
+  },
+  {
+   "context": 1048064,
+   "id": "orca/orcacyber-mimo-flash"
   },
   {
    "context": 261632,
@@ -2267,7 +2271,7 @@
    "id": "thinkingmachines/Inkling-Small:thinking"
   },
   {
-   "context": 1048000,
+   "context": 1040000,
    "id": "thinkingmachines/inkling"
   },
   {

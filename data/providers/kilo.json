@@ -1,5 +1,5 @@
 {
- "generated_at": 1794136553,
+ "generated_at": 1794228642,
  "id": "kilo",
  "models": [
   {
@@ -595,7 +595,7 @@
    "id": "mistralai/mistral-small-3.1-24b-instruct"
   },
   {
-   "context": 128000,
+   "context": 32768,
    "id": "mistralai/mistral-small-3.2-24b-instruct"
   },
   {
@@ -1083,7 +1083,7 @@
    "id": "qwen/qwen3.5-35b-a3b"
   },
   {
-   "context": 262144,
+   "context": 256000,
    "id": "qwen/qwen3.5-397b-a17b"
   },
   {
@@ -1157,10 +1157,6 @@
   {
    "context": 1048576,
    "id": "reflection/beam-1.0-501b-a23b"
-  },
-  {
-   "context": 1048576,
-   "id": "reflection/beam-free"
   },
   {
    "context": 16384,
@@ -1379,7 +1375,7 @@
    "id": "z-ai/glm-4.6v"
   },
   {
-   "context": 202752,
+   "context": 204800,
    "id": "z-ai/glm-4.7"
   },
   {
