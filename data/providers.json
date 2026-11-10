@@ -1,5 +1,5 @@
 {
- "generated_at": 1794228642,
+ "generated_at": 1794314279,
  "providers": {
   "302ai": {
    "api_key_env": [
@@ -2912,7 +2912,7 @@
     "AWS_BEARER_TOKEN_BEDROCK"
    ],
    "base_url": "",
-   "model": "us.openai.gpt-6.1-terra",
+   "model": "us.anthropic.claude-fable-5-2",
    "models": [
     {
      "context": 1000000,
@@ -2937,6 +2937,10 @@
     {
      "context": 1000000,
      "id": "anthropic.claude-fable-5-1"
+    },
+    {
+     "context": 1000000,
+     "id": "anthropic.claude-fable-5-2"
     },
     {
      "context": 200000,
@@ -3155,6 +3159,10 @@
      "id": "global.anthropic.claude-fable-5-1"
     },
     {
+     "context": 1000000,
+     "id": "global.anthropic.claude-fable-5-2"
+    },
+    {
      "context": 200000,
      "id": "global.anthropic.claude-haiku-4-5-20251001-v1:0"
     },
@@ -3209,6 +3217,10 @@
     {
      "context": 1048576,
      "id": "global.moonshotai.kimi-k3"
+    },
+    {
+     "context": 1048576,
+     "id": "global.moonshotai.kimi-k3.1"
     },
     {
      "context": 1050000,
@@ -3559,6 +3571,10 @@
      "id": "us.anthropic.claude-fable-5-1"
     },
     {
+     "context": 1000000,
+     "id": "us.anthropic.claude-fable-5-2"
+    },
+    {
      "context": 200000,
      "id": "us.anthropic.claude-haiku-4-5-20251001-v1:0"
     },
@@ -3645,6 +3661,10 @@
     {
      "context": 1048576,
      "id": "us.moonshotai.kimi-k3"
+    },
+    {
+     "context": 1048576,
+     "id": "us.moonshotai.kimi-k3.1"
     },
     {
      "context": 1050000,
@@ -3856,6 +3876,10 @@
     {
      "context": 1000000,
      "id": "claude-fable-5-1"
+    },
+    {
+     "context": 1000000,
+     "id": "claude-fable-5-2"
     },
     {
      "context": 200000,
@@ -4210,7 +4234,7 @@
     "AZURE_API_KEY"
    ],
    "base_url": "",
-   "model": "gpt-6.1-terra",
+   "model": "claude-fable-5-2",
    "models": [
     {
      "context": 1000000,
@@ -4219,6 +4243,10 @@
     {
      "context": 1000000,
      "id": "claude-fable-5-1"
+    },
+    {
+     "context": 1000000,
+     "id": "claude-fable-5-2"
     },
     {
      "context": 200000,
@@ -4605,7 +4633,7 @@
     "AZURE_COGNITIVE_SERVICES_API_KEY"
    ],
    "base_url": "",
-   "model": "gpt-6.1-terra",
+   "model": "claude-fable-5-2",
    "models": [
     {
      "context": 1000000,
@@ -4614,6 +4642,10 @@
     {
      "context": 1000000,
      "id": "claude-fable-5-1"
+    },
+    {
+     "context": 1000000,
+     "id": "claude-fable-5-2"
     },
     {
      "context": 200000,
@@ -5330,6 +5362,10 @@
    "base_url": "https://llm.chutes.ai/v1",
    "model": "tencent/Hy4",
    "models": [
+    {
+     "context": 262144,
+     "id": "Qwen/Qwen3.5-27B-TEE"
+    },
     {
      "context": 262144,
      "id": "Qwen/Qwen3.5-397B-A17B-TEE"
@@ -6853,7 +6889,7 @@
     "CROSSMODEL_API_KEY"
    ],
    "base_url": "https://api.crossmodel.ai/v1",
-   "model": "gemini/gemini-4-argon",
+   "model": "anthropic/claude-fable-5-2",
    "models": [
     {
      "context": 1000000,
@@ -6862,6 +6898,10 @@
     {
      "context": 1000000,
      "id": "anthropic/claude-fable-5-1"
+    },
+    {
+     "context": 1000000,
+     "id": "anthropic/claude-fable-5-2"
     },
     {
      "context": 200000,
@@ -6980,6 +7020,10 @@
      "id": "moonshot/kimi-k3"
     },
     {
+     "context": 1048576,
+     "id": "moonshot/kimi-k3.1-pro"
+    },
+    {
      "context": 128000,
      "id": "openai/gpt-4o-mini"
     },
@@ -7032,6 +7076,10 @@
      "id": "openai/gpt-6.1-sol"
     },
     {
+     "context": 1050000,
+     "id": "openai/gpt-6.1-terra"
+    },
+    {
      "context": 1000000,
      "id": "qwen/qwen3.6-flash"
     },
@@ -7066,6 +7114,10 @@
     {
      "context": 262144,
      "id": "tencent/hy3"
+    },
+    {
+     "context": 1048576,
+     "id": "tencent/hy4"
     },
     {
      "context": 1048576,
@@ -8160,7 +8212,7 @@
     "EDENAI_API_KEY"
    ],
    "base_url": "https://api.edenai.run/v3",
-   "model": "tencent/hy4",
+   "model": "anthropic/claude-fable-latest",
    "models": [
     {
      "context": 300000,
@@ -8269,6 +8321,10 @@
     {
      "context": 1000000,
      "id": "anthropic/claude-fable-5-1"
+    },
+    {
+     "context": 1000000,
+     "id": "anthropic/claude-fable-5-2"
     },
     {
      "context": 1000000,
@@ -9136,15 +9192,7 @@
     },
     {
      "context": 1048576,
-     "id": "nebius/deepseek-ai/DeepSeek-V4-Flash-0731"
-    },
-    {
-     "context": 1048576,
      "id": "nebius/deepseek-ai/DeepSeek-V4-Pro-0813"
-    },
-    {
-     "context": 1048576,
-     "id": "nebius/deepseek-ai/DeepSeek-V4.1-Flash"
     },
     {
      "context": 1048576,
@@ -10693,11 +10741,11 @@
    "model": "gemini-2.5-flash",
    "models": [
     {
-     "context": 131072,
+     "context": 1048576,
      "id": "deep-research-max-preview-04-2026"
     },
     {
-     "context": 131072,
+     "context": 1048576,
      "id": "deep-research-preview-04-2026"
     },
     {
@@ -11081,11 +11129,11 @@
    "model": "gemini-2.5-flash",
    "models": [
     {
-     "context": 131072,
+     "context": 1048576,
      "id": "deep-research-max-preview-04-2026"
     },
     {
-     "context": 131072,
+     "context": 1048576,
      "id": "deep-research-preview-04-2026"
     },
     {
@@ -11234,11 +11282,15 @@
     "GOOGLE_APPLICATION_CREDENTIALS"
    ],
    "base_url": "",
-   "model": "gemini-4-argon",
+   "model": "claude-fable-5-2@default",
    "models": [
     {
      "context": 1000000,
      "id": "claude-fable-5-1@default"
+    },
+    {
+     "context": 1000000,
+     "id": "claude-fable-5-2@default"
     },
     {
      "context": 1000000,
@@ -13911,7 +13963,7 @@
     "KILO_API_KEY"
    ],
    "base_url": "https://api.kilo.ai/api/gateway",
-   "model": "liquid/lfm-3-1.7b:free",
+   "model": "nex-agi/nex-n2.6",
    "models": [
     {
      "context": 131072,
@@ -13968,6 +14020,10 @@
     {
      "context": 1000000,
      "id": "anthropic/claude-fable-5.1"
+    },
+    {
+     "context": 1000000,
+     "id": "anthropic/claude-fable-5.2"
     },
     {
      "context": 200000,
@@ -14258,7 +14314,7 @@
      "id": "google/gemma-3-4b-it"
     },
     {
-     "context": 262144,
+     "context": 256000,
      "id": "google/gemma-4-26b-a4b-it"
     },
     {
@@ -14366,7 +14422,7 @@
      "id": "meta-llama/llama-3.2-3b-instruct"
     },
     {
-     "context": 131072,
+     "context": 128000,
      "id": "meta-llama/llama-3.3-70b-instruct"
     },
     {
@@ -14380,6 +14436,10 @@
     {
      "context": 163840,
      "id": "meta-llama/llama-guard-4-12b"
+    },
+    {
+     "context": 1048576,
+     "id": "meta/muse-ember"
     },
     {
      "context": 131072,
@@ -14416,10 +14476,6 @@
     {
      "context": 16384,
      "id": "microsoft/phi-4"
-    },
-    {
-     "context": 1000000,
-     "id": "minimax/minimax-m1"
     },
     {
      "context": 65536,
@@ -14572,6 +14628,10 @@
     {
      "context": 262144,
      "id": "nex-agi/nex-n2.5-pro"
+    },
+    {
+     "context": 262144,
+     "id": "nex-agi/nex-n2.6"
     },
     {
      "context": 131072,
@@ -15122,10 +15182,6 @@
      "id": "scaledown/summarize"
     },
     {
-     "context": 1048576,
-     "id": "stealth/crouton-alpha"
-    },
-    {
      "context": 256000,
      "id": "stealth/glyph-cluster"
     },
@@ -15188,6 +15244,10 @@
     {
      "context": 524288,
      "id": "thinkingmachines/inkling"
+    },
+    {
+     "context": 1048576,
+     "id": "thinkingmachines/inkling-2-small:free"
     },
     {
      "context": 524288,
@@ -15314,7 +15374,7 @@
      "id": "z-ai/glm-5.3"
     },
     {
-     "context": 1048576,
+     "context": 1048575,
      "id": "z-ai/glm-5.3-flash"
     },
     {
@@ -15593,7 +15653,7 @@
     "LLMGATEWAY_API_KEY"
    ],
    "base_url": "https://api.llmgateway.io/v1",
-   "model": "deepseek-v4.1-flash-cyber",
+   "model": "muse-ember-1.0",
    "models": [
     {
      "context": 262000,
@@ -15610,6 +15670,10 @@
     {
      "context": 1000000,
      "id": "claude-fable-5-1"
+    },
+    {
+     "context": 1000000,
+     "id": "claude-fable-5-2"
     },
     {
      "context": 200000,
@@ -15684,6 +15748,10 @@
      "id": "deepseek-v4-flash"
     },
     {
+     "context": 1000000,
+     "id": "deepseek-v4-flash-0731"
+    },
+    {
      "context": 1050000,
      "id": "deepseek-v4-pro"
     },
@@ -15698,6 +15766,10 @@
     {
      "context": 1040000,
      "id": "deepseek-v4.1-flash-cyber"
+    },
+    {
+     "context": 1048576,
+     "id": "deepseek-v4.1-flash-uncensored"
     },
     {
      "context": 262144,
@@ -16200,6 +16272,10 @@
      "id": "mistral-small-2603"
     },
     {
+     "context": 1048576,
+     "id": "muse-ember-1.0"
+    },
+    {
      "context": 131072,
      "id": "muse-glimmer-30b"
     },
@@ -16399,7 +16475,7 @@
     "LLMGATEWAY_API_KEY"
    ],
    "base_url": "https://api.llmgateway.io/v1",
-   "model": "inference.net/deepseek-v4.1-flash-cyber",
+   "model": "meta/muse-ember-1.0",
    "models": [
     {
      "context": 1000000,
@@ -16522,6 +16598,10 @@
      "id": "anthropic/claude-fable-5-1"
     },
     {
+     "context": 1000000,
+     "id": "anthropic/claude-fable-5-2"
+    },
+    {
      "context": 200000,
      "id": "anthropic/claude-haiku-4-5"
     },
@@ -16584,6 +16664,10 @@
     {
      "context": 1000000,
      "id": "aws-bedrock/claude-fable-5-1"
+    },
+    {
+     "context": 1000000,
+     "id": "aws-bedrock/claude-fable-5-2"
     },
     {
      "context": 200000,
@@ -16950,6 +17034,10 @@
      "id": "bytedance/seed-2-0-pro-260328"
     },
     {
+     "context": 1000000,
+     "id": "canopywave/deepseek-v4-flash-0731"
+    },
+    {
      "context": 200000,
      "id": "canopywave/glm-5.2"
     },
@@ -16968,6 +17056,10 @@
     {
      "context": 1000000,
      "id": "canopywave/minimax-m3.1-flash"
+    },
+    {
+     "context": 1000000,
+     "id": "canopywave/qwen3.8-flash"
     },
     {
      "context": 131072,
@@ -17004,6 +17096,10 @@
     {
      "context": 1048576,
      "id": "consensusprotocol/deepseek-v4.1-flash"
+    },
+    {
+     "context": 1048576,
+     "id": "consensusprotocol/deepseek-v4.1-flash-uncensored"
     },
     {
      "context": 262144,
@@ -17280,6 +17376,10 @@
     {
      "context": 1048576,
      "id": "meta-contributor/muse-spark-1.3-contributor"
+    },
+    {
+     "context": 1048576,
+     "id": "meta/muse-ember-1.0"
     },
     {
      "context": 1048576,
@@ -17772,6 +17872,10 @@
     {
      "context": 1048576,
      "id": "runware/kimi-k3"
+    },
+    {
+     "context": 950000,
+     "id": "runware/kimi-k3.1-pro"
     },
     {
      "context": 1000000,
@@ -18641,6 +18745,10 @@
    "base_url": "https://api.meta.ai/v1",
    "model": "muse-spark-1.3",
    "models": [
+    {
+     "context": 1048576,
+     "id": "muse-ember-1.0"
+    },
     {
      "context": 1048576,
      "id": "muse-spark-1.1"
@@ -19529,7 +19637,7 @@
     "NANO_GPT_API_KEY"
    ],
    "base_url": "https://nano-gpt.com/api/v1",
-   "model": "orca/orcacyber-mimo-flash",
+   "model": "nex-agi/nex-n2.6",
    "models": [
     {
      "context": 32768,
@@ -19816,14 +19924,6 @@
      "id": "TEE/llama3-3-70b"
     },
     {
-     "context": 65536,
-     "id": "TEE/qwen2.5-vl-72b-instruct"
-    },
-    {
-     "context": 262144,
-     "id": "TEE/qwen3.5-397b-a17b"
-    },
-    {
      "context": 262144,
      "id": "TEE/qwen3.6-27b"
     },
@@ -19908,10 +20008,6 @@
      "id": "abliteration-ai/abliterated-model-large-v2"
     },
     {
-     "context": 524288,
-     "id": "agnes-3.0-flash"
-    },
-    {
      "context": 131072,
      "id": "aion-labs/aion-2.0"
     },
@@ -19974,6 +20070,10 @@
     {
      "context": 1000000,
      "id": "anthropic/claude-fable-5.1"
+    },
+    {
+     "context": 1000000,
+     "id": "anthropic/claude-fable-5.2"
     },
     {
      "context": 1000000,
@@ -20112,10 +20212,6 @@
      "id": "arcee-ai/trinity-large-thinking"
     },
     {
-     "context": 128000,
-     "id": "asi1-mini"
-    },
-    {
      "context": 1000000,
      "id": "auto-model"
     },
@@ -20146,14 +20242,6 @@
     {
      "context": 262144,
      "id": "bytedance-seed/seed-2.0-lite"
-    },
-    {
-     "context": 256000,
-     "id": "bytedance/doubao-seed-2.1-pro"
-    },
-    {
-     "context": 256000,
-     "id": "bytedance/doubao-seed-2.1-turbo"
     },
     {
      "context": 128000,
@@ -20292,14 +20380,6 @@
      "id": "deepseek/deepseek-v4.1-flash"
     },
     {
-     "context": 524288,
-     "id": "deepseek/deepseek-v4.1-flash-0910-uncensored"
-    },
-    {
-     "context": 524288,
-     "id": "deepseek/deepseek-v4.1-flash-0910-uncensored:thinking"
-    },
-    {
      "context": 1048576,
      "id": "deepseek/deepseek-v4.1-flash-1017"
     },
@@ -20330,18 +20410,6 @@
     {
      "context": 262144,
      "id": "elorian/glimpse"
-    },
-    {
-     "context": 128000,
-     "id": "ernie-5.0-thinking-preview"
-    },
-    {
-     "context": 119000,
-     "id": "ernie-5.1"
-    },
-    {
-     "context": 119000,
-     "id": "ernie-5.1:thinking"
     },
     {
      "context": 8192,
@@ -20522,10 +20590,6 @@
     {
      "context": 262144,
      "id": "gemma-4-31b-it-scarlet"
-    },
-    {
-     "context": 1000000,
-     "id": "glm-4-long"
     },
     {
      "context": 262144,
@@ -21054,6 +21118,10 @@
     {
      "context": 262144,
      "id": "nex-agi/nex-n2.5-pro"
+    },
+    {
+     "context": 262144,
+     "id": "nex-agi/nex-n2.6"
     },
     {
      "context": 32768,
@@ -21768,7 +21836,7 @@
      "id": "stepfun/step-3.7-flash:thinking"
     },
     {
-     "context": 1000000,
+     "context": 1048576,
      "id": "stepfun/step-5-preview"
     },
     {
@@ -24479,6 +24547,10 @@
      "id": "claude-fable-5-1"
     },
     {
+     "context": 1000000,
+     "id": "claude-fable-5-2"
+    },
+    {
      "context": 200000,
      "id": "claude-haiku-4-5"
     },
@@ -24844,6 +24916,10 @@
     },
     {
      "context": 1000000,
+     "id": "longcat-2.5-free"
+    },
+    {
+     "context": 1000000,
      "id": "longcat-2.5-preview-free"
     },
     {
@@ -24901,6 +24977,10 @@
     {
      "context": 524288,
      "id": "mistral-large-4"
+    },
+    {
+     "context": 1048576,
+     "id": "muse-ember-1.0"
     },
     {
      "context": 1048576,
@@ -25090,6 +25170,10 @@
     },
     {
      "context": 1000000,
+     "id": "longcat-2.5-free"
+    },
+    {
+     "context": 1000000,
      "id": "longcat-2.5-preview-free"
     },
     {
@@ -25243,6 +25327,10 @@
     {
      "context": 1000000,
      "id": "anthropic/claude-fable-5.1"
+    },
+    {
+     "context": 1000000,
+     "id": "anthropic/claude-fable-5.2"
     },
     {
      "context": 200000,
@@ -25649,6 +25737,10 @@
      "id": "meta-llama/llama-guard-4-12b"
     },
     {
+     "context": 1048576,
+     "id": "meta/muse-ember"
+    },
+    {
      "context": 131072,
      "id": "meta/muse-glimmer-30b"
     },
@@ -25685,15 +25777,11 @@
      "id": "microsoft/phi-4"
     },
     {
-     "context": 1000000,
-     "id": "minimax/minimax-m1"
-    },
-    {
-     "context": 204800,
+     "context": 200000,
      "id": "minimax/minimax-m2.5"
     },
     {
-     "context": 204800,
+     "context": 196608,
      "id": "minimax/minimax-m2.7"
     },
     {
@@ -25839,6 +25927,10 @@
     {
      "context": 262144,
      "id": "nex-agi/nex-n2.5-pro"
+    },
+    {
+     "context": 262144,
+     "id": "nex-agi/nex-n2.6"
     },
     {
      "context": 131072,
@@ -26317,7 +26409,7 @@
      "id": "qwen/qwen3.8-2.4t-a95b"
     },
     {
-     "context": 1024000,
+     "context": 1048575,
      "id": "qwen/qwen3.8-27b"
     },
     {
@@ -26397,10 +26489,6 @@
      "id": "scaledown/summarize"
     },
     {
-     "context": 1048576,
-     "id": "stealth/crouton-alpha"
-    },
-    {
      "context": 262144,
      "id": "stepfun/step-3.5-flash"
     },
@@ -26409,7 +26497,7 @@
      "id": "stepfun/step-3.7-flash"
     },
     {
-     "context": 1048576,
+     "context": 1000000,
      "id": "stepfun/step-5-preview"
     },
     {
@@ -26459,6 +26547,10 @@
     {
      "context": 524288,
      "id": "thinkingmachines/inkling"
+    },
+    {
+     "context": 1048576,
+     "id": "thinkingmachines/inkling-2-small:free"
     },
     {
      "context": 524288,
@@ -26521,7 +26613,7 @@
      "id": "xiaomi/mimo-v2.5"
     },
     {
-     "context": 1050000,
+     "context": 1024000,
      "id": "xiaomi/mimo-v2.5-pro"
     },
     {
@@ -32982,6 +33074,10 @@
     {
      "context": 1000000,
      "id": "claude-fable-5-1"
+    },
+    {
+     "context": 1000000,
+     "id": "claude-fable-5-2"
     },
     {
      "context": 1000000,

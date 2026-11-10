@@ -1,5 +1,5 @@
 {
- "generated_at": 1794228642,
+ "generated_at": 1794314279,
  "id": "edenai",
  "models": [
   {
@@ -109,6 +109,10 @@
   {
    "context": 1000000,
    "id": "anthropic/claude-fable-5-1"
+  },
+  {
+   "context": 1000000,
+   "id": "anthropic/claude-fable-5-2"
   },
   {
    "context": 1000000,
@@ -976,15 +980,7 @@
   },
   {
    "context": 1048576,
-   "id": "nebius/deepseek-ai/DeepSeek-V4-Flash-0731"
-  },
-  {
-   "context": 1048576,
    "id": "nebius/deepseek-ai/DeepSeek-V4-Pro-0813"
-  },
-  {
-   "context": 1048576,
-   "id": "nebius/deepseek-ai/DeepSeek-V4.1-Flash"
   },
   {
    "context": 1048576,

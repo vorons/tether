@@ -1,5 +1,5 @@
 {
- "generated_at": 1794228642,
+ "generated_at": 1794314279,
  "id": "openrouter",
  "models": [
   {
@@ -57,6 +57,10 @@
   {
    "context": 1000000,
    "id": "anthropic/claude-fable-5.1"
+  },
+  {
+   "context": 1000000,
+   "id": "anthropic/claude-fable-5.2"
   },
   {
    "context": 200000,
@@ -463,6 +467,10 @@
    "id": "meta-llama/llama-guard-4-12b"
   },
   {
+   "context": 1048576,
+   "id": "meta/muse-ember"
+  },
+  {
    "context": 131072,
    "id": "meta/muse-glimmer-30b"
   },
@@ -499,15 +507,11 @@
    "id": "microsoft/phi-4"
   },
   {
-   "context": 1000000,
-   "id": "minimax/minimax-m1"
-  },
-  {
-   "context": 204800,
+   "context": 200000,
    "id": "minimax/minimax-m2.5"
   },
   {
-   "context": 204800,
+   "context": 196608,
    "id": "minimax/minimax-m2.7"
   },
   {
@@ -653,6 +657,10 @@
   {
    "context": 262144,
    "id": "nex-agi/nex-n2.5-pro"
+  },
+  {
+   "context": 262144,
+   "id": "nex-agi/nex-n2.6"
   },
   {
    "context": 131072,
@@ -1131,7 +1139,7 @@
    "id": "qwen/qwen3.8-2.4t-a95b"
   },
   {
-   "context": 1024000,
+   "context": 1048575,
    "id": "qwen/qwen3.8-27b"
   },
   {
@@ -1211,10 +1219,6 @@
    "id": "scaledown/summarize"
   },
   {
-   "context": 1048576,
-   "id": "stealth/crouton-alpha"
-  },
-  {
    "context": 262144,
    "id": "stepfun/step-3.5-flash"
   },
@@ -1223,7 +1227,7 @@
    "id": "stepfun/step-3.7-flash"
   },
   {
-   "context": 1048576,
+   "context": 1000000,
    "id": "stepfun/step-5-preview"
   },
   {
@@ -1273,6 +1277,10 @@
   {
    "context": 524288,
    "id": "thinkingmachines/inkling"
+  },
+  {
+   "context": 1048576,
+   "id": "thinkingmachines/inkling-2-small:free"
   },
   {
    "context": 524288,
@@ -1335,7 +1343,7 @@
    "id": "xiaomi/mimo-v2.5"
   },
   {
-   "context": 1050000,
+   "context": 1024000,
    "id": "xiaomi/mimo-v2.5-pro"
   },
   {

@@ -1,7 +1,11 @@
 {
- "generated_at": 1794228642,
+ "generated_at": 1794314279,
  "id": "meta",
  "models": [
+  {
+   "context": 1048576,
+   "id": "muse-ember-1.0"
+  },
   {
    "context": 1048576,
    "id": "muse-spark-1.1"

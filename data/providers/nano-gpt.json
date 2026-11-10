@@ -1,5 +1,5 @@
 {
- "generated_at": 1794228642,
+ "generated_at": 1794314279,
  "id": "nano-gpt",
  "models": [
   {
@@ -287,14 +287,6 @@
    "id": "TEE/llama3-3-70b"
   },
   {
-   "context": 65536,
-   "id": "TEE/qwen2.5-vl-72b-instruct"
-  },
-  {
-   "context": 262144,
-   "id": "TEE/qwen3.5-397b-a17b"
-  },
-  {
    "context": 262144,
    "id": "TEE/qwen3.6-27b"
   },
@@ -379,10 +371,6 @@
    "id": "abliteration-ai/abliterated-model-large-v2"
   },
   {
-   "context": 524288,
-   "id": "agnes-3.0-flash"
-  },
-  {
    "context": 131072,
    "id": "aion-labs/aion-2.0"
   },
@@ -445,6 +433,10 @@
   {
    "context": 1000000,
    "id": "anthropic/claude-fable-5.1"
+  },
+  {
+   "context": 1000000,
+   "id": "anthropic/claude-fable-5.2"
   },
   {
    "context": 1000000,
@@ -583,10 +575,6 @@
    "id": "arcee-ai/trinity-large-thinking"
   },
   {
-   "context": 128000,
-   "id": "asi1-mini"
-  },
-  {
    "context": 1000000,
    "id": "auto-model"
   },
@@ -617,14 +605,6 @@
   {
    "context": 262144,
    "id": "bytedance-seed/seed-2.0-lite"
-  },
-  {
-   "context": 256000,
-   "id": "bytedance/doubao-seed-2.1-pro"
-  },
-  {
-   "context": 256000,
-   "id": "bytedance/doubao-seed-2.1-turbo"
   },
   {
    "context": 128000,
@@ -763,14 +743,6 @@
    "id": "deepseek/deepseek-v4.1-flash"
   },
   {
-   "context": 524288,
-   "id": "deepseek/deepseek-v4.1-flash-0910-uncensored"
-  },
-  {
-   "context": 524288,
-   "id": "deepseek/deepseek-v4.1-flash-0910-uncensored:thinking"
-  },
-  {
    "context": 1048576,
    "id": "deepseek/deepseek-v4.1-flash-1017"
   },
@@ -801,18 +773,6 @@
   {
    "context": 262144,
    "id": "elorian/glimpse"
-  },
-  {
-   "context": 128000,
-   "id": "ernie-5.0-thinking-preview"
-  },
-  {
-   "context": 119000,
-   "id": "ernie-5.1"
-  },
-  {
-   "context": 119000,
-   "id": "ernie-5.1:thinking"
   },
   {
    "context": 8192,
@@ -993,10 +953,6 @@
   {
    "context": 262144,
    "id": "gemma-4-31b-it-scarlet"
-  },
-  {
-   "context": 1000000,
-   "id": "glm-4-long"
   },
   {
    "context": 262144,
@@ -1525,6 +1481,10 @@
   {
    "context": 262144,
    "id": "nex-agi/nex-n2.5-pro"
+  },
+  {
+   "context": 262144,
+   "id": "nex-agi/nex-n2.6"
   },
   {
    "context": 32768,
@@ -2239,7 +2199,7 @@
    "id": "stepfun/step-3.7-flash:thinking"
   },
   {
-   "context": 1000000,
+   "context": 1048576,
    "id": "stepfun/step-5-preview"
   },
   {

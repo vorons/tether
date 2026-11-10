@@ -1,5 +1,5 @@
 {
- "generated_at": 1794228642,
+ "generated_at": 1794314279,
  "id": "azure",
  "models": [
   {
@@ -9,6 +9,10 @@
   {
    "context": 1000000,
    "id": "claude-fable-5-1"
+  },
+  {
+   "context": 1000000,
+   "id": "claude-fable-5-2"
   },
   {
    "context": 200000,

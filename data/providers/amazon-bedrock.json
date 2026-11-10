@@ -1,5 +1,5 @@
 {
- "generated_at": 1794228642,
+ "generated_at": 1794314279,
  "id": "amazon-bedrock",
  "models": [
   {
@@ -25,6 +25,10 @@
   {
    "context": 1000000,
    "id": "anthropic.claude-fable-5-1"
+  },
+  {
+   "context": 1000000,
+   "id": "anthropic.claude-fable-5-2"
   },
   {
    "context": 200000,
@@ -243,6 +247,10 @@
    "id": "global.anthropic.claude-fable-5-1"
   },
   {
+   "context": 1000000,
+   "id": "global.anthropic.claude-fable-5-2"
+  },
+  {
    "context": 200000,
    "id": "global.anthropic.claude-haiku-4-5-20251001-v1:0"
   },
@@ -297,6 +305,10 @@
   {
    "context": 1048576,
    "id": "global.moonshotai.kimi-k3"
+  },
+  {
+   "context": 1048576,
+   "id": "global.moonshotai.kimi-k3.1"
   },
   {
    "context": 1050000,
@@ -647,6 +659,10 @@
    "id": "us.anthropic.claude-fable-5-1"
   },
   {
+   "context": 1000000,
+   "id": "us.anthropic.claude-fable-5-2"
+  },
+  {
    "context": 200000,
    "id": "us.anthropic.claude-haiku-4-5-20251001-v1:0"
   },
@@ -733,6 +749,10 @@
   {
    "context": 1048576,
    "id": "us.moonshotai.kimi-k3"
+  },
+  {
+   "context": 1048576,
+   "id": "us.moonshotai.kimi-k3.1"
   },
   {
    "context": 1050000,

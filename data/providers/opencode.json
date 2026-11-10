@@ -1,5 +1,5 @@
 {
- "generated_at": 1794228642,
+ "generated_at": 1794314279,
  "id": "opencode",
  "models": [
   {
@@ -25,6 +25,10 @@
   {
    "context": 1000000,
    "id": "claude-fable-5-1"
+  },
+  {
+   "context": 1000000,
+   "id": "claude-fable-5-2"
   },
   {
    "context": 200000,
@@ -392,6 +396,10 @@
   },
   {
    "context": 1000000,
+   "id": "longcat-2.5-free"
+  },
+  {
+   "context": 1000000,
    "id": "longcat-2.5-preview-free"
   },
   {
@@ -449,6 +457,10 @@
   {
    "context": 524288,
    "id": "mistral-large-4"
+  },
+  {
+   "context": 1048576,
+   "id": "muse-ember-1.0"
   },
   {
    "context": 1048576,

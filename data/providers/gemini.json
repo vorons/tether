@@ -1,13 +1,13 @@
 {
- "generated_at": 1794228642,
+ "generated_at": 1794314279,
  "id": "gemini",
  "models": [
   {
-   "context": 131072,
+   "context": 1048576,
    "id": "deep-research-max-preview-04-2026"
   },
   {
-   "context": 131072,
+   "context": 1048576,
    "id": "deep-research-preview-04-2026"
   },
   {
