@@ -1,5 +1,5 @@
 {
- "generated_at": 1794314279,
+ "generated_at": 1794397905,
  "id": "edenai",
  "models": [
   {
@@ -669,6 +669,10 @@
   {
    "context": 1048576,
    "id": "google/gemini-4-argon"
+  },
+  {
+   "context": 1048576,
+   "id": "google/gemini-4-carbon"
   },
   {
    "context": 1048576,
@@ -1445,6 +1449,18 @@
   {
    "context": 1048576,
    "id": "vertex/gemini-4-argon@us"
+  },
+  {
+   "context": 1048576,
+   "id": "vertex/gemini-4-carbon"
+  },
+  {
+   "context": 1048576,
+   "id": "vertex/gemini-4-carbon@eu"
+  },
+  {
+   "context": 1048576,
+   "id": "vertex/gemini-4-carbon@us"
   },
   {
    "context": 1048576,

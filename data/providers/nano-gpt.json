@@ -1,5 +1,5 @@
 {
- "generated_at": 1794314279,
+ "generated_at": 1794397905,
  "id": "nano-gpt",
  "models": [
   {
@@ -303,7 +303,7 @@
    "id": "TheDrummer/Anubis-70B-v1"
   },
   {
-   "context": 32000,
+   "context": 32768,
    "id": "TheDrummer/Anubis-70B-v1.1"
   },
   {
@@ -323,7 +323,7 @@
    "id": "TheDrummer/Cydonia-24B-v4.1"
   },
   {
-   "context": 131072,
+   "context": 65536,
    "id": "TheDrummer/Cydonia-24B-v4.3"
   },
   {
@@ -571,10 +571,6 @@
    "id": "anthropic/claude-sonnet-latest"
   },
   {
-   "context": 262144,
-   "id": "arcee-ai/trinity-large-thinking"
-  },
-  {
    "context": 1000000,
    "id": "auto-model"
   },
@@ -745,6 +741,14 @@
   {
    "context": 1048576,
    "id": "deepseek/deepseek-v4.1-flash-1017"
+  },
+  {
+   "context": 1048576,
+   "id": "deepseek/deepseek-v4.1-flash-1017-uncensored"
+  },
+  {
+   "context": 1048576,
+   "id": "deepseek/deepseek-v4.1-flash-1017-uncensored:thinking"
   },
   {
    "context": 1048576,
@@ -1013,6 +1017,10 @@
   {
    "context": 1048576,
    "id": "google/gemini-4-argon"
+  },
+  {
+   "context": 1048576,
+   "id": "google/gemini-4-carbon"
   },
   {
    "context": 1048576,

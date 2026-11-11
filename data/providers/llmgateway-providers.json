@@ -1,10 +1,14 @@
 {
- "generated_at": 1794314279,
+ "generated_at": 1794397905,
  "id": "llmgateway-providers",
  "models": [
   {
    "context": 1000000,
    "id": "alibaba/deepseek-v4-flash"
+  },
+  {
+   "context": 1000000,
+   "id": "alibaba/deepseek-v4-flash-0731"
   },
   {
    "context": 1000000,
@@ -472,6 +476,10 @@
   },
   {
    "context": 1048576,
+   "id": "baidu/deepseek-v4-flash-0731"
+  },
+  {
+   "context": 1048576,
    "id": "baidu/deepseek-v4-pro"
   },
   {
@@ -509,6 +517,10 @@
   {
    "context": 1048576,
    "id": "bytedance/deepseek-v4-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "bytedance/deepseek-v4-flash-0731"
   },
   {
    "context": 1048576,
@@ -596,6 +608,10 @@
   },
   {
    "context": 1048576,
+   "id": "cloudflare/deepseek-v4-flash-0731"
+  },
+  {
+   "context": 1048576,
    "id": "cloudflare/deepseek-v4-pro"
   },
   {
@@ -645,6 +661,10 @@
   {
    "context": 1000000,
    "id": "deepinfra/deepseek-v4-flash"
+  },
+  {
+   "context": 1000000,
+   "id": "deepinfra/deepseek-v4-flash-0731"
   },
   {
    "context": 1048576,
@@ -800,6 +820,10 @@
   },
   {
    "context": 1048576,
+   "id": "google-ai-studio/gemini-4-carbon"
+  },
+  {
+   "context": 1048576,
    "id": "google-ai-studio/gemini-pro-latest"
   },
   {
@@ -840,6 +864,10 @@
   },
   {
    "context": 1048576,
+   "id": "google-vertex/gemini-4-carbon"
+  },
+  {
+   "context": 1048576,
    "id": "greenference/glm-5.3-flash"
   },
   {
@@ -861,6 +889,10 @@
   {
    "context": 131072,
    "id": "groq/gpt-oss-20b"
+  },
+  {
+   "context": 1000000,
+   "id": "inference.net/deepseek-v4-flash"
   },
   {
    "context": 262144,
@@ -1045,6 +1077,10 @@
   {
    "context": 1050000,
    "id": "novita/deepseek-v4-flash"
+  },
+  {
+   "context": 1050000,
+   "id": "novita/deepseek-v4-flash-0731"
   },
   {
    "context": 1048576,
@@ -1477,6 +1513,10 @@
   {
    "context": 1000000,
    "id": "tencent/deepseek-v4-flash"
+  },
+  {
+   "context": 1000000,
+   "id": "tencent/deepseek-v4-flash-0731"
   },
   {
    "context": 1000000,

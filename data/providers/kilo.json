@@ -1,5 +1,5 @@
 {
- "generated_at": 1794314279,
+ "generated_at": 1794397905,
  "id": "kilo",
  "models": [
   {
@@ -115,6 +115,14 @@
    "id": "anthropic/claude-sonnet-5.5"
   },
   {
+   "context": 1024000,
+   "id": "baidu/ernie-5.5-flash-preview"
+  },
+  {
+   "context": 1024000,
+   "id": "baidu/ernie-light-dt-1.0-intl"
+  },
+  {
    "context": 262144,
    "id": "bytedance-seed/seed-1.6"
   },
@@ -199,7 +207,7 @@
    "id": "deepseek/deepseek-v3.2-exp"
   },
   {
-   "context": 1048575,
+   "context": 1048576,
    "id": "deepseek/deepseek-v4-flash"
   },
   {
@@ -323,6 +331,10 @@
    "id": "google/gemini-4-argon"
   },
   {
+   "context": 1048576,
+   "id": "google/gemini-4-carbon"
+  },
+  {
    "context": 65536,
    "id": "google/gemini-nano-banana-2.1"
   },
@@ -419,6 +431,10 @@
    "id": "kilo-auto/small"
   },
   {
+   "context": 261795,
+   "id": "kt/midm-k-3.0-pro"
+  },
+  {
    "context": 128000,
    "id": "liquid/lfm-2.5-2.6b"
   },
@@ -503,7 +519,7 @@
    "id": "meta/muse-spark-1.3-contributor"
   },
   {
-   "context": 1048576,
+   "context": 1000000,
    "id": "meta/muse-spark-open"
   },
   {
@@ -657,6 +673,10 @@
   {
    "context": 262144,
    "id": "morph/morph-v3-large"
+  },
+  {
+   "context": 262144,
+   "id": "motif-technologies/motif-3"
   },
   {
    "context": 262144,
@@ -1001,10 +1021,6 @@
   {
    "context": 32768,
    "id": "qwen/qwen-2.5-72b-instruct"
-  },
-  {
-   "context": 32768,
-   "id": "qwen/qwen-2.5-7b-instruct"
   },
   {
    "context": 32768,
@@ -1399,7 +1415,7 @@
    "id": "z-ai/glm-5-turbo"
   },
   {
-   "context": 202752,
+   "context": 202745,
    "id": "z-ai/glm-5.1"
   },
   {
@@ -1411,7 +1427,7 @@
    "id": "z-ai/glm-5.3"
   },
   {
-   "context": 1048575,
+   "context": 1048576,
    "id": "z-ai/glm-5.3-flash"
   },
   {

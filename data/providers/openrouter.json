@@ -1,5 +1,5 @@
 {
- "generated_at": 1794314279,
+ "generated_at": 1794397905,
  "id": "openrouter",
  "models": [
   {
@@ -113,6 +113,14 @@
   {
    "context": 1000000,
    "id": "anthropic/claude-sonnet-5.5"
+  },
+  {
+   "context": 1024000,
+   "id": "baidu/ernie-5.5-flash-preview"
+  },
+  {
+   "context": 1024000,
+   "id": "baidu/ernie-light-dt-1.0-intl"
   },
   {
    "context": 262144,
@@ -323,6 +331,10 @@
    "id": "google/gemini-4-argon"
   },
   {
+   "context": 1048576,
+   "id": "google/gemini-4-carbon"
+  },
+  {
    "context": 65536,
    "id": "google/gemini-nano-banana-2.1"
   },
@@ -405,6 +417,10 @@
   {
    "context": 128000,
    "id": "inference-net/schematron-v2-turbo"
+  },
+  {
+   "context": 261795,
+   "id": "kt/midm-k-3.0-pro"
   },
   {
    "context": 128000,
@@ -649,6 +665,10 @@
   {
    "context": 262144,
    "id": "morph/morph-v3-large"
+  },
+  {
+   "context": 262144,
+   "id": "motif-technologies/motif-3"
   },
   {
    "context": 262144,
@@ -997,10 +1017,6 @@
   {
    "context": 32768,
    "id": "qwen/qwen-2.5-72b-instruct"
-  },
-  {
-   "context": 32768,
-   "id": "qwen/qwen-2.5-7b-instruct"
   },
   {
    "context": 32768,
@@ -1357,10 +1373,6 @@
   {
    "context": 1048576,
    "id": "xiaomi/mimo-v2.6-pro-ultraspeed"
-  },
-  {
-   "context": 262144,
-   "id": "xingchen-agi/xing4.0-29b-a4b:free"
   },
   {
    "context": 131072,

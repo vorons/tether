@@ -1,5 +1,5 @@
 {
- "generated_at": 1794314279,
+ "generated_at": 1794397905,
  "providers": {
   "302ai": {
    "api_key_env": [
@@ -5635,7 +5635,7 @@
     "CLOUDFLARE_ACCOUNT_ID",
     "CLOUDFLARE_GATEWAY_ID"
    ],
-   "model": "openai/gpt-6.1-terra",
+   "model": "meta/muse-ember-1.0",
    "models": [
     {
      "context": 262144,
@@ -5664,6 +5664,10 @@
     {
      "context": 1000000,
      "id": "anthropic/claude-fable-5.1"
+    },
+    {
+     "context": 1000000,
+     "id": "anthropic/claude-fable-5.2"
     },
     {
      "context": 200000,
@@ -5768,6 +5772,10 @@
     {
      "context": 1048576,
      "id": "google/gemini-4-argon"
+    },
+    {
+     "context": 1048576,
+     "id": "meta/muse-ember-1.0"
     },
     {
      "context": 1048576,
@@ -8212,7 +8220,7 @@
     "EDENAI_API_KEY"
    ],
    "base_url": "https://api.edenai.run/v3",
-   "model": "anthropic/claude-fable-latest",
+   "model": "vertex/gemini-4-carbon@us",
    "models": [
     {
      "context": 300000,
@@ -8881,6 +8889,10 @@
     {
      "context": 1048576,
      "id": "google/gemini-4-argon"
+    },
+    {
+     "context": 1048576,
+     "id": "google/gemini-4-carbon"
     },
     {
      "context": 1048576,
@@ -9657,6 +9669,18 @@
     {
      "context": 1048576,
      "id": "vertex/gemini-4-argon@us"
+    },
+    {
+     "context": 1048576,
+     "id": "vertex/gemini-4-carbon"
+    },
+    {
+     "context": 1048576,
+     "id": "vertex/gemini-4-carbon@eu"
+    },
+    {
+     "context": 1048576,
+     "id": "vertex/gemini-4-carbon@us"
     },
     {
      "context": 1048576,
@@ -10845,6 +10869,10 @@
      "id": "gemini-4-argon"
     },
     {
+     "context": 1048576,
+     "id": "gemini-4-carbon"
+    },
+    {
      "context": 2048,
      "id": "gemini-embedding-001"
     },
@@ -10903,6 +10931,10 @@
      "id": "claude-fable-5.1"
     },
     {
+     "context": 1000000,
+     "id": "claude-fable-5.2"
+    },
+    {
      "context": 200000,
      "id": "claude-haiku-4.5"
     },
@@ -10957,6 +10989,10 @@
     {
      "context": 1048576,
      "id": "gemini-4-argon"
+    },
+    {
+     "context": 1048576,
+     "id": "gemini-4-carbon"
     },
     {
      "context": 264000,
@@ -11233,6 +11269,10 @@
      "id": "gemini-4-argon"
     },
     {
+     "context": 1048576,
+     "id": "gemini-4-carbon"
+    },
+    {
      "context": 2048,
      "id": "gemini-embedding-001"
     },
@@ -11282,7 +11322,7 @@
     "GOOGLE_APPLICATION_CREDENTIALS"
    ],
    "base_url": "",
-   "model": "claude-fable-5-2@default",
+   "model": "gemini-4-carbon",
    "models": [
     {
      "context": 1000000,
@@ -11443,6 +11483,10 @@
     {
      "context": 1048576,
      "id": "gemini-4-argon"
+    },
+    {
+     "context": 1048576,
+     "id": "gemini-4-carbon"
     },
     {
      "context": 2048,
@@ -14078,6 +14122,14 @@
      "id": "anthropic/claude-sonnet-5.5"
     },
     {
+     "context": 1024000,
+     "id": "baidu/ernie-5.5-flash-preview"
+    },
+    {
+     "context": 1024000,
+     "id": "baidu/ernie-light-dt-1.0-intl"
+    },
+    {
      "context": 262144,
      "id": "bytedance-seed/seed-1.6"
     },
@@ -14162,7 +14214,7 @@
      "id": "deepseek/deepseek-v3.2-exp"
     },
     {
-     "context": 1048575,
+     "context": 1048576,
      "id": "deepseek/deepseek-v4-flash"
     },
     {
@@ -14286,6 +14338,10 @@
      "id": "google/gemini-4-argon"
     },
     {
+     "context": 1048576,
+     "id": "google/gemini-4-carbon"
+    },
+    {
      "context": 65536,
      "id": "google/gemini-nano-banana-2.1"
     },
@@ -14382,6 +14438,10 @@
      "id": "kilo-auto/small"
     },
     {
+     "context": 261795,
+     "id": "kt/midm-k-3.0-pro"
+    },
+    {
      "context": 128000,
      "id": "liquid/lfm-2.5-2.6b"
     },
@@ -14466,7 +14526,7 @@
      "id": "meta/muse-spark-1.3-contributor"
     },
     {
-     "context": 1048576,
+     "context": 1000000,
      "id": "meta/muse-spark-open"
     },
     {
@@ -14620,6 +14680,10 @@
     {
      "context": 262144,
      "id": "morph/morph-v3-large"
+    },
+    {
+     "context": 262144,
+     "id": "motif-technologies/motif-3"
     },
     {
      "context": 262144,
@@ -14964,10 +15028,6 @@
     {
      "context": 32768,
      "id": "qwen/qwen-2.5-72b-instruct"
-    },
-    {
-     "context": 32768,
-     "id": "qwen/qwen-2.5-7b-instruct"
     },
     {
      "context": 32768,
@@ -15362,7 +15422,7 @@
      "id": "z-ai/glm-5-turbo"
     },
     {
-     "context": 202752,
+     "context": 202745,
      "id": "z-ai/glm-5.1"
     },
     {
@@ -15374,7 +15434,7 @@
      "id": "z-ai/glm-5.3"
     },
     {
-     "context": 1048575,
+     "context": 1048576,
      "id": "z-ai/glm-5.3-flash"
     },
     {
@@ -15653,7 +15713,7 @@
     "LLMGATEWAY_API_KEY"
    ],
    "base_url": "https://api.llmgateway.io/v1",
-   "model": "muse-ember-1.0",
+   "model": "gemini-4-carbon",
    "models": [
     {
      "context": 262000,
@@ -15748,7 +15808,7 @@
      "id": "deepseek-v4-flash"
     },
     {
-     "context": 1000000,
+     "context": 1050000,
      "id": "deepseek-v4-flash-0731"
     },
     {
@@ -15822,6 +15882,10 @@
     {
      "context": 1048576,
      "id": "gemini-4-argon"
+    },
+    {
+     "context": 1048576,
+     "id": "gemini-4-carbon"
     },
     {
      "context": 1048576,
@@ -16475,11 +16539,15 @@
     "LLMGATEWAY_API_KEY"
    ],
    "base_url": "https://api.llmgateway.io/v1",
-   "model": "meta/muse-ember-1.0",
+   "model": "google-vertex/gemini-4-carbon",
    "models": [
     {
      "context": 1000000,
      "id": "alibaba/deepseek-v4-flash"
+    },
+    {
+     "context": 1000000,
+     "id": "alibaba/deepseek-v4-flash-0731"
     },
     {
      "context": 1000000,
@@ -16947,6 +17015,10 @@
     },
     {
      "context": 1048576,
+     "id": "baidu/deepseek-v4-flash-0731"
+    },
+    {
+     "context": 1048576,
      "id": "baidu/deepseek-v4-pro"
     },
     {
@@ -16984,6 +17056,10 @@
     {
      "context": 1048576,
      "id": "bytedance/deepseek-v4-flash"
+    },
+    {
+     "context": 1048576,
+     "id": "bytedance/deepseek-v4-flash-0731"
     },
     {
      "context": 1048576,
@@ -17071,6 +17147,10 @@
     },
     {
      "context": 1048576,
+     "id": "cloudflare/deepseek-v4-flash-0731"
+    },
+    {
+     "context": 1048576,
      "id": "cloudflare/deepseek-v4-pro"
     },
     {
@@ -17120,6 +17200,10 @@
     {
      "context": 1000000,
      "id": "deepinfra/deepseek-v4-flash"
+    },
+    {
+     "context": 1000000,
+     "id": "deepinfra/deepseek-v4-flash-0731"
     },
     {
      "context": 1048576,
@@ -17275,6 +17359,10 @@
     },
     {
      "context": 1048576,
+     "id": "google-ai-studio/gemini-4-carbon"
+    },
+    {
+     "context": 1048576,
      "id": "google-ai-studio/gemini-pro-latest"
     },
     {
@@ -17315,6 +17403,10 @@
     },
     {
      "context": 1048576,
+     "id": "google-vertex/gemini-4-carbon"
+    },
+    {
+     "context": 1048576,
      "id": "greenference/glm-5.3-flash"
     },
     {
@@ -17336,6 +17428,10 @@
     {
      "context": 131072,
      "id": "groq/gpt-oss-20b"
+    },
+    {
+     "context": 1000000,
+     "id": "inference.net/deepseek-v4-flash"
     },
     {
      "context": 262144,
@@ -17520,6 +17616,10 @@
     {
      "context": 1050000,
      "id": "novita/deepseek-v4-flash"
+    },
+    {
+     "context": 1050000,
+     "id": "novita/deepseek-v4-flash-0731"
     },
     {
      "context": 1048576,
@@ -17952,6 +18052,10 @@
     {
      "context": 1000000,
      "id": "tencent/deepseek-v4-flash"
+    },
+    {
+     "context": 1000000,
+     "id": "tencent/deepseek-v4-flash-0731"
     },
     {
      "context": 1000000,
@@ -19940,7 +20044,7 @@
      "id": "TheDrummer/Anubis-70B-v1"
     },
     {
-     "context": 32000,
+     "context": 32768,
      "id": "TheDrummer/Anubis-70B-v1.1"
     },
     {
@@ -19960,7 +20064,7 @@
      "id": "TheDrummer/Cydonia-24B-v4.1"
     },
     {
-     "context": 131072,
+     "context": 65536,
      "id": "TheDrummer/Cydonia-24B-v4.3"
     },
     {
@@ -20208,10 +20312,6 @@
      "id": "anthropic/claude-sonnet-latest"
     },
     {
-     "context": 262144,
-     "id": "arcee-ai/trinity-large-thinking"
-    },
-    {
      "context": 1000000,
      "id": "auto-model"
     },
@@ -20382,6 +20482,14 @@
     {
      "context": 1048576,
      "id": "deepseek/deepseek-v4.1-flash-1017"
+    },
+    {
+     "context": 1048576,
+     "id": "deepseek/deepseek-v4.1-flash-1017-uncensored"
+    },
+    {
+     "context": 1048576,
+     "id": "deepseek/deepseek-v4.1-flash-1017-uncensored:thinking"
     },
     {
      "context": 1048576,
@@ -20650,6 +20758,10 @@
     {
      "context": 1048576,
      "id": "google/gemini-4-argon"
+    },
+    {
+     "context": 1048576,
+     "id": "google/gemini-4-carbon"
     },
     {
      "context": 1048576,
@@ -22394,10 +22506,6 @@
      "id": "openai/whisper-large-v3"
     },
     {
-     "context": 262144,
-     "id": "qwen/qwen3.5-397b-a17b"
-    },
-    {
      "context": 1000000,
      "id": "qwen/qwen3.7-max"
     },
@@ -23566,7 +23674,7 @@
     "OFOX_API_KEY"
    ],
    "base_url": "https://api.ofox.ai/v1",
-   "model": "openai/gpt-6.1-terra",
+   "model": "anthropic/claude-fable-5.2",
    "models": [
     {
      "context": 1000000,
@@ -23575,6 +23683,10 @@
     {
      "context": 1000000,
      "id": "anthropic/claude-fable-5.1"
+    },
+    {
+     "context": 1000000,
+     "id": "anthropic/claude-fable-5.2"
     },
     {
      "context": 200000,
@@ -24683,6 +24795,10 @@
      "id": "gemini-4-argon"
     },
     {
+     "context": 1048576,
+     "id": "gemini-4-carbon"
+    },
+    {
      "context": 204800,
      "id": "glm-4.6"
     },
@@ -25385,6 +25501,14 @@
      "id": "anthropic/claude-sonnet-5.5"
     },
     {
+     "context": 1024000,
+     "id": "baidu/ernie-5.5-flash-preview"
+    },
+    {
+     "context": 1024000,
+     "id": "baidu/ernie-light-dt-1.0-intl"
+    },
+    {
      "context": 262144,
      "id": "bytedance-seed/seed-1.6"
     },
@@ -25593,6 +25717,10 @@
      "id": "google/gemini-4-argon"
     },
     {
+     "context": 1048576,
+     "id": "google/gemini-4-carbon"
+    },
+    {
      "context": 65536,
      "id": "google/gemini-nano-banana-2.1"
     },
@@ -25675,6 +25803,10 @@
     {
      "context": 128000,
      "id": "inference-net/schematron-v2-turbo"
+    },
+    {
+     "context": 261795,
+     "id": "kt/midm-k-3.0-pro"
     },
     {
      "context": 128000,
@@ -25919,6 +26051,10 @@
     {
      "context": 262144,
      "id": "morph/morph-v3-large"
+    },
+    {
+     "context": 262144,
+     "id": "motif-technologies/motif-3"
     },
     {
      "context": 262144,
@@ -26267,10 +26403,6 @@
     {
      "context": 32768,
      "id": "qwen/qwen-2.5-72b-instruct"
-    },
-    {
-     "context": 32768,
-     "id": "qwen/qwen-2.5-7b-instruct"
     },
     {
      "context": 32768,
@@ -26627,10 +26759,6 @@
     {
      "context": 1048576,
      "id": "xiaomi/mimo-v2.6-pro-ultraspeed"
-    },
-    {
-     "context": 262144,
-     "id": "xingchen-agi/xing4.0-29b-a4b:free"
     },
     {
      "context": 131072,
@@ -28508,7 +28636,7 @@
     "PRIME_API_KEY"
    ],
    "base_url": "https://api.pinference.ai/api/v1",
-   "model": "moonshotai/kimi-k3.1-pro",
+   "model": "google/gemini-4-carbon",
    "models": [
     {
      "context": 1000000,
@@ -28517,6 +28645,10 @@
     {
      "context": 1000000,
      "id": "anthropic/claude-fable-5.1"
+    },
+    {
+     "context": 1000000,
+     "id": "anthropic/claude-fable-5.2"
     },
     {
      "context": 1000000,
@@ -28597,6 +28729,10 @@
     {
      "context": 1048576,
      "id": "google/gemini-4-argon"
+    },
+    {
+     "context": 1048576,
+     "id": "google/gemini-4-carbon"
     },
     {
      "context": 131072,

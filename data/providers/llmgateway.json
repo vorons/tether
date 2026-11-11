@@ -1,5 +1,5 @@
 {
- "generated_at": 1794314279,
+ "generated_at": 1794397905,
  "id": "llmgateway",
  "models": [
   {
@@ -95,7 +95,7 @@
    "id": "deepseek-v4-flash"
   },
   {
-   "context": 1000000,
+   "context": 1050000,
    "id": "deepseek-v4-flash-0731"
   },
   {
@@ -169,6 +169,10 @@
   {
    "context": 1048576,
    "id": "gemini-4-argon"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini-4-carbon"
   },
   {
    "context": 1048576,

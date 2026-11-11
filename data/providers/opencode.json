@@ -1,5 +1,5 @@
 {
- "generated_at": 1794314279,
+ "generated_at": 1794397905,
  "id": "opencode",
  "models": [
   {
@@ -161,6 +161,10 @@
   {
    "context": 1048576,
    "id": "gemini-4-argon"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini-4-carbon"
   },
   {
    "context": 204800,
