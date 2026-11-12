@@ -1,5 +1,5 @@
 {
- "generated_at": 1794397905,
+ "generated_at": 1794487280,
  "id": "kilo",
  "models": [
   {
@@ -116,7 +116,7 @@
   },
   {
    "context": 1024000,
-   "id": "baidu/ernie-5.5-flash-preview"
+   "id": "baidu/ernie-5.5-flash-preview:free"
   },
   {
    "context": 1024000,
@@ -124,19 +124,7 @@
   },
   {
    "context": 262144,
-   "id": "bytedance-seed/seed-1.6"
-  },
-  {
-   "context": 262144,
-   "id": "bytedance-seed/seed-1.6-flash"
-  },
-  {
-   "context": 262144,
    "id": "bytedance-seed/seed-2-1-turbo"
-  },
-  {
-   "context": 262144,
-   "id": "bytedance-seed/seed-2.0-code"
   },
   {
    "context": 262144,
@@ -531,7 +519,7 @@
    "id": "microsoft/phi-4"
   },
   {
-   "context": 65536,
+   "context": 200000,
    "id": "minimax/minimax-m2.5"
   },
   {
@@ -1299,16 +1287,16 @@
    "id": "thinkingmachines/inkling"
   },
   {
-   "context": 1048576,
-   "id": "thinkingmachines/inkling-2-small:free"
-  },
-  {
    "context": 524288,
    "id": "thinkingmachines/inkling-small"
   },
   {
    "context": 1048576,
    "id": "unbiased/pareto-26.10"
+  },
+  {
+   "context": 1048576,
+   "id": "unbiased/pareto-26.10-preview"
   },
   {
    "context": 262144,
@@ -1415,7 +1403,7 @@
    "id": "z-ai/glm-5-turbo"
   },
   {
-   "context": 202745,
+   "context": 202752,
    "id": "z-ai/glm-5.1"
   },
   {

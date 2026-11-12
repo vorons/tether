@@ -1,5 +1,5 @@
 {
- "generated_at": 1794397905,
+ "generated_at": 1794487280,
  "id": "nebius",
  "models": [
   {
@@ -28,27 +28,11 @@
   },
   {
    "context": 262144,
-   "id": "Qwen/Qwen3.5-397B-A17B"
-  },
-  {
-   "context": 262144,
    "id": "Qwen/Qwen3.8-27B"
-  },
-  {
-   "context": 1024000,
-   "id": "deepseek-ai/DeepSeek-V4-Flash-0731"
-  },
-  {
-   "context": 1048576,
-   "id": "deepseek-ai/DeepSeek-V4-Pro"
   },
   {
    "context": 979000,
    "id": "deepseek-ai/DeepSeek-V4-Pro-0813"
-  },
-  {
-   "context": 1048000,
-   "id": "deepseek-ai/DeepSeek-V4.1-Flash"
   },
   {
    "context": 1048576,
@@ -61,10 +45,6 @@
   {
    "context": 1048576,
    "id": "meta-models/muse-spark-open"
-  },
-  {
-   "context": 262144,
-   "id": "moonshotai/Kimi-K2.7-Code"
   },
   {
    "context": 1024000,

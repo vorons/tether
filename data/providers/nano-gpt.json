@@ -1,5 +1,5 @@
 {
- "generated_at": 1794397905,
+ "generated_at": 1794487280,
  "id": "nano-gpt",
  "models": [
   {
@@ -367,7 +367,7 @@
    "id": "abliteration-ai/abliterated-model-large-flash"
   },
   {
-   "context": 1048576,
+   "context": 1000000,
    "id": "abliteration-ai/abliterated-model-large-v2"
   },
   {
@@ -587,6 +587,10 @@
    "id": "auto-model-standard"
   },
   {
+   "context": 1024000,
+   "id": "baidu/ernie-light-dt-1.0-intl"
+  },
+  {
    "context": 131072,
    "id": "baseten/Kimi-K2-Instruct-FP4"
   },
@@ -739,6 +743,14 @@
    "id": "deepseek/deepseek-v4.1-flash"
   },
   {
+   "context": 524288,
+   "id": "deepseek/deepseek-v4.1-flash-0910-uncensored"
+  },
+  {
+   "context": 524288,
+   "id": "deepseek/deepseek-v4.1-flash-0910-uncensored:thinking"
+  },
+  {
    "context": 1048576,
    "id": "deepseek/deepseek-v4.1-flash-1017"
   },
@@ -753,6 +765,14 @@
   {
    "context": 1048576,
    "id": "deepseek/deepseek-v4.1-flash-1017:thinking"
+  },
+  {
+   "context": 1048576,
+   "id": "deepseek/deepseek-v4.1-flash-uncensored"
+  },
+  {
+   "context": 1048576,
+   "id": "deepseek/deepseek-v4.1-flash-uncensored:thinking"
   },
   {
    "context": 1048576,
@@ -1055,7 +1075,7 @@
    "id": "google/gemma-4-31b-it:thinking"
   },
   {
-   "context": 262144,
+   "context": 32768,
    "id": "google/gemma4-31b-splituntied"
   },
   {
@@ -1063,7 +1083,7 @@
    "id": "heabsy/cyberheabsy"
   },
   {
-   "context": 524288,
+   "context": 1048576,
    "id": "heabsy/qwen3.8-27b-uncensored-fast"
   },
   {
@@ -1221,6 +1241,10 @@
   {
    "context": 328000,
    "id": "meta-llama/llama-4-scout"
+  },
+  {
+   "context": 1048576,
+   "id": "meta/muse-ember"
   },
   {
    "context": 131072,
@@ -2059,7 +2083,7 @@
    "id": "qwen/qwen3.8-27b-darkidol"
   },
   {
-   "context": 524288,
+   "context": 1048576,
    "id": "qwen/qwen3.8-27b-fable"
   },
   {
@@ -2083,7 +2107,7 @@
    "id": "qwen/qwen3.8-27b-novelist"
   },
   {
-   "context": 524288,
+   "context": 1048576,
    "id": "qwen/qwen3.8-27b-queen"
   },
   {

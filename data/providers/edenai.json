@@ -1,5 +1,5 @@
 {
- "generated_at": 1794397905,
+ "generated_at": 1794487280,
  "id": "edenai",
  "models": [
   {
@@ -581,10 +581,6 @@
   {
    "context": 131072,
    "id": "flexai/Muse-Glimmer-30B"
-  },
-  {
-   "context": 262144,
-   "id": "flexai/Step-3.7-Flash"
   },
   {
    "context": 131072,
@@ -1341,6 +1337,10 @@
   {
    "context": 524288,
    "id": "together_ai/thinkingmachines/Inkling"
+  },
+  {
+   "context": 131072,
+   "id": "tsystems/gpt-oss-120b"
   },
   {
    "context": 32768,

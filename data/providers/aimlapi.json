@@ -1,5 +1,5 @@
 {
- "generated_at": 1794397905,
+ "generated_at": 1794487280,
  "id": "aimlapi",
  "models": [
   {
@@ -113,10 +113,6 @@
   {
    "context": 262144,
    "id": "bytedance-seed/seed-1.6-flash"
-  },
-  {
-   "context": 262144,
-   "id": "bytedance-seed/seed-2.0-code"
   },
   {
    "context": 262144,

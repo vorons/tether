@@ -1,5 +1,5 @@
 {
- "generated_at": 1794397905,
+ "generated_at": 1794487280,
  "id": "digitalocean",
  "models": [
   {
@@ -29,6 +29,10 @@
   {
    "context": 1000000,
    "id": "anthropic-claude-fable-5.1"
+  },
+  {
+   "context": 1000000,
+   "id": "anthropic-claude-fable-5.2"
   },
   {
    "context": 200000,
@@ -149,6 +153,10 @@
   {
    "context": 1048576,
    "id": "kimi-k3"
+  },
+  {
+   "context": 1048576,
+   "id": "kimi-k3.1-pro"
   },
   {
    "context": 128000,

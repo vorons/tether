@@ -1,5 +1,5 @@
 {
- "generated_at": 1794397905,
+ "generated_at": 1794487280,
  "id": "engy",
  "models": [
   {
@@ -29,6 +29,10 @@
   {
    "context": 1113088,
    "id": "kimi-k3"
+  },
+  {
+   "context": 1113088,
+   "id": "kimi-k3.1-pro"
   },
   {
    "context": 208192,
