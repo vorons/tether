@@ -1,5 +1,5 @@
 {
- "generated_at": 1794487280,
+ "generated_at": 1794571852,
  "id": "edenai",
  "models": [
   {
@@ -277,6 +277,10 @@
   {
    "context": 32768,
    "id": "cloudflare/@cf/qwen/qwen2.5-coder-32b-instruct"
+  },
+  {
+   "context": 1048576,
+   "id": "cloudflare/@cf/thinkingmachines/inkling-2-small"
   },
   {
    "context": 131072,
@@ -672,6 +676,10 @@
   },
   {
    "context": 1048576,
+   "id": "google/gemini-4-hydrogen"
+  },
+  {
+   "context": 1048576,
    "id": "google/gemini-flash-latest"
   },
   {
@@ -879,11 +887,11 @@
    "id": "mistral/mistral-large-4@eu"
   },
   {
-   "context": 262144,
+   "context": 1048576,
    "id": "mistral/mistral-large-latest"
   },
   {
-   "context": 262144,
+   "context": 1048576,
    "id": "mistral/mistral-large-latest@eu"
   },
   {
@@ -980,6 +988,10 @@
   },
   {
    "context": 1048576,
+   "id": "nebius/deepseek-ai/DeepSeek-V4-Flash-0731"
+  },
+  {
+   "context": 1048576,
    "id": "nebius/deepseek-ai/DeepSeek-V4-Pro-0813"
   },
   {
@@ -1005,6 +1017,10 @@
   {
    "context": 131072,
    "id": "nebius/openai/gpt-oss-120b"
+  },
+  {
+   "context": 1048576,
+   "id": "nebius/thinkingmachines/Inkling-2-Small"
   },
   {
    "context": 1047576,
@@ -1339,6 +1355,10 @@
    "id": "together_ai/thinkingmachines/Inkling"
   },
   {
+   "context": 1048576,
+   "id": "together_ai/thinkingmachines/Inkling-2-Small"
+  },
+  {
    "context": 131072,
    "id": "tsystems/gpt-oss-120b"
   },
@@ -1461,6 +1481,18 @@
   {
    "context": 1048576,
    "id": "vertex/gemini-4-carbon@us"
+  },
+  {
+   "context": 1048576,
+   "id": "vertex/gemini-4-hydrogen"
+  },
+  {
+   "context": 1048576,
+   "id": "vertex/gemini-4-hydrogen@eu"
+  },
+  {
+   "context": 1048576,
+   "id": "vertex/gemini-4-hydrogen@us"
   },
   {
    "context": 1048576,

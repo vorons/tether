@@ -1,5 +1,5 @@
 {
- "generated_at": 1794487280,
+ "generated_at": 1794571852,
  "id": "chutes",
  "models": [
   {
@@ -15,7 +15,7 @@
    "id": "Qwen/Qwen3.6-27B-TEE"
   },
   {
-   "context": 0,
+   "context": 1000000,
    "id": "Qwen/Qwen3.8-2.4T-A95B"
   },
   {
@@ -23,7 +23,7 @@
    "id": "Qwen/Qwen3.8-27B-TEE"
   },
   {
-   "context": 0,
+   "context": 1000000,
    "id": "Qwen/Qwen3.8-Max-0902"
   },
   {
@@ -35,11 +35,11 @@
    "id": "deepseek-ai/DeepSeek-V4-Flash-0731-TEE"
   },
   {
-   "context": 0,
+   "context": 1000000,
    "id": "deepseek-ai/DeepSeek-V4-Pro-0813"
   },
   {
-   "context": 0,
+   "context": 1000000,
    "id": "deepseek-ai/DeepSeek-V4.1-Flash-1017"
   },
   {
@@ -51,7 +51,7 @@
    "id": "moonshotai/Kimi-K2.6-TEE"
   },
   {
-   "context": 0,
+   "context": 262144,
    "id": "moonshotai/Kimi-K2.7-Code"
   },
   {
@@ -59,7 +59,7 @@
    "id": "moonshotai/Kimi-K3-TEE"
   },
   {
-   "context": 0,
+   "context": 1048576,
    "id": "tencent/Hy4"
   },
   {
@@ -67,7 +67,7 @@
    "id": "zai-org/GLM-5.1-TEE"
   },
   {
-   "context": 0,
+   "context": 1048576,
    "id": "zai-org/GLM-5.2-Fast"
   },
   {
@@ -75,7 +75,7 @@
    "id": "zai-org/GLM-5.2-TEE"
   },
   {
-   "context": 0,
+   "context": 1048576,
    "id": "zai-org/GLM-5.3"
   }
  ],

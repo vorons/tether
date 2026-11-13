@@ -1,5 +1,5 @@
 {
- "generated_at": 1794487280,
+ "generated_at": 1794571852,
  "id": "openrouter",
  "models": [
   {
@@ -113,6 +113,10 @@
   {
    "context": 1000000,
    "id": "anthropic/claude-sonnet-5.5"
+  },
+  {
+   "context": 262144,
+   "id": "apodex/apodex-1.1-mini:free"
   },
   {
    "context": 1024000,
@@ -323,6 +327,10 @@
    "id": "google/gemini-4-carbon"
   },
   {
+   "context": 1048576,
+   "id": "google/gemini-4-hydrogen"
+  },
+  {
    "context": 65536,
    "id": "google/gemini-nano-banana-2.1"
   },
@@ -385,6 +393,14 @@
   {
    "context": 262144,
    "id": "inclusionai/ling-3.0-flash"
+  },
+  {
+   "context": 262144,
+   "id": "inclusionai/ling-3.0-flash-fin"
+  },
+  {
+   "context": 262144,
+   "id": "inclusionai/ling-3.0-flash-sante"
   },
   {
    "context": 131072,
@@ -967,6 +983,10 @@
    "id": "particle-ai/particle-1"
   },
   {
+   "context": 1048576,
+   "id": "particle-ai/particle-1:free"
+  },
+  {
    "context": 32768,
    "id": "perceptron/perceptron-mk1"
   },
@@ -1281,6 +1301,10 @@
   {
    "context": 524288,
    "id": "thinkingmachines/inkling"
+  },
+  {
+   "context": 1048576,
+   "id": "thinkingmachines/inkling-2-small"
   },
   {
    "context": 1048576,

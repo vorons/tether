@@ -1,5 +1,5 @@
 {
- "generated_at": 1794487280,
+ "generated_at": 1794571852,
  "id": "nearai",
  "models": [
   {
@@ -33,6 +33,10 @@
   {
    "context": 1000000,
    "id": "anthropic/claude-fable-5-1"
+  },
+  {
+   "context": 1000000,
+   "id": "anthropic/claude-fable-5-2"
   },
   {
    "context": 200000,

@@ -1,5 +1,5 @@
 {
- "generated_at": 1794487280,
+ "generated_at": 1794571852,
  "id": "cloudflare-workers-ai",
  "models": [
   {
@@ -97,6 +97,10 @@
   {
    "context": 24000,
    "id": "@cf/qwen/qwq-32b"
+  },
+  {
+   "context": 1048576,
+   "id": "@cf/thinkingmachines/inkling-2-small"
   },
   {
    "context": 131072,

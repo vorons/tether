@@ -1,5 +1,5 @@
 {
- "generated_at": 1794487280,
+ "generated_at": 1794571852,
  "id": "nano-gpt",
  "models": [
   {
@@ -139,20 +139,8 @@
    "id": "LatitudeGames/Wayfarer-Large-70B-Llama-3.3"
   },
   {
-   "context": 32768,
-   "id": "MarinaraSpaghetti/NemoMix-Unleashed-12B"
-  },
-  {
    "context": 128000,
    "id": "Meta-Llama-3-1-8B-Instruct-FP8"
-  },
-  {
-   "context": 1000000,
-   "id": "MiniMax-M1"
-  },
-  {
-   "context": 1000000,
-   "id": "MiniMaxAI/MiniMax-M1-80k"
   },
   {
    "context": 16384,
@@ -672,10 +660,6 @@
   },
   {
    "context": 128000,
-   "id": "deepseek-chat-cheaper"
-  },
-  {
-   "context": 128000,
    "id": "deepseek-v3-0324"
   },
   {
@@ -724,10 +708,6 @@
   },
   {
    "context": 1048576,
-   "id": "deepseek/deepseek-v4-pro"
-  },
-  {
-   "context": 1048576,
    "id": "deepseek/deepseek-v4-pro-0813"
   },
   {
@@ -736,7 +716,11 @@
   },
   {
    "context": 1048576,
-   "id": "deepseek/deepseek-v4-pro:thinking"
+   "id": "deepseek/deepseek-v4-pro-20260423"
+  },
+  {
+   "context": 1048576,
+   "id": "deepseek/deepseek-v4-pro-20260423:thinking"
   },
   {
    "context": 1048576,
@@ -815,14 +799,6 @@
    "id": "fireworks/ember-1"
   },
   {
-   "context": 2097152,
-   "id": "gemini-2.0-pro-exp-02-05"
-  },
-  {
-   "context": 128000,
-   "id": "gemini-2.0-pro-reasoner"
-  },
-  {
    "context": 1048576,
    "id": "gemini-2.5-flash"
   },
@@ -832,59 +808,11 @@
   },
   {
    "context": 1048576,
-   "id": "gemini-2.5-flash-lite-preview-06-17"
-  },
-  {
-   "context": 1048576,
-   "id": "gemini-2.5-flash-lite-preview-09-2025"
-  },
-  {
-   "context": 1048576,
-   "id": "gemini-2.5-flash-lite-preview-09-2025-thinking"
-  },
-  {
-   "context": 1048576,
    "id": "gemini-2.5-flash-nothinking"
   },
   {
    "context": 1048576,
-   "id": "gemini-2.5-flash-preview-04-17"
-  },
-  {
-   "context": 1048576,
-   "id": "gemini-2.5-flash-preview-04-17:thinking"
-  },
-  {
-   "context": 1048000,
-   "id": "gemini-2.5-flash-preview-05-20"
-  },
-  {
-   "context": 1048000,
-   "id": "gemini-2.5-flash-preview-05-20:thinking"
-  },
-  {
-   "context": 1048576,
-   "id": "gemini-2.5-flash-preview-09-2025"
-  },
-  {
-   "context": 1048576,
-   "id": "gemini-2.5-flash-preview-09-2025-thinking"
-  },
-  {
-   "context": 1048576,
    "id": "gemini-2.5-pro"
-  },
-  {
-   "context": 1048576,
-   "id": "gemini-2.5-pro-exp-03-25"
-  },
-  {
-   "context": 1048576,
-   "id": "gemini-2.5-pro-preview-03-25"
-  },
-  {
-   "context": 1048576,
-   "id": "gemini-2.5-pro-preview-05-06"
   },
   {
    "context": 1048576,
@@ -893,10 +821,6 @@
   {
    "context": 65536,
    "id": "gemini-3-pro-image-preview"
-  },
-  {
-   "context": 2097152,
-   "id": "gemini-exp-1206"
   },
   {
    "context": 131072,
@@ -1041,6 +965,10 @@
   {
    "context": 1048576,
    "id": "google/gemini-4-carbon"
+  },
+  {
+   "context": 1048576,
+   "id": "google/gemini-4-hydrogen"
   },
   {
    "context": 1048576,
@@ -1764,15 +1692,7 @@
   },
   {
    "context": 200000,
-   "id": "openai/o1-pro"
-  },
-  {
-   "context": 200000,
    "id": "openai/o3"
-  },
-  {
-   "context": 200000,
-   "id": "openai/o3-mini-low"
   },
   {
    "context": 200000,
@@ -1839,7 +1759,7 @@
    "id": "perceptron/perceptron-mk1.5"
   },
   {
-   "context": 128000,
+   "context": 8192,
    "id": "phi-4-mini-instruct"
   },
   {
@@ -1893,10 +1813,6 @@
   {
    "context": 41000,
    "id": "qwen/qwen3-14b"
-  },
-  {
-   "context": 262144,
-   "id": "qwen/qwen3-235b-a22b"
   },
   {
    "context": 262144,
@@ -2209,10 +2125,6 @@
   {
    "context": 32768,
    "id": "soob3123/Veiled-Calla-12B"
-  },
-  {
-   "context": 32768,
-   "id": "soob3123/amoral-gemma3-27B-v2"
   },
   {
    "context": 32768,

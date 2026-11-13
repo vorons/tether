@@ -1,5 +1,5 @@
 {
- "generated_at": 1794487280,
+ "generated_at": 1794571852,
  "id": "llmgateway",
  "models": [
   {
@@ -109,6 +109,10 @@
   {
    "context": 1040000,
    "id": "deepseek-v4.1-flash-cyber"
+  },
+  {
+   "context": 1050000,
+   "id": "deepseek-v4.1-flash-latest"
   },
   {
    "context": 1048576,

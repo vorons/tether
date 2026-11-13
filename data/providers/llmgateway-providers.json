@@ -1,5 +1,5 @@
 {
- "generated_at": 1794487280,
+ "generated_at": 1794571852,
  "id": "llmgateway-providers",
  "models": [
   {
@@ -21,6 +21,10 @@
   {
    "context": 1000000,
    "id": "alibaba/deepseek-v4.1-flash-1017"
+  },
+  {
+   "context": 1000000,
+   "id": "alibaba/deepseek-v4.1-flash-latest"
   },
   {
    "context": 202752,
@@ -491,6 +495,10 @@
    "id": "baidu/deepseek-v4.1-flash-1017"
   },
   {
+   "context": 1048576,
+   "id": "baidu/deepseek-v4.1-flash-latest"
+  },
+  {
    "context": 202752,
    "id": "baidu/glm-5.1"
   },
@@ -592,6 +600,10 @@
   },
   {
    "context": 1048576,
+   "id": "cloudflare/deepseek-v4.1-flash-latest"
+  },
+  {
+   "context": 1048576,
    "id": "cloudflare/glm-5.3"
   },
   {
@@ -649,6 +661,10 @@
   {
    "context": 1048576,
    "id": "deepinfra/deepseek-v4.1-flash-1017"
+  },
+  {
+   "context": 1048576,
+   "id": "deepinfra/deepseek-v4.1-flash-latest"
   },
   {
    "context": 262144,
@@ -711,8 +727,16 @@
    "id": "deepseek/deepseek-v4.1-flash-1017"
   },
   {
+   "context": 1050000,
+   "id": "deepseek/deepseek-v4.1-flash-latest"
+  },
+  {
    "context": 1048576,
    "id": "entrim/deepseek-v4.1-flash-1017"
+  },
+  {
+   "context": 1048576,
+   "id": "entrim/deepseek-v4.1-flash-latest"
   },
   {
    "context": 1048576,
@@ -749,6 +773,10 @@
   {
    "context": 1048576,
    "id": "flexai/deepseek-v4.1-flash-1017"
+  },
+  {
+   "context": 1048576,
+   "id": "flexai/deepseek-v4.1-flash-latest"
   },
   {
    "context": 1048576,
@@ -881,6 +909,10 @@
   {
    "context": 1040000,
    "id": "inference.net/deepseek-v4.1-flash-cyber"
+  },
+  {
+   "context": 262144,
+   "id": "inference.net/deepseek-v4.1-flash-latest"
   },
   {
    "context": 1048576,
@@ -1069,6 +1101,10 @@
   {
    "context": 1048576,
    "id": "novita/deepseek-v4.1-flash-1017"
+  },
+  {
+   "context": 1048576,
+   "id": "novita/deepseek-v4.1-flash-latest"
   },
   {
    "context": 262144,
@@ -1352,6 +1388,10 @@
   },
   {
    "context": 1048576,
+   "id": "reka-ai/deepseek-v4.1-flash-latest"
+  },
+  {
+   "context": 1048576,
    "id": "reka-ai/glm-5.3"
   },
   {
@@ -1395,6 +1435,10 @@
    "id": "runware/deepseek-v4.1-flash-1017"
   },
   {
+   "context": 1048576,
+   "id": "runware/deepseek-v4.1-flash-latest"
+  },
+  {
    "context": 262144,
    "id": "runware/gemma-4-31b-it"
   },
@@ -1435,12 +1479,20 @@
    "id": "sciforium/deepseek-v4.1-flash-1017"
   },
   {
+   "context": 1048576,
+   "id": "sciforium/deepseek-v4.1-flash-latest"
+  },
+  {
    "context": 1000000,
    "id": "scx-ai-gp/deepseek-v4.1-flash"
   },
   {
    "context": 1050000,
    "id": "scx-ai-gp/deepseek-v4.1-flash-1017"
+  },
+  {
+   "context": 1050000,
+   "id": "scx-ai-gp/deepseek-v4.1-flash-latest"
   },
   {
    "context": 1000000,
@@ -1509,6 +1561,10 @@
   {
    "context": 1000000,
    "id": "tencent/deepseek-v4.1-flash-1017"
+  },
+  {
+   "context": 1000000,
+   "id": "tencent/deepseek-v4.1-flash-latest"
   },
   {
    "context": 200000,
@@ -1605,6 +1661,10 @@
   {
    "context": 1048576,
    "id": "together-ai/deepseek-v4.1-flash-1017"
+  },
+  {
+   "context": 1048576,
+   "id": "together-ai/deepseek-v4.1-flash-latest"
   },
   {
    "context": 202752,

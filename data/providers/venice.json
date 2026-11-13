@@ -1,5 +1,5 @@
 {
- "generated_at": 1794487280,
+ "generated_at": 1794571852,
  "id": "venice",
  "models": [
   {
@@ -57,10 +57,6 @@
   {
    "context": 1000000,
    "id": "claude-opus-4-8"
-  },
-  {
-   "context": 1000000,
-   "id": "claude-opus-4-8-fast"
   },
   {
    "context": 1000000,
@@ -165,6 +161,10 @@
   {
    "context": 1000000,
    "id": "gemini-4-argon"
+  },
+  {
+   "context": 1000000,
+   "id": "gemini-4-carbon"
   },
   {
    "context": 256000,
@@ -385,6 +385,10 @@
   {
    "context": 128000,
    "id": "openai-gpt-oss-120b"
+  },
+  {
+   "context": 1000000,
+   "id": "pareto"
   },
   {
    "context": 1000000,
