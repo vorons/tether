@@ -1,14 +1,10 @@
 {
- "generated_at": 1794571852,
+ "generated_at": 1794655613,
  "id": "sambanova",
  "models": [
   {
-   "context": 131072,
-   "id": "DeepSeek-V3.1"
-  },
-  {
-   "context": 32768,
-   "id": "DeepSeek-V3.2"
+   "context": 1048576,
+   "id": "GLM-5.3"
   },
   {
    "context": 131072,
@@ -16,7 +12,7 @@
   },
   {
    "context": 1048576,
-   "id": "MiniMax-M3"
+   "id": "MiniMax-M3.1-Flash"
   },
   {
    "context": 131072,

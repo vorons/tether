@@ -1,5 +1,5 @@
 {
- "generated_at": 1794571852,
+ "generated_at": 1794655613,
  "id": "edenai",
  "models": [
   {
@@ -523,16 +523,16 @@
    "id": "deepinfra/thinkingmachines/Inkling"
   },
   {
+   "context": 262144,
+   "id": "deepinfra/thinkingmachines/Inkling-2-Small"
+  },
+  {
    "context": 524288,
    "id": "deepinfra/thinkingmachines/Inkling-Small"
   },
   {
    "context": 202752,
    "id": "deepinfra/zai-org/GLM-4.7-Flash"
-  },
-  {
-   "context": 1000000,
-   "id": "deepseek-v4-flash-vision-exp"
   },
   {
    "context": 131072,
@@ -593,6 +593,10 @@
   {
    "context": 131072,
    "id": "flexai/gpt-oss-20b"
+  },
+  {
+   "context": 131072,
+   "id": "flexai/gpt-oss-20b@eu"
   },
   {
    "context": 1048576,

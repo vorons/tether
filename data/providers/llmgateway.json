@@ -1,5 +1,5 @@
 {
- "generated_at": 1794571852,
+ "generated_at": 1794655613,
  "id": "llmgateway",
  "models": [
   {
@@ -173,6 +173,10 @@
   {
    "context": 1048576,
    "id": "gemini-4-carbon"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini-4-hydrogen"
   },
   {
    "context": 1048576,

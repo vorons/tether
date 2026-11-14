@@ -1,5 +1,5 @@
 {
- "generated_at": 1794571852,
+ "generated_at": 1794655613,
  "id": "kilo",
  "models": [
   {
@@ -127,10 +127,6 @@
    "id": "anthropic/claude-sonnet-5.5"
   },
   {
-   "context": 262144,
-   "id": "apodex/apodex-1.1-mini:free"
-  },
-  {
    "context": 1024000,
    "id": "baidu/ernie-5.5-flash-preview:free"
   },
@@ -187,7 +183,7 @@
    "id": "cohere/north-mini-code:free"
   },
   {
-   "context": 163840,
+   "context": 128000,
    "id": "deepseek/deepseek-chat"
   },
   {
@@ -451,11 +447,11 @@
    "id": "inclusionai/ling-3.0-flash"
   },
   {
-   "context": 262144,
+   "context": 256000,
    "id": "inclusionai/ling-3.0-flash-fin"
   },
   {
-   "context": 262144,
+   "context": 256000,
    "id": "inclusionai/ling-3.0-flash-sante"
   },
   {
@@ -473,6 +469,10 @@
   {
    "context": 1000000,
    "id": "inclusionai/ling-3.1-flash-1019"
+  },
+  {
+   "context": 1048576,
+   "id": "inclusionai/ling-3.2-flash:free"
   },
   {
    "context": 128000,
@@ -512,10 +512,6 @@
   },
   {
    "context": 128000,
-   "id": "liquid/lfm-2.5-2.6b"
-  },
-  {
-   "context": 128000,
    "id": "liquid/lfm-2.5-24b-a2b"
   },
   {
@@ -551,7 +547,7 @@
    "id": "meta-llama/llama-3.2-1b-instruct"
   },
   {
-   "context": 131072,
+   "context": 80000,
    "id": "meta-llama/llama-3.2-3b-instruct"
   },
   {
@@ -623,7 +619,7 @@
    "id": "minimax/minimax-m2.1-lightning"
   },
   {
-   "context": 200000,
+   "context": 198000,
    "id": "minimax/minimax-m2.5"
   },
   {
@@ -1459,7 +1455,7 @@
    "id": "qwen/qwen3.8-flash"
   },
   {
-   "context": 262144,
+   "context": 1000000,
    "id": "qwen/qwen3.8-max"
   },
   {

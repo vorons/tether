@@ -1,5 +1,5 @@
 {
- "generated_at": 1794571852,
+ "generated_at": 1794655613,
  "id": "prime",
  "models": [
   {
@@ -57,10 +57,6 @@
   {
    "context": 1048576,
    "id": "deepseek/deepseek-v4-pro"
-  },
-  {
-   "context": 1048576,
-   "id": "deepseek/deepseek-v4.1-flash"
   },
   {
    "context": 1048576,
@@ -267,8 +263,12 @@
    "id": "qwen/qwen3-vl-30b-a3b-instruct"
   },
   {
-   "context": 1000000,
+   "context": 262144,
    "id": "qwen/qwen3.8-27b"
+  },
+  {
+   "context": 1048576,
+   "id": "thinkingmachines/inkling-2-small"
   },
   {
    "context": 500000,
@@ -281,14 +281,6 @@
   {
    "context": 1048576,
    "id": "z-ai/glm-5.2"
-  },
-  {
-   "context": 1048576,
-   "id": "z-ai/glm-5.3"
-  },
-  {
-   "context": 1048576,
-   "id": "z-ai/glm-5.3-flash"
   }
  ],
  "schema": 1

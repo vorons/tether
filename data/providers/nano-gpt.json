@@ -1,5 +1,5 @@
 {
- "generated_at": 1794571852,
+ "generated_at": 1794655613,
  "id": "nano-gpt",
  "models": [
   {
@@ -2133,10 +2133,6 @@
   {
    "context": 262144,
    "id": "stepfun-ai/step-3.5-flash"
-  },
-  {
-   "context": 262144,
-   "id": "stepfun-ai/step-3.5-flash-2603"
   },
   {
    "context": 262144,

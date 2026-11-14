@@ -1,5 +1,5 @@
 {
- "generated_at": 1794571852,
+ "generated_at": 1794655613,
  "id": "llmgateway-providers",
  "models": [
   {
@@ -31,6 +31,10 @@
    "id": "alibaba/glm-5"
   },
   {
+   "context": 202752,
+   "id": "alibaba/glm-5.1"
+  },
+  {
    "context": 1000000,
    "id": "alibaba/glm-5.2"
   },
@@ -43,8 +47,16 @@
    "id": "alibaba/kimi-k2.5"
   },
   {
+   "context": 262144,
+   "id": "alibaba/kimi-k2.7-code"
+  },
+  {
    "context": 1048576,
    "id": "alibaba/kimi-k3"
+  },
+  {
+   "context": 1048576,
+   "id": "alibaba/kimi-k3.1-pro"
   },
   {
    "context": 1000000,
@@ -105,6 +117,14 @@
   {
    "context": 983616,
    "id": "alibaba/qwen3.7-plus"
+  },
+  {
+   "context": 983616,
+   "id": "alibaba/qwen3.8-2.4t-a95b"
+  },
+  {
+   "context": 983616,
+   "id": "alibaba/qwen3.8-27b"
   },
   {
    "context": 983616,
@@ -832,6 +852,10 @@
   },
   {
    "context": 1048576,
+   "id": "google-ai-studio/gemini-4-hydrogen"
+  },
+  {
+   "context": 1048576,
    "id": "google-ai-studio/gemini-pro-latest"
   },
   {
@@ -873,6 +897,10 @@
   {
    "context": 1048576,
    "id": "google-vertex/gemini-4-carbon"
+  },
+  {
+   "context": 1048576,
+   "id": "google-vertex/gemini-4-hydrogen"
   },
   {
    "context": 1048576,

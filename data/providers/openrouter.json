@@ -1,5 +1,5 @@
 {
- "generated_at": 1794571852,
+ "generated_at": 1794655613,
  "id": "openrouter",
  "models": [
   {
@@ -113,10 +113,6 @@
   {
    "context": 1000000,
    "id": "anthropic/claude-sonnet-5.5"
-  },
-  {
-   "context": 262144,
-   "id": "apodex/apodex-1.1-mini:free"
   },
   {
    "context": 1024000,
@@ -395,14 +391,6 @@
    "id": "inclusionai/ling-3.0-flash"
   },
   {
-   "context": 262144,
-   "id": "inclusionai/ling-3.0-flash-fin"
-  },
-  {
-   "context": 262144,
-   "id": "inclusionai/ling-3.0-flash-sante"
-  },
-  {
    "context": 131072,
    "id": "inclusionai/ling-3.0-flash-vl"
   },
@@ -425,14 +413,6 @@
   {
    "context": 261795,
    "id": "kt/midm-k-3.0-pro"
-  },
-  {
-   "context": 128000,
-   "id": "liquid/lfm-2.5-2.6b"
-  },
-  {
-   "context": 65536,
-   "id": "liquid/lfm-2.5-2.6b:free"
   },
   {
    "context": 128000,
@@ -527,7 +507,7 @@
    "id": "microsoft/phi-4"
   },
   {
-   "context": 200000,
+   "context": 198000,
    "id": "minimax/minimax-m2.5"
   },
   {
