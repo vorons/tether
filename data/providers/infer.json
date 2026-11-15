@@ -1,14 +1,46 @@
 {
- "generated_at": 1794655613,
+ "generated_at": 1794743767,
  "id": "infer",
  "models": [
+  {
+   "context": 1000000,
+   "id": "infer/claude-fable-5-1:low-cost"
+  },
+  {
+   "context": 1000000,
+   "id": "infer/claude-opus-5-5:low-cost"
+  },
+  {
+   "context": 1000000,
+   "id": "infer/claude-sonnet-5-5:low-cost"
+  },
+  {
+   "context": 199999,
+   "id": "infer/gemini-3.1-pro-preview:low-cost"
+  },
+  {
+   "context": 1048576,
+   "id": "infer/gemini-3.8-flash:low-cost"
+  },
   {
    "context": 271999,
    "id": "infer/gpt-5.6-sol:official"
   },
   {
    "context": 271999,
+   "id": "infer/gpt-6-astra:low-cost"
+  },
+  {
+   "context": 271999,
    "id": "infer/gpt-6-astra:official"
+  },
+  {
+   "context": 271999,
+   "id": "infer/gpt-6.1-sol:low-cost"
+  },
+  {
+   "context": 199999,
+   "id": "infer/grok-4.7:low-cost"
   }
  ],
  "schema": 1

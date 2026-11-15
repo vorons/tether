@@ -1,0 +1,55 @@
+{
+ "generated_at": 1794743767,
+ "id": "synthorai",
+ "models": [
+  {
+   "context": 1000000,
+   "id": "claude-haiku-5-5"
+  },
+  {
+   "context": 1000000,
+   "id": "claude-opus-5"
+  },
+  {
+   "context": 1000000,
+   "id": "claude-opus-5-5"
+  },
+  {
+   "context": 1000000,
+   "id": "claude-sonnet-5-5"
+  },
+  {
+   "context": 1000000,
+   "id": "deepseek-v4-pro"
+  },
+  {
+   "context": 1000000,
+   "id": "deepseek-v4.1-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini-3.1-pro-preview"
+  },
+  {
+   "context": 1000000,
+   "id": "glm-5.3"
+  },
+  {
+   "context": 1050000,
+   "id": "gpt-6-luna"
+  },
+  {
+   "context": 1050000,
+   "id": "gpt-6-sol"
+  },
+  {
+   "context": 1050000,
+   "id": "gpt-6.1-sol"
+  },
+  {
+   "context": 1048576,
+   "id": "kimi-k3"
+  }
+ ],
+ "schema": 1
+}

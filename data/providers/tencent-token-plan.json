@@ -1,7 +1,35 @@
 {
- "generated_at": 1794655613,
+ "generated_at": 1794743767,
  "id": "tencent-token-plan",
  "models": [
+  {
+   "context": 1000000,
+   "id": "deepseek/deepseek-flash"
+  },
+  {
+   "context": 1000000,
+   "id": "deepseek/deepseek-v4-pro"
+  },
+  {
+   "context": 1000000,
+   "id": "glm-5-2"
+  },
+  {
+   "context": 1000000,
+   "id": "glm-5-3"
+  },
+  {
+   "context": 1000000,
+   "id": "glm-5.2"
+  },
+  {
+   "context": 1000000,
+   "id": "glm-5.3"
+  },
+  {
+   "context": 1000000,
+   "id": "glm-5.3-flash"
+  },
   {
    "context": 256000,
    "id": "hy3"
@@ -13,6 +41,26 @@
   {
    "context": 1024000,
    "id": "hy4-preview"
+  },
+  {
+   "context": 262144,
+   "id": "kimi-k2.7-code"
+  },
+  {
+   "context": 1048576,
+   "id": "kimi-k3"
+  },
+  {
+   "context": 1048576,
+   "id": "mimo-v2.6-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "minimax-m-3-0"
+  },
+  {
+   "context": 1048576,
+   "id": "minimax-m3"
   }
  ],
  "schema": 1

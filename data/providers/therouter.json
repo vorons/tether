@@ -1,0 +1,11 @@
+{
+ "generated_at": 1794743767,
+ "id": "therouter",
+ "models": [
+  {
+   "context": 128000,
+   "id": "openai/gpt-4o-mini"
+  }
+ ],
+ "schema": 1
+}

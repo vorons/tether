@@ -1,7 +1,11 @@
 {
- "generated_at": 1794655613,
+ "generated_at": 1794743767,
  "id": "fastrouter",
  "models": [
+  {
+   "context": 1000000,
+   "id": "anthropic/claude-fable-5"
+  },
   {
    "context": 200000,
    "id": "anthropic/claude-opus-4.1"
@@ -9,6 +13,14 @@
   {
    "context": 1000000,
    "id": "anthropic/claude-opus-4.8"
+  },
+  {
+   "context": 1000000,
+   "id": "anthropic/claude-opus-5"
+  },
+  {
+   "context": 1000000,
+   "id": "anthropic/claude-opus-5.5"
   },
   {
    "context": 1000000,
@@ -100,6 +112,10 @@
   },
   {
    "context": 400000,
+   "id": "openai/gpt-5.2"
+  },
+  {
+   "context": 400000,
    "id": "openai/gpt-5.3-codex"
   },
   {
@@ -117,6 +133,14 @@
   {
    "context": 1050000,
    "id": "openai/gpt-5.5-pro"
+  },
+  {
+   "context": 400000,
+   "id": "openai/gpt-6-luna"
+  },
+  {
+   "context": 400000,
+   "id": "openai/gpt-6-sol"
   },
   {
    "context": 128000,
@@ -147,6 +171,14 @@
    "id": "x-ai/grok-4.3"
   },
   {
+   "context": 500000,
+   "id": "x-ai/grok-4.6"
+  },
+  {
+   "context": 500000,
+   "id": "x-ai/grok-4.7"
+  },
+  {
    "context": 256000,
    "id": "x-ai/grok-build-0.1"
   },
@@ -157,6 +189,10 @@
   {
    "context": 200000,
    "id": "z-ai/glm-5.1"
+  },
+  {
+   "context": 1000000,
+   "id": "z-ai/glm-5.3-flash"
   }
  ],
  "schema": 1

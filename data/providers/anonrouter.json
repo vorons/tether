@@ -1,0 +1,19 @@
+{
+ "generated_at": 1794743767,
+ "id": "anonrouter",
+ "models": [
+  {
+   "context": 163840,
+   "id": "deepseek/deepseek-v3"
+  },
+  {
+   "context": 131072,
+   "id": "google/gemma-3-12b-it"
+  },
+  {
+   "context": 131072,
+   "id": "google/gemma-3-27b-it"
+  }
+ ],
+ "schema": 1
+}

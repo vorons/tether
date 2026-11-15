@@ -1,0 +1,15 @@
+{
+ "generated_at": 1794743767,
+ "id": "oathbreaker",
+ "models": [
+  {
+   "context": 131072,
+   "id": "oathbreaker-glm-5.3"
+  },
+  {
+   "context": 131072,
+   "id": "oathbreaker-glm-5.3-flash"
+  }
+ ],
+ "schema": 1
+}

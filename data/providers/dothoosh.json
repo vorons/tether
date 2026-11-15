@@ -1,0 +1,71 @@
+{
+ "generated_at": 1794743767,
+ "id": "dothoosh",
+ "models": [
+  {
+   "context": 1000000,
+   "id": "claude-fable-5-1"
+  },
+  {
+   "context": 1000000,
+   "id": "claude-haiku-5-5"
+  },
+  {
+   "context": 1000000,
+   "id": "claude-opus-5-5"
+  },
+  {
+   "context": 1000000,
+   "id": "claude-sonnet-5-5"
+  },
+  {
+   "context": 1048576,
+   "id": "deepseek-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "deepseek-v4-pro"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini-3.5-flash-lite"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini-3.8-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini-4-argon"
+  },
+  {
+   "context": 1050000,
+   "id": "gpt-6-astra"
+  },
+  {
+   "context": 1050000,
+   "id": "gpt-6-luna"
+  },
+  {
+   "context": 1050000,
+   "id": "gpt-6.1-sol"
+  },
+  {
+   "context": 262144,
+   "id": "kimi-k2.6"
+  },
+  {
+   "context": 262144,
+   "id": "kimi-k2.7-code"
+  },
+  {
+   "context": 1048576,
+   "id": "kimi-k3"
+  },
+  {
+   "context": 1048576,
+   "id": "kimi-k3.1-pro"
+  }
+ ],
+ "schema": 1
+}

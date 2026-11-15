@@ -1,0 +1,63 @@
+{
+ "generated_at": 1794743767,
+ "id": "keln",
+ "models": [
+  {
+   "context": 1048576,
+   "id": "deepseek-ai/deepseek-v4-pro-0813"
+  },
+  {
+   "context": 1048576,
+   "id": "deepseek-ai/deepseek-v4.1-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "deepseek-ai/deepseek-v4.1-flash-1017"
+  },
+  {
+   "context": 262144,
+   "id": "google/gemma-4-31b-it"
+  },
+  {
+   "context": 1048576,
+   "id": "minimaxai/minimax-m3.1-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "moonshotai/kimi-k3"
+  },
+  {
+   "context": 1048576,
+   "id": "moonshotai/kimi-k3.1-pro"
+  },
+  {
+   "context": 262144,
+   "id": "nvidia/nemotron-3-ultra-550b-a55b"
+  },
+  {
+   "context": 131072,
+   "id": "openai/gpt-oss-120b"
+  },
+  {
+   "context": 1000000,
+   "id": "qwen/qwen3.8-2.4t-a95b"
+  },
+  {
+   "context": 1000000,
+   "id": "qwen/qwen3.8-27b"
+  },
+  {
+   "context": 1048576,
+   "id": "zai-org/glm-5.2"
+  },
+  {
+   "context": 1048576,
+   "id": "zai-org/glm-5.3"
+  },
+  {
+   "context": 1048576,
+   "id": "zai-org/glm-5.3-flash"
+  }
+ ],
+ "schema": 1
+}

@@ -1,19 +1,7 @@
 {
- "generated_at": 1794655613,
+ "generated_at": 1794743767,
  "id": "neuralwatt",
  "models": [
-  {
-   "context": 1048560,
-   "id": "deepseek-v4-flash"
-  },
-  {
-   "context": 1048560,
-   "id": "deepseek-v4-flash-flex"
-  },
-  {
-   "context": 1048560,
-   "id": "deepseek-v4-flash-speed"
-  },
   {
    "context": 1048560,
    "id": "deepseek-v4.1-flash"
@@ -21,6 +9,10 @@
   {
    "context": 1048560,
    "id": "deepseek-v4.1-flash-flex"
+  },
+  {
+   "context": 1048560,
+   "id": "deepseek-v4.1-flash-speed"
   },
   {
    "context": 262128,
@@ -43,28 +35,12 @@
    "id": "glm-5.3-flex"
   },
   {
-   "context": 262128,
-   "id": "kimi-k2.7-code"
-  },
-  {
-   "context": 262128,
-   "id": "kimi-k2.7-code-fast"
-  },
-  {
-   "context": 262128,
-   "id": "kimi-k2.7-code-flex"
+   "context": 1048560,
+   "id": "kimi-k3.1-pro"
   },
   {
    "context": 1048560,
-   "id": "kimi-k3"
-  },
-  {
-   "context": 1048560,
-   "id": "kimi-k3-fast"
-  },
-  {
-   "context": 1048560,
-   "id": "kimi-k3-flex"
+   "id": "kimi-k3.1-pro-flex"
   },
   {
    "context": 1048560,
@@ -75,6 +51,30 @@
    "id": "mimo-v2.6-pro-flex"
   },
   {
+   "context": 1048560,
+   "id": "nw-flash"
+  },
+  {
+   "context": 1048560,
+   "id": "nw-flash-flex"
+  },
+  {
+   "context": 1048560,
+   "id": "nw-large"
+  },
+  {
+   "context": 1048560,
+   "id": "nw-large-flex"
+  },
+  {
+   "context": 262128,
+   "id": "nw-small"
+  },
+  {
+   "context": 262128,
+   "id": "nw-small-flex"
+  },
+  {
    "context": 262128,
    "id": "qwen-3.8-27b"
   },
@@ -83,15 +83,15 @@
    "id": "qwen-3.8-27b-flex"
   },
   {
-   "context": 131056,
+   "context": 262128,
    "id": "qwen3.6-35b"
   },
   {
-   "context": 131056,
+   "context": 262128,
    "id": "qwen3.6-35b-fast"
   },
   {
-   "context": 131056,
+   "context": 262128,
    "id": "qwen3.6-35b-flex"
   }
  ],

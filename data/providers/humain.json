@@ -1,0 +1,15 @@
+{
+ "generated_at": 1794743767,
+ "id": "humain",
+ "models": [
+  {
+   "context": 204800,
+   "id": "humain-m3-preview"
+  },
+  {
+   "context": 1048576,
+   "id": "humain-m3-research-preview"
+  }
+ ],
+ "schema": 1
+}

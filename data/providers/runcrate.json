@@ -1,0 +1,51 @@
+{
+ "generated_at": 1794743767,
+ "id": "runcrate",
+ "models": [
+  {
+   "context": 262144,
+   "id": "Qwen/Qwen3-235B-A22B-Instruct-2507"
+  },
+  {
+   "context": 262144,
+   "id": "Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo"
+  },
+  {
+   "context": 1000000,
+   "id": "Qwen/Qwen3.8-Flash"
+  },
+  {
+   "context": 163840,
+   "id": "deepseek-ai/DeepSeek-V3.2"
+  },
+  {
+   "context": 1048576,
+   "id": "deepseek-ai/DeepSeek-V4.1-Flash"
+  },
+  {
+   "context": 1048576,
+   "id": "deepseek-ai/DeepSeek-V4.1-Flash-1017"
+  },
+  {
+   "context": 131072,
+   "id": "meta-llama/Llama-3.3-70B-Instruct-Turbo"
+  },
+  {
+   "context": 262144,
+   "id": "moonshotai/Kimi-K2.6"
+  },
+  {
+   "context": 131072,
+   "id": "openai/gpt-oss-120b"
+  },
+  {
+   "context": 1048576,
+   "id": "zai-org/GLM-5.3"
+  },
+  {
+   "context": 1048576,
+   "id": "zai-org/GLM-5.3-Flash"
+  }
+ ],
+ "schema": 1
+}

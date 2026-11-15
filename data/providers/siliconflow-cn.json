@@ -1,5 +1,5 @@
 {
- "generated_at": 1794655613,
+ "generated_at": 1794743767,
  "id": "siliconflow-cn",
  "models": [
   {
@@ -149,6 +149,10 @@
   {
    "context": 1049000,
    "id": "deepseek-ai/DeepSeek-V4-Pro"
+  },
+  {
+   "context": 1000000,
+   "id": "deepseek-ai/DeepSeek-V4.1-Flash"
   },
   {
    "context": 131000,

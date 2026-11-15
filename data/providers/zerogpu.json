@@ -1,0 +1,43 @@
+{
+ "generated_at": 1794743767,
+ "id": "zerogpu",
+ "models": [
+  {
+   "context": 1048576,
+   "id": "deepseek-v4.1-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "glm-5.3-flash"
+  },
+  {
+   "context": 1047576,
+   "id": "gpt-4.1-mini"
+  },
+  {
+   "context": 400000,
+   "id": "gpt-5.4-nano"
+  },
+  {
+   "context": 272000,
+   "id": "gpt-5.6-luna"
+  },
+  {
+   "context": 131072,
+   "id": "gpt-oss-120b"
+  },
+  {
+   "context": 131072,
+   "id": "llama-3.1-8b-instruct-fast"
+  },
+  {
+   "context": 32768,
+   "id": "qwen3-30b-a3b-fp8"
+  },
+  {
+   "context": 262144,
+   "id": "qwen3.6-35b-a3b"
+  }
+ ],
+ "schema": 1
+}

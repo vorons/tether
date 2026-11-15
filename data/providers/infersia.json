@@ -1,0 +1,31 @@
+{
+ "generated_at": 1794743767,
+ "id": "infersia",
+ "models": [
+  {
+   "context": 1048576,
+   "id": "deepseek/deepseek-v4.1-flash-1017"
+  },
+  {
+   "context": 1048576,
+   "id": "minimax/minimax-m3.1-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "reflection/beam-1.0-501b-a23b"
+  },
+  {
+   "context": 1048576,
+   "id": "tencent/hy4-preview"
+  },
+  {
+   "context": 1048320,
+   "id": "xiaomi/mimo-v2.6-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "xiaomi/mimo-v2.6-pro"
+  }
+ ],
+ "schema": 1
+}

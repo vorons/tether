@@ -1,0 +1,55 @@
+{
+ "generated_at": 1794743767,
+ "id": "uplinkswitch",
+ "models": [
+  {
+   "context": 1048576,
+   "id": "gemini-3.5-flash-lite"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini-3.8-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini-4-argon"
+  },
+  {
+   "context": 1000000,
+   "id": "glm-5.3"
+  },
+  {
+   "context": 1000000,
+   "id": "glm-5.3-flash"
+  },
+  {
+   "context": 400000,
+   "id": "gpt-5.3-codex"
+  },
+  {
+   "context": 1050000,
+   "id": "gpt-5.5"
+  },
+  {
+   "context": 1050000,
+   "id": "gpt-6-astra"
+  },
+  {
+   "context": 1050000,
+   "id": "gpt-6-luna"
+  },
+  {
+   "context": 1050000,
+   "id": "gpt-6-sol"
+  },
+  {
+   "context": 1050000,
+   "id": "gpt-6.1-sol"
+  },
+  {
+   "context": 1048576,
+   "id": "kimi-k3"
+  }
+ ],
+ "schema": 1
+}

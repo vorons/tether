@@ -1,0 +1,51 @@
+{
+ "generated_at": 1794743767,
+ "id": "moneo",
+ "models": [
+  {
+   "context": 200000,
+   "id": "Claude Haiku 5.5"
+  },
+  {
+   "context": 198000,
+   "id": "MiniMax-M2.7:web"
+  },
+  {
+   "context": 1000000,
+   "id": "deepseek-v4-1-flash-1017-uncensored"
+  },
+  {
+   "context": 1000000,
+   "id": "deepseek-v4-flash:web"
+  },
+  {
+   "context": 256000,
+   "id": "gemma-4-31b:web"
+  },
+  {
+   "context": 128000,
+   "id": "gpt-oss-120b"
+  },
+  {
+   "context": 256000,
+   "id": "kimi-k2.7-code:web"
+  },
+  {
+   "context": 262144,
+   "id": "nvidia-nemotron-3-5-super-vl-120b-a12b"
+  },
+  {
+   "context": 128000,
+   "id": "qwen3-235b:web"
+  },
+  {
+   "context": 256000,
+   "id": "qwen3-coder-480b-a35b-instruct"
+  },
+  {
+   "context": 1000000,
+   "id": "z-ai-glm-5-3-flash"
+  }
+ ],
+ "schema": 1
+}

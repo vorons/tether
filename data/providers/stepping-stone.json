@@ -1,0 +1,67 @@
+{
+ "generated_at": 1794743767,
+ "id": "stepping-stone",
+ "models": [
+  {
+   "context": 8192,
+   "id": "BAAI/bge-m3"
+  },
+  {
+   "context": 8192,
+   "id": "BAAI/bge-reranker-v2-m3"
+  },
+  {
+   "context": 196608,
+   "id": "MiniMaxAI/MiniMax-M2.5"
+  },
+  {
+   "context": 131072,
+   "id": "NVIDIA/NVIDIA-Nemotron-3-Super-120B-A12B"
+  },
+  {
+   "context": 262144,
+   "id": "Qwen/Qwen3-Coder-Next"
+  },
+  {
+   "context": 131072,
+   "id": "Qwen/Qwen3.5-35B-A3B-FP8"
+  },
+  {
+   "context": 262144,
+   "id": "Qwen/Qwen3.8-27B"
+  },
+  {
+   "context": 8192,
+   "id": "allenai/olmOCR-2-7B"
+  },
+  {
+   "context": 131072,
+   "id": "apertus-ai/Apertus-v1.5-8B"
+  },
+  {
+   "context": 524288,
+   "id": "deepseek-ai/DeepSeek-V4-Flash-0731"
+  },
+  {
+   "context": 163840,
+   "id": "google/gemma-4-31B-it"
+  },
+  {
+   "context": 16384,
+   "id": "lightonai/LightOnOCR-2-1B"
+  },
+  {
+   "context": 131072,
+   "id": "openai/gpt-oss-120b"
+  },
+  {
+   "context": 16384,
+   "id": "opendatalab/MinerU2.5-2509-1.2B"
+  },
+  {
+   "context": 262144,
+   "id": "zai-org/GLM-5.3-Flash"
+  }
+ ],
+ "schema": 1
+}

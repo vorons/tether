@@ -1,0 +1,39 @@
+{
+ "generated_at": 1794743767,
+ "id": "inference-coop",
+ "models": [
+  {
+   "context": 1000000,
+   "id": "greenpt/deepseek-v4.1-flash"
+  },
+  {
+   "context": 1000000,
+   "id": "greenpt/glm-5.3"
+  },
+  {
+   "context": 1000000,
+   "id": "greenpt/glm-5.3-flash"
+  },
+  {
+   "context": 262144,
+   "id": "regolo/apertus-70b"
+  },
+  {
+   "context": 262144,
+   "id": "regolo/qwen3.5-122b"
+  },
+  {
+   "context": 1048576,
+   "id": "tinfoil/deepseek-v4-1-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "tinfoil/glm-5.3"
+  },
+  {
+   "context": 131072,
+   "id": "tinfoil/gpt-oss-120b"
+  }
+ ],
+ "schema": 1
+}

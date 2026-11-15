@@ -1,5 +1,5 @@
 {
- "generated_at": 1794655613,
+ "generated_at": 1794743767,
  "id": "commandcode",
  "models": [
   {
@@ -13,6 +13,22 @@
   {
    "context": 1000000,
    "id": "MiniMaxAI/MiniMax-M3"
+  },
+  {
+   "context": 200000,
+   "id": "Qwen/Qwen3.6-Plus"
+  },
+  {
+   "context": 1000000,
+   "id": "Qwen/Qwen3.7-Flash"
+  },
+  {
+   "context": 1000000,
+   "id": "Qwen/Qwen3.7-Max"
+  },
+  {
+   "context": 1000000,
+   "id": "Qwen/Qwen3.7-Plus"
   },
   {
    "context": 262144,
@@ -29,6 +45,10 @@
   {
    "context": 1000000,
    "id": "Qwen/Qwen3.8-Max-0902"
+  },
+  {
+   "context": 1000000,
+   "id": "Qwen/Qwen3.8-Max-Prime"
   },
   {
    "context": 1000000,
@@ -180,7 +200,15 @@
   },
   {
    "context": 262144,
+   "id": "inclusionai/ling-3.1-flash"
+  },
+  {
+   "context": 262144,
    "id": "inclusionai/ling-3.1-flash:free"
+  },
+  {
+   "context": 1000000,
+   "id": "meituan/LongCat-2.0"
   },
   {
    "context": 1048576,
@@ -204,11 +232,27 @@
   },
   {
    "context": 1048576,
+   "id": "meta/muse-spark-open"
+  },
+  {
+   "context": 1048576,
    "id": "meta/muse-wonder-1.0"
+  },
+  {
+   "context": 1000000,
+   "id": "minimax/minimax-m3.1-flash"
   },
   {
    "context": 524288,
    "id": "mistral/mistral-large-4"
+  },
+  {
+   "context": 256000,
+   "id": "moonshotai/Kimi-K2.5"
+  },
+  {
+   "context": 256000,
+   "id": "moonshotai/Kimi-K2.6"
   },
   {
    "context": 256000,
@@ -223,12 +267,36 @@
    "id": "moonshotai/Kimi-K3"
   },
   {
+   "context": 1048576,
+   "id": "moonshotai/Kimi-K3.1-Pro"
+  },
+  {
    "context": 1000000,
    "id": "nvidia/nemotron-3-ultra-550b-a55b"
   },
   {
+   "context": 262144,
+   "id": "nvidia/nemotron-3.5-super-vl"
+  },
+  {
+   "context": 262144,
+   "id": "ornith/ornith-1.5-122b"
+  },
+  {
+   "context": 256000,
+   "id": "poolside/laguna-s-2.1-free"
+  },
+  {
+   "context": 1048576,
+   "id": "reflection/beam:free"
+  },
+  {
    "context": 1000000,
    "id": "sakana/fugu-ultra"
+  },
+  {
+   "context": 256000,
+   "id": "stealth/glyph-cluster:free"
   },
   {
    "context": 256000,
@@ -271,12 +339,28 @@
    "id": "xai/grok-4.7"
   },
   {
+   "context": 1048576,
+   "id": "xiaomi/mimo-v2.6-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "xiaomi/mimo-v2.6-pro"
+  },
+  {
+   "context": 1048576,
+   "id": "xiaomi/mimo-v2.6-pro-ultraspeed"
+  },
+  {
    "context": 1000000,
    "id": "z-ai/glm-5.3-flash"
   },
   {
    "context": 1000000,
    "id": "z-ai/glm-5.3-flashx"
+  },
+  {
+   "context": 200000,
+   "id": "zai-org/GLM-5"
   },
   {
    "context": 1000000,

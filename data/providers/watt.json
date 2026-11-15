@@ -1,0 +1,79 @@
+{
+ "generated_at": 1794743767,
+ "id": "watt",
+ "models": [
+  {
+   "context": 1048576,
+   "id": "DeepSeek-V4-Flash"
+  },
+  {
+   "context": 1048576,
+   "id": "DeepSeek-V4-Flash-0731"
+  },
+  {
+   "context": 1048576,
+   "id": "DeepSeek-V4-Pro"
+  },
+  {
+   "context": 1048576,
+   "id": "DeepSeek-V4.1-Flash"
+  },
+  {
+   "context": 1048576,
+   "id": "DeepSeek-V4.1-Flash-1017"
+  },
+  {
+   "context": 202752,
+   "id": "GLM-5.1"
+  },
+  {
+   "context": 1048576,
+   "id": "GLM-5.2"
+  },
+  {
+   "context": 1048576,
+   "id": "GLM-5.3"
+  },
+  {
+   "context": 1048576,
+   "id": "GLM-5.3-Flash"
+  },
+  {
+   "context": 1048576,
+   "id": "Hy4-preview"
+  },
+  {
+   "context": 271360,
+   "id": "Kimi-K2.5"
+  },
+  {
+   "context": 271360,
+   "id": "Kimi-K2.7-Code"
+  },
+  {
+   "context": 1048576,
+   "id": "Kimi-K3"
+  },
+  {
+   "context": 524288,
+   "id": "MiniMax-M3"
+  },
+  {
+   "context": 262144,
+   "id": "Qwen3.5-122B-A10B"
+  },
+  {
+   "context": 262144,
+   "id": "Qwen3.5-27B"
+  },
+  {
+   "context": 262144,
+   "id": "Qwen3.5-35B-A3B"
+  },
+  {
+   "context": 262144,
+   "id": "Qwen3.5-397B-A17B"
+  }
+ ],
+ "schema": 1
+}

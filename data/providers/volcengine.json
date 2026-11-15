@@ -1,5 +1,5 @@
 {
- "generated_at": 1794655613,
+ "generated_at": 1794743767,
  "id": "volcengine",
  "models": [
   {
@@ -43,7 +43,7 @@
    "id": "doubao-seed-2-0-pro-260215"
   },
   {
-   "context": 256000,
+   "context": 1024000,
    "id": "doubao-seed-2-1-pro-260628"
   },
   {
@@ -55,7 +55,7 @@
    "id": "doubao-seed-character-260628"
   },
   {
-   "context": 256000,
+   "context": 1024000,
    "id": "doubao-seed-evolving"
   },
   {

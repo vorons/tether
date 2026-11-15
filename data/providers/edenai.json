@@ -1,5 +1,5 @@
 {
- "generated_at": 1794655613,
+ "generated_at": 1794743767,
  "id": "edenai",
  "models": [
   {
@@ -523,7 +523,7 @@
    "id": "deepinfra/thinkingmachines/Inkling"
   },
   {
-   "context": 262144,
+   "context": 1048576,
    "id": "deepinfra/thinkingmachines/Inkling-2-Small"
   },
   {

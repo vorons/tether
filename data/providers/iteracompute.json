@@ -1,7 +1,23 @@
 {
- "generated_at": 1794655613,
+ "generated_at": 1794743767,
  "id": "iteracompute",
  "models": [
+  {
+   "context": 1000000,
+   "id": "anthropic/claude-fable-5-1"
+  },
+  {
+   "context": 1000000,
+   "id": "anthropic/claude-haiku-5-5"
+  },
+  {
+   "context": 1000000,
+   "id": "anthropic/claude-opus-5-5"
+  },
+  {
+   "context": 1000000,
+   "id": "anthropic/claude-sonnet-5-5"
+  },
   {
    "context": 1048576,
    "id": "deepseek/deepseek-v4-flash-0731"
@@ -16,7 +32,35 @@
   },
   {
    "context": 1048576,
+   "id": "deepseek/deepseek-v4.1-flash-1017"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini/gemini-3.8-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini/gemini-4-argon"
+  },
+  {
+   "context": 204800,
+   "id": "minimax/minimax-m2.5"
+  },
+  {
+   "context": 204800,
+   "id": "minimax/minimax-m2.7"
+  },
+  {
+   "context": 1048576,
    "id": "minimax/minimax-m3"
+  },
+  {
+   "context": 262144,
+   "id": "moonshotai/kimi-k2.5"
+  },
+  {
+   "context": 262144,
+   "id": "moonshotai/kimi-k2.6"
   },
   {
    "context": 262144,
@@ -27,12 +71,36 @@
    "id": "moonshotai/kimi-k3"
   },
   {
+   "context": 1050000,
+   "id": "openai/gpt-6-astra"
+  },
+  {
+   "context": 1050000,
+   "id": "openai/gpt-6-luna"
+  },
+  {
+   "context": 1050000,
+   "id": "openai/gpt-6.1-sol"
+  },
+  {
    "context": 1048576,
    "id": "qwen/qwen3.8-2.4t-a95b"
   },
   {
    "context": 131072,
    "id": "qwen/qwen3.8-27b"
+  },
+  {
+   "context": 1048576,
+   "id": "qwen/qwen3.8-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "qwen/qwen3.8-max"
+  },
+  {
+   "context": 1048576,
+   "id": "z-ai/glm-5.2"
   },
   {
    "context": 1048576,

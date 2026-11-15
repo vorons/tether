@@ -1,0 +1,11 @@
+{
+ "generated_at": 1794743767,
+ "id": "paraloncloud",
+ "models": [
+  {
+   "context": 131072,
+   "id": "qwen3.8-27b"
+  }
+ ],
+ "schema": 1
+}

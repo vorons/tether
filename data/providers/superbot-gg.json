@@ -1,0 +1,15 @@
+{
+ "generated_at": 1794743767,
+ "id": "superbot-gg",
+ "models": [
+  {
+   "context": 1000000,
+   "id": "superbot"
+  },
+  {
+   "context": 500000,
+   "id": "superbot-fast"
+  }
+ ],
+ "schema": 1
+}

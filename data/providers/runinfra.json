@@ -1,5 +1,5 @@
 {
- "generated_at": 1794655613,
+ "generated_at": 1794743767,
  "id": "runinfra",
  "models": [
   {
@@ -25,6 +25,10 @@
   {
    "context": 262144,
    "id": "ornith-ai/Ornith-1.5-35B-A3B"
+  },
+  {
+   "context": 1048576,
+   "id": "stepfun-ai/Step-5-Preview"
   },
   {
    "context": 1048576,

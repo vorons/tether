@@ -1,0 +1,67 @@
+{
+ "generated_at": 1794743767,
+ "id": "abliteratedllm",
+ "models": [
+  {
+   "context": 1048576,
+   "id": "deepseek-v4.1-flash-1017"
+  },
+  {
+   "context": 1048576,
+   "id": "deepseek-v4.1-flash-1017-ultrafast"
+  },
+  {
+   "context": 1048576,
+   "id": "deepseek-v4.1-flash-original"
+  },
+  {
+   "context": 1048576,
+   "id": "ember-1"
+  },
+  {
+   "context": 1048576,
+   "id": "glm-5.3"
+  },
+  {
+   "context": 1048576,
+   "id": "glm-5.3-fast"
+  },
+  {
+   "context": 1048576,
+   "id": "glm-5.3-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "glm-5.3-flash-abliterated"
+  },
+  {
+   "context": 1048576,
+   "id": "kimi-k3"
+  },
+  {
+   "context": 1048576,
+   "id": "kimi-k3-fast"
+  },
+  {
+   "context": 1048576,
+   "id": "kimi-k3.1-pro"
+  },
+  {
+   "context": 512000,
+   "id": "minimax-m3"
+  },
+  {
+   "context": 1048576,
+   "id": "muse-spark-open"
+  },
+  {
+   "context": 262144,
+   "id": "qwen3.8-2.4t-a95b"
+  },
+  {
+   "context": 262144,
+   "id": "qwen3.8-max"
+  }
+ ],
+ "schema": 1
+}

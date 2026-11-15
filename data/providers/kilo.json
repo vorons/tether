@@ -1,5 +1,5 @@
 {
- "generated_at": 1794655613,
+ "generated_at": 1794743767,
  "id": "kilo",
  "models": [
   {
@@ -199,7 +199,7 @@
    "id": "deepseek/deepseek-r1"
   },
   {
-   "context": 163840,
+   "context": 128000,
    "id": "deepseek/deepseek-r1-0528"
   },
   {
@@ -427,20 +427,8 @@
    "id": "ibm-granite/granite-4.2-8b"
   },
   {
-   "context": 128000,
-   "id": "inception/mercury-2"
-  },
-  {
-   "context": 260000,
-   "id": "inception/mercury-2.5"
-  },
-  {
    "context": 1000000,
    "id": "inception/mercury-3"
-  },
-  {
-   "context": 32000,
-   "id": "inception/mercury-coder-small"
   },
   {
    "context": 262144,
@@ -1739,7 +1727,7 @@
    "id": "z-ai/glm-4.6v"
   },
   {
-   "context": 204800,
+   "context": 202752,
    "id": "z-ai/glm-4.7"
   },
   {

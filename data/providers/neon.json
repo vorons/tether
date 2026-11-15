@@ -1,5 +1,5 @@
 {
- "generated_at": 1794655613,
+ "generated_at": 1794743767,
  "id": "neon",
  "models": [
   {
@@ -205,10 +205,6 @@
   {
    "context": 500000,
    "id": "grok-4-7"
-  },
-  {
-   "context": 1048576,
-   "id": "inkling"
   },
   {
    "context": 1048576,

@@ -1,0 +1,43 @@
+{
+ "generated_at": 1794743767,
+ "id": "kitani",
+ "models": [
+  {
+   "context": 1000000,
+   "id": "deepseek/deepseek-v4-pro-0813"
+  },
+  {
+   "context": 1000000,
+   "id": "deepseek/deepseek-v4.1-flash-1017"
+  },
+  {
+   "context": 1000000,
+   "id": "deepseek/deepseek-v4.1-flash-1017-thinking"
+  },
+  {
+   "context": 8192,
+   "id": "google/gemma-4-12b-it"
+  },
+  {
+   "context": 8192,
+   "id": "meta-llama/llama-3.1-8b-instruct"
+  },
+  {
+   "context": 8192,
+   "id": "mistralai/ministral-8b-2512"
+  },
+  {
+   "context": 8192,
+   "id": "mistralai/mistral-nemo-instruct-2407"
+  },
+  {
+   "context": 1000000,
+   "id": "z-ai/glm-5.3"
+  },
+  {
+   "context": 1000000,
+   "id": "z-ai/glm-5.3-flash"
+  }
+ ],
+ "schema": 1
+}

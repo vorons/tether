@@ -1,0 +1,35 @@
+{
+ "generated_at": 1794743767,
+ "id": "powerspring",
+ "models": [
+  {
+   "context": 1048576,
+   "id": "deepseek-v4.1-flash"
+  },
+  {
+   "context": 262000,
+   "id": "gemma-4-26b-a4b"
+  },
+  {
+   "context": 262000,
+   "id": "gemma-4-31b"
+  },
+  {
+   "context": 1048576,
+   "id": "glm-5.3-flash"
+  },
+  {
+   "context": 131000,
+   "id": "gpt-oss-120b"
+  },
+  {
+   "context": 131000,
+   "id": "gpt-oss-20b"
+  },
+  {
+   "context": 1000000,
+   "id": "qwen3.8-27b"
+  }
+ ],
+ "schema": 1
+}

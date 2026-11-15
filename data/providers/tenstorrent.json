@@ -1,0 +1,23 @@
+{
+ "generated_at": 1794743767,
+ "id": "tenstorrent",
+ "models": [
+  {
+   "context": 1000000,
+   "id": "MiniMaxAI/MiniMax-M3.1-Flash"
+  },
+  {
+   "context": 262144,
+   "id": "Qwen/Qwen3.8-27B"
+  },
+  {
+   "context": 1044480,
+   "id": "zai-org/GLM-5.3"
+  },
+  {
+   "context": 262000,
+   "id": "zai-org/GLM-5.3-Flash"
+  }
+ ],
+ "schema": 1
+}

@@ -1,0 +1,15 @@
+{
+ "generated_at": 1794743767,
+ "id": "phase",
+ "models": [
+  {
+   "context": 131072,
+   "id": "gpt-oss-120b"
+  },
+  {
+   "context": 262144,
+   "id": "qwen3-coder-480b"
+  }
+ ],
+ "schema": 1
+}

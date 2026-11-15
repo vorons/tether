@@ -1,10 +1,14 @@
 {
- "generated_at": 1794655613,
+ "generated_at": 1794743767,
  "id": "nan",
  "models": [
   {
    "context": 1000000,
    "id": "deepseek-v4-flash"
+  },
+  {
+   "context": 1000000,
+   "id": "deepseek-v4-pro"
   },
   {
    "context": 262144,
@@ -20,11 +24,15 @@
   },
   {
    "context": 1048576,
-   "id": "mimo-v2.6-flash"
+   "id": "hy4"
   },
   {
-   "context": 8192,
-   "id": "qwen-image-2.1"
+   "context": 1048576,
+   "id": "kimi-k3.1-pro"
+  },
+  {
+   "context": 1048576,
+   "id": "mimo-v2.6-flash"
   },
   {
    "context": 262144,
@@ -33,6 +41,10 @@
   {
    "context": 1048576,
    "id": "qwen3.8-flash"
+  },
+  {
+   "context": 1000000,
+   "id": "qwen3.8-max"
   }
  ],
  "schema": 1

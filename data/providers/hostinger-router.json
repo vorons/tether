@@ -1,0 +1,39 @@
+{
+ "generated_at": 1794743767,
+ "id": "hostinger-router",
+ "models": [
+  {
+   "context": 1000000,
+   "id": "claude-fable-5"
+  },
+  {
+   "context": 200000,
+   "id": "claude-haiku-4.5"
+  },
+  {
+   "context": 1000000,
+   "id": "claude-opus-5"
+  },
+  {
+   "context": 1000000,
+   "id": "claude-sonnet-4.5"
+  },
+  {
+   "context": 1000000,
+   "id": "claude-sonnet-4.6"
+  },
+  {
+   "context": 1000000,
+   "id": "claude-sonnet-5"
+  },
+  {
+   "context": 1048576,
+   "id": "deepseek-v4.1-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "kimi-k3"
+  }
+ ],
+ "schema": 1
+}

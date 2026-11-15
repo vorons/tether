@@ -1,0 +1,19 @@
+{
+ "generated_at": 1794743767,
+ "id": "apiko",
+ "models": [
+  {
+   "context": 1000000,
+   "id": "claude-opus-5-5"
+  },
+  {
+   "context": 1000000,
+   "id": "claude-sonnet-5-5"
+  },
+  {
+   "context": 1000000,
+   "id": "deepseek-v4-pro"
+  }
+ ],
+ "schema": 1
+}

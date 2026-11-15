@@ -1,0 +1,11 @@
+{
+ "generated_at": 1794743767,
+ "id": "mallard",
+ "models": [
+  {
+   "context": 262144,
+   "id": "qwen/qwen3.6-35b-a3b"
+  }
+ ],
+ "schema": 1
+}

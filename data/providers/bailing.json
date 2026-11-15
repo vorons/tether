@@ -1,14 +1,26 @@
 {
- "generated_at": 1794655613,
+ "generated_at": 1794743767,
  "id": "bailing",
  "models": [
   {
-   "context": 128000,
-   "id": "Ling-1T"
+   "context": 262144,
+   "id": "Ling-3.0-flash"
   },
   {
-   "context": 128000,
-   "id": "Ring-1T"
+   "context": 262144,
+   "id": "Ling-3.0-flash-VL"
+  },
+  {
+   "context": 131072,
+   "id": "Ling-3.0-tiny"
+  },
+  {
+   "context": 1000000,
+   "id": "Ling-3.1-flash"
+  },
+  {
+   "context": 1000000,
+   "id": "Ling-3.2-flash"
   }
  ],
  "schema": 1

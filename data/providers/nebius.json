@@ -1,5 +1,5 @@
 {
- "generated_at": 1794655613,
+ "generated_at": 1794743767,
  "id": "nebius",
  "models": [
   {
@@ -52,6 +52,10 @@
   },
   {
    "context": 1048576,
+   "id": "moonshotai/Kimi-K3.1-Pro"
+  },
+  {
+   "context": 1048576,
    "id": "nvidia/Nemotron-3-Ultra-550b-a55b"
   },
   {
@@ -73,6 +77,10 @@
   {
    "context": 1048576,
    "id": "reflection/beam"
+  },
+  {
+   "context": 1048576,
+   "id": "thinkingmachines/Inkling-2-Small"
   },
   {
    "context": 1048576,

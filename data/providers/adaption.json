@@ -1,0 +1,35 @@
+{
+ "generated_at": 1794743767,
+ "id": "adaption",
+ "models": [
+  {
+   "context": 1048576,
+   "id": "deepseek-v4-flash"
+  },
+  {
+   "context": 256000,
+   "id": "gemma-4-26b-a4b-it"
+  },
+  {
+   "context": 256000,
+   "id": "gemma-4-31b-it"
+  },
+  {
+   "context": 1048575,
+   "id": "glm-5.2"
+  },
+  {
+   "context": 1048576,
+   "id": "glm-5.3-flash"
+  },
+  {
+   "context": 131072,
+   "id": "qwen3.5-397b"
+  },
+  {
+   "context": 262144,
+   "id": "qwen3.8-27b"
+  }
+ ],
+ "schema": 1
+}

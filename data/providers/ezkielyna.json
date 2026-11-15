@@ -1,0 +1,27 @@
+{
+ "generated_at": 1794743767,
+ "id": "ezkielyna",
+ "models": [
+  {
+   "context": 1000000,
+   "id": "deepseek-v4-pro"
+  },
+  {
+   "context": 1000000,
+   "id": "deepseek-v4.1-flash"
+  },
+  {
+   "context": 1000000,
+   "id": "glm-5.3"
+  },
+  {
+   "context": 1000000,
+   "id": "glm-5.3-flash"
+  },
+  {
+   "context": 1000000,
+   "id": "step-5-preview"
+  }
+ ],
+ "schema": 1
+}

@@ -1,5 +1,5 @@
 {
- "generated_at": 1794655613,
+ "generated_at": 1794743767,
  "id": "volcengine-coding-plan",
  "models": [
   {
@@ -11,15 +11,35 @@
    "id": "deepseek-v4-pro"
   },
   {
+   "context": 1000000,
+   "id": "deepseek-v4.1-flash"
+  },
+  {
+   "context": 1000000,
+   "id": "deepseek-v4.1-flash-economy"
+  },
+  {
    "context": 256000,
    "id": "doubao-seed-2.0-lite"
+  },
+  {
+   "context": 256000,
+   "id": "doubao-seed-2.0-mini"
+  },
+  {
+   "context": 1024000,
+   "id": "doubao-seed-2.1-lite"
+  },
+  {
+   "context": 1024000,
+   "id": "doubao-seed-2.1-pro"
   },
   {
    "context": 256000,
    "id": "doubao-seed-2.1-turbo"
   },
   {
-   "context": 256000,
+   "context": 1024000,
    "id": "doubao-seed-evolving"
   },
   {
@@ -36,7 +56,15 @@
   },
   {
    "context": 1048576,
+   "id": "kimi-k2.8-preview"
+  },
+  {
+   "context": 1048576,
    "id": "kimi-k3"
+  },
+  {
+   "context": 1048576,
+   "id": "kimi-k3.1-pro"
   },
   {
    "context": 1048576,

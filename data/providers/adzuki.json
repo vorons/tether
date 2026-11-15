@@ -1,0 +1,55 @@
+{
+ "generated_at": 1794743767,
+ "id": "adzuki",
+ "models": [
+  {
+   "context": 1000000,
+   "id": "deepseek-v4-pro"
+  },
+  {
+   "context": 1000000,
+   "id": "deepseek-v4.1-flash"
+  },
+  {
+   "context": 256000,
+   "id": "doubao-seed-2.0-lite"
+  },
+  {
+   "context": 1024000,
+   "id": "doubao-seed-2.1-pro"
+  },
+  {
+   "context": 1000000,
+   "id": "glm-5.3"
+  },
+  {
+   "context": 1000000,
+   "id": "glm-5.3-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "kimi-k3"
+  },
+  {
+   "context": 1048576,
+   "id": "kimi-k3.1-pro"
+  },
+  {
+   "context": 1048576,
+   "id": "mimo-v2.5"
+  },
+  {
+   "context": 1048576,
+   "id": "mimo-v2.5-pro"
+  },
+  {
+   "context": 1048576,
+   "id": "minimax-m3"
+  },
+  {
+   "context": 1000000,
+   "id": "qwen3.8-max"
+  }
+ ],
+ "schema": 1
+}

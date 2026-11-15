@@ -1,5 +1,5 @@
 {
- "generated_at": 1794655613,
+ "generated_at": 1794743767,
  "id": "cline-pass",
  "models": [
   {
@@ -13,6 +13,10 @@
   {
    "context": 1000000,
    "id": "cline-pass/deepseek-v4.1-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "cline-pass/deepseek-v4.1-flash-1017"
   },
   {
    "context": 1000000,
@@ -40,6 +44,10 @@
   },
   {
    "context": 1048576,
+   "id": "cline-pass/kimi-k3.1-pro"
+  },
+  {
+   "context": 1048576,
    "id": "cline-pass/mimo-v2.5"
   },
   {
@@ -57,6 +65,10 @@
   {
    "context": 1048576,
    "id": "cline-pass/minimax-m3"
+  },
+  {
+   "context": 1048576,
+   "id": "cline-pass/minimax-m3.1-flash"
   },
   {
    "context": 1048576,

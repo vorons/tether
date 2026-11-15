@@ -1,0 +1,19 @@
+{
+ "generated_at": 1794743767,
+ "id": "jad-ai",
+ "models": [
+  {
+   "context": 65000,
+   "id": "jad-ai"
+  },
+  {
+   "context": 256000,
+   "id": "jad-code"
+  },
+  {
+   "context": 256000,
+   "id": "jad-go"
+  }
+ ],
+ "schema": 1
+}

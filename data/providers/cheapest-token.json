@@ -1,0 +1,83 @@
+{
+ "generated_at": 1794743767,
+ "id": "cheapest-token",
+ "models": [
+  {
+   "context": 1048576,
+   "id": "deepseek-v4-pro-0813"
+  },
+  {
+   "context": 1048576,
+   "id": "deepseek-v4.1-flash-1017"
+  },
+  {
+   "context": 1048576,
+   "id": "glm-5.3"
+  },
+  {
+   "context": 1048576,
+   "id": "glm-5.3-flash"
+  },
+  {
+   "context": 1050000,
+   "id": "gpt-5.5"
+  },
+  {
+   "context": 1050000,
+   "id": "gpt-5.6-luna"
+  },
+  {
+   "context": 1050000,
+   "id": "gpt-5.6-sol"
+  },
+  {
+   "context": 1050000,
+   "id": "gpt-5.6-terra"
+  },
+  {
+   "context": 1050000,
+   "id": "gpt-6-astra"
+  },
+  {
+   "context": 1050000,
+   "id": "gpt-6-luna"
+  },
+  {
+   "context": 1050000,
+   "id": "gpt-6-sol"
+  },
+  {
+   "context": 1050000,
+   "id": "gpt-6.1-sol"
+  },
+  {
+   "context": 1050000,
+   "id": "gpt-6.1-terra"
+  },
+  {
+   "context": 200000,
+   "id": "grok-4.6"
+  },
+  {
+   "context": 500000,
+   "id": "grok-4.7"
+  },
+  {
+   "context": 1048576,
+   "id": "kimi-k3"
+  },
+  {
+   "context": 1048576,
+   "id": "minimax-m3.1-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "nemotron-3.5-super-vl"
+  },
+  {
+   "context": 1000000,
+   "id": "qwen3.8-max"
+  }
+ ],
+ "schema": 1
+}

@@ -1,0 +1,15 @@
+{
+ "generated_at": 1794743767,
+ "id": "rayline",
+ "models": [
+  {
+   "context": 1000000,
+   "id": "arc-sage-1.0"
+  },
+  {
+   "context": 1000000,
+   "id": "arc-swift-1.0"
+  }
+ ],
+ "schema": 1
+}

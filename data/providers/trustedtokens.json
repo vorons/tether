@@ -1,0 +1,47 @@
+{
+ "generated_at": 1794743767,
+ "id": "trustedtokens",
+ "models": [
+  {
+   "context": 262144,
+   "id": "Qwen/Qwen3.6-35B-A3B-FP8"
+  },
+  {
+   "context": 262144,
+   "id": "Qwen/Qwen3.8-27B"
+  },
+  {
+   "context": 1000000,
+   "id": "deepseek-ai/DeepSeek-V4.1-Flash-1017"
+  },
+  {
+   "context": 262144,
+   "id": "google/diffusiongemma-26B-A4B-it"
+  },
+  {
+   "context": 262144,
+   "id": "google/gemma-4-26B-A4B-it"
+  },
+  {
+   "context": 262144,
+   "id": "nvidia/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B"
+  },
+  {
+   "context": 131072,
+   "id": "openai/gpt-oss-120b"
+  },
+  {
+   "context": 1000000,
+   "id": "zai-org/GLM-5.2"
+  },
+  {
+   "context": 230000,
+   "id": "zai-org/GLM-5.3"
+  },
+  {
+   "context": 1000000,
+   "id": "zai-org/GLM-5.3-Flash"
+  }
+ ],
+ "schema": 1
+}

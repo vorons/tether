@@ -1,0 +1,31 @@
+{
+ "generated_at": 1794743767,
+ "id": "augure",
+ "models": [
+  {
+   "context": 262144,
+   "id": "open-glm-5-3"
+  },
+  {
+   "context": 262144,
+   "id": "open-qwen-3.8-flash-next"
+  },
+  {
+   "context": 262144,
+   "id": "ossington-4-1"
+  },
+  {
+   "context": 262144,
+   "id": "ossington-5"
+  },
+  {
+   "context": 1048576,
+   "id": "rosedale-1"
+  },
+  {
+   "context": 262144,
+   "id": "tofino-3"
+  }
+ ],
+ "schema": 1
+}

@@ -1,0 +1,31 @@
+{
+ "generated_at": 1794743767,
+ "id": "cloudcode",
+ "models": [
+  {
+   "context": 1000000,
+   "id": "deepseek-v4-pro"
+  },
+  {
+   "context": 1000000,
+   "id": "deepseek-v4.1-flash"
+  },
+  {
+   "context": 1000000,
+   "id": "glm-5.3"
+  },
+  {
+   "context": 1000000,
+   "id": "glm-5.3-flash"
+  },
+  {
+   "context": 200000,
+   "id": "glm-5v-turbo"
+  },
+  {
+   "context": 1048576,
+   "id": "mistral-large-4"
+  }
+ ],
+ "schema": 1
+}

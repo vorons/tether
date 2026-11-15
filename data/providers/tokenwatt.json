@@ -1,0 +1,11 @@
+{
+ "generated_at": 1794743767,
+ "id": "tokenwatt",
+ "models": [
+  {
+   "context": 131072,
+   "id": "qwen/qwen3-coder-30b-a3b-instruct"
+  }
+ ],
+ "schema": 1
+}

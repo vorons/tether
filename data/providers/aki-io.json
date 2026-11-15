@@ -1,7 +1,11 @@
 {
- "generated_at": 1794655613,
+ "generated_at": 1794743767,
  "id": "aki-io",
  "models": [
+  {
+   "context": 1048576,
+   "id": "deepseek-v4.1-flash-1017-tl5"
+  },
   {
    "context": 1048576,
    "id": "deepseek-v4.1-flash-552b"
@@ -20,11 +24,11 @@
   },
   {
    "context": 262144,
-   "id": "mistral4-119b"
+   "id": "kolibri-1-tl5"
   },
   {
-   "context": 256000,
-   "id": "qwen3.6-35b"
+   "context": 262144,
+   "id": "mistral4-119b"
   },
   {
    "context": 262144,

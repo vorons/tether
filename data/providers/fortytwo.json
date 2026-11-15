@@ -1,0 +1,11 @@
+{
+ "generated_at": 1794743767,
+ "id": "fortytwo",
+ "models": [
+  {
+   "context": 262144,
+   "id": "qwen/qwen3.8-27b"
+  }
+ ],
+ "schema": 1
+}

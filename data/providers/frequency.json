@@ -1,0 +1,11 @@
+{
+ "generated_at": 1794743767,
+ "id": "frequency",
+ "models": [
+  {
+   "context": 32768,
+   "id": "google/gemma-4-26b-a4b-it"
+  }
+ ],
+ "schema": 1
+}

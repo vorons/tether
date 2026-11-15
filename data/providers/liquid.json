@@ -1,10 +1,38 @@
 {
- "generated_at": 1794655613,
+ "generated_at": 1794743767,
  "id": "liquid",
  "models": [
   {
+   "context": 1048576,
+   "id": "deepseek-v4.1-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "deepseek-v4.1-flash-1017"
+  },
+  {
+   "context": 1048576,
+   "id": "glm-5.3"
+  },
+  {
+   "context": 1048576,
+   "id": "glm-5.3-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "kimi-k3"
+  },
+  {
+   "context": 1048576,
+   "id": "kimi-k3.1-pro"
+  },
+  {
    "context": 10000000,
    "id": "liquid.auto"
+  },
+  {
+   "context": 262144,
+   "id": "qwen3.8-27b"
   }
  ],
  "schema": 1

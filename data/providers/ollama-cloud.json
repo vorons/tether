@@ -1,5 +1,5 @@
 {
- "generated_at": 1794655613,
+ "generated_at": 1794743767,
  "id": "ollama-cloud",
  "models": [
   {
@@ -45,6 +45,10 @@
   {
    "context": 131072,
    "id": "gpt-oss:20b"
+  },
+  {
+   "context": 1048576,
+   "id": "inkling-2-small"
   },
   {
    "context": 262144,

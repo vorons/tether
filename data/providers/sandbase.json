@@ -1,0 +1,47 @@
+{
+ "generated_at": 1794743767,
+ "id": "sandbase",
+ "models": [
+  {
+   "context": 1000000,
+   "id": "alibaba/qwen3.7-max"
+  },
+  {
+   "context": 1000000,
+   "id": "alibaba/qwen3.7-plus"
+  },
+  {
+   "context": 1000000,
+   "id": "deepseek/deepseek-v4-flash"
+  },
+  {
+   "context": 1000000,
+   "id": "deepseek/deepseek-v4-pro"
+  },
+  {
+   "context": 1048576,
+   "id": "moonshotai/kimi-k3"
+  },
+  {
+   "context": 1050000,
+   "id": "openai/gpt-5.6-luna"
+  },
+  {
+   "context": 1050000,
+   "id": "openai/gpt-5.6-sol"
+  },
+  {
+   "context": 1050000,
+   "id": "openai/gpt-5.6-terra"
+  },
+  {
+   "context": 1000000,
+   "id": "z-ai/glm-5.3"
+  },
+  {
+   "context": 1000000,
+   "id": "z-ai/glm-5.3-flash"
+  }
+ ],
+ "schema": 1
+}

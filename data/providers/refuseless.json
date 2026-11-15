@@ -1,0 +1,31 @@
+{
+ "generated_at": 1794743767,
+ "id": "refuseless",
+ "models": [
+  {
+   "context": 1048576,
+   "id": "deepseek-v4.1-flash-abliterated"
+  },
+  {
+   "context": 524288,
+   "id": "deepseek-v4.1-flash-abliterated-free"
+  },
+  {
+   "context": 1048576,
+   "id": "deepseek-v4.1-flash-fast"
+  },
+  {
+   "context": 1048576,
+   "id": "glm-5.3-abliterated"
+  },
+  {
+   "context": 1048576,
+   "id": "glm-5.3-flash-abliterated"
+  },
+  {
+   "context": 1048576,
+   "id": "minimax-m3.1-flash"
+  }
+ ],
+ "schema": 1
+}
