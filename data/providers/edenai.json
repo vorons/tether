@@ -1,5 +1,5 @@
 {
- "generated_at": 1794743767,
+ "generated_at": 1794833004,
  "id": "edenai",
  "models": [
   {
@@ -333,10 +333,6 @@
   {
    "context": 256000,
    "id": "deepinfra/ByteDance/Seed-2.0-code"
-  },
-  {
-   "context": 256000,
-   "id": "deepinfra/ByteDance/Seed-2.0-mini"
   },
   {
    "context": 4096,
@@ -1237,6 +1233,10 @@
   {
    "context": 1000000,
    "id": "qwen/qwen3.8-omni-flash"
+  },
+  {
+   "context": 1000000,
+   "id": "qwen/qwen4-max"
   },
   {
    "context": 256000,

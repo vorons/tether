@@ -1,5 +1,5 @@
 {
- "generated_at": 1794743767,
+ "generated_at": 1794833004,
  "id": "llmgateway-providers",
  "models": [
   {
@@ -1501,6 +1501,10 @@
   {
    "context": 1000000,
    "id": "sakana/fugu-ultra-v2.0"
+  },
+  {
+   "context": 262144,
+   "id": "sakana/sakana-namazu"
   },
   {
    "context": 1048576,

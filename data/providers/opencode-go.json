@@ -1,5 +1,5 @@
 {
- "generated_at": 1794743767,
+ "generated_at": 1794833004,
  "id": "opencode-go",
  "models": [
   {
@@ -65,6 +65,10 @@
   {
    "context": 1048576,
    "id": "hy4"
+  },
+  {
+   "context": 1048576,
+   "id": "hy4-flash-free"
   },
   {
    "context": 1024000,
@@ -149,6 +153,10 @@
   {
    "context": 1000000,
    "id": "qwen3.8-max"
+  },
+  {
+   "context": 1000000,
+   "id": "qwen4-max"
   },
   {
    "context": 1048576,

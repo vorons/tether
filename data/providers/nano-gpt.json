@@ -1,5 +1,5 @@
 {
- "generated_at": 1794743767,
+ "generated_at": 1794833004,
  "id": "nano-gpt",
  "models": [
   {
@@ -257,6 +257,10 @@
   {
    "context": 131072,
    "id": "TEE/gpt-oss-120b"
+  },
+  {
+   "context": 524288,
+   "id": "TEE/inkling-2-small"
   },
   {
    "context": 262144,
@@ -1051,6 +1055,10 @@
    "id": "huihui-ai/Qwen2.5-32B-Instruct-abliterated"
   },
   {
+   "context": 128000,
+   "id": "hyperresearch/ousia-1"
+  },
+  {
    "context": 131072,
    "id": "ibm-granite/granite-4.2-8b"
   },
@@ -1125,6 +1133,14 @@
   {
    "context": 1000000,
    "id": "longcat-2.0:thinking"
+  },
+  {
+   "context": 1048576,
+   "id": "lyber/deepseek-v4.1-flash-1017-abliterated"
+  },
+  {
+   "context": 1048576,
+   "id": "lyber/kimi-k3.1-pro-abliterated"
   },
   {
    "context": 16384,
@@ -2069,6 +2085,14 @@
   {
    "context": 991808,
    "id": "qwen/qwen3.8-omni-flash"
+  },
+  {
+   "context": 1000000,
+   "id": "qwen/qwen4-max"
+  },
+  {
+   "context": 1000000,
+   "id": "qwen/qwen4-max:thinking"
   },
   {
    "context": 32768,

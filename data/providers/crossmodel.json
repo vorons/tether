@@ -1,5 +1,5 @@
 {
- "generated_at": 1794743767,
+ "generated_at": 1794833004,
  "id": "crossmodel",
  "models": [
   {
@@ -49,14 +49,6 @@
   {
    "context": 1000000,
    "id": "anthropic/claude-sonnet-5-5"
-  },
-  {
-   "context": 1000000,
-   "id": "deepseek/deepseek-v4-flash"
-  },
-  {
-   "context": 1000000,
-   "id": "deepseek/deepseek-v4-flash-vision-exp"
   },
   {
    "context": 1000000,
@@ -113,6 +105,10 @@
   {
    "context": 1048576,
    "id": "gemini/gemini-4-carbon"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini/gemini-4-hydrogen"
   },
   {
    "context": 204800,
@@ -227,6 +223,10 @@
    "id": "qwen/qwen3.8-omni-flash"
   },
   {
+   "context": 1000000,
+   "id": "qwen/qwen4-max"
+  },
+  {
    "context": 262144,
    "id": "tencent/hy3"
   },
@@ -236,7 +236,7 @@
   },
   {
    "context": 1048576,
-   "id": "tencent/hy4-preview"
+   "id": "tencent/hy4-flash"
   },
   {
    "context": 1000000,

@@ -1,5 +1,5 @@
 {
- "generated_at": 1794743767,
+ "generated_at": 1794833004,
  "id": "empiriolabs",
  "models": [
   {
@@ -221,6 +221,10 @@
   {
    "context": 1006592,
    "id": "qwen3-8-omni-flash"
+  },
+  {
+   "context": 983616,
+   "id": "qwen4-max"
   },
   {
    "context": 229096,

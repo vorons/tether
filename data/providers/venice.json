@@ -1,5 +1,5 @@
 {
- "generated_at": 1794743767,
+ "generated_at": 1794833004,
  "id": "venice",
  "models": [
   {
@@ -421,6 +421,10 @@
   {
    "context": 1000000,
    "id": "qwen-3-8-max"
+  },
+  {
+   "context": 1000000,
+   "id": "qwen-4-max"
   },
   {
    "context": 128000,
