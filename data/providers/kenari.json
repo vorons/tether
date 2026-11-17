@@ -1,10 +1,18 @@
 {
- "generated_at": 1794833004,
+ "generated_at": 1794921775,
  "id": "kenari",
  "models": [
   {
+   "context": 262144,
+   "id": "beam-1-0:free"
+  },
+  {
    "context": 1000000,
    "id": "claude-fable-5"
+  },
+  {
+   "context": 1000000,
+   "id": "claude-haiku-5-5"
   },
   {
    "context": 1000000,
@@ -20,11 +28,19 @@
   },
   {
    "context": 1000000,
+   "id": "claude-opus-5-5"
+  },
+  {
+   "context": 1000000,
    "id": "claude-sonnet-4-6"
   },
   {
    "context": 1000000,
    "id": "claude-sonnet-5"
+  },
+  {
+   "context": 1000000,
+   "id": "claude-sonnet-5-5"
   },
   {
    "context": 1000000,
@@ -36,35 +52,15 @@
   },
   {
    "context": 1000000,
-   "id": "deepseek-v4-flash:free"
-  },
-  {
-   "context": 1000000,
    "id": "deepseek-v4-pro"
-  },
-  {
-   "context": 1048576,
-   "id": "gemini-2-5-flash"
-  },
-  {
-   "context": 1048576,
-   "id": "gemini-2-5-flash-lite"
   },
   {
    "context": 1048576,
    "id": "gemini-3-1-flash-lite"
   },
   {
-   "context": 8192,
-   "id": "gemini-3-1-flash-tts"
-  },
-  {
    "context": 1048576,
    "id": "gemini-3-1-pro"
-  },
-  {
-   "context": 1048576,
-   "id": "gemini-3-5-flash"
   },
   {
    "context": 1048576,
@@ -75,16 +71,24 @@
    "id": "gemini-3-7-flash"
   },
   {
+   "context": 1048576,
+   "id": "gemini-3-8-flash"
+  },
+  {
+   "context": 8192,
+   "id": "gemini-3-8-flash-lite-tts"
+  },
+  {
    "context": 262144,
    "id": "gemma-4-31b-it"
   },
   {
-   "context": 200000,
-   "id": "glm-4-7-flash:free"
+   "context": 128000,
+   "id": "glm-4-6v-flash:free"
   },
   {
    "context": 200000,
-   "id": "glm-5-1"
+   "id": "glm-4-7-flash:free"
   },
   {
    "context": 1000000,
@@ -99,14 +103,6 @@
    "id": "glm-5-3-flash"
   },
   {
-   "context": 400000,
-   "id": "gpt-5-4-mini"
-  },
-  {
-   "context": 1050000,
-   "id": "gpt-5-5"
-  },
-  {
    "context": 1050000,
    "id": "gpt-5-6-luna"
   },
@@ -116,11 +112,43 @@
   },
   {
    "context": 1050000,
-   "id": "gpt-5-6-terra"
+   "id": "gpt-6-1-sol"
+  },
+  {
+   "context": 1050000,
+   "id": "gpt-6-1-terra"
+  },
+  {
+   "context": 1050000,
+   "id": "gpt-6-astra"
+  },
+  {
+   "context": 1050000,
+   "id": "gpt-6-luna"
+  },
+  {
+   "context": 1050000,
+   "id": "gpt-6-sol"
   },
   {
    "context": 272000,
    "id": "gpt-image-2"
+  },
+  {
+   "context": 0,
+   "id": "gpt-image-2-5-flare"
+  },
+  {
+   "context": 0,
+   "id": "gpt-image-2-5-sunburst"
+  },
+  {
+   "context": 0,
+   "id": "gpt-image-2-6-flare"
+  },
+  {
+   "context": 0,
+   "id": "gpt-image-2-6-sunburst"
   },
   {
    "context": 131072,
@@ -131,6 +159,10 @@
    "id": "gpt-oss-20b"
   },
   {
+   "context": 0,
+   "id": "gpt-transcribe"
+  },
+  {
    "context": 500000,
    "id": "grok-4-5"
   },
@@ -139,8 +171,8 @@
    "id": "grok-4-6"
   },
   {
-   "context": 256000,
-   "id": "grok-build-0-1"
+   "context": 500000,
+   "id": "grok-4-7"
   },
   {
    "context": 16000,
@@ -151,12 +183,24 @@
    "id": "grok-imagine-image-2-0"
   },
   {
-   "context": 256000,
+   "context": 16000,
+   "id": "grok-imagine-image-quality"
+  },
+  {
+   "context": 196608,
    "id": "hy3"
   },
   {
-   "context": 256000,
-   "id": "hy3:free"
+   "context": 1048576,
+   "id": "hy4"
+  },
+  {
+   "context": 1048576,
+   "id": "hy4-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "hy4-flash:free"
   },
   {
    "context": 262144,
@@ -164,15 +208,7 @@
   },
   {
    "context": 262144,
-   "id": "kimi-k2-6:free"
-  },
-  {
-   "context": 262144,
    "id": "kimi-k2-7-code"
-  },
-  {
-   "context": 262144,
-   "id": "kimi-k2-7-code:free"
   },
   {
    "context": 1048576,
@@ -180,15 +216,15 @@
   },
   {
    "context": 1048576,
-   "id": "mimo-v2-5"
+   "id": "kimi-k3-1-pro"
   },
   {
-   "context": 1048576,
-   "id": "mimo-v2-5-pro"
+   "context": 1000000,
+   "id": "longcat-2-5:free"
   },
   {
-   "context": 1048576,
-   "id": "mimo-v2-5:free"
+   "context": 131072,
+   "id": "lyria-3-5"
   },
   {
    "context": 204800,
@@ -203,12 +239,40 @@
    "id": "minimax-m3"
   },
   {
-   "context": 262144,
-   "id": "mistral-large:free"
+   "context": 1000000,
+   "id": "minimax-m3-1-flash"
   },
   {
-   "context": 262144,
-   "id": "mistral-medium-3-5:free"
+   "context": 1048576,
+   "id": "muse-ember-1-0"
+  },
+  {
+   "context": 131072,
+   "id": "muse-glimmer-30b:free"
+  },
+  {
+   "context": 1048576,
+   "id": "muse-spark-1-2"
+  },
+  {
+   "context": 1048576,
+   "id": "muse-spark-1-2-contributor"
+  },
+  {
+   "context": 1048576,
+   "id": "muse-spark-1-3"
+  },
+  {
+   "context": 1048576,
+   "id": "muse-spark-1-3-contributor"
+  },
+  {
+   "context": 1007997,
+   "id": "muse-wonder-1-0"
+  },
+  {
+   "context": 1048576,
+   "id": "muse-wonder-full-1-0"
   },
   {
    "context": 131072,
@@ -224,19 +288,19 @@
   },
   {
    "context": 262144,
-   "id": "nemotron-3-nano-30b-a3b"
-  },
-  {
-   "context": 262144,
    "id": "nemotron-3-super-120b-a12b"
-  },
-  {
-   "context": 262144,
-   "id": "nemotron-3-super-120b-a12b:free"
   },
   {
    "context": 1000000,
    "id": "nemotron-3-ultra-550b-a55b"
+  },
+  {
+   "context": 1000000,
+   "id": "nemotron-3-ultra-550b-a55b:free"
+  },
+  {
+   "context": 1048576,
+   "id": "particle-1:free"
   },
   {
    "context": 1000000,
@@ -247,12 +311,20 @@
    "id": "qwen3-8-max"
   },
   {
+   "context": 524288,
+   "id": "solar-mini4:free"
+  },
+  {
    "context": 256000,
    "id": "step-3-7-flash"
   },
   {
-   "context": 256000,
-   "id": "step-3-7-flash:free"
+   "context": 1000000,
+   "id": "step-5-preview"
+  },
+  {
+   "context": 0,
+   "id": "whisper-1"
   },
   {
    "context": 448,

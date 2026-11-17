@@ -1,5 +1,5 @@
 {
- "generated_at": 1794833004,
+ "generated_at": 1794921775,
  "id": "openrouter",
  "models": [
   {
@@ -699,7 +699,7 @@
    "id": "nvidia/nemotron-3.5-content-safety"
   },
   {
-   "context": 262144,
+   "context": 1048576,
    "id": "nvidia/nemotron-3.5-lightning"
   },
   {
@@ -1257,6 +1257,10 @@
   {
    "context": 1048576,
    "id": "tencent/hy4"
+  },
+  {
+   "context": 1048576,
+   "id": "tencent/hy4-flash"
   },
   {
    "context": 1048576,

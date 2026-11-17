@@ -1,5 +1,5 @@
 {
- "generated_at": 1794833004,
+ "generated_at": 1794921775,
  "id": "kilo",
  "models": [
   {
@@ -459,10 +459,6 @@
    "id": "inclusionai/ling-3.1-flash-1019"
   },
   {
-   "context": 1048576,
-   "id": "inclusionai/ling-3.2-flash:free"
-  },
-  {
    "context": 128000,
    "id": "inference-net/schematron-v2-small"
   },
@@ -827,7 +823,7 @@
    "id": "nvidia/nemotron-3-super-120b-a12b"
   },
   {
-   "context": 202800,
+   "context": 262144,
    "id": "nvidia/nemotron-3-ultra-550b-a55b"
   },
   {
@@ -1459,6 +1455,10 @@
    "id": "qwen/qwen4-max"
   },
   {
+   "context": 262144,
+   "id": "recursive/flint-v1.0"
+  },
+  {
    "context": 1048576,
    "id": "reflection/beam-1.0-501b-a23b"
   },
@@ -1575,7 +1575,7 @@
    "id": "tencent/hy4"
   },
   {
-   "context": 1024000,
+   "context": 1048576,
    "id": "tencent/hy4-flash"
   },
   {

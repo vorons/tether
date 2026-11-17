@@ -1,11 +1,7 @@
 {
- "generated_at": 1794833004,
+ "generated_at": 1794921775,
  "id": "llmgateway-providers",
  "models": [
-  {
-   "context": 1000000,
-   "id": "alibaba/deepseek-v4-flash"
-  },
   {
    "context": 1000000,
    "id": "alibaba/deepseek-v4-flash-0731"
@@ -41,6 +37,10 @@
   {
    "context": 1048576,
    "id": "alibaba/glm-5.3"
+  },
+  {
+   "context": 1048576,
+   "id": "alibaba/glm-5.3-prime"
   },
   {
    "context": 262144,
@@ -141,6 +141,10 @@
   {
    "context": 262144,
    "id": "alibaba/qwen35-397b-a17b"
+  },
+  {
+   "context": 983616,
+   "id": "alibaba/qwen4-max"
   },
   {
    "context": 1000000,
@@ -323,6 +327,22 @@
    "id": "aws-mantle/gpt-6-astra"
   },
   {
+   "context": 921600,
+   "id": "aws-mantle/gpt-6-luna"
+  },
+  {
+   "context": 921600,
+   "id": "aws-mantle/gpt-6-sol"
+  },
+  {
+   "context": 921600,
+   "id": "aws-mantle/gpt-6.1-sol"
+  },
+  {
+   "context": 921600,
+   "id": "aws-mantle/gpt-6.1-terra"
+  },
+  {
    "context": 1000000,
    "id": "azure-anthropic/claude-fable-5"
   },
@@ -365,6 +385,10 @@
   {
    "context": 1000000,
    "id": "azure/gpt-4.1-mini"
+  },
+  {
+   "context": 1000000,
+   "id": "azure/gpt-4.1-nano"
   },
   {
    "context": 128000,
@@ -496,10 +520,6 @@
   },
   {
    "context": 1048576,
-   "id": "baidu/deepseek-v4-flash"
-  },
-  {
-   "context": 1048576,
    "id": "baidu/deepseek-v4-flash-0731"
   },
   {
@@ -540,10 +560,6 @@
   },
   {
    "context": 1048576,
-   "id": "bytedance/deepseek-v4-flash"
-  },
-  {
-   "context": 1048576,
    "id": "bytedance/deepseek-v4-flash-0731"
   },
   {
@@ -575,8 +591,20 @@
    "id": "canopywave/deepseek-v4-flash-0731"
   },
   {
+   "context": 1000000,
+   "id": "canopywave/deepseek-v4.1-flash-1017"
+  },
+  {
+   "context": 1000000,
+   "id": "canopywave/deepseek-v4.1-flash-latest"
+  },
+  {
    "context": 200000,
    "id": "canopywave/glm-5.2"
+  },
+  {
+   "context": 1000000,
+   "id": "canopywave/glm-5.3"
   },
   {
    "context": 1000000,
@@ -601,10 +629,6 @@
   {
    "context": 131072,
    "id": "cerebras/gpt-oss-120b"
-  },
-  {
-   "context": 1048576,
-   "id": "cloudflare/deepseek-v4-flash"
   },
   {
    "context": 1048576,
@@ -672,6 +696,10 @@
   },
   {
    "context": 1048576,
+   "id": "deepinfra/deepseek-v4-flash-vision-exp"
+  },
+  {
+   "context": 1048576,
    "id": "deepinfra/deepseek-v4-pro"
   },
   {
@@ -695,8 +723,16 @@
    "id": "deepinfra/gemma-4-31b-it"
   },
   {
+   "context": 1048576,
+   "id": "deepinfra/glm-5.3-flash"
+  },
+  {
    "context": 131072,
    "id": "deepinfra/granite-4.2-8b"
+  },
+  {
+   "context": 1048576,
+   "id": "deepinfra/hy4-preview"
   },
   {
    "context": 262144,
@@ -772,6 +808,14 @@
   },
   {
    "context": 1048576,
+   "id": "fireworks/deepseek-v4.1-flash-1017"
+  },
+  {
+   "context": 1048576,
+   "id": "fireworks/deepseek-v4.1-flash-latest"
+  },
+  {
+   "context": 1048576,
    "id": "fireworks/glm-5.3"
   },
   {
@@ -785,6 +829,14 @@
   {
    "context": 1040384,
    "id": "fireworks/kimi-k3-fast"
+  },
+  {
+   "context": 1040384,
+   "id": "fireworks/kimi-k3.1-pro"
+  },
+  {
+   "context": 1048576,
+   "id": "fireworks/muse-spark-open"
   },
   {
    "context": 1048576,
@@ -931,6 +983,10 @@
    "id": "inference.net/deepseek-v4-flash"
   },
   {
+   "context": 1040000,
+   "id": "inference.net/deepseek-v4.1-flash"
+  },
+  {
    "context": 262144,
    "id": "inference.net/deepseek-v4.1-flash-1017"
   },
@@ -1039,12 +1095,24 @@
    "id": "mistral/codestral-2508"
   },
   {
+   "context": 1048576,
+   "id": "mistral/deepseek-v4.1-flash-1017"
+  },
+  {
+   "context": 1048576,
+   "id": "mistral/deepseek-v4.1-flash-latest"
+  },
+  {
    "context": 262144,
    "id": "mistral/devstral-2512"
   },
   {
    "context": 1048576,
    "id": "mistral/glm-5.3"
+  },
+  {
+   "context": 1048576,
+   "id": "mistral/glm-5.3-flash"
   },
   {
    "context": 262144,
@@ -1116,10 +1184,6 @@
   },
   {
    "context": 1050000,
-   "id": "novita/deepseek-v4-flash"
-  },
-  {
-   "context": 1050000,
    "id": "novita/deepseek-v4-flash-0731"
   },
   {
@@ -1183,6 +1247,10 @@
    "id": "novita/hy3"
   },
   {
+   "context": 1000000,
+   "id": "novita/hy4-preview"
+  },
+  {
    "context": 131072,
    "id": "novita/kimi-k2"
   },
@@ -1201,6 +1269,10 @@
   {
    "context": 262144,
    "id": "novita/ling-3.0-flash"
+  },
+  {
+   "context": 1000000,
+   "id": "novita/ling-3.1-flash"
   },
   {
    "context": 131072,
@@ -1403,24 +1475,8 @@
    "id": "quartz/gemini-3.1-pro-preview"
   },
   {
-   "context": 1000000,
-   "id": "ranoai/deepseek-v4-flash"
-  },
-  {
    "context": 1048576,
    "id": "reka-ai/deepseek-v4.1-flash"
-  },
-  {
-   "context": 1048576,
-   "id": "reka-ai/deepseek-v4.1-flash-1017"
-  },
-  {
-   "context": 1048576,
-   "id": "reka-ai/deepseek-v4.1-flash-latest"
-  },
-  {
-   "context": 1048576,
-   "id": "reka-ai/glm-5.3"
   },
   {
    "context": 1048576,
@@ -1560,6 +1616,10 @@
   },
   {
    "context": 1000000,
+   "id": "scx-ai-gp/kimi-k3.1-pro-highspeed"
+  },
+  {
+   "context": 1000000,
    "id": "scx-ai-gp/qwen3.8-max"
   },
   {
@@ -1573,10 +1633,6 @@
   {
    "context": 32768,
    "id": "scx-ai/qwen3-32b"
-  },
-  {
-   "context": 1000000,
-   "id": "tencent/deepseek-v4-flash"
   },
   {
    "context": 1000000,
@@ -1684,6 +1740,10 @@
   },
   {
    "context": 1048576,
+   "id": "together-ai/beam-1.0-501b-a23b"
+  },
+  {
+   "context": 1048576,
    "id": "together-ai/deepseek-v4-pro"
   },
   {
@@ -1720,11 +1780,19 @@
   },
   {
    "context": 1048576,
+   "id": "together-ai/kimi-k3.1-pro"
+  },
+  {
+   "context": 1048576,
    "id": "together-ai/minimax-m3.1-flash"
   },
   {
    "context": 131072,
    "id": "together-ai/muse-glimmer-30b"
+  },
+  {
+   "context": 1048576,
+   "id": "together-ai/muse-spark-open"
   },
   {
    "context": 200000,
@@ -1811,6 +1879,10 @@
    "id": "xiaomi/mimo-v2.6-pro"
   },
   {
+   "context": 1000000,
+   "id": "xiaomi/mimo-v2.6-pro-ultraspeed"
+  },
+  {
    "context": 128000,
    "id": "zai/glm-4-32b-0414-128k"
   },
@@ -1873,6 +1945,10 @@
   {
    "context": 1048576,
    "id": "zai/glm-5.3-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "zai/glm-5.3-flashx"
   }
  ],
  "schema": 1

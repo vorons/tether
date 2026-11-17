@@ -1,5 +1,5 @@
 {
- "generated_at": 1794833004,
+ "generated_at": 1794921775,
  "id": "novita-ai",
  "models": [
   {
@@ -279,6 +279,10 @@
    "id": "qwen/qwen3.8-max"
   },
   {
+   "context": 1000000,
+   "id": "qwen/qwen4-max"
+  },
+  {
    "context": 262144,
    "id": "stepfun/step-3.7-flash"
   },
@@ -293,6 +297,10 @@
   {
    "context": 1000000,
    "id": "tencent/hy4"
+  },
+  {
+   "context": 1000000,
+   "id": "tencent/hy4-flash"
   },
   {
    "context": 1000000,

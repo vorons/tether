@@ -1,5 +1,5 @@
 {
- "generated_at": 1794833004,
+ "generated_at": 1794921775,
  "id": "requesty",
  "models": [
   {
@@ -33,10 +33,6 @@
   {
    "context": 1000000,
    "id": "claude-haiku-5-5@eu"
-  },
-  {
-   "context": 200000,
-   "id": "claude-opus-4-1"
   },
   {
    "context": 200000,
@@ -101,10 +97,6 @@
   {
    "context": 1000000,
    "id": "claude-sonnet-4-6@eu"
-  },
-  {
-   "context": 1000000,
-   "id": "claude-sonnet-4@eu"
   },
   {
    "context": 1000000,
@@ -255,6 +247,26 @@
    "id": "gemini-4-argon@eu"
   },
   {
+   "context": 1048576,
+   "id": "gemini-4-carbon"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini-4-carbon@eu"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini-4-hydrogen"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini-4-hydrogen@eu"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini-4-hydrogen@us"
+  },
+  {
    "context": 262144,
    "id": "gemma-4-26b-a4b-it"
   },
@@ -267,16 +279,8 @@
    "id": "glm-5.1"
   },
   {
-   "context": 200000,
-   "id": "glm-5.1@eu"
-  },
-  {
    "context": 1048576,
    "id": "glm-5.2"
-  },
-  {
-   "context": 1000000,
-   "id": "glm-5.2-fast"
   },
   {
    "context": 1048576,
@@ -463,20 +467,12 @@
    "id": "inkling-256k"
   },
   {
-   "context": 256000,
-   "id": "kat-coder-pro"
-  },
-  {
    "context": 128000,
    "id": "kimi-k2.5@eu"
   },
   {
    "context": 262144,
    "id": "kimi-k2.6"
-  },
-  {
-   "context": 256000,
-   "id": "kimi-k2.6@eu"
   },
   {
    "context": 262144,
@@ -487,7 +483,7 @@
    "id": "kimi-k2.7-code@eu"
   },
   {
-   "context": 1048576,
+   "context": 1000000,
    "id": "kimi-k3"
   },
   {
@@ -500,15 +496,11 @@
   },
   {
    "context": 1048576,
+   "id": "kimi-k3.1-pro@eu"
+  },
+  {
+   "context": 1048576,
    "id": "kimi-k3@eu"
-  },
-  {
-   "context": 32768,
-   "id": "laguna-m.1"
-  },
-  {
-   "context": 32768,
-   "id": "laguna-xs.2"
   },
   {
    "context": 262144,
@@ -520,18 +512,6 @@
   },
   {
    "context": 262144,
-   "id": "ling-2.6-1t"
-  },
-  {
-   "context": 262144,
-   "id": "ling-2.6-flash"
-  },
-  {
-   "context": 262144,
-   "id": "ling-3.0-tiny"
-  },
-  {
-   "context": 1048576,
    "id": "mimo-v2.5"
   },
   {
@@ -619,20 +599,8 @@
    "id": "muse-wonder-1.0"
   },
   {
-   "context": 300000,
-   "id": "nemotron-3-nano-omni"
-  },
-  {
    "context": 131072,
    "id": "nemotron-3-nano-omni-30b-a3b-reasoning"
-  },
-  {
-   "context": 300000,
-   "id": "nemotron-3-nano-omni@eu"
-  },
-  {
-   "context": 1048576,
-   "id": "nemotron-3-super-120b-a12b"
   },
   {
    "context": 1048576,
@@ -641,10 +609,6 @@
   {
    "context": 262144,
    "id": "nemotron-3-ultra-nvfp4"
-  },
-  {
-   "context": 131072,
-   "id": "nemotron-3.5-content-safety"
   },
   {
    "context": 1048576,
@@ -713,10 +677,6 @@
   {
    "context": 1048576,
    "id": "qwen3.8-max"
-  },
-  {
-   "context": 262144,
-   "id": "ring-2.6-1t"
   },
   {
    "context": 256000,

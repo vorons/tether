@@ -1,5 +1,5 @@
 {
- "generated_at": 1794833004,
+ "generated_at": 1794921775,
  "id": "nano-gpt",
  "models": [
   {
@@ -743,6 +743,14 @@
    "id": "deepseek/deepseek-v4.1-flash-1017"
   },
   {
+   "context": 1000000,
+   "id": "deepseek/deepseek-v4.1-flash-1017-abliterated"
+  },
+  {
+   "context": 1000000,
+   "id": "deepseek/deepseek-v4.1-flash-1017-abliterated:thinking"
+  },
+  {
    "context": 1048576,
    "id": "deepseek/deepseek-v4.1-flash-1017-uncensored"
   },
@@ -1111,6 +1119,14 @@
    "id": "kimi-k2-instruct-fast"
   },
   {
+   "context": 200000,
+   "id": "kitani/clover-2"
+  },
+  {
+   "context": 200000,
+   "id": "kitani/clover-2:thinking"
+  },
+  {
    "context": 32768,
    "id": "lightonai/LightOnOCR-2-1B"
   },
@@ -1133,10 +1149,6 @@
   {
    "context": 1000000,
    "id": "longcat-2.0:thinking"
-  },
-  {
-   "context": 1048576,
-   "id": "lyber/deepseek-v4.1-flash-1017-abliterated"
   },
   {
    "context": 1048576,

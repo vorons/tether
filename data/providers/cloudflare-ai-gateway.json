@@ -1,5 +1,5 @@
 {
- "generated_at": 1794833004,
+ "generated_at": 1794921775,
  "id": "cloudflare-ai-gateway",
  "models": [
   {
@@ -83,6 +83,10 @@
    "id": "anthropic/claude-sonnet-5.5"
   },
   {
+   "context": 1000000,
+   "id": "deepseek-ai/deepseek-v4.1-flash-1017"
+  },
+  {
    "context": 131072,
    "id": "deepseek/deepseek-v4-pro"
   },
@@ -144,6 +148,10 @@
   },
   {
    "context": 1048576,
+   "id": "google/gemini-4-hydrogen"
+  },
+  {
+   "context": 1048576,
    "id": "meta/muse-ember-1.0"
   },
   {
@@ -173,6 +181,10 @@
   {
    "context": 1048576,
    "id": "moonshotai/kimi-k3"
+  },
+  {
+   "context": 1048576,
+   "id": "moonshotai/kimi-k3.1-pro"
   },
   {
    "context": 1047576,
@@ -309,6 +321,10 @@
   {
    "context": 500000,
    "id": "xai/grok-4.7"
+  },
+  {
+   "context": 1048576,
+   "id": "xiaomi/mimo-v2.6-pro"
   }
  ],
  "schema": 1

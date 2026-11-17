@@ -1,5 +1,5 @@
 {
- "generated_at": 1794833004,
+ "generated_at": 1794921775,
  "id": "aimlapi",
  "models": [
   {
@@ -109,10 +109,6 @@
   {
    "context": 1000000,
    "id": "anthropic/claude-sonnet-5.5"
-  },
-  {
-   "context": 262144,
-   "id": "bytedance-seed/seed-1.6-flash"
   },
   {
    "context": 262144,
@@ -229,14 +225,6 @@
   {
    "context": 4096,
    "id": "gryphe/mythomax-l2-13b"
-  },
-  {
-   "context": 128000,
-   "id": "inception/mercury-2"
-  },
-  {
-   "context": 260000,
-   "id": "inception/mercury-2.5"
   },
   {
    "context": 128000,
@@ -365,14 +353,6 @@
   {
    "context": 262144,
    "id": "morph/morph-v3-large"
-  },
-  {
-   "context": 131072,
-   "id": "nousresearch/hermes-3-llama-3.1-405b"
-  },
-  {
-   "context": 131072,
-   "id": "nousresearch/hermes-3-llama-3.1-70b"
   },
   {
    "context": 1047576,

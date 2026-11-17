@@ -1,5 +1,5 @@
 {
- "generated_at": 1794833004,
+ "generated_at": 1794921775,
  "id": "empiriolabs",
  "models": [
   {
@@ -105,14 +105,6 @@
   {
    "context": 1048576,
    "id": "mimo-v2-6-pro-ultraspeed"
-  },
-  {
-   "context": 204800,
-   "id": "minimax-m2-7"
-  },
-  {
-   "context": 204800,
-   "id": "minimax-m2-7-highspeed"
   },
   {
    "context": 1048576,

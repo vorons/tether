@@ -1,5 +1,5 @@
 {
- "generated_at": 1794833004,
+ "generated_at": 1794921775,
  "id": "deepinfra",
  "models": [
   {
@@ -105,6 +105,10 @@
   {
    "context": 256000,
    "id": "Qwen/Qwen3.8-Max"
+  },
+  {
+   "context": 1000000,
+   "id": "Qwen/Qwen4-Max"
   },
   {
    "context": 262144,

@@ -1,5 +1,5 @@
 {
- "generated_at": 1794833004,
+ "generated_at": 1794921775,
  "id": "edenai",
  "models": [
   {
@@ -985,10 +985,6 @@
   {
    "context": 262144,
    "id": "nebius/Qwen/Qwen3-30B-A3B-Instruct-2507"
-  },
-  {
-   "context": 1048576,
-   "id": "nebius/deepseek-ai/DeepSeek-V4-Flash-0731"
   },
   {
    "context": 1048576,
