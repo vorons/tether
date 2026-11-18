@@ -1,5 +1,5 @@
 {
- "generated_at": 1794921775,
+ "generated_at": 1795006873,
  "id": "moneo",
  "models": [
   {
@@ -21,6 +21,10 @@
   {
    "context": 256000,
    "id": "gemma-4-31b:web"
+  },
+  {
+   "context": 128000,
+   "id": "gpt-5-6-luna"
   },
   {
    "context": 128000,

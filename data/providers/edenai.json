@@ -1,5 +1,5 @@
 {
- "generated_at": 1794921775,
+ "generated_at": 1795006873,
  "id": "edenai",
  "models": [
   {
@@ -895,14 +895,6 @@
    "id": "mistral/mistral-large-latest@eu"
   },
   {
-   "context": 131072,
-   "id": "mistral/mistral-medium-2505"
-  },
-  {
-   "context": 131072,
-   "id": "mistral/mistral-medium-2505@eu"
-  },
-  {
    "context": 262144,
    "id": "mistral/mistral-medium-2604"
   },
@@ -1133,6 +1125,14 @@
   {
    "context": 1050000,
    "id": "openai/gpt-6.1-terra"
+  },
+  {
+   "context": 1050000,
+   "id": "openai/gpt-6.2-astra"
+  },
+  {
+   "context": 1050000,
+   "id": "openai/gpt-6.2-sol"
   },
   {
    "context": 1050000,

@@ -1,5 +1,5 @@
 {
- "generated_at": 1794921775,
+ "generated_at": 1795006873,
  "id": "ofox",
  "models": [
   {
@@ -245,6 +245,10 @@
   {
    "context": 1048576,
    "id": "google/gemini-4-argon"
+  },
+  {
+   "context": 1048576,
+   "id": "google/gemini-4-carbon"
   },
   {
    "context": 1048576,
@@ -509,6 +513,10 @@
   {
    "context": 1000000,
    "id": "qwen/qwen3.8-max-0902"
+  },
+  {
+   "context": 1000000,
+   "id": "qwen/qwen4-max"
   },
   {
    "context": 256000,

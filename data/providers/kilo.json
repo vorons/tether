@@ -1,5 +1,5 @@
 {
- "generated_at": 1794921775,
+ "generated_at": 1795006873,
  "id": "kilo",
  "models": [
   {
@@ -199,7 +199,7 @@
    "id": "deepseek/deepseek-r1"
   },
   {
-   "context": 163840,
+   "context": 128000,
    "id": "deepseek/deepseek-r1-0528"
   },
   {
@@ -591,32 +591,16 @@
    "id": "microsoft/phi-4"
   },
   {
-   "context": 205000,
-   "id": "minimax/minimax-m2"
-  },
-  {
    "context": 204800,
    "id": "minimax/minimax-m2.1"
-  },
-  {
-   "context": 204800,
-   "id": "minimax/minimax-m2.1-lightning"
   },
   {
    "context": 196608,
    "id": "minimax/minimax-m2.5"
   },
   {
-   "context": 204800,
-   "id": "minimax/minimax-m2.5-highspeed"
-  },
-  {
    "context": 196608,
    "id": "minimax/minimax-m2.7"
-  },
-  {
-   "context": 204800,
-   "id": "minimax/minimax-m2.7-highspeed"
   },
   {
    "context": 524288,
@@ -715,7 +699,7 @@
    "id": "mistralai/mistral-small-3.1-24b-instruct"
   },
   {
-   "context": 32768,
+   "context": 128000,
    "id": "mistralai/mistral-small-3.2-24b-instruct"
   },
   {
@@ -1143,6 +1127,30 @@
    "id": "openai/gpt-6.1-terra-pro"
   },
   {
+   "context": 1050000,
+   "id": "openai/gpt-6.2-astra"
+  },
+  {
+   "context": 1050000,
+   "id": "openai/gpt-6.2-astra-fast"
+  },
+  {
+   "context": 1050000,
+   "id": "openai/gpt-6.2-astra-pro"
+  },
+  {
+   "context": 1050000,
+   "id": "openai/gpt-6.2-sol"
+  },
+  {
+   "context": 1050000,
+   "id": "openai/gpt-6.2-sol-fast"
+  },
+  {
+   "context": 1050000,
+   "id": "openai/gpt-6.2-sol-pro"
+  },
+  {
    "context": 128000,
    "id": "openai/gpt-audio"
   },
@@ -1337,10 +1345,6 @@
   {
    "context": 262144,
    "id": "qwen/qwen3-next-80b-a3b-instruct"
-  },
-  {
-   "context": 262144,
-   "id": "qwen/qwen3-next-80b-a3b-thinking"
   },
   {
    "context": 131072,
@@ -1687,7 +1691,7 @@
    "id": "xiaomi/mimo-v2.5"
   },
   {
-   "context": 1024000,
+   "context": 262144,
    "id": "xiaomi/mimo-v2.5-pro"
   },
   {
@@ -1763,7 +1767,7 @@
    "id": "z-ai/glm-5.3-fast"
   },
   {
-   "context": 1048576,
+   "context": 1048575,
    "id": "z-ai/glm-5.3-flash"
   },
   {

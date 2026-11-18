@@ -1,5 +1,5 @@
 {
- "generated_at": 1794921775,
+ "generated_at": 1795006873,
  "id": "llmgateway-providers",
  "models": [
   {
@@ -499,6 +499,14 @@
    "id": "azure/gpt-6.1-terra"
   },
   {
+   "context": 1050000,
+   "id": "azure/gpt-6.2-astra"
+  },
+  {
+   "context": 1050000,
+   "id": "azure/gpt-6.2-sol"
+  },
+  {
    "context": 0,
    "id": "azure/gpt-live-transcribe"
   },
@@ -835,6 +843,10 @@
    "id": "fireworks/kimi-k3.1-pro"
   },
   {
+   "context": 1040384,
+   "id": "fireworks/minimax-m3.1-flash"
+  },
+  {
    "context": 1048576,
    "id": "fireworks/muse-spark-open"
   },
@@ -844,11 +856,19 @@
   },
   {
    "context": 1048576,
+   "id": "flexai/deepseek-v4-flash-0731"
+  },
+  {
+   "context": 1048576,
    "id": "flexai/deepseek-v4.1-flash-1017"
   },
   {
    "context": 1048576,
    "id": "flexai/deepseek-v4.1-flash-latest"
+  },
+  {
+   "context": 262144,
+   "id": "flexai/gemma-4-26b-a4b-it"
   },
   {
    "context": 1048576,
@@ -1455,6 +1475,14 @@
    "id": "openai/gpt-6.1-terra"
   },
   {
+   "context": 1050000,
+   "id": "openai/gpt-6.2-astra"
+  },
+  {
+   "context": 1050000,
+   "id": "openai/gpt-6.2-sol"
+  },
+  {
    "context": 0,
    "id": "openai/gpt-live-transcribe"
   },
@@ -1623,6 +1651,10 @@
    "id": "scx-ai-gp/qwen3.8-max"
   },
   {
+   "context": 1000000,
+   "id": "scx-ai-gp/qwen4-max"
+  },
+  {
    "context": 131072,
    "id": "scx-ai/gpt-oss-120b"
   },
@@ -1693,6 +1725,14 @@
   {
    "context": 262144,
    "id": "tencent/hy3"
+  },
+  {
+   "context": 1000000,
+   "id": "tencent/hy4"
+  },
+  {
+   "context": 1000000,
+   "id": "tencent/hy4-flash"
   },
   {
    "context": 1000000,
@@ -1795,8 +1835,20 @@
    "id": "together-ai/muse-spark-open"
   },
   {
+   "context": 1000000,
+   "id": "vertex-anthropic/claude-fable-5-1"
+  },
+  {
+   "context": 1000000,
+   "id": "vertex-anthropic/claude-fable-5-2"
+  },
+  {
    "context": 200000,
    "id": "vertex-anthropic/claude-haiku-4-5"
+  },
+  {
+   "context": 1000000,
+   "id": "vertex-anthropic/claude-haiku-5-5"
   },
   {
    "context": 200000,
@@ -1811,6 +1863,10 @@
    "id": "vertex-anthropic/claude-opus-4-7"
   },
   {
+   "context": 1000000,
+   "id": "vertex-anthropic/claude-opus-5-5"
+  },
+  {
    "context": 200000,
    "id": "vertex-anthropic/claude-sonnet-4-5"
   },
@@ -1821,6 +1877,10 @@
   {
    "context": 1000000,
    "id": "vertex-anthropic/claude-sonnet-5"
+  },
+  {
+   "context": 1000000,
+   "id": "vertex-anthropic/claude-sonnet-5-5"
   },
   {
    "context": 2000000,

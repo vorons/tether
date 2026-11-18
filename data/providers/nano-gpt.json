@@ -1,5 +1,5 @@
 {
- "generated_at": 1794921775,
+ "generated_at": 1795006873,
  "id": "nano-gpt",
  "models": [
   {
@@ -1677,6 +1677,22 @@
   {
    "context": 1050000,
    "id": "openai/gpt-6.1-terra-pro"
+  },
+  {
+   "context": 922000,
+   "id": "openai/gpt-6.2-astra"
+  },
+  {
+   "context": 922000,
+   "id": "openai/gpt-6.2-astra-pro"
+  },
+  {
+   "context": 922000,
+   "id": "openai/gpt-6.2-sol"
+  },
+  {
+   "context": 922000,
+   "id": "openai/gpt-6.2-sol-pro"
   },
   {
    "context": 1050000,

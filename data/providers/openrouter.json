@@ -1,5 +1,5 @@
 {
- "generated_at": 1794921775,
+ "generated_at": 1795006873,
  "id": "openrouter",
  "models": [
   {
@@ -911,6 +911,22 @@
    "id": "openai/gpt-6.1-terra-pro"
   },
   {
+   "context": 1050000,
+   "id": "openai/gpt-6.2-astra"
+  },
+  {
+   "context": 1050000,
+   "id": "openai/gpt-6.2-astra-pro"
+  },
+  {
+   "context": 1050000,
+   "id": "openai/gpt-6.2-sol"
+  },
+  {
+   "context": 1050000,
+   "id": "openai/gpt-6.2-sol-pro"
+  },
+  {
    "context": 128000,
    "id": "openai/gpt-audio"
   },
@@ -1355,7 +1371,7 @@
    "id": "xiaomi/mimo-v2.5"
   },
   {
-   "context": 1024000,
+   "context": 262144,
    "id": "xiaomi/mimo-v2.5-pro"
   },
   {

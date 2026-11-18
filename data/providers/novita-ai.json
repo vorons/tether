@@ -1,5 +1,5 @@
 {
- "generated_at": 1794921775,
+ "generated_at": 1795006873,
  "id": "novita-ai",
  "models": [
   {
@@ -233,6 +233,10 @@
   {
    "context": 131072,
    "id": "qwen/qwen3-vl-30b-a3b-instruct"
+  },
+  {
+   "context": 262000,
+   "id": "qwen/qwen3-vl-plus"
   },
   {
    "context": 262144,
