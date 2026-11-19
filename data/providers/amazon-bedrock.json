@@ -1,5 +1,5 @@
 {
- "generated_at": 1795006873,
+ "generated_at": 1795093305,
  "id": "amazon-bedrock",
  "models": [
   {
@@ -343,6 +343,14 @@
    "id": "global.openai.gpt-6.1-terra"
   },
   {
+   "context": 1050000,
+   "id": "global.openai.gpt-6.2-astra"
+  },
+  {
+   "context": 1050000,
+   "id": "global.openai.gpt-6.2-sol"
+  },
+  {
    "context": 500000,
    "id": "global.xai.grok-4.6"
   },
@@ -571,6 +579,14 @@
    "id": "openai.gpt-6.1-terra"
   },
   {
+   "context": 1050000,
+   "id": "openai.gpt-6.2-astra"
+  },
+  {
+   "context": 1050000,
+   "id": "openai.gpt-6.2-sol"
+  },
+  {
    "context": 131072,
    "id": "openai.gpt-oss-120b"
   },
@@ -785,6 +801,14 @@
   {
    "context": 1050000,
    "id": "us.openai.gpt-6.1-terra"
+  },
+  {
+   "context": 1050000,
+   "id": "us.openai.gpt-6.2-astra"
+  },
+  {
+   "context": 1050000,
+   "id": "us.openai.gpt-6.2-sol"
   },
   {
    "context": 122880,

@@ -1,5 +1,5 @@
 {
- "generated_at": 1795006873,
+ "generated_at": 1795093305,
  "id": "cortecs",
  "models": [
   {
@@ -255,7 +255,7 @@
    "id": "kimi-k2.7-code"
   },
   {
-   "context": 1048576,
+   "context": 1024000,
    "id": "kimi-k3"
   },
   {

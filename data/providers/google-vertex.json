@@ -1,5 +1,5 @@
 {
- "generated_at": 1795006873,
+ "generated_at": 1795093305,
  "id": "google-vertex",
  "models": [
   {
@@ -169,6 +169,10 @@
   {
    "context": 1048576,
    "id": "gemini-4-hydrogen"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini-4-neon"
   },
   {
    "context": 2048,

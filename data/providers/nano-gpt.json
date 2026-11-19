@@ -1,5 +1,5 @@
 {
- "generated_at": 1795006873,
+ "generated_at": 1795093305,
  "id": "nano-gpt",
  "models": [
   {
@@ -23,20 +23,8 @@
    "id": "EVA-UNIT-01/EVA-Qwen2.5-72B-v0.2"
   },
   {
-   "context": 16384,
-   "id": "Envoid/Llama-3.05-NT-Storybreaker-Ministral-70B"
-  },
-  {
-   "context": 16384,
-   "id": "Envoid/Llama-3.05-Nemotron-Tenyxchat-Storybreaker-70B"
-  },
-  {
    "context": 131072,
    "id": "GLM-4.6-Derestricted-v5"
-  },
-  {
-   "context": 16384,
-   "id": "GalrionSoftworks/MN-LooseCannon-12B-v1"
   },
   {
    "context": 262144,
@@ -131,20 +119,12 @@
    "id": "Gryphe/MythoMax-L2-13b"
   },
   {
-   "context": 128000,
-   "id": "LLM360/K2-Think"
-  },
-  {
    "context": 32768,
    "id": "LatitudeGames/Wayfarer-Large-70B-Llama-3.3"
   },
   {
    "context": 128000,
    "id": "Meta-Llama-3-1-8B-Instruct-FP8"
-  },
-  {
-   "context": 16384,
-   "id": "NeverSleep/Lumimaid-v0.2-70B"
   },
   {
    "context": 262144,
@@ -171,22 +151,6 @@
    "id": "ReadyArt/MS3.2-The-Omega-Directive-24B-Unslop-v2.0"
   },
   {
-   "context": 128000,
-   "id": "Salesforce/Llama-xLAM-2-70b-fc-r"
-  },
-  {
-   "context": 16384,
-   "id": "Sao10K/L3-8B-Stheno-v3.2"
-  },
-  {
-   "context": 20480,
-   "id": "Sao10K/L3.1-70B-Euryale-v2.2"
-  },
-  {
-   "context": 32768,
-   "id": "Sao10K/L3.1-70B-Hanami-x1"
-  },
-  {
    "context": 20480,
    "id": "Sao10K/L3.3-70B-Euryale-v2.3"
   },
@@ -205,10 +169,6 @@
   {
    "context": 32768,
    "id": "Steelskull/L3.3-Nevoria-R1-70b"
-  },
-  {
-   "context": 164000,
-   "id": "TEE/deepseek-v3.2"
   },
   {
    "context": 1048576,
@@ -231,22 +191,6 @@
    "id": "TEE/gemma4-31b:thinking"
   },
   {
-   "context": 202752,
-   "id": "TEE/glm-5.1"
-  },
-  {
-   "context": 202752,
-   "id": "TEE/glm-5.1-thinking"
-  },
-  {
-   "context": 1048576,
-   "id": "TEE/glm-5.2"
-  },
-  {
-   "context": 1048576,
-   "id": "TEE/glm-5.2:thinking"
-  },
-  {
    "context": 1048576,
    "id": "TEE/glm-5.3"
   },
@@ -264,14 +208,6 @@
   },
   {
    "context": 262144,
-   "id": "TEE/kimi-k2.6"
-  },
-  {
-   "context": 1048576,
-   "id": "TEE/kimi-k3"
-  },
-  {
-   "context": 262144,
    "id": "TEE/kimi-k3.1-pro"
   },
   {
@@ -280,67 +216,11 @@
   },
   {
    "context": 262144,
-   "id": "TEE/qwen3.6-27b"
-  },
-  {
-   "context": 262144,
    "id": "TEE/qwen3.6-35b-a3b"
   },
   {
    "context": 262144,
    "id": "TEE/qwen3.8-27b"
-  },
-  {
-   "context": 65536,
-   "id": "TheDrummer/Anubis-70B-v1"
-  },
-  {
-   "context": 32768,
-   "id": "TheDrummer/Anubis-70B-v1.1"
-  },
-  {
-   "context": 262144,
-   "id": "TheDrummer/Artemis-v1.1"
-  },
-  {
-   "context": 32768,
-   "id": "TheDrummer/Cydonia-24B-v2"
-  },
-  {
-   "context": 32768,
-   "id": "TheDrummer/Cydonia-24B-v4"
-  },
-  {
-   "context": 131072,
-   "id": "TheDrummer/Cydonia-24B-v4.1"
-  },
-  {
-   "context": 65536,
-   "id": "TheDrummer/Cydonia-24B-v4.3"
-  },
-  {
-   "context": 32768,
-   "id": "TheDrummer/Magidonia-24B-v4.3"
-  },
-  {
-   "context": 16384,
-   "id": "TheDrummer/Rocinante-12B-v1.1"
-  },
-  {
-   "context": 8192,
-   "id": "TheDrummer/UnslopNemo-12B-v4.1"
-  },
-  {
-   "context": 65536,
-   "id": "TheDrummer/artemis-31b-v1.2"
-  },
-  {
-   "context": 32768,
-   "id": "TheDrummer/skyfall-36b-v2"
-  },
-  {
-   "context": 16384,
-   "id": "VongolaChouko/Starcannon-Unleashed-12B-v1.0"
   },
   {
    "context": 32768,
@@ -1015,10 +895,6 @@
    "id": "google/gemma-4-31b-it:thinking"
   },
   {
-   "context": 32768,
-   "id": "google/gemma4-31b-splituntied"
-  },
-  {
    "context": 1048576,
    "id": "heabsy/cyberheabsy"
   },
@@ -1115,6 +991,14 @@
    "id": "inflatebot/MN-12B-Mag-Mell-R1"
   },
   {
+   "context": 1048576,
+   "id": "jcartu/deepseek-v4.1-flash-1017-abliterated-lossless-csf"
+  },
+  {
+   "context": 256000,
+   "id": "jiunsong/supergemma4-26b-uncensored"
+  },
+  {
    "context": 131072,
    "id": "kimi-k2-instruct-fast"
   },
@@ -1149,6 +1033,10 @@
   {
    "context": 1000000,
    "id": "longcat-2.0:thinking"
+  },
+  {
+   "context": 1048576,
+   "id": "lyber/deepseek-v4.1-flash-1017-abliterated"
   },
   {
    "context": 1048576,
@@ -1271,7 +1159,7 @@
    "id": "minimax/minimax-m3"
   },
   {
-   "context": 1048576,
+   "context": 1000000,
    "id": "minimax/minimax-m3.1-flash"
   },
   {
@@ -1483,10 +1371,6 @@
    "id": "nvidia/Llama-3.1-Nemotron-70B-Instruct-HF"
   },
   {
-   "context": 128000,
-   "id": "nvidia/Llama-3.3-Nemotron-Super-49B-v1"
-  },
-  {
    "context": 262144,
    "id": "nvidia/nemotron-3-nano-30b-a3b"
   },
@@ -1511,11 +1395,11 @@
    "id": "nvidia/nemotron-3.5-content-safety"
   },
   {
-   "context": 1000000,
+   "context": 262144,
    "id": "nvidia/nemotron-3.5-lightning"
   },
   {
-   "context": 1000000,
+   "context": 262144,
    "id": "nvidia/nemotron-3.5-lightning:thinking"
   },
   {
@@ -1751,8 +1635,16 @@
    "id": "orca/orcacyber-flash-1.0:thinking"
   },
   {
+   "context": 999488,
+   "id": "orca/orcacyber-glm-5.3"
+  },
+  {
    "context": 1048064,
    "id": "orca/orcacyber-glm-5.3-flash"
+  },
+  {
+   "context": 1048064,
+   "id": "orca/orcacyber-hy4"
   },
   {
    "context": 1048064,
@@ -1771,6 +1663,14 @@
    "id": "orca/orcacyber-qwen3.8-flash-next"
   },
   {
+   "context": 1048064,
+   "id": "orca/orcacyber-ultra-1.0"
+  },
+  {
+   "context": 999488,
+   "id": "orca/orcacyber-zero-1.0"
+  },
+  {
    "context": 999488,
    "id": "orca/orcacyber-zero-1.5"
   },
@@ -1785,10 +1685,6 @@
   {
    "context": 262144,
    "id": "ornith-ai/ornith-1.5-35b-a3b:thinking"
-  },
-  {
-   "context": 32768,
-   "id": "pamanseau/OpenReasoning-Nemotron-32B"
   },
   {
    "context": 1048576,
@@ -1903,16 +1799,8 @@
    "id": "qwen/qwen3-next-80b-a3b-instruct"
   },
   {
-   "context": 256000,
-   "id": "qwen/qwen3-next-80b-a3b-thinking"
-  },
-  {
    "context": 131072,
    "id": "qwen/qwen3-vl-235b-a22b-instruct"
-  },
-  {
-   "context": 131072,
-   "id": "qwen/qwen3-vl-235b-a22b-thinking"
   },
   {
    "context": 131072,
@@ -2049,10 +1937,6 @@
   {
    "context": 262144,
    "id": "qwen/qwen3.8-27b-fimi"
-  },
-  {
-   "context": 262144,
-   "id": "qwen/qwen3.8-27b-hemmingway"
   },
   {
    "context": 262144,
@@ -2239,10 +2123,6 @@
    "id": "unbiased/pareto-26.9"
   },
   {
-   "context": 6144,
-   "id": "undi95/remm-slerp-l2-13b"
-  },
-  {
    "context": 32768,
    "id": "universal-summarizer"
   },
@@ -2265,10 +2145,6 @@
   {
    "context": 524288,
    "id": "upstage/solar-mini4:thinking"
-  },
-  {
-   "context": 131072,
-   "id": "upstage/solar-pro-3"
   },
   {
    "context": 524288,
@@ -2319,11 +2195,11 @@
    "id": "xiaomi/mimo-v2.5"
   },
   {
-   "context": 1048576,
+   "context": 262144,
    "id": "xiaomi/mimo-v2.5-pro"
   },
   {
-   "context": 1048576,
+   "context": 262144,
    "id": "xiaomi/mimo-v2.5-pro:thinking"
   },
   {
@@ -2353,10 +2229,6 @@
   {
    "context": 1048576,
    "id": "xiaomi/mimo-v2.6-pro-ultraspeed"
-  },
-  {
-   "context": 262144,
-   "id": "xingchen-agi/xing4.0-29b-a4b"
   },
   {
    "context": 32768,

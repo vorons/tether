@@ -1,5 +1,5 @@
 {
- "generated_at": 1795006873,
+ "generated_at": 1795093305,
  "id": "azure",
  "models": [
   {
@@ -249,6 +249,14 @@
   {
    "context": 1050000,
    "id": "gpt-6.1-terra"
+  },
+  {
+   "context": 1050000,
+   "id": "gpt-6.2-astra"
+  },
+  {
+   "context": 1050000,
+   "id": "gpt-6.2-sol"
   },
   {
    "context": 400000,

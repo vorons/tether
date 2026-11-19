@@ -1,5 +1,5 @@
 {
- "generated_at": 1795006873,
+ "generated_at": 1795093305,
  "id": "llmgateway-providers",
  "models": [
   {
@@ -928,6 +928,10 @@
   },
   {
    "context": 1048576,
+   "id": "google-ai-studio/gemini-4-neon"
+  },
+  {
+   "context": 1048576,
    "id": "google-ai-studio/gemini-pro-latest"
   },
   {
@@ -973,6 +977,10 @@
   {
    "context": 1048576,
    "id": "google-vertex/gemini-4-hydrogen"
+  },
+  {
+   "context": 1048576,
+   "id": "google-vertex/gemini-4-neon"
   },
   {
    "context": 1048576,

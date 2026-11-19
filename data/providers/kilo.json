@@ -1,5 +1,5 @@
 {
- "generated_at": 1795006873,
+ "generated_at": 1795093305,
  "id": "kilo",
  "models": [
   {
@@ -367,6 +367,10 @@
    "id": "google/gemini-4-hydrogen"
   },
   {
+   "context": 1048576,
+   "id": "google/gemini-4-neon"
+  },
+  {
    "context": 65536,
    "id": "google/gemini-nano-banana-2.1"
   },
@@ -457,6 +461,10 @@
   {
    "context": 1000000,
    "id": "inclusionai/ling-3.1-flash-1019"
+  },
+  {
+   "context": 1048576,
+   "id": "inclusionai/ling-3.2-flash:free"
   },
   {
    "context": 128000,
@@ -1463,6 +1471,10 @@
    "id": "recursive/flint-v1.0"
   },
   {
+   "context": 262144,
+   "id": "recursive/flint-v1.0:free"
+  },
+  {
    "context": 1048576,
    "id": "reflection/beam-1.0-501b-a23b"
   },
@@ -1747,7 +1759,7 @@
    "id": "z-ai/glm-5-turbo"
   },
   {
-   "context": 202752,
+   "context": 204800,
    "id": "z-ai/glm-5.1"
   },
   {

@@ -1,5 +1,5 @@
 {
- "generated_at": 1795006873,
+ "generated_at": 1795093305,
  "id": "kenari",
  "models": [
   {
@@ -79,10 +79,6 @@
    "id": "gemini-3-8-flash-lite-tts"
   },
   {
-   "context": 262144,
-   "id": "gemma-4-31b-it"
-  },
-  {
    "context": 128000,
    "id": "glm-4-6v-flash:free"
   },
@@ -117,6 +113,14 @@
   {
    "context": 1050000,
    "id": "gpt-6-1-terra"
+  },
+  {
+   "context": 1050000,
+   "id": "gpt-6-2-astra"
+  },
+  {
+   "context": 920000,
+   "id": "gpt-6-2-sol"
   },
   {
    "context": 1050000,
@@ -269,10 +273,6 @@
   {
    "context": 1007997,
    "id": "muse-wonder-1-0"
-  },
-  {
-   "context": 1048576,
-   "id": "muse-wonder-full-1-0"
   },
   {
    "context": 131072,

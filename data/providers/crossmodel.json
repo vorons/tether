@@ -1,5 +1,5 @@
 {
- "generated_at": 1795006873,
+ "generated_at": 1795093305,
  "id": "crossmodel",
  "models": [
   {
@@ -109,6 +109,10 @@
   {
    "context": 1048576,
    "id": "gemini/gemini-4-hydrogen"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini/gemini-4-neon"
   },
   {
    "context": 204800,

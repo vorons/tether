@@ -1,10 +1,14 @@
 {
- "generated_at": 1795006873,
+ "generated_at": 1795093305,
  "id": "cloudflare-workers-ai",
  "models": [
   {
    "context": 128000,
    "id": "@cf/aisingapore/gemma-sea-lion-v4-27b-it"
+  },
+  {
+   "context": 65536,
+   "id": "@cf/cloudflare/clairic-flash"
   },
   {
    "context": 80000,

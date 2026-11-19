@@ -1,5 +1,5 @@
 {
- "generated_at": 1795006873,
+ "generated_at": 1795093305,
  "id": "vivgrid",
  "models": [
   {
@@ -9,6 +9,10 @@
   {
    "context": 1000000,
    "id": "claude-fable-5-1"
+  },
+  {
+   "context": 1000000,
+   "id": "claude-fable-5-2"
   },
   {
    "context": 1000000,
@@ -145,6 +149,18 @@
   {
    "context": 1050000,
    "id": "gpt-6.1-terra"
+  },
+  {
+   "context": 1000000,
+   "id": "gpt-6.2-astra"
+  },
+  {
+   "context": 1000000,
+   "id": "gpt-6.2-sol"
+  },
+  {
+   "context": 1048576,
+   "id": "hy4-flash"
   },
   {
    "context": 1000000,

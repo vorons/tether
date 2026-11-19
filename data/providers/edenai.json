@@ -1,5 +1,5 @@
 {
- "generated_at": 1795006873,
+ "generated_at": 1795093305,
  "id": "edenai",
  "models": [
   {
@@ -215,6 +215,10 @@
    "id": "azure/gpt-4.1-nano@eu"
   },
   {
+   "context": 1047576,
+   "id": "azure/gpt-4.1-nano@us"
+  },
+  {
    "context": 272000,
    "id": "azure/gpt-5.1-codex"
   },
@@ -293,6 +297,14 @@
   {
    "context": 288000,
    "id": "cohere/command-a-03-2025"
+  },
+  {
+   "context": 8992,
+   "id": "cohere/command-a-translate-08-2025"
+  },
+  {
+   "context": 128000,
+   "id": "cohere/command-a-vision-07-2025"
   },
   {
    "context": 128000,
@@ -677,6 +689,10 @@
   {
    "context": 1048576,
    "id": "google/gemini-4-hydrogen"
+  },
+  {
+   "context": 1048576,
+   "id": "google/gemini-4-neon"
   },
   {
    "context": 1048576,
@@ -1493,6 +1509,18 @@
   {
    "context": 1048576,
    "id": "vertex/gemini-4-hydrogen@us"
+  },
+  {
+   "context": 1048576,
+   "id": "vertex/gemini-4-neon"
+  },
+  {
+   "context": 1048576,
+   "id": "vertex/gemini-4-neon@eu"
+  },
+  {
+   "context": 1048576,
+   "id": "vertex/gemini-4-neon@us"
   },
   {
    "context": 1048576,
