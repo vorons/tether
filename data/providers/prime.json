@@ -1,5 +1,5 @@
 {
- "generated_at": 1795093305,
+ "generated_at": 1795179136,
  "id": "prime",
  "models": [
   {
@@ -93,6 +93,10 @@
   {
    "context": 1048576,
    "id": "google/gemini-4-carbon"
+  },
+  {
+   "context": 1048576,
+   "id": "google/gemini-4-neon"
   },
   {
    "context": 131072,
@@ -237,6 +241,14 @@
   {
    "context": 1050000,
    "id": "openai/gpt-6.1-sol"
+  },
+  {
+   "context": 1050000,
+   "id": "openai/gpt-6.2-astra"
+  },
+  {
+   "context": 1050000,
+   "id": "openai/gpt-6.2-sol"
   },
   {
    "context": 131072,

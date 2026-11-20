@@ -1,5 +1,5 @@
 {
- "generated_at": 1795093305,
+ "generated_at": 1795179136,
  "id": "requesty",
  "models": [
   {
@@ -265,6 +265,18 @@
   {
    "context": 1048576,
    "id": "gemini-4-hydrogen@us"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini-4-neon"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini-4-neon@eu"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini-4-neon@us"
   },
   {
    "context": 262144,

@@ -1,5 +1,5 @@
 {
- "generated_at": 1795093305,
+ "generated_at": 1795179136,
  "id": "llmgateway-providers",
  "models": [
   {
@@ -628,6 +628,10 @@
   },
   {
    "context": 1000000,
+   "id": "canopywave/kimi-k3.1-pro"
+  },
+  {
+   "context": 1000000,
    "id": "canopywave/minimax-m3.1-flash"
   },
   {
@@ -640,14 +644,6 @@
   },
   {
    "context": 1048576,
-   "id": "cloudflare/deepseek-v4-flash-0731"
-  },
-  {
-   "context": 1048576,
-   "id": "cloudflare/deepseek-v4-pro"
-  },
-  {
-   "context": 1048576,
    "id": "cloudflare/deepseek-v4.1-flash-1017"
   },
   {
@@ -657,10 +653,6 @@
   {
    "context": 1048576,
    "id": "cloudflare/glm-5.3"
-  },
-  {
-   "context": 1048576,
-   "id": "cloudflare/glm-5.3-flash"
   },
   {
    "context": 1000000,
@@ -1821,6 +1813,10 @@
   {
    "context": 131072,
    "id": "together-ai/gpt-oss-120b"
+  },
+  {
+   "context": 1048576,
+   "id": "together-ai/hy4"
   },
   {
    "context": 1000000,

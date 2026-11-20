@@ -1,5 +1,5 @@
 {
- "generated_at": 1795093305,
+ "generated_at": 1795179136,
  "id": "cortecs",
  "models": [
   {
@@ -127,6 +127,10 @@
    "id": "gemini-4-hydrogen"
   },
   {
+   "context": 1048576,
+   "id": "gemini-4-neon"
+  },
+  {
    "context": 131000,
    "id": "gemma-3-27b-it"
   },
@@ -225,6 +229,14 @@
   {
    "context": 1050000,
    "id": "gpt-6.1-terra"
+  },
+  {
+   "context": 1050000,
+   "id": "gpt-6.2-astra"
+  },
+  {
+   "context": 1050000,
+   "id": "gpt-6.2-sol"
   },
   {
    "context": 131000,
@@ -333,6 +345,10 @@
   {
    "context": 32000,
    "id": "mixtral-8x7B-instruct-v0.1"
+  },
+  {
+   "context": 1000000,
+   "id": "nemotron-3.5-super-vl"
   },
   {
    "context": 128000,

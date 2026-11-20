@@ -1,5 +1,5 @@
 {
- "generated_at": 1795093305,
+ "generated_at": 1795179136,
  "id": "xai",
  "models": [
   {
@@ -29,10 +29,6 @@
   {
    "context": 500000,
    "id": "grok-4.7"
-  },
-  {
-   "context": 256000,
-   "id": "grok-build-0.1"
   },
   {
    "context": 16000,

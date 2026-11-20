@@ -1,5 +1,5 @@
 {
- "generated_at": 1795093305,
+ "generated_at": 1795179136,
  "id": "kenari",
  "models": [
   {
@@ -309,6 +309,10 @@
   {
    "context": 1000000,
    "id": "qwen3-8-max"
+  },
+  {
+   "context": 1000000,
+   "id": "qwen4-max:free"
   },
   {
    "context": 524288,

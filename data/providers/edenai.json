@@ -1,5 +1,5 @@
 {
- "generated_at": 1795093305,
+ "generated_at": 1795179136,
  "id": "edenai",
  "models": [
   {
@@ -193,10 +193,6 @@
   {
    "context": 32768,
    "id": "arkanecloud/ministral-14b"
-  },
-  {
-   "context": 256000,
-   "id": "arkanecloud/nvidia/nemotron-3-super-120b-a12b"
   },
   {
    "context": 512288,
@@ -1367,6 +1363,10 @@
    "id": "together_ai/reflection/Beam-1.0-501B-A23B"
   },
   {
+   "context": 1048576,
+   "id": "together_ai/tencent/Hy4"
+  },
+  {
    "context": 524288,
    "id": "together_ai/thinkingmachines/Inkling"
   },
@@ -1561,10 +1561,6 @@
   {
    "context": 500000,
    "id": "xai/grok-4.7"
-  },
-  {
-   "context": 256000,
-   "id": "xai/grok-build-0.1"
   },
   {
    "context": 500000,

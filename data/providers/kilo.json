@@ -1,5 +1,5 @@
 {
- "generated_at": 1795093305,
+ "generated_at": 1795179136,
  "id": "kilo",
  "models": [
   {
@@ -177,10 +177,6 @@
   {
    "context": 128000,
    "id": "cohere/command-r7b-12-2024"
-  },
-  {
-   "context": 256000,
-   "id": "cohere/north-mini-code:free"
   },
   {
    "context": 128000,
@@ -535,11 +531,7 @@
    "id": "meta-llama/llama-3.1-8b-instruct"
   },
   {
-   "context": 60000,
-   "id": "meta-llama/llama-3.2-1b-instruct"
-  },
-  {
-   "context": 80000,
+   "context": 131072,
    "id": "meta-llama/llama-3.2-3b-instruct"
   },
   {
@@ -713,6 +705,10 @@
   {
    "context": 65536,
    "id": "mistralai/mixtral-8x22b-instruct"
+  },
+  {
+   "context": 128000,
+   "id": "mistralai/pixtral-large-2502"
   },
   {
    "context": 32768,
@@ -1695,10 +1691,6 @@
    "id": "x-ai/grok-4.7"
   },
   {
-   "context": 256000,
-   "id": "x-ai/grok-build-0.1"
-  },
-  {
    "context": 1000000,
    "id": "xiaomi/mimo-v2.5"
   },
@@ -1779,7 +1771,7 @@
    "id": "z-ai/glm-5.3-fast"
   },
   {
-   "context": 1048575,
+   "context": 1048576,
    "id": "z-ai/glm-5.3-flash"
   },
   {

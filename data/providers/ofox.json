@@ -1,5 +1,5 @@
 {
- "generated_at": 1795093305,
+ "generated_at": 1795179136,
  "id": "ofox",
  "models": [
   {
@@ -253,6 +253,10 @@
   {
    "context": 1048576,
    "id": "google/gemini-4-hydrogen"
+  },
+  {
+   "context": 1048576,
+   "id": "google/gemini-4-neon"
   },
   {
    "context": 65536,
