@@ -1,5 +1,5 @@
 {
- "generated_at": 1795179136,
+ "generated_at": 1795264629,
  "id": "keln",
  "models": [
   {
@@ -21,10 +21,6 @@
   {
    "context": 1048576,
    "id": "minimaxai/minimax-m3.1-flash"
-  },
-  {
-   "context": 1048576,
-   "id": "moonshotai/kimi-k3"
   },
   {
    "context": 1048576,

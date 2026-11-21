@@ -1,5 +1,5 @@
 {
- "generated_at": 1795179136,
+ "generated_at": 1795264629,
  "id": "nano-gpt",
  "models": [
   {
@@ -907,6 +907,10 @@
    "id": "google/gemini-4-hydrogen"
   },
   {
+   "context": 983040,
+   "id": "google/gemini-4-neon"
+  },
+  {
    "context": 1048576,
    "id": "google/gemini-flash-latest"
   },
@@ -1063,16 +1067,12 @@
    "id": "lightonai/LightOnOCR-2-1B"
   },
   {
-   "context": 128000,
+   "context": 8192,
    "id": "liquid/lfm-2.5-2.6b"
   },
   {
    "context": 128000,
    "id": "liquid/lfm-2.5-24b-a2b"
-  },
-  {
-   "context": 262144,
-   "id": "liquid/lfm-3-1.7b"
   },
   {
    "context": 1000000,
@@ -2117,10 +2117,6 @@
   {
    "context": 32768,
    "id": "speakleash/bielik-11b-v3.0-instruct"
-  },
-  {
-   "context": 262144,
-   "id": "stepfun-ai/step-3.5-flash"
   },
   {
    "context": 262144,

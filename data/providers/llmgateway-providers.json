@@ -1,5 +1,5 @@
 {
- "generated_at": 1795179136,
+ "generated_at": 1795264629,
  "id": "llmgateway-providers",
  "models": [
   {
@@ -57,6 +57,10 @@
   {
    "context": 1048576,
    "id": "alibaba/kimi-k3.1-pro"
+  },
+  {
+   "context": 1048576,
+   "id": "alibaba/kimi-k3.1-pro-prime"
   },
   {
    "context": 1000000,
@@ -309,6 +313,10 @@
   {
    "context": 8192,
    "id": "aws-bedrock/llama-4-scout-17b-instruct"
+  },
+  {
+   "context": 131072,
+   "id": "aws-bedrock/pixtral-large-2502"
   },
   {
    "context": 921600,
@@ -657,10 +665,6 @@
   {
    "context": 1000000,
    "id": "consensusprotocol/deepseek-v4-flash"
-  },
-  {
-   "context": 1048576,
-   "id": "consensusprotocol/deepseek-v4.1-flash"
   },
   {
    "context": 1048576,
@@ -1505,6 +1509,14 @@
   {
    "context": 1048576,
    "id": "reka-ai/deepseek-v4.1-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "reka-ai/deepseek-v4.1-flash-1017"
+  },
+  {
+   "context": 1048576,
+   "id": "reka-ai/deepseek-v4.1-flash-latest"
   },
   {
    "context": 1048576,

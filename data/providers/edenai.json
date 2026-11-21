@@ -1,5 +1,5 @@
 {
- "generated_at": 1795179136,
+ "generated_at": 1795264629,
  "id": "edenai",
  "models": [
   {
@@ -240,19 +240,7 @@
   },
   {
    "context": 1048576,
-   "id": "cloudflare/@cf/deepseek-ai/deepseek-v4-flash-0731"
-  },
-  {
-   "context": 1048576,
-   "id": "cloudflare/@cf/deepseek-ai/deepseek-v4-pro-0813"
-  },
-  {
-   "context": 1048576,
    "id": "cloudflare/@cf/deepseek-ai/deepseek-v4.1-flash-1017"
-  },
-  {
-   "context": 60000,
-   "id": "cloudflare/@cf/meta/llama-3.2-1b-instruct"
   },
   {
    "context": 80000,
@@ -1485,42 +1473,6 @@
   {
    "context": 1048576,
    "id": "vertex/gemini-4-argon@us"
-  },
-  {
-   "context": 1048576,
-   "id": "vertex/gemini-4-carbon"
-  },
-  {
-   "context": 1048576,
-   "id": "vertex/gemini-4-carbon@eu"
-  },
-  {
-   "context": 1048576,
-   "id": "vertex/gemini-4-carbon@us"
-  },
-  {
-   "context": 1048576,
-   "id": "vertex/gemini-4-hydrogen"
-  },
-  {
-   "context": 1048576,
-   "id": "vertex/gemini-4-hydrogen@eu"
-  },
-  {
-   "context": 1048576,
-   "id": "vertex/gemini-4-hydrogen@us"
-  },
-  {
-   "context": 1048576,
-   "id": "vertex/gemini-4-neon"
-  },
-  {
-   "context": 1048576,
-   "id": "vertex/gemini-4-neon@eu"
-  },
-  {
-   "context": 1048576,
-   "id": "vertex/gemini-4-neon@us"
   },
   {
    "context": 1048576,

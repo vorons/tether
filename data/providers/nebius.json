@@ -1,5 +1,5 @@
 {
- "generated_at": 1795179136,
+ "generated_at": 1795264629,
  "id": "nebius",
  "models": [
   {
@@ -53,6 +53,10 @@
   {
    "context": 1048576,
    "id": "moonshotai/Kimi-K3.1-Pro"
+  },
+  {
+   "context": 262144,
+   "id": "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B"
   },
   {
    "context": 1048576,

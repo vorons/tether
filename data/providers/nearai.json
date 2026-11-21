@@ -1,5 +1,5 @@
 {
- "generated_at": 1795179136,
+ "generated_at": 1795264629,
  "id": "nearai",
  "models": [
   {
@@ -205,6 +205,14 @@
   {
    "context": 1050000,
    "id": "openai/gpt-6.1-sol"
+  },
+  {
+   "context": 1050000,
+   "id": "openai/gpt-6.2-astra"
+  },
+  {
+   "context": 1050000,
+   "id": "openai/gpt-6.2-sol"
   },
   {
    "context": 200000,

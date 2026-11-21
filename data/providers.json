@@ -1,5 +1,5 @@
 {
- "generated_at": 1795179136,
+ "generated_at": 1795264629,
  "providers": {
   "302ai": {
    "api_key_env": [
@@ -9328,7 +9328,7 @@
     "EDENAI_API_KEY"
    ],
    "base_url": "https://api.edenai.run/v3",
-   "model": "vertex/gemini-4-neon@us",
+   "model": "google/gemini-4-neon",
    "models": [
     {
      "context": 300000,
@@ -9568,19 +9568,7 @@
     },
     {
      "context": 1048576,
-     "id": "cloudflare/@cf/deepseek-ai/deepseek-v4-flash-0731"
-    },
-    {
-     "context": 1048576,
-     "id": "cloudflare/@cf/deepseek-ai/deepseek-v4-pro-0813"
-    },
-    {
-     "context": 1048576,
      "id": "cloudflare/@cf/deepseek-ai/deepseek-v4.1-flash-1017"
-    },
-    {
-     "context": 60000,
-     "id": "cloudflare/@cf/meta/llama-3.2-1b-instruct"
     },
     {
      "context": 80000,
@@ -10813,42 +10801,6 @@
     {
      "context": 1048576,
      "id": "vertex/gemini-4-argon@us"
-    },
-    {
-     "context": 1048576,
-     "id": "vertex/gemini-4-carbon"
-    },
-    {
-     "context": 1048576,
-     "id": "vertex/gemini-4-carbon@eu"
-    },
-    {
-     "context": 1048576,
-     "id": "vertex/gemini-4-carbon@us"
-    },
-    {
-     "context": 1048576,
-     "id": "vertex/gemini-4-hydrogen"
-    },
-    {
-     "context": 1048576,
-     "id": "vertex/gemini-4-hydrogen@eu"
-    },
-    {
-     "context": 1048576,
-     "id": "vertex/gemini-4-hydrogen@us"
-    },
-    {
-     "context": 1048576,
-     "id": "vertex/gemini-4-neon"
-    },
-    {
-     "context": 1048576,
-     "id": "vertex/gemini-4-neon@eu"
-    },
-    {
-     "context": 1048576,
-     "id": "vertex/gemini-4-neon@us"
     },
     {
      "context": 1048576,
@@ -14312,6 +14264,10 @@
     },
     {
      "context": 1048576,
+     "id": "tencent/Hy4"
+    },
+    {
+     "context": 1048576,
      "id": "tencent/Hy4-flash"
     },
     {
@@ -16021,10 +15977,6 @@
     },
     {
      "context": 1048576,
-     "id": "moonshotai/kimi-k3"
-    },
-    {
-     "context": 1048576,
      "id": "moonshotai/kimi-k3.1-pro"
     },
     {
@@ -16405,7 +16357,7 @@
     "KILO_API_KEY"
    ],
    "base_url": "https://api.kilo.ai/api/gateway",
-   "model": "google/gemini-4-neon",
+   "model": "thinkingmachines/inkling-2-mini",
    "models": [
     {
      "context": 131072,
@@ -16588,7 +16540,7 @@
      "id": "deepseek/deepseek-chat"
     },
     {
-     "context": 128000,
+     "context": 163840,
      "id": "deepseek/deepseek-chat-v3-0324"
     },
     {
@@ -16628,7 +16580,7 @@
      "id": "deepseek/deepseek-v4-flash-0731"
     },
     {
-     "context": 1048575,
+     "context": 1048576,
      "id": "deepseek/deepseek-v4-flash-vision-exp"
     },
     {
@@ -16658,10 +16610,6 @@
     {
      "context": 1048576,
      "id": "deepseek/deepseek-v4.1-flash-fast"
-    },
-    {
-     "context": 512000,
-     "id": "dots-studio/dots-3-note-preview:free"
     },
     {
      "context": 262144,
@@ -16920,10 +16868,6 @@
      "id": "mancer/weaver"
     },
     {
-     "context": 1048756,
-     "id": "meituan/longcat-2.0"
-    },
-    {
      "context": 1048576,
      "id": "meituan/longcat-2.5"
     },
@@ -17000,7 +16944,7 @@
      "id": "minimax/minimax-m2.1"
     },
     {
-     "context": 196608,
+     "context": 198000,
      "id": "minimax/minimax-m2.5"
     },
     {
@@ -17008,11 +16952,11 @@
      "id": "minimax/minimax-m2.7"
     },
     {
-     "context": 524288,
+     "context": 262144,
      "id": "minimax/minimax-m3"
     },
     {
-     "context": 1048576,
+     "context": 1000000,
      "id": "minimax/minimax-m3.1-flash"
     },
     {
@@ -17236,7 +17180,7 @@
      "id": "nvidia/nemotron-3.5-lightning:free"
     },
     {
-     "context": 262144,
+     "context": 1048576,
      "id": "nvidia/nemotron-3.5-super-vl"
     },
     {
@@ -17869,6 +17813,10 @@
     },
     {
      "context": 262144,
+     "id": "radixark/daisyrose-27b"
+    },
+    {
+     "context": 262144,
      "id": "recursive/flint-v1.0"
     },
     {
@@ -17984,10 +17932,6 @@
      "id": "tencent/hy3"
     },
     {
-     "context": 262144,
-     "id": "tencent/hy3-preview"
-    },
-    {
      "context": 1048576,
      "id": "tencent/hy4"
     },
@@ -18014,6 +17958,10 @@
     {
      "context": 524288,
      "id": "thinkingmachines/inkling"
+    },
+    {
+     "context": 1048576,
+     "id": "thinkingmachines/inkling-2-mini"
     },
     {
      "context": 1048576,
@@ -18156,7 +18104,7 @@
      "id": "z-ai/glm-5-turbo"
     },
     {
-     "context": 204800,
+     "context": 202752,
      "id": "z-ai/glm-5.1"
     },
     {
@@ -18735,7 +18683,7 @@
     "LLMGATEWAY_API_KEY"
    ],
    "base_url": "https://api.llmgateway.io/v1",
-   "model": "gemini-4-neon",
+   "model": "kimi-k3.1-pro-prime",
    "models": [
     {
      "context": 128000,
@@ -19286,6 +19234,10 @@
      "id": "kimi-k3.1-pro-highspeed"
     },
     {
+     "context": 1048576,
+     "id": "kimi-k3.1-pro-prime"
+    },
+    {
      "context": 262144,
      "id": "ling-3.0-flash"
     },
@@ -19450,6 +19402,10 @@
      "id": "o3"
     },
     {
+     "context": 131072,
+     "id": "pixtral-large-2502"
+    },
+    {
      "context": 1000000,
      "id": "qwen-flash"
     },
@@ -19609,7 +19565,7 @@
     "LLMGATEWAY_API_KEY"
    ],
    "base_url": "https://api.llmgateway.io/v1",
-   "model": "google-vertex/gemini-4-neon",
+   "model": "alibaba/kimi-k3.1-pro-prime",
    "models": [
     {
      "context": 1000000,
@@ -19666,6 +19622,10 @@
     {
      "context": 1048576,
      "id": "alibaba/kimi-k3.1-pro"
+    },
+    {
+     "context": 1048576,
+     "id": "alibaba/kimi-k3.1-pro-prime"
     },
     {
      "context": 1000000,
@@ -19918,6 +19878,10 @@
     {
      "context": 8192,
      "id": "aws-bedrock/llama-4-scout-17b-instruct"
+    },
+    {
+     "context": 131072,
+     "id": "aws-bedrock/pixtral-large-2502"
     },
     {
      "context": 921600,
@@ -20266,10 +20230,6 @@
     {
      "context": 1000000,
      "id": "consensusprotocol/deepseek-v4-flash"
-    },
-    {
-     "context": 1048576,
-     "id": "consensusprotocol/deepseek-v4.1-flash"
     },
     {
      "context": 1048576,
@@ -21114,6 +21074,14 @@
     {
      "context": 1048576,
      "id": "reka-ai/deepseek-v4.1-flash"
+    },
+    {
+     "context": 1048576,
+     "id": "reka-ai/deepseek-v4.1-flash-1017"
+    },
+    {
+     "context": 1048576,
+     "id": "reka-ai/deepseek-v4.1-flash-latest"
     },
     {
      "context": 1048576,
@@ -24140,6 +24108,10 @@
      "id": "google/gemini-4-hydrogen"
     },
     {
+     "context": 983040,
+     "id": "google/gemini-4-neon"
+    },
+    {
      "context": 1048576,
      "id": "google/gemini-flash-latest"
     },
@@ -24296,16 +24268,12 @@
      "id": "lightonai/LightOnOCR-2-1B"
     },
     {
-     "context": 128000,
+     "context": 8192,
      "id": "liquid/lfm-2.5-2.6b"
     },
     {
      "context": 128000,
      "id": "liquid/lfm-2.5-24b-a2b"
-    },
-    {
-     "context": 262144,
-     "id": "liquid/lfm-3-1.7b"
     },
     {
      "context": 1000000,
@@ -25353,10 +25321,6 @@
     },
     {
      "context": 262144,
-     "id": "stepfun-ai/step-3.5-flash"
-    },
-    {
-     "context": 262144,
      "id": "stepfun/step-3.7-flash:thinking"
     },
     {
@@ -25699,7 +25663,7 @@
     "NEARAI_API_KEY"
    ],
    "base_url": "https://cloud-api.near.ai/v1",
-   "model": "anthropic/claude-fable-5-2",
+   "model": "openai/gpt-6.2-sol",
    "models": [
     {
      "context": 32768,
@@ -25906,6 +25870,14 @@
      "id": "openai/gpt-6.1-sol"
     },
     {
+     "context": 1050000,
+     "id": "openai/gpt-6.2-astra"
+    },
+    {
+     "context": 1050000,
+     "id": "openai/gpt-6.2-sol"
+    },
+    {
      "context": 200000,
      "id": "openai/o3"
     },
@@ -25998,6 +25970,10 @@
     {
      "context": 1048576,
      "id": "moonshotai/Kimi-K3.1-Pro"
+    },
+    {
+     "context": 262144,
+     "id": "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B"
     },
     {
      "context": 1048576,
@@ -29217,10 +29193,6 @@
      "id": "deepseek/deepseek-v4.1-flash-1017"
     },
     {
-     "context": 512000,
-     "id": "dots-studio/dots-3-note-preview:free"
-    },
-    {
      "context": 262144,
      "id": "elorian/glimpse"
     },
@@ -29431,10 +29403,6 @@
     {
      "context": 8000,
      "id": "mancer/weaver"
-    },
-    {
-     "context": 1048756,
-     "id": "meituan/longcat-2.0"
     },
     {
      "context": 131072,
@@ -30182,6 +30150,10 @@
     },
     {
      "context": 262144,
+     "id": "radixark/daisyrose-27b"
+    },
+    {
+     "context": 262144,
      "id": "recursive/flint-v1.0:free"
     },
     {
@@ -30265,10 +30237,6 @@
      "id": "tencent/hy3"
     },
     {
-     "context": 262144,
-     "id": "tencent/hy3-preview"
-    },
-    {
      "context": 1048576,
      "id": "tencent/hy4"
     },
@@ -30295,6 +30263,10 @@
     {
      "context": 524288,
      "id": "thinkingmachines/inkling"
+    },
+    {
+     "context": 1048576,
+     "id": "thinkingmachines/inkling-2-mini"
     },
     {
      "context": 1048576,
@@ -30365,11 +30337,11 @@
      "id": "xiaomi/mimo-v2.5-pro"
     },
     {
-     "context": 1050000,
+     "context": 1048576,
      "id": "xiaomi/mimo-v2.6-flash"
     },
     {
-     "context": 1050000,
+     "context": 1048576,
      "id": "xiaomi/mimo-v2.6-pro"
     },
     {
@@ -32629,10 +32601,6 @@
      "id": "mistralai/mixtral-8x22b-instruct"
     },
     {
-     "context": 262144,
-     "id": "moonshotai/kimi-k2-0905"
-    },
-    {
      "context": 1048576,
      "id": "moonshotai/kimi-k3"
     },
@@ -32763,18 +32731,6 @@
     {
      "context": 262144,
      "id": "qwen/qwen3-30b-a3b-instruct-2507"
-    },
-    {
-     "context": 262144,
-     "id": "qwen/qwen3-coder-next"
-    },
-    {
-     "context": 262144,
-     "id": "qwen/qwen3-vl-235b-a22b-instruct"
-    },
-    {
-     "context": 262144,
-     "id": "qwen/qwen3-vl-30b-a3b-instruct"
     },
     {
      "context": 262144,

@@ -1,5 +1,5 @@
 {
- "generated_at": 1795179136,
+ "generated_at": 1795264629,
  "id": "openrouter",
  "models": [
   {
@@ -219,10 +219,6 @@
    "id": "deepseek/deepseek-v4.1-flash-1017"
   },
   {
-   "context": 512000,
-   "id": "dots-studio/dots-3-note-preview:free"
-  },
-  {
    "context": 262144,
    "id": "elorian/glimpse"
   },
@@ -433,10 +429,6 @@
   {
    "context": 8000,
    "id": "mancer/weaver"
-  },
-  {
-   "context": 1048756,
-   "id": "meituan/longcat-2.0"
   },
   {
    "context": 131072,
@@ -1184,6 +1176,10 @@
   },
   {
    "context": 262144,
+   "id": "radixark/daisyrose-27b"
+  },
+  {
+   "context": 262144,
    "id": "recursive/flint-v1.0:free"
   },
   {
@@ -1267,10 +1263,6 @@
    "id": "tencent/hy3"
   },
   {
-   "context": 262144,
-   "id": "tencent/hy3-preview"
-  },
-  {
    "context": 1048576,
    "id": "tencent/hy4"
   },
@@ -1297,6 +1289,10 @@
   {
    "context": 524288,
    "id": "thinkingmachines/inkling"
+  },
+  {
+   "context": 1048576,
+   "id": "thinkingmachines/inkling-2-mini"
   },
   {
    "context": 1048576,
@@ -1367,11 +1363,11 @@
    "id": "xiaomi/mimo-v2.5-pro"
   },
   {
-   "context": 1050000,
+   "context": 1048576,
    "id": "xiaomi/mimo-v2.6-flash"
   },
   {
-   "context": 1050000,
+   "context": 1048576,
    "id": "xiaomi/mimo-v2.6-pro"
   },
   {

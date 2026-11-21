@@ -1,5 +1,5 @@
 {
- "generated_at": 1795179136,
+ "generated_at": 1795264629,
  "id": "llmgateway",
  "models": [
   {
@@ -551,6 +551,10 @@
    "id": "kimi-k3.1-pro-highspeed"
   },
   {
+   "context": 1048576,
+   "id": "kimi-k3.1-pro-prime"
+  },
+  {
    "context": 262144,
    "id": "ling-3.0-flash"
   },
@@ -713,6 +717,10 @@
   {
    "context": 200000,
    "id": "o3"
+  },
+  {
+   "context": 131072,
+   "id": "pixtral-large-2502"
   },
   {
    "context": 1000000,

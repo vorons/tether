@@ -1,5 +1,5 @@
 {
- "generated_at": 1795179136,
+ "generated_at": 1795264629,
  "id": "huggingface",
  "models": [
   {
@@ -293,6 +293,10 @@
   {
    "context": 262144,
    "id": "tencent/Hy3"
+  },
+  {
+   "context": 1048576,
+   "id": "tencent/Hy4"
   },
   {
    "context": 1048576,
