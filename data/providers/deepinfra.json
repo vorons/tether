@@ -1,5 +1,5 @@
 {
- "generated_at": 1795264629,
+ "generated_at": 1795350853,
  "id": "deepinfra",
  "models": [
   {
@@ -273,6 +273,10 @@
   {
    "context": 262144,
    "id": "tencent/Hy3"
+  },
+  {
+   "context": 1048576,
+   "id": "tencent/Hy4"
   },
   {
    "context": 1048576,

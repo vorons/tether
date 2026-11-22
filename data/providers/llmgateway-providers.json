@@ -1,5 +1,5 @@
 {
- "generated_at": 1795264629,
+ "generated_at": 1795350853,
  "id": "llmgateway-providers",
  "models": [
   {
@@ -845,6 +845,10 @@
   {
    "context": 1048576,
    "id": "fireworks/muse-spark-open"
+  },
+  {
+   "context": 1009981,
+   "id": "fireworks/qwen3.8-2.4t-a95b"
   },
   {
    "context": 1048576,

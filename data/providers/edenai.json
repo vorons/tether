@@ -1,5 +1,5 @@
 {
- "generated_at": 1795264629,
+ "generated_at": 1795350853,
  "id": "edenai",
  "models": [
   {
@@ -508,6 +508,10 @@
   },
   {
    "context": 1048576,
+   "id": "deepinfra/tencent/Hy4"
+  },
+  {
+   "context": 1048576,
    "id": "deepinfra/tencent/Hy4-preview"
   },
   {
@@ -547,20 +551,12 @@
    "id": "fireworks_ai/accounts/fireworks/models/ember-1"
   },
   {
-   "context": 131072,
-   "id": "fireworks_ai/accounts/fireworks/models/gpt-oss-120b"
-  },
-  {
    "context": 1048576,
    "id": "fireworks_ai/accounts/fireworks/models/inkling"
   },
   {
    "context": 1048576,
    "id": "fireworks_ai/accounts/fireworks/models/muse-spark-open"
-  },
-  {
-   "context": 131072,
-   "id": "fireworks_ai/gpt-oss-120b"
   },
   {
    "context": 1048576,

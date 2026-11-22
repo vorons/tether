@@ -1,5 +1,5 @@
 {
- "generated_at": 1795264629,
+ "generated_at": 1795350853,
  "id": "kilo",
  "models": [
   {
@@ -411,7 +411,7 @@
    "id": "google/lyria-3-pro-preview"
   },
   {
-   "context": 4096,
+   "context": 8192,
    "id": "gryphe/mythomax-l2-13b"
   },
   {
@@ -1423,7 +1423,7 @@
    "id": "qwen/qwen3.7-plus"
   },
   {
-   "context": 1000000,
+   "context": 262144,
    "id": "qwen/qwen3.8-2.4t-a95b"
   },
   {
@@ -1727,7 +1727,7 @@
    "id": "z-ai/glm-4.6v"
   },
   {
-   "context": 202752,
+   "context": 204800,
    "id": "z-ai/glm-4.7"
   },
   {
@@ -1767,7 +1767,7 @@
    "id": "z-ai/glm-5.3-fast"
   },
   {
-   "context": 1048576,
+   "context": 1048575,
    "id": "z-ai/glm-5.3-flash"
   },
   {

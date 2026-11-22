@@ -1,5 +1,5 @@
 {
- "generated_at": 1795264629,
+ "generated_at": 1795350853,
  "id": "vivgrid",
  "models": [
   {
@@ -69,6 +69,18 @@
   {
    "context": 1048576,
    "id": "gemini-3.8-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini-4-carbon"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini-4-hydrogen"
+  },
+  {
+   "context": 1048576,
+   "id": "gemini-4-neon"
   },
   {
    "context": 1000000,
