@@ -1,5 +1,5 @@
 {
- "generated_at": 1795350853,
+ "generated_at": 1795444561,
  "id": "nano-gpt",
  "models": [
   {
@@ -1335,11 +1335,11 @@
    "id": "moonshotai/kimi-k2-thinking"
   },
   {
-   "context": 262144,
+   "context": 256000,
    "id": "moonshotai/kimi-k2.5"
   },
   {
-   "context": 262144,
+   "context": 256000,
    "id": "moonshotai/kimi-k2.5:thinking"
   },
   {
@@ -1736,6 +1736,10 @@
   },
   {
    "context": 1048576,
+   "id": "paperinstruments/ultramarine-1-flash"
+  },
+  {
+   "context": 1048576,
    "id": "particle-ai/particle-1"
   },
   {
@@ -1875,11 +1879,11 @@
    "id": "qwen/qwen3.5-35b-a3b:thinking"
   },
   {
-   "context": 262144,
+   "context": 258048,
    "id": "qwen/qwen3.5-397b-a17b"
   },
   {
-   "context": 262144,
+   "context": 258048,
    "id": "qwen/qwen3.5-397b-a17b:thinking"
   },
   {

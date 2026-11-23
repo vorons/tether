@@ -1,14 +1,34 @@
 {
- "generated_at": 1795350853,
+ "generated_at": 1795444561,
  "id": "sarvam",
  "models": [
   {
-   "context": 131072,
+   "context": 1048576,
+   "id": "deepseekv4.1-flash-1017"
+  },
+  {
+   "context": 1048576,
+   "id": "deepseekv4.1-flash-1017-interactive"
+  },
+  {
+   "context": 262144,
+   "id": "gemma4"
+  },
+  {
+   "context": 1048576,
+   "id": "glm5.3"
+  },
+  {
+   "context": 1048576,
+   "id": "glm5.3-flash"
+  },
+  {
+   "context": 128000,
    "id": "sarvam-105b"
   },
   {
-   "context": 65536,
-   "id": "sarvam-30b"
+   "context": 32000,
+   "id": "sarvam-105b-conversations"
   }
  ],
  "schema": 1

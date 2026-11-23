@@ -1,5 +1,5 @@
 {
- "generated_at": 1795350853,
+ "generated_at": 1795444561,
  "id": "kilo",
  "models": [
   {
@@ -253,6 +253,10 @@
   {
    "context": 1048576,
    "id": "deepseek/deepseek-v4.1-flash-fast"
+  },
+  {
+   "context": 512000,
+   "id": "dots-studio/dots-3-note-preview:free"
   },
   {
    "context": 262144,
@@ -1767,7 +1771,7 @@
    "id": "z-ai/glm-5.3-fast"
   },
   {
-   "context": 1048575,
+   "context": 1048576,
    "id": "z-ai/glm-5.3-flash"
   },
   {

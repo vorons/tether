@@ -1,5 +1,5 @@
 {
- "generated_at": 1795350853,
+ "generated_at": 1795444561,
  "id": "chutes",
  "models": [
   {
@@ -25,6 +25,10 @@
   {
    "context": 1000000,
    "id": "Qwen/Qwen3.8-Max-0902"
+  },
+  {
+   "context": 1000000,
+   "id": "Qwen/Qwen4-Max"
   },
   {
    "context": 131072,

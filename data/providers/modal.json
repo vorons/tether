@@ -1,10 +1,14 @@
 {
- "generated_at": 1795350853,
+ "generated_at": 1795444561,
  "id": "modal",
  "models": [
   {
    "context": 1010000,
    "id": "Qwen/Qwen3.8-2.4T-A95B"
+  },
+  {
+   "context": 1000000,
+   "id": "Qwen/Qwen3.8-Max-VL-Thinking"
   },
   {
    "context": 1000000,
@@ -17,6 +21,10 @@
   {
    "context": 1048576,
    "id": "moonshotai/Kimi-K3"
+  },
+  {
+   "context": 1048576,
+   "id": "moonshotai/Kimi-K3.1-Pro"
   },
   {
    "context": 1000000,

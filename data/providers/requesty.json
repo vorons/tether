@@ -1,5 +1,5 @@
 {
- "generated_at": 1795350853,
+ "generated_at": 1795444561,
  "id": "requesty",
  "models": [
   {
@@ -479,10 +479,6 @@
    "id": "grok-4.7"
   },
   {
-   "context": 256000,
-   "id": "grok-build-0.1"
-  },
-  {
    "context": 262144,
    "id": "hy3"
   },
@@ -529,14 +525,6 @@
   {
    "context": 1048576,
    "id": "kimi-k3@eu"
-  },
-  {
-   "context": 262144,
-   "id": "leanstral-1-5"
-  },
-  {
-   "context": 262144,
-   "id": "leanstral-1-5@eu"
   },
   {
    "context": 262144,

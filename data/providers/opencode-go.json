@@ -1,5 +1,5 @@
 {
- "generated_at": 1795350853,
+ "generated_at": 1795444561,
  "id": "opencode-go",
  "models": [
   {
@@ -93,6 +93,10 @@
   {
    "context": 1000000,
    "id": "longcat-2.0"
+  },
+  {
+   "context": 1000000,
+   "id": "longcat-2.5"
   },
   {
    "context": 1000000,

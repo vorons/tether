@@ -1,5 +1,5 @@
 {
- "generated_at": 1795350853,
+ "generated_at": 1795444561,
  "id": "llmgateway-providers",
  "models": [
   {
@@ -733,6 +733,10 @@
   {
    "context": 131072,
    "id": "deepinfra/granite-4.2-8b"
+  },
+  {
+   "context": 1048576,
+   "id": "deepinfra/hy4"
   },
   {
    "context": 1048576,

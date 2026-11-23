@@ -1,0 +1,31 @@
+{
+ "generated_at": 1795444561,
+ "id": "primalabs",
+ "models": [
+  {
+   "context": 1048576,
+   "id": "primalabs-ai/DeepSeek-V4.1-Flash-1017"
+  },
+  {
+   "context": 262144,
+   "id": "primalabs-ai/GLM-5.3-Flash"
+  },
+  {
+   "context": 1048576,
+   "id": "primalabs-ai/Kimi-K3.1-Pro"
+  },
+  {
+   "context": 1048576,
+   "id": "primalabs-ai/MiMo-V2.6-Pro"
+  },
+  {
+   "context": 1048576,
+   "id": "primalabs-ai/Nemotron-3.5-Lightning-NVFP4"
+  },
+  {
+   "context": 1048576,
+   "id": "primalabs-ai/Nemotron-3.5-Super-VL-NVFP4"
+  }
+ ],
+ "schema": 1
+}

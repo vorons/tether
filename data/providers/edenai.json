@@ -1,5 +1,5 @@
 {
- "generated_at": 1795350853,
+ "generated_at": 1795444561,
  "id": "edenai",
  "models": [
   {
@@ -93,6 +93,10 @@
   {
    "context": 262144,
    "id": "amazon/qwen.qwen3-coder-next"
+  },
+  {
+   "context": 4096,
+   "id": "amazon/writer.palmyra-vision-7b"
   },
   {
    "context": 203000,
@@ -1493,6 +1497,10 @@
   {
    "context": 1000000,
    "id": "xai/grok-4.20-0309-reasoning"
+  },
+  {
+   "context": 1000000,
+   "id": "xai/grok-4.20-multi-agent-0309"
   },
   {
    "context": 1000000,

@@ -1,5 +1,5 @@
 {
- "generated_at": 1795350853,
+ "generated_at": 1795444561,
  "id": "openrouter",
  "models": [
   {
@@ -219,6 +219,10 @@
    "id": "deepseek/deepseek-v4.1-flash-1017"
   },
   {
+   "context": 512000,
+   "id": "dots-studio/dots-3-note-preview:free"
+  },
+  {
    "context": 262144,
    "id": "elorian/glimpse"
   },
@@ -395,7 +399,7 @@
    "id": "inclusionai/ling-3.0-tiny"
   },
   {
-   "context": 1000000,
+   "context": 1048576,
    "id": "inclusionai/ling-3.1-flash"
   },
   {

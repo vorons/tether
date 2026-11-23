@@ -1,5 +1,5 @@
 {
- "generated_at": 1795350853,
+ "generated_at": 1795444561,
  "id": "zai-coding-plan",
  "models": [
   {
@@ -29,6 +29,10 @@
   {
    "context": 1000000,
    "id": "glm-5.3-highspeed"
+  },
+  {
+   "context": 1000000,
+   "id": "glm-5.4"
   }
  ],
  "schema": 1

@@ -1,5 +1,5 @@
 {
- "generated_at": 1795350853,
+ "generated_at": 1795444561,
  "id": "amazon-bedrock",
  "models": [
   {
@@ -829,6 +829,10 @@
   {
    "context": 1000000,
    "id": "us.zai.glm-5.3"
+  },
+  {
+   "context": 4096,
+   "id": "writer.palmyra-vision-7b"
   },
   {
    "context": 122880,
