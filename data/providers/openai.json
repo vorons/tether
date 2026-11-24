@@ -1,22 +1,10 @@
 {
- "generated_at": 1795444561,
+ "generated_at": 1795531905,
  "id": "openai",
  "models": [
   {
    "context": 0,
    "id": "chatgpt-image-latest"
-  },
-  {
-   "context": 16385,
-   "id": "gpt-3.5-turbo"
-  },
-  {
-   "context": 8192,
-   "id": "gpt-4"
-  },
-  {
-   "context": 128000,
-   "id": "gpt-4-turbo"
   },
   {
    "context": 1047576,
@@ -27,16 +15,8 @@
    "id": "gpt-4.1-mini"
   },
   {
-   "context": 1047576,
-   "id": "gpt-4.1-nano"
-  },
-  {
    "context": 128000,
    "id": "gpt-4o"
-  },
-  {
-   "context": 128000,
-   "id": "gpt-4o-2024-05-13"
   },
   {
    "context": 128000,
@@ -81,10 +61,6 @@
   {
    "context": 400000,
    "id": "gpt-5.3-codex"
-  },
-  {
-   "context": 128000,
-   "id": "gpt-5.3-codex-spark"
   },
   {
    "context": 1050000,
@@ -175,32 +151,12 @@
    "id": "gpt-image-2"
   },
   {
-   "context": 128000,
-   "id": "gpt-realtime-2.1"
-  },
-  {
-   "context": 200000,
-   "id": "o1"
-  },
-  {
-   "context": 200000,
-   "id": "o1-pro"
-  },
-  {
    "context": 200000,
    "id": "o3"
   },
   {
    "context": 200000,
-   "id": "o3-mini"
-  },
-  {
-   "context": 200000,
    "id": "o3-pro"
-  },
-  {
-   "context": 200000,
-   "id": "o4-mini"
   },
   {
    "context": 8191,

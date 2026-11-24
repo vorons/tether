@@ -1,5 +1,5 @@
 {
- "generated_at": 1795444561,
+ "generated_at": 1795531905,
  "id": "togetherai",
  "models": [
   {
@@ -17,6 +17,10 @@
   {
    "context": 524288,
    "id": "MiniMaxAI/MiniMax-M3"
+  },
+  {
+   "context": 1048576,
+   "id": "MiniMaxAI/MiniMax-M3.1-Flash"
   },
   {
    "context": 32768,
@@ -51,6 +55,10 @@
    "id": "Qwen/Qwen3.7-Max"
   },
   {
+   "context": 1000000,
+   "id": "Qwen/Qwen4-Max"
+  },
+  {
    "context": 163839,
    "id": "deepseek-ai/DeepSeek-R1"
   },
@@ -75,12 +83,20 @@
    "id": "deepseek-ai/DeepSeek-V4.1-Flash"
   },
   {
+   "context": 1048576,
+   "id": "deepseek-ai/DeepSeek-V4.1-Flash-1017"
+  },
+  {
    "context": 32768,
    "id": "essentialai/Rnj-1-Instruct"
   },
   {
    "context": 131072,
    "id": "meta-llama/Llama-3.3-70B-Instruct-Turbo"
+  },
+  {
+   "context": 131072,
+   "id": "meta-models/Muse-Glimmer-30B"
   },
   {
    "context": 1048576,
@@ -111,8 +127,16 @@
    "id": "reflection/Beam-1.0-501B-A23B"
   },
   {
+   "context": 1048576,
+   "id": "tencent/Hy4"
+  },
+  {
    "context": 524288,
    "id": "thinkingmachines/Inkling"
+  },
+  {
+   "context": 1048576,
+   "id": "thinkingmachines/Inkling-2-Small"
   },
   {
    "context": 202752,

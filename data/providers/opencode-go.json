@@ -1,5 +1,5 @@
 {
- "generated_at": 1795444561,
+ "generated_at": 1795531905,
  "id": "opencode-go",
  "models": [
   {
@@ -57,6 +57,10 @@
   {
    "context": 500000,
    "id": "grok-4.7"
+  },
+  {
+   "context": 1000000,
+   "id": "hungerg-free"
   },
   {
    "context": 256000,

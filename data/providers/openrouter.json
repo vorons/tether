@@ -1,5 +1,5 @@
 {
- "generated_at": 1795444561,
+ "generated_at": 1795531905,
  "id": "openrouter",
  "models": [
   {
@@ -609,18 +609,6 @@
   {
    "context": 32000,
    "id": "moondream/moondream3.1-9b-a2b"
-  },
-  {
-   "context": 131072,
-   "id": "moonshotai/kimi-k2"
-  },
-  {
-   "context": 262144,
-   "id": "moonshotai/kimi-k2-0905"
-  },
-  {
-   "context": 262144,
-   "id": "moonshotai/kimi-k2-thinking"
   },
   {
    "context": 262144,
@@ -1243,7 +1231,7 @@
    "id": "scaledown/summarize"
   },
   {
-   "context": 262144,
+   "context": 256000,
    "id": "stepfun/step-3.7-flash"
   },
   {
@@ -1291,7 +1279,7 @@
    "id": "thedrummer/unslopnemo-12b"
   },
   {
-   "context": 524288,
+   "context": 1048576,
    "id": "thinkingmachines/inkling"
   },
   {
@@ -1361,10 +1349,6 @@
   {
    "context": 1000000,
    "id": "xiaomi/mimo-v2.5"
-  },
-  {
-   "context": 262144,
-   "id": "xiaomi/mimo-v2.5-pro"
   },
   {
    "context": 1048576,

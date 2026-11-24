@@ -1,5 +1,5 @@
 {
- "generated_at": 1795444561,
+ "generated_at": 1795531905,
  "id": "keln",
  "models": [
   {
@@ -35,11 +35,7 @@
    "id": "openai/gpt-oss-120b"
   },
   {
-   "context": 1000000,
-   "id": "qwen/qwen3.8-2.4t-a95b"
-  },
-  {
-   "context": 1000000,
+   "context": 262144,
    "id": "qwen/qwen3.8-27b"
   },
   {

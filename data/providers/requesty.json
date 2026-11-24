@@ -1,5 +1,5 @@
 {
- "generated_at": 1795444561,
+ "generated_at": 1795531905,
  "id": "requesty",
  "models": [
   {
@@ -543,19 +543,11 @@
    "id": "mimo-v2.6-pro"
   },
   {
-   "context": 200000,
-   "id": "minimax-m2.7"
-  },
-  {
-   "context": 200000,
-   "id": "minimax-m2.7-highspeed"
-  },
-  {
-   "context": 1000000,
+   "context": 512000,
    "id": "minimax-m3"
   },
   {
-   "context": 1000000,
+   "context": 1048576,
    "id": "minimax-m3.1-flash"
   },
   {

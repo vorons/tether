@@ -1,5 +1,5 @@
 {
- "generated_at": 1795444561,
+ "generated_at": 1795531905,
  "id": "prime",
  "models": [
   {
@@ -267,6 +267,10 @@
    "id": "thinkingmachines/inkling-2-small"
   },
   {
+   "context": 1048576,
+   "id": "thinkingmachines/inkling-2-small-fast"
+  },
+  {
    "context": 500000,
    "id": "x-ai/grok-4.6"
   },
@@ -277,6 +281,10 @@
   {
    "context": 1048576,
    "id": "z-ai/glm-5.2"
+  },
+  {
+   "context": 1048576,
+   "id": "z-ai/glm-5.3-flash"
   }
  ],
  "schema": 1

@@ -1,5 +1,5 @@
 {
- "generated_at": 1795444561,
+ "generated_at": 1795531905,
  "id": "opencode",
  "models": [
   {
@@ -385,6 +385,10 @@
   {
    "context": 1048576,
    "id": "kimi-k3"
+  },
+  {
+   "context": 1048576,
+   "id": "kimi-k3.1-pro"
   },
   {
    "context": 256000,

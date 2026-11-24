@@ -1,5 +1,5 @@
 {
- "generated_at": 1795444561,
+ "generated_at": 1795531905,
  "id": "aimlapi",
  "models": [
   {
@@ -335,16 +335,8 @@
    "id": "moonshot/kimi-k3"
   },
   {
-   "context": 131072,
-   "id": "moonshotai/kimi-k2"
-  },
-  {
    "context": 262144,
    "id": "moonshotai/kimi-k2-0905"
-  },
-  {
-   "context": 262144,
-   "id": "moonshotai/kimi-k2-thinking"
   },
   {
    "context": 81920,
@@ -617,10 +609,6 @@
   {
    "context": 1000000,
    "id": "xiaomi/mimo-v2.5"
-  },
-  {
-   "context": 1000000,
-   "id": "xiaomi/mimo-v2.5-pro"
   },
   {
    "context": 65536,

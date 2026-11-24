@@ -1,5 +1,5 @@
 {
- "generated_at": 1795444561,
+ "generated_at": 1795531905,
  "id": "nano-gpt",
  "models": [
   {
@@ -372,26 +372,6 @@
   },
   {
    "context": 200000,
-   "id": "anthropic/claude-opus-4.1"
-  },
-  {
-   "context": 200000,
-   "id": "anthropic/claude-opus-4.1:thinking"
-  },
-  {
-   "context": 200000,
-   "id": "anthropic/claude-opus-4.1:thinking:1024"
-  },
-  {
-   "context": 200000,
-   "id": "anthropic/claude-opus-4.1:thinking:32768"
-  },
-  {
-   "context": 200000,
-   "id": "anthropic/claude-opus-4.1:thinking:8192"
-  },
-  {
-   "context": 200000,
    "id": "anthropic/claude-opus-4.5"
   },
   {
@@ -501,10 +481,6 @@
   {
    "context": 1024000,
    "id": "baidu/ernie-light-dt-1.0-intl"
-  },
-  {
-   "context": 131072,
-   "id": "baseten/Kimi-K2-Instruct-FP4"
   },
   {
    "context": 262144,
@@ -1051,10 +1027,6 @@
    "id": "jiunsong/supergemma4-26b-uncensored"
   },
   {
-   "context": 131072,
-   "id": "kimi-k2-instruct-fast"
-  },
-  {
    "context": 200000,
    "id": "kitani/clover-2"
   },
@@ -1263,10 +1235,6 @@
    "id": "mistralai/mistral-medium-3"
   },
   {
-   "context": 131072,
-   "id": "mistralai/mistral-medium-3.1"
-  },
-  {
    "context": 256000,
    "id": "mistralai/mistral-medium-3.5"
   },
@@ -1325,14 +1293,6 @@
   {
    "context": 256000,
    "id": "moonshotai/kimi-k2-instruct"
-  },
-  {
-   "context": 128000,
-   "id": "moonshotai/kimi-k2-instruct-0711"
-  },
-  {
-   "context": 262144,
-   "id": "moonshotai/kimi-k2-thinking"
   },
   {
    "context": 256000,
@@ -1461,10 +1421,6 @@
   {
    "context": 1047576,
    "id": "openai/gpt-4.1-mini"
-  },
-  {
-   "context": 1047576,
-   "id": "openai/gpt-4.1-nano"
   },
   {
    "context": 128000,
@@ -1696,7 +1652,19 @@
   },
   {
    "context": 1048064,
+   "id": "orca/orcacyber-hy4-flash"
+  },
+  {
+   "context": 1048064,
+   "id": "orca/orcacyber-inkling-2-mini"
+  },
+  {
+   "context": 1048064,
    "id": "orca/orcacyber-k3.1-pro"
+  },
+  {
+   "context": 1048064,
+   "id": "orca/orcacyber-ling-3.2-flash"
   },
   {
    "context": 1048064,
@@ -1709,6 +1677,10 @@
   {
    "context": 261632,
    "id": "orca/orcacyber-qwen3.8-flash-next"
+  },
+  {
+   "context": 999488,
+   "id": "orca/orcacyber-step-5-preview"
   },
   {
    "context": 1048064,
@@ -2007,7 +1979,7 @@
    "id": "qwen/qwen3.8-27b-queen"
   },
   {
-   "context": 262144,
+   "context": 65536,
    "id": "qwen/qwen3.8-27b-swift"
   },
   {
@@ -2237,10 +2209,6 @@
   {
    "context": 500000,
    "id": "x-ai/grok-4.7"
-  },
-  {
-   "context": 256000,
-   "id": "x-ai/grok-build-0.1"
   },
   {
    "context": 500000,

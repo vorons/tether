@@ -1,5 +1,5 @@
 {
- "generated_at": 1795444561,
+ "generated_at": 1795531905,
  "id": "gemini",
  "models": [
   {
@@ -9,10 +9,6 @@
   {
    "context": 1048576,
    "id": "deep-research-preview-04-2026"
-  },
-  {
-   "context": 128000,
-   "id": "gemini-2.5-computer-use-preview-10-2025"
   },
   {
    "context": 1048576,
@@ -57,10 +53,6 @@
   {
    "context": 65536,
    "id": "gemini-3.1-flash-lite-image"
-  },
-  {
-   "context": 1048576,
-   "id": "gemini-3.1-flash-lite-preview"
   },
   {
    "context": 131072,
@@ -133,10 +125,6 @@
   {
    "context": 1048576,
    "id": "gemini-flash-lite-latest"
-  },
-  {
-   "context": 131072,
-   "id": "gemini-omni-flash-preview"
   },
   {
    "context": 1048576,

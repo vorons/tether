@@ -1,5 +1,5 @@
 {
- "generated_at": 1795444561,
+ "generated_at": 1795531905,
  "id": "huggingface",
  "models": [
   {
@@ -309,6 +309,10 @@
   {
    "context": 1048576,
    "id": "thinkingmachines/Inkling"
+  },
+  {
+   "context": 262144,
+   "id": "thinkingmachines/Inkling-2-Mini"
   },
   {
    "context": 1048576,
