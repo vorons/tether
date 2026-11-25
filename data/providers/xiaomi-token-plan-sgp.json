@@ -1,27 +1,7 @@
 {
- "generated_at": 1795531905,
+ "generated_at": 1795616378,
  "id": "xiaomi-token-plan-sgp",
  "models": [
-  {
-   "context": 1048576,
-   "id": "mimo-v2.5"
-  },
-  {
-   "context": 1048576,
-   "id": "mimo-v2.5-pro"
-  },
-  {
-   "context": 8192,
-   "id": "mimo-v2.5-tts"
-  },
-  {
-   "context": 8192,
-   "id": "mimo-v2.5-tts-voiceclone"
-  },
-  {
-   "context": 8192,
-   "id": "mimo-v2.5-tts-voicedesign"
-  },
   {
    "context": 1048576,
    "id": "mimo-v2.6-flash"

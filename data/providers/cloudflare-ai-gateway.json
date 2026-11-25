@@ -1,5 +1,5 @@
 {
- "generated_at": 1795531905,
+ "generated_at": 1795616378,
  "id": "cloudflare-ai-gateway",
  "models": [
   {
@@ -81,10 +81,6 @@
   {
    "context": 1000000,
    "id": "anthropic/claude-sonnet-5.5"
-  },
-  {
-   "context": 1000000,
-   "id": "deepseek-ai/deepseek-v4.1-flash-1017"
   },
   {
    "context": 131072,

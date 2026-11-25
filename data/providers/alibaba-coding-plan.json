@@ -1,5 +1,5 @@
 {
- "generated_at": 1795531905,
+ "generated_at": 1795616378,
  "id": "alibaba-coding-plan",
  "models": [
   {
@@ -17,18 +17,6 @@
   {
    "context": 262144,
    "id": "kimi-k2.5"
-  },
-  {
-   "context": 262144,
-   "id": "qwen3-coder-next"
-  },
-  {
-   "context": 1000000,
-   "id": "qwen3-coder-plus"
-  },
-  {
-   "context": 262144,
-   "id": "qwen3-max-2026-01-23"
   },
   {
    "context": 1000000,

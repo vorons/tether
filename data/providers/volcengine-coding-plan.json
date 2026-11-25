@@ -1,5 +1,5 @@
 {
- "generated_at": 1795531905,
+ "generated_at": 1795616378,
  "id": "volcengine-coding-plan",
  "models": [
   {
@@ -20,10 +20,6 @@
   },
   {
    "context": 256000,
-   "id": "doubao-seed-2.0-lite"
-  },
-  {
-   "context": 256000,
    "id": "doubao-seed-2.0-mini"
   },
   {
@@ -33,10 +29,6 @@
   {
    "context": 1024000,
    "id": "doubao-seed-2.1-pro"
-  },
-  {
-   "context": 256000,
-   "id": "doubao-seed-2.1-turbo"
   },
   {
    "context": 1024000,
@@ -51,10 +43,6 @@
    "id": "glm-5.3-flash"
   },
   {
-   "context": 262144,
-   "id": "kimi-k2.7-code"
-  },
-  {
    "context": 1048576,
    "id": "kimi-k2.8-preview"
   },
@@ -65,10 +53,6 @@
   {
    "context": 1048576,
    "id": "kimi-k3.1-pro"
-  },
-  {
-   "context": 1048576,
-   "id": "minimax-m3"
   }
  ],
  "schema": 1

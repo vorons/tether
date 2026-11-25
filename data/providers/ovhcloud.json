@@ -1,7 +1,15 @@
 {
- "generated_at": 1795531905,
+ "generated_at": 1795616378,
  "id": "ovhcloud",
  "models": [
+  {
+   "context": 1048576,
+   "id": "deepseek-v4.1-flash-1017"
+  },
+  {
+   "context": 262144,
+   "id": "gemma-4-26b-a4b"
+  },
   {
    "context": 131072,
    "id": "gpt-oss-120b"
@@ -12,6 +20,10 @@
   },
   {
    "context": 131072,
+   "id": "laguna-xs-2.1"
+  },
+  {
+   "context": 131072,
    "id": "meta-llama-3_3-70b-instruct"
   },
   {
@@ -19,8 +31,24 @@
    "id": "mistral-small-3.2-24b-instruct-2506"
   },
   {
+   "context": 262144,
+   "id": "nemotron3-nano-30b"
+  },
+  {
+   "context": 131072,
+   "id": "nemotron3-omni-30b"
+  },
+  {
+   "context": 8192,
+   "id": "olala-v1.0-translate"
+  },
+  {
    "context": 32768,
    "id": "qwen2.5-vl-72b-instruct"
+  },
+  {
+   "context": 32768,
+   "id": "qwen3-vl-30b-a3b"
   },
   {
    "context": 262144,
@@ -33,6 +61,10 @@
   {
    "context": 262144,
    "id": "qwen3.6-27b"
+  },
+  {
+   "context": 262144,
+   "id": "qwen3.6-35b-a3b"
   },
   {
    "context": 262144,

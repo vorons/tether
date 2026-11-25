@@ -1,7 +1,19 @@
 {
- "generated_at": 1795531905,
+ "generated_at": 1795616378,
  "id": "volcengine",
  "models": [
+  {
+   "context": 1000000,
+   "id": "deepseek-v4-1-flash-260910"
+  },
+  {
+   "context": 1000000,
+   "id": "deepseek-v4-1-flash-261017"
+  },
+  {
+   "context": 1000000,
+   "id": "deepseek-v4-1-flash-economy-261017"
+  },
   {
    "context": 1000000,
    "id": "deepseek-v4-flash-ga-260731"
@@ -9,26 +21,6 @@
   {
    "context": 1000000,
    "id": "deepseek-v4-pro-ga-260813"
-  },
-  {
-   "context": 256000,
-   "id": "doubao-seed-1-6-251015"
-  },
-  {
-   "context": 256000,
-   "id": "doubao-seed-1-6-flash-250828"
-  },
-  {
-   "context": 256000,
-   "id": "doubao-seed-1-6-vision-250815"
-  },
-  {
-   "context": 256000,
-   "id": "doubao-seed-1-8-251228"
-  },
-  {
-   "context": 262144,
-   "id": "doubao-seed-2-0-code-preview-260215"
   },
   {
    "context": 256000,
@@ -44,14 +36,22 @@
   },
   {
    "context": 1024000,
+   "id": "doubao-seed-2-1-lite-260915"
+  },
+  {
+   "context": 256000,
    "id": "doubao-seed-2-1-pro-260628"
+  },
+  {
+   "context": 1024000,
+   "id": "doubao-seed-2-1-pro-260915"
   },
   {
    "context": 256000,
    "id": "doubao-seed-2-1-turbo-260628"
   },
   {
-   "context": 256000,
+   "context": 128000,
    "id": "doubao-seed-character-260628"
   },
   {
@@ -65,6 +65,10 @@
   {
    "context": 1000000,
    "id": "glm-5-3-flash-260828"
+  },
+  {
+   "context": 1048576,
+   "id": "kimi-k3-1-pro-261024"
   }
  ],
  "schema": 1

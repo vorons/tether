@@ -1,5 +1,5 @@
 {
- "generated_at": 1795531905,
+ "generated_at": 1795616378,
  "id": "llmgateway-providers",
  "models": [
   {
@@ -745,6 +745,10 @@
   {
    "context": 1048576,
    "id": "deepinfra/hy4-preview"
+  },
+  {
+   "context": 1048576,
+   "id": "deepinfra/inkling-2-mini"
   },
   {
    "context": 262144,

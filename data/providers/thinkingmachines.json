@@ -1,5 +1,5 @@
 {
- "generated_at": 1795531905,
+ "generated_at": 1795616378,
  "id": "thinkingmachines",
  "models": [
   {
@@ -36,10 +36,6 @@
   },
   {
    "context": 65536,
-   "id": "Qwen/Qwen3.6-27B"
-  },
-  {
-   "context": 65536,
    "id": "Qwen/Qwen3.6-35B-A3B"
   },
   {
@@ -53,10 +49,6 @@
   {
    "context": 262144,
    "id": "Qwen/Qwen3.8-27B:peft:262144"
-  },
-  {
-   "context": 32768,
-   "id": "deepseek-ai/DeepSeek-V3.1"
   },
   {
    "context": 262144,
@@ -75,8 +67,8 @@
    "id": "moonshotai/Kimi-K2.6:peft:131072"
   },
   {
-   "context": 65536,
-   "id": "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16"
+   "context": 262144,
+   "id": "moonshotai/Kimi-K3.1-Pro:peft:262144"
   },
   {
    "context": 65536,
@@ -125,6 +117,22 @@
   {
    "context": 65536,
    "id": "thinkingmachines/Inkling"
+  },
+  {
+   "context": 1048576,
+   "id": "thinkingmachines/Inkling-2-Mini"
+  },
+  {
+   "context": 1048576,
+   "id": "thinkingmachines/Inkling-2-Mini:peft:262144"
+  },
+  {
+   "context": 1048576,
+   "id": "thinkingmachines/Inkling-2-Small"
+  },
+  {
+   "context": 1048576,
+   "id": "thinkingmachines/Inkling-2-Small:peft:262144"
   },
   {
    "context": 65536,

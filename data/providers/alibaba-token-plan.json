@@ -1,18 +1,10 @@
 {
- "generated_at": 1795531905,
+ "generated_at": 1795616378,
  "id": "alibaba-token-plan",
  "models": [
   {
    "context": 196608,
    "id": "MiniMax-M2.5"
-  },
-  {
-   "context": 131072,
-   "id": "deepseek-v3.2"
-  },
-  {
-   "context": 1000000,
-   "id": "deepseek-v4-flash"
   },
   {
    "context": 1000000,
@@ -108,7 +100,7 @@
   },
   {
    "context": 1000000,
-   "id": "qwen3.8-max-preview"
+   "id": "qwen4-max"
   },
   {
    "context": 8192,

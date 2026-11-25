@@ -1,5 +1,5 @@
 {
- "generated_at": 1795531905,
+ "generated_at": 1795616378,
  "id": "github-copilot",
  "models": [
   {
@@ -24,15 +24,7 @@
   },
   {
    "context": 200000,
-   "id": "claude-opus-4.7"
-  },
-  {
-   "context": 200000,
    "id": "claude-opus-4.8"
-  },
-  {
-   "context": 1000000,
-   "id": "claude-opus-5"
   },
   {
    "context": 1000000,
@@ -49,18 +41,6 @@
   {
    "context": 1000000,
    "id": "claude-sonnet-5.5"
-  },
-  {
-   "context": 200000,
-   "id": "gemini-3.5-flash"
-  },
-  {
-   "context": 1000000,
-   "id": "gemini-3.6-flash"
-  },
-  {
-   "context": 1000000,
-   "id": "gemini-3.7-flash"
   },
   {
    "context": 1000000,
@@ -83,28 +63,12 @@
    "id": "gemini-4-neon"
   },
   {
-   "context": 264000,
-   "id": "gpt-5-mini"
-  },
-  {
    "context": 400000,
    "id": "gpt-5.3-codex"
   },
   {
-   "context": 1050000,
-   "id": "gpt-5.4"
-  },
-  {
-   "context": 400000,
-   "id": "gpt-5.4-mini"
-  },
-  {
    "context": 400000,
    "id": "gpt-5.4-nano"
-  },
-  {
-   "context": 1050000,
-   "id": "gpt-5.5"
   },
   {
    "context": 1050000,
@@ -113,10 +77,6 @@
   {
    "context": 1050000,
    "id": "gpt-5.6-sol"
-  },
-  {
-   "context": 1050000,
-   "id": "gpt-5.6-terra"
   },
   {
    "context": 1050000,
@@ -157,10 +117,6 @@
   {
    "context": 500000,
    "id": "grok-4.7"
-  },
-  {
-   "context": 256000,
-   "id": "kimi-k2.7-code"
   },
   {
    "context": 1048576,

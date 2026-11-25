@@ -1,5 +1,5 @@
 {
- "generated_at": 1795531905,
+ "generated_at": 1795616378,
  "id": "llmgateway",
  "models": [
   {
@@ -509,6 +509,10 @@
   {
    "context": 1048576,
    "id": "hy4-preview"
+  },
+  {
+   "context": 1048576,
+   "id": "inkling-2-mini"
   },
   {
    "context": 256000,

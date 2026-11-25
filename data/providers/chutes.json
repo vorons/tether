@@ -1,5 +1,5 @@
 {
- "generated_at": 1795531905,
+ "generated_at": 1795616378,
  "id": "chutes",
  "models": [
   {
@@ -61,10 +61,6 @@
   {
    "context": 1048576,
    "id": "moonshotai/Kimi-K3-TEE"
-  },
-  {
-   "context": 1048576,
-   "id": "tencent/Hy4"
   },
   {
    "context": 202752,

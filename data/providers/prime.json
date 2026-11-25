@@ -1,5 +1,5 @@
 {
- "generated_at": 1795531905,
+ "generated_at": 1795616378,
  "id": "prime",
  "models": [
   {
@@ -240,6 +240,10 @@
   },
   {
    "context": 1050000,
+   "id": "openai/gpt-6.1-sol-pro"
+  },
+  {
+   "context": 1050000,
    "id": "openai/gpt-6.2-astra"
   },
   {
@@ -261,6 +265,10 @@
   {
    "context": 262144,
    "id": "qwen/qwen3.8-27b"
+  },
+  {
+   "context": 1048576,
+   "id": "ricursiveai/ripple-65b-preview"
   },
   {
    "context": 1048576,

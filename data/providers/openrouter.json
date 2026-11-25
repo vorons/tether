@@ -1,5 +1,5 @@
 {
- "generated_at": 1795531905,
+ "generated_at": 1795616378,
  "id": "openrouter",
  "models": [
   {
@@ -217,10 +217,6 @@
   {
    "context": 1048576,
    "id": "deepseek/deepseek-v4.1-flash-1017"
-  },
-  {
-   "context": 512000,
-   "id": "dots-studio/dots-3-note-preview:free"
   },
   {
    "context": 262144,
@@ -503,7 +499,7 @@
    "id": "microsoft/phi-4"
   },
   {
-   "context": 198000,
+   "context": 65536,
    "id": "minimax/minimax-m2.5"
   },
   {
@@ -555,16 +551,8 @@
    "id": "mistralai/mistral-large-4-0"
   },
   {
-   "context": 131072,
-   "id": "mistralai/mistral-medium-3"
-  },
-  {
    "context": 262144,
    "id": "mistralai/mistral-medium-3-5"
-  },
-  {
-   "context": 131072,
-   "id": "mistralai/mistral-medium-3.1"
   },
   {
    "context": 131072,
@@ -1312,7 +1300,15 @@
   },
   {
    "context": 524288,
+   "id": "upstage/solar-mini-4-5"
+  },
+  {
+   "context": 524288,
    "id": "upstage/solar-mini4"
+  },
+  {
+   "context": 524288,
+   "id": "upstage/solar-pro-4-contributor"
   },
   {
    "context": 524288,
@@ -1347,12 +1343,12 @@
    "id": "x-ai/grok-4.7"
   },
   {
-   "context": 1000000,
-   "id": "xiaomi/mimo-v2.5"
+   "context": 1048576,
+   "id": "xiaomi/mimo-v2.6-flash"
   },
   {
    "context": 1048576,
-   "id": "xiaomi/mimo-v2.6-flash"
+   "id": "xiaomi/mimo-v2.6-flash-mopd"
   },
   {
    "context": 1048576,
@@ -1387,7 +1383,7 @@
    "id": "z-ai/glm-4.7"
   },
   {
-   "context": 200000,
+   "context": 131072,
    "id": "z-ai/glm-4.7-flash"
   },
   {

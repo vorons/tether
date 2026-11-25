@@ -1,7 +1,11 @@
 {
- "generated_at": 1795531905,
+ "generated_at": 1795616378,
  "id": "stepfun-ai",
  "models": [
+  {
+   "context": 32768,
+   "id": "step-1o-turbo-vision"
+  },
   {
    "context": 256000,
    "id": "step-3.5-flash"
@@ -20,11 +24,11 @@
   },
   {
    "context": 0,
-   "id": "step-tts-2"
+   "id": "stepaudio-2.5-asr"
   },
   {
    "context": 0,
-   "id": "stepaudio-2.5-asr"
+   "id": "stepaudio-2.5-chat"
   },
   {
    "context": 0,

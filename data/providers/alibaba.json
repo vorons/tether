@@ -1,5 +1,5 @@
 {
- "generated_at": 1795531905,
+ "generated_at": 1795616378,
  "id": "alibaba",
  "models": [
   {
@@ -11,12 +11,20 @@
    "id": "glm-5.2"
   },
   {
+   "context": 1000000,
+   "id": "glm-5.3-prime"
+  },
+  {
    "context": 1048576,
    "id": "kimi-k3"
   },
   {
-   "context": 131072,
-   "id": "qvq-max"
+   "context": 1048576,
+   "id": "kimi-k3.1-pro"
+  },
+  {
+   "context": 1048576,
+   "id": "kimi-k3.1-pro-prime"
   },
   {
    "context": 1000000,
@@ -31,18 +39,6 @@
    "id": "qwen-mt-plus"
   },
   {
-   "context": 16384,
-   "id": "qwen-mt-turbo"
-  },
-  {
-   "context": 32768,
-   "id": "qwen-omni-turbo"
-  },
-  {
-   "context": 32768,
-   "id": "qwen-omni-turbo-realtime"
-  },
-  {
    "context": 1000000,
    "id": "qwen-plus"
   },
@@ -51,88 +47,20 @@
    "id": "qwen-plus-character-ja"
   },
   {
-   "context": 1000000,
-   "id": "qwen-turbo"
-  },
-  {
-   "context": 131072,
-   "id": "qwen-vl-max"
-  },
-  {
    "context": 34096,
    "id": "qwen-vl-ocr"
-  },
-  {
-   "context": 131072,
-   "id": "qwen-vl-plus"
-  },
-  {
-   "context": 32768,
-   "id": "qwen2-5-omni-7b"
-  },
-  {
-   "context": 131072,
-   "id": "qwen3-14b"
-  },
-  {
-   "context": 131072,
-   "id": "qwen3-235b-a22b"
-  },
-  {
-   "context": 131072,
-   "id": "qwen3-32b"
-  },
-  {
-   "context": 131072,
-   "id": "qwen3-8b"
   },
   {
    "context": 53248,
    "id": "qwen3-asr-flash"
   },
   {
-   "context": 262144,
-   "id": "qwen3-coder-30b-a3b-instruct"
-  },
-  {
-   "context": 262144,
-   "id": "qwen3-coder-480b-a35b-instruct"
-  },
-  {
    "context": 1000000,
    "id": "qwen3-coder-flash"
   },
   {
-   "context": 1048576,
-   "id": "qwen3-coder-plus"
-  },
-  {
-   "context": 53248,
-   "id": "qwen3-livetranslate-flash-realtime"
-  },
-  {
-   "context": 262144,
-   "id": "qwen3-max"
-  },
-  {
-   "context": 131072,
-   "id": "qwen3-next-80b-a3b-instruct"
-  },
-  {
-   "context": 131072,
-   "id": "qwen3-next-80b-a3b-thinking"
-  },
-  {
    "context": 65536,
    "id": "qwen3-omni-flash"
-  },
-  {
-   "context": 65536,
-   "id": "qwen3-omni-flash-realtime"
-  },
-  {
-   "context": 131072,
-   "id": "qwen3-vl-235b-a22b"
   },
   {
    "context": 131072,
@@ -179,10 +107,6 @@
    "id": "qwen3.6-flash"
   },
   {
-   "context": 262144,
-   "id": "qwen3.6-max-preview"
-  },
-  {
    "context": 1000000,
    "id": "qwen3.6-plus"
   },
@@ -211,8 +135,8 @@
    "id": "qwen3.8-omni-flash"
   },
   {
-   "context": 131072,
-   "id": "qwq-plus"
+   "context": 1000000,
+   "id": "qwen4-max"
   }
  ],
  "schema": 1

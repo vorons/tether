@@ -1,13 +1,13 @@
 {
- "generated_at": 1795531905,
+ "generated_at": 1795616378,
  "id": "fireworks-ai",
  "models": [
   {
-   "context": 1000000,
+   "context": 1048576,
    "id": "accounts/fireworks/models/deepseek-v4p1-flash"
   },
   {
-   "context": 1000000,
+   "context": 1048576,
    "id": "accounts/fireworks/models/deepseek-v4p1-flash-1017"
   },
   {
@@ -23,6 +23,10 @@
    "id": "accounts/fireworks/models/glm-5p3-flash"
   },
   {
+   "context": 524288,
+   "id": "accounts/fireworks/models/hy4-flash"
+  },
+  {
    "context": 1048576,
    "id": "accounts/fireworks/models/kimi-k3"
   },
@@ -35,7 +39,7 @@
    "id": "accounts/fireworks/models/minimax-m3"
   },
   {
-   "context": 1000000,
+   "context": 1048576,
    "id": "accounts/fireworks/models/minimax-m3p1-flash"
   },
   {
@@ -51,8 +55,20 @@
    "id": "accounts/fireworks/models/qwen3p8-max"
   },
   {
+   "context": 262144,
+   "id": "accounts/fireworks/models/qwen4-max"
+  },
+  {
+   "context": 1048576,
+   "id": "accounts/fireworks/models/ultramarine-1-flash-us"
+  },
+  {
    "context": 1000000,
    "id": "accounts/fireworks/routers/deepseek-flash-latest"
+  },
+  {
+   "context": 1048576,
+   "id": "accounts/fireworks/routers/deepseek-v4p1-flash-1017-flex"
   },
   {
    "context": 1000000,
@@ -63,8 +79,16 @@
    "id": "accounts/fireworks/routers/deepseek-v4p1-flash-1017-ultrafast"
   },
   {
+   "context": 1048576,
+   "id": "accounts/fireworks/routers/deepseek-v4p1-flash-1017-us"
+  },
+  {
    "context": 1000000,
    "id": "accounts/fireworks/routers/deepseek-v4p1-flash-spot"
+  },
+  {
+   "context": 1048576,
+   "id": "accounts/fireworks/routers/deepseek-v4p1-flash-us"
   },
   {
    "context": 1048572,
@@ -73,6 +97,10 @@
   {
    "context": 1048573,
    "id": "accounts/fireworks/routers/glm-5p3-spot"
+  },
+  {
+   "context": 1048573,
+   "id": "accounts/fireworks/routers/glm-5p3-us"
   },
   {
    "context": 1048572,
@@ -96,7 +124,11 @@
   },
   {
    "context": 1048576,
-   "id": "accounts/fireworks/routers/kimi-k3-spot"
+   "id": "accounts/fireworks/routers/kimi-k3-us"
+  },
+  {
+   "context": 1048576,
+   "id": "accounts/fireworks/routers/kimi-k3p1-pro-us"
   },
   {
    "context": 1048576,

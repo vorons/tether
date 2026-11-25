@@ -1,5 +1,5 @@
 {
- "generated_at": 1795531905,
+ "generated_at": 1795616378,
  "id": "empiriolabs",
  "models": [
   {
@@ -33,10 +33,6 @@
   {
    "context": 1000000,
    "id": "fugu-ultra-v2-0"
-  },
-  {
-   "context": 131072,
-   "id": "gemma-3-27b"
   },
   {
    "context": 262144,

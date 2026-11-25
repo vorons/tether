@@ -1,10 +1,22 @@
 {
- "generated_at": 1795531905,
+ "generated_at": 1795616378,
  "id": "databricks",
  "models": [
   {
+   "context": 1000000,
+   "id": "databricks-claude-fable-5"
+  },
+  {
+   "context": 1000000,
+   "id": "databricks-claude-fable-5-1"
+  },
+  {
    "context": 200000,
    "id": "databricks-claude-haiku-4-5"
+  },
+  {
+   "context": 1000000,
+   "id": "databricks-claude-haiku-5-5"
   },
   {
    "context": 200000,
@@ -23,8 +35,16 @@
    "id": "databricks-claude-opus-4-7"
   },
   {
-   "context": 200000,
-   "id": "databricks-claude-sonnet-4"
+   "context": 1000000,
+   "id": "databricks-claude-opus-4-8"
+  },
+  {
+   "context": 1000000,
+   "id": "databricks-claude-opus-5"
+  },
+  {
+   "context": 1000000,
+   "id": "databricks-claude-opus-5-5"
   },
   {
    "context": 200000,
@@ -35,12 +55,16 @@
    "id": "databricks-claude-sonnet-4-6"
   },
   {
-   "context": 1048576,
-   "id": "databricks-gemini-2-5-flash"
+   "context": 1000000,
+   "id": "databricks-claude-sonnet-5"
   },
   {
-   "context": 1048576,
-   "id": "databricks-gemini-2-5-pro"
+   "context": 1000000,
+   "id": "databricks-claude-sonnet-5-5"
+  },
+  {
+   "context": 1000000,
+   "id": "databricks-deepseek-v4-1-flash-1017"
   },
   {
    "context": 1048576,
@@ -56,15 +80,39 @@
   },
   {
    "context": 1048576,
+   "id": "databricks-gemini-3-5-flash-lite"
+  },
+  {
+   "context": 1048576,
+   "id": "databricks-gemini-3-7-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "databricks-gemini-3-8-flash"
+  },
+  {
+   "context": 1048576,
    "id": "databricks-gemini-3-flash"
   },
   {
    "context": 1048576,
-   "id": "databricks-gemini-3-pro"
+   "id": "databricks-gemini-4-argon"
+  },
+  {
+   "context": 131072,
+   "id": "databricks-gemma-3-12b"
   },
   {
    "context": 1000000,
    "id": "databricks-glm-5-2"
+  },
+  {
+   "context": 1048576,
+   "id": "databricks-glm-5-3"
+  },
+  {
+   "context": 1048576,
+   "id": "databricks-glm-5-3-flash"
   },
   {
    "context": 400000,
@@ -77,6 +125,10 @@
   {
    "context": 400000,
    "id": "databricks-gpt-5-2"
+  },
+  {
+   "context": 400000,
+   "id": "databricks-gpt-5-3-codex"
   },
   {
    "context": 1050000,
@@ -93,6 +145,10 @@
   {
    "context": 1050000,
    "id": "databricks-gpt-5-5"
+  },
+  {
+   "context": 1050000,
+   "id": "databricks-gpt-5-5-pro"
   },
   {
    "context": 1050000,
@@ -115,6 +171,26 @@
    "id": "databricks-gpt-5-nano"
   },
   {
+   "context": 1050000,
+   "id": "databricks-gpt-6-1-sol"
+  },
+  {
+   "context": 1050000,
+   "id": "databricks-gpt-6-1-terra"
+  },
+  {
+   "context": 1050000,
+   "id": "databricks-gpt-6-astra"
+  },
+  {
+   "context": 1050000,
+   "id": "databricks-gpt-6-luna"
+  },
+  {
+   "context": 1050000,
+   "id": "databricks-gpt-6-sol"
+  },
+  {
    "context": 131072,
    "id": "databricks-gpt-oss-120b"
   },
@@ -123,8 +199,52 @@
    "id": "databricks-gpt-oss-20b"
   },
   {
-   "context": 262144,
-   "id": "databricks-kimi-k2-7-code"
+   "context": 500000,
+   "id": "databricks-grok-4-6"
+  },
+  {
+   "context": 500000,
+   "id": "databricks-grok-4-7"
+  },
+  {
+   "context": 1048576,
+   "id": "databricks-kimi-k3"
+  },
+  {
+   "context": 1048576,
+   "id": "databricks-kimi-k3-1-pro"
+  },
+  {
+   "context": 1000000,
+   "id": "databricks-llama-4-maverick"
+  },
+  {
+   "context": 128000,
+   "id": "databricks-meta-llama-3-1-8b-instruct"
+  },
+  {
+   "context": 128000,
+   "id": "databricks-meta-llama-3-3-70b-instruct"
+  },
+  {
+   "context": 1000000,
+   "id": "system.ai.claude-fable-5-2"
+  },
+  {
+   "context": 1048576,
+   "id": "system.ai.gemini-4-carbon"
+  },
+  {
+   "context": 1048576,
+   "id": "system.ai.gemini-4-hydrogen"
+  },
+  {
+   "context": 1050000,
+   "id": "system.ai.gpt-6-2-astra"
+  },
+  {
+   "context": 1050000,
+   "id": "system.ai.gpt-6-2-sol"
   }
  ],
  "schema": 1

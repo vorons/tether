@@ -1,5 +1,5 @@
 {
- "generated_at": 1795531905,
+ "generated_at": 1795616378,
  "id": "nano-gpt",
  "models": [
   {
@@ -1035,6 +1035,10 @@
    "id": "kitani/clover-2:thinking"
   },
   {
+   "context": 200000,
+   "id": "kitani/evolve-beta"
+  },
+  {
    "context": 32768,
    "id": "lightonai/LightOnOCR-2-1B"
   },
@@ -1179,7 +1183,7 @@
    "id": "minimax/minimax-m3"
   },
   {
-   "context": 1000000,
+   "context": 1048576,
    "id": "minimax/minimax-m3.1-flash"
   },
   {
@@ -1285,14 +1289,6 @@
   {
    "context": 32000,
    "id": "moondream/moondream3.1-9b-a2b"
-  },
-  {
-   "context": 262144,
-   "id": "moonshotai/Kimi-K2-Instruct-0905"
-  },
-  {
-   "context": 256000,
-   "id": "moonshotai/kimi-k2-instruct"
   },
   {
    "context": 256000,
@@ -2168,11 +2164,27 @@
   },
   {
    "context": 524288,
+   "id": "upstage/solar-mini-4-5"
+  },
+  {
+   "context": 524288,
+   "id": "upstage/solar-mini-4-5:thinking"
+  },
+  {
+   "context": 524288,
    "id": "upstage/solar-mini4"
   },
   {
    "context": 524288,
    "id": "upstage/solar-mini4:thinking"
+  },
+  {
+   "context": 524288,
+   "id": "upstage/solar-pro-4-contributor"
+  },
+  {
+   "context": 524288,
+   "id": "upstage/solar-pro-4-contributor:thinking"
   },
   {
    "context": 524288,
@@ -2237,6 +2249,10 @@
   {
    "context": 1048576,
    "id": "xiaomi/mimo-v2.6-flash-abliterated"
+  },
+  {
+   "context": 1048576,
+   "id": "xiaomi/mimo-v2.6-flash-mopd"
   },
   {
    "context": 1048576,

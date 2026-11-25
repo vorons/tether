@@ -1,5 +1,5 @@
 {
- "generated_at": 1795531905,
+ "generated_at": 1795616378,
  "id": "edenai",
  "models": [
   {
@@ -521,6 +521,10 @@
   {
    "context": 524288,
    "id": "deepinfra/thinkingmachines/Inkling"
+  },
+  {
+   "context": 1048576,
+   "id": "deepinfra/thinkingmachines/Inkling-2-Mini"
   },
   {
    "context": 1048576,
@@ -1155,6 +1159,10 @@
    "id": "openai/o3-pro"
   },
   {
+   "context": 1048576,
+   "id": "ovhcloud/DeepSeek-V4.1-Flash-1017"
+  },
+  {
    "context": 131072,
    "id": "ovhcloud/gpt-oss-120b"
   },
@@ -1464,27 +1472,11 @@
   },
   {
    "context": 1048576,
-   "id": "vertex/gemini-4-argon"
-  },
-  {
-   "context": 1048576,
-   "id": "vertex/gemini-4-argon@eu"
-  },
-  {
-   "context": 1048576,
-   "id": "vertex/gemini-4-argon@us"
-  },
-  {
-   "context": 1048576,
    "id": "vertex/gemini-flash-latest"
   },
   {
    "context": 131072,
    "id": "vertex/gemini-nano-banana-2.1"
-  },
-  {
-   "context": 1048576,
-   "id": "vertex/gemini-pro-latest"
   },
   {
    "context": 2000000,
@@ -1557,6 +1549,10 @@
   {
    "context": 1048576,
    "id": "zai/glm-5.3-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "zai/glm-5.3-flashx-legal"
   },
   {
    "context": 202752,

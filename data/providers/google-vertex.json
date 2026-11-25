@@ -1,5 +1,5 @@
 {
- "generated_at": 1795531905,
+ "generated_at": 1795616378,
  "id": "google-vertex",
  "models": [
   {
@@ -91,7 +91,7 @@
    "id": "gemini-2.5-flash"
   },
   {
-   "context": 32768,
+   "context": 65536,
    "id": "gemini-2.5-flash-image"
   },
   {

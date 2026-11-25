@@ -1,5 +1,5 @@
 {
- "generated_at": 1795531905,
+ "generated_at": 1795616378,
  "id": "alibaba-cn",
  "models": [
   {
@@ -55,8 +55,16 @@
    "id": "deepseek-v3-2-exp"
   },
   {
+   "context": 131072,
+   "id": "deepseek-v3.2"
+  },
+  {
    "context": 1000000,
    "id": "deepseek-v4-flash"
+  },
+  {
+   "context": 1000000,
+   "id": "deepseek-v4-flash-0731"
   },
   {
    "context": 1000000,
@@ -83,6 +91,10 @@
    "id": "glm-5.3"
   },
   {
+   "context": 1000000,
+   "id": "glm-5.3-prime"
+  },
+  {
    "context": 262144,
    "id": "kimi-k2-thinking"
   },
@@ -99,16 +111,20 @@
    "id": "kimi-k3"
   },
   {
+   "context": 1048576,
+   "id": "kimi-k3.1-pro"
+  },
+  {
+   "context": 1048576,
+   "id": "kimi-k3.1-pro-prime"
+  },
+  {
    "context": 262144,
    "id": "kimi/kimi-k2.5"
   },
   {
    "context": 131072,
    "id": "moonshot-kimi-k2-instruct"
-  },
-  {
-   "context": 131072,
-   "id": "qvq-max"
   },
   {
    "context": 1000000,
@@ -128,10 +144,6 @@
   },
   {
    "context": 4096,
-   "id": "qwen-math-plus"
-  },
-  {
-   "context": 4096,
    "id": "qwen-math-turbo"
   },
   {
@@ -143,18 +155,6 @@
    "id": "qwen-mt-plus"
   },
   {
-   "context": 16384,
-   "id": "qwen-mt-turbo"
-  },
-  {
-   "context": 32768,
-   "id": "qwen-omni-turbo"
-  },
-  {
-   "context": 32768,
-   "id": "qwen-omni-turbo-realtime"
-  },
-  {
    "context": 1000000,
    "id": "qwen-plus"
   },
@@ -163,84 +163,20 @@
    "id": "qwen-plus-character"
   },
   {
-   "context": 1000000,
-   "id": "qwen-turbo"
-  },
-  {
-   "context": 131072,
-   "id": "qwen-vl-max"
-  },
-  {
    "context": 34096,
    "id": "qwen-vl-ocr"
-  },
-  {
-   "context": 131072,
-   "id": "qwen-vl-plus"
-  },
-  {
-   "context": 32768,
-   "id": "qwen2-5-omni-7b"
-  },
-  {
-   "context": 131072,
-   "id": "qwen3-14b"
-  },
-  {
-   "context": 131072,
-   "id": "qwen3-235b-a22b"
-  },
-  {
-   "context": 131072,
-   "id": "qwen3-32b"
-  },
-  {
-   "context": 131072,
-   "id": "qwen3-8b"
   },
   {
    "context": 53248,
    "id": "qwen3-asr-flash"
   },
   {
-   "context": 262144,
-   "id": "qwen3-coder-30b-a3b-instruct"
-  },
-  {
-   "context": 262144,
-   "id": "qwen3-coder-480b-a35b-instruct"
-  },
-  {
    "context": 1000000,
    "id": "qwen3-coder-flash"
   },
   {
-   "context": 1048576,
-   "id": "qwen3-coder-plus"
-  },
-  {
-   "context": 262144,
-   "id": "qwen3-max"
-  },
-  {
-   "context": 131072,
-   "id": "qwen3-next-80b-a3b-instruct"
-  },
-  {
-   "context": 131072,
-   "id": "qwen3-next-80b-a3b-thinking"
-  },
-  {
    "context": 65536,
    "id": "qwen3-omni-flash"
-  },
-  {
-   "context": 65536,
-   "id": "qwen3-omni-flash-realtime"
-  },
-  {
-   "context": 131072,
-   "id": "qwen3-vl-235b-a22b"
   },
   {
    "context": 131072,
@@ -249,6 +185,18 @@
   {
    "context": 262144,
    "id": "qwen3-vl-plus"
+  },
+  {
+   "context": 262144,
+   "id": "qwen3.5-122b-a10b"
+  },
+  {
+   "context": 262144,
+   "id": "qwen3.5-27b"
+  },
+  {
+   "context": 262144,
+   "id": "qwen3.5-35b-a3b"
   },
   {
    "context": 262144,
@@ -263,12 +211,16 @@
    "id": "qwen3.5-plus"
   },
   {
-   "context": 1000000,
-   "id": "qwen3.6-flash"
+   "context": 262144,
+   "id": "qwen3.6-27b"
   },
   {
-   "context": 245800,
-   "id": "qwen3.6-max-preview"
+   "context": 262144,
+   "id": "qwen3.6-35b-a3b"
+  },
+  {
+   "context": 1000000,
+   "id": "qwen3.6-flash"
   },
   {
    "context": 1000000,
@@ -299,8 +251,8 @@
    "id": "qwen3.8-omni-flash"
   },
   {
-   "context": 131072,
-   "id": "qwq-plus"
+   "context": 1000000,
+   "id": "qwen4-max"
   },
   {
    "context": 163840,

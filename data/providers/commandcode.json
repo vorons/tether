@@ -1,5 +1,5 @@
 {
- "generated_at": 1795531905,
+ "generated_at": 1795616378,
  "id": "commandcode",
  "models": [
   {
@@ -315,7 +315,7 @@
    "id": "tencent/hy3-paid"
   },
   {
-   "context": 1024000,
+   "context": 1048576,
    "id": "tencent/hy4-preview"
   },
   {

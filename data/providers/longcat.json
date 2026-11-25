@@ -1,5 +1,5 @@
 {
- "generated_at": 1795531905,
+ "generated_at": 1795616378,
  "id": "longcat",
  "models": [
   {
@@ -9,10 +9,6 @@
   {
    "context": 1048576,
    "id": "LongCat-2.5"
-  },
-  {
-   "context": 1048576,
-   "id": "LongCat-2.5-Preview"
   }
  ],
  "schema": 1
