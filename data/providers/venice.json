@@ -1,5 +1,5 @@
 {
- "generated_at": 1795616378,
+ "generated_at": 1795701148,
  "id": "venice",
  "models": [
   {
@@ -217,6 +217,10 @@
   {
    "context": 500000,
    "id": "grok-4-7"
+  },
+  {
+   "context": 1048576,
+   "id": "hy4"
   },
   {
    "context": 1048576,

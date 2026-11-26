@@ -1,5 +1,5 @@
 {
- "generated_at": 1795616378,
+ "generated_at": 1795701148,
  "id": "huggingface",
  "models": [
   {
@@ -27,7 +27,7 @@
    "id": "MiniMaxAI/MiniMax-M2.7"
   },
   {
-   "context": 1048576,
+   "context": 524288,
    "id": "MiniMaxAI/MiniMax-M3"
   },
   {

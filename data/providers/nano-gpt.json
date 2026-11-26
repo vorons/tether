@@ -1,5 +1,5 @@
 {
- "generated_at": 1795616378,
+ "generated_at": 1795701148,
  "id": "nano-gpt",
  "models": [
   {
@@ -217,6 +217,10 @@
   {
    "context": 1048576,
    "id": "TEE/glm-5.3-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "TEE/glm-5.3-uncensored"
   },
   {
    "context": 131072,
@@ -521,10 +525,6 @@
   {
    "context": 256000,
    "id": "command-a-reasoning-08-2025"
-  },
-  {
-   "context": 128000,
-   "id": "deepcogito/cogito-v1-preview-qwen-32B"
   },
   {
    "context": 163840,
@@ -1291,11 +1291,15 @@
    "id": "moondream/moondream3.1-9b-a2b"
   },
   {
-   "context": 256000,
+   "context": 262144,
+   "id": "moonshotai/kimi-k2-thinking"
+  },
+  {
+   "context": 262144,
    "id": "moonshotai/kimi-k2.5"
   },
   {
-   "context": 256000,
+   "context": 262144,
    "id": "moonshotai/kimi-k2.5:thinking"
   },
   {
@@ -1623,10 +1627,6 @@
    "id": "openai/o3"
   },
   {
-   "context": 200000,
-   "id": "openai/o3-pro-2025-06-10"
-  },
-  {
    "context": 1048064,
    "id": "orca/orcacyber-flash-1.0"
   },
@@ -1847,11 +1847,11 @@
    "id": "qwen/qwen3.5-35b-a3b:thinking"
   },
   {
-   "context": 258048,
+   "context": 262144,
    "id": "qwen/qwen3.5-397b-a17b"
   },
   {
-   "context": 258048,
+   "context": 262144,
    "id": "qwen/qwen3.5-397b-a17b:thinking"
   },
   {
@@ -2135,16 +2135,12 @@
    "id": "thinkingmachines/inkling"
   },
   {
+   "context": 1048576,
+   "id": "thinkingmachines/inkling-2-mini"
+  },
+  {
    "context": 1040000,
    "id": "thinkingmachines/inkling:thinking"
-  },
-  {
-   "context": 1048576,
-   "id": "unbiased/pareto-26.10"
-  },
-  {
-   "context": 262144,
-   "id": "unbiased/pareto-26.9"
   },
   {
    "context": 32768,
@@ -2252,10 +2248,6 @@
   },
   {
    "context": 1048576,
-   "id": "xiaomi/mimo-v2.6-flash-mopd"
-  },
-  {
-   "context": 1048576,
    "id": "xiaomi/mimo-v2.6-flash-uncensored"
   },
   {
@@ -2273,6 +2265,10 @@
   {
    "context": 32768,
    "id": "xtools-at/deepseek-v4-pro-qwen3.5-9b-uncensored-heretic"
+  },
+  {
+   "context": 980000,
+   "id": "yetalabs/kimi-k3.1-pro-abliterated"
   },
   {
    "context": 128000,

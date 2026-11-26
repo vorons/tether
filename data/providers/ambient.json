@@ -1,9 +1,9 @@
 {
- "generated_at": 1795616378,
+ "generated_at": 1795701148,
  "id": "ambient",
  "models": [
   {
-   "context": 202752,
+   "context": 1048576,
    "id": "ambient/large"
   },
   {
@@ -13,6 +13,10 @@
   {
    "context": 1048576,
    "id": "deepseek/deepseek-v4.1-flash-1017"
+  },
+  {
+   "context": 262144,
+   "id": "google/gemma-4-26b-a4b-it"
   },
   {
    "context": 131072,

@@ -1,5 +1,5 @@
 {
- "generated_at": 1795616378,
+ "generated_at": 1795701148,
  "id": "opencode",
  "models": [
   {
@@ -565,6 +565,10 @@
   {
    "context": 262000,
    "id": "ring-2.6-1t-free"
+  },
+  {
+   "context": 1048576,
+   "id": "seaglass-alpha-free"
   },
   {
    "context": 1048576,

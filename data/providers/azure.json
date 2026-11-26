@@ -1,5 +1,5 @@
 {
- "generated_at": 1795616378,
+ "generated_at": 1795701148,
  "id": "azure",
  "models": [
   {
@@ -21,10 +21,6 @@
   {
    "context": 1000000,
    "id": "claude-haiku-5-5"
-  },
-  {
-   "context": 1000000,
-   "id": "claude-mythos-5"
   },
   {
    "context": 200000,
@@ -71,10 +67,6 @@
    "id": "codestral-2501"
   },
   {
-   "context": 200000,
-   "id": "codex-mini"
-  },
-  {
    "context": 131072,
    "id": "cohere-command-a"
   },
@@ -109,6 +101,34 @@
   {
    "context": 1000000,
    "id": "deepseek-v4.1-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "fw-deepseek-v4.1-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "fw-glm-5.3"
+  },
+  {
+   "context": 1048576,
+   "id": "fw-glm-5.3-flash"
+  },
+  {
+   "context": 1048576,
+   "id": "fw-kimi-k3"
+  },
+  {
+   "context": 1048576,
+   "id": "fw-kimi-k3.1-pro"
+  },
+  {
+   "context": 262144,
+   "id": "fw-nemotron-3-ultra-nvfp4"
+  },
+  {
+   "context": 262144,
+   "id": "fw-nemotron-lightning-3.5-30b-a3b"
   },
   {
    "context": 16384,
@@ -259,12 +279,12 @@
    "id": "gpt-6.2-sol"
   },
   {
-   "context": 400000,
+   "context": 128000,
    "id": "gpt-chat-latest"
   },
   {
    "context": 0,
-   "id": "gpt-image-1"
+   "id": "gpt-image-1-mini"
   },
   {
    "context": 0,
@@ -281,6 +301,10 @@
   {
    "context": 0,
    "id": "gpt-image-2.5-sunburst"
+  },
+  {
+   "context": 131072,
+   "id": "gpt-oss-120b"
   },
   {
    "context": 128000,
@@ -319,6 +343,10 @@
    "id": "kimi-k2.7-code"
   },
   {
+   "context": 1048576,
+   "id": "kimi-k3.1-pro"
+  },
+  {
    "context": 128000,
    "id": "llama-3.3-70b-instruct"
   },
@@ -347,27 +375,11 @@
    "id": "model-router"
   },
   {
-   "context": 200000,
-   "id": "o1"
-  },
-  {
-   "context": 200000,
-   "id": "o3"
-  },
-  {
-   "context": 200000,
-   "id": "o3-mini"
-  },
-  {
-   "context": 200000,
-   "id": "o4-mini"
-  },
-  {
-   "context": 128000,
+   "context": 16384,
    "id": "phi-4"
   },
   {
-   "context": 128000,
+   "context": 131072,
    "id": "phi-4-mini"
   },
   {
@@ -375,16 +387,12 @@
    "id": "phi-4-mini-reasoning"
   },
   {
-   "context": 128000,
+   "context": 131072,
    "id": "phi-4-multimodal"
   },
   {
-   "context": 32000,
+   "context": 32768,
    "id": "phi-4-reasoning"
-  },
-  {
-   "context": 32000,
-   "id": "phi-4-reasoning-plus"
   },
   {
    "context": 8192,

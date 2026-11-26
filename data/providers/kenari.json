@@ -1,5 +1,5 @@
 {
- "generated_at": 1795616378,
+ "generated_at": 1795701148,
  "id": "kenari",
  "models": [
   {
@@ -253,10 +253,6 @@
   {
    "context": 1048576,
    "id": "muse-ember-1-0"
-  },
-  {
-   "context": 131072,
-   "id": "muse-glimmer-30b:free"
   },
   {
    "context": 1048576,

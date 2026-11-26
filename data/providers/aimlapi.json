@@ -1,5 +1,5 @@
 {
- "generated_at": 1795616378,
+ "generated_at": 1795701148,
  "id": "aimlapi",
  "models": [
   {
@@ -13,10 +13,6 @@
   {
    "context": 131000,
    "id": "alibaba/qwen-plus"
-  },
-  {
-   "context": 262000,
-   "id": "alibaba/qwen3-coder-480b-a35b-instruct"
   },
   {
    "context": 129024,
@@ -285,10 +281,6 @@
   {
    "context": 131072,
    "id": "mistralai/mistral-large-2407"
-  },
-  {
-   "context": 131072,
-   "id": "mistralai/mistral-medium-3"
   },
   {
    "context": 262144,

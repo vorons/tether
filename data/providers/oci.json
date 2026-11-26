@@ -1,5 +1,5 @@
 {
- "generated_at": 1795616378,
+ "generated_at": 1795701148,
  "id": "oci",
  "models": [
   {
@@ -37,6 +37,10 @@
   {
    "context": 500000,
    "id": "xai.grok-4.6"
+  },
+  {
+   "context": 500000,
+   "id": "xai.grok-4.7"
   }
  ],
  "schema": 1

@@ -1,5 +1,5 @@
 {
- "generated_at": 1795616378,
+ "generated_at": 1795701148,
  "id": "fireworks-ai",
  "models": [
   {
@@ -93,6 +93,14 @@
   {
    "context": 1048572,
    "id": "accounts/fireworks/routers/glm-5p3-fast"
+  },
+  {
+   "context": 1048573,
+   "id": "accounts/fireworks/routers/glm-5p3-flash-flex"
+  },
+  {
+   "context": 1048573,
+   "id": "accounts/fireworks/routers/glm-5p3-flex"
   },
   {
    "context": 1048573,

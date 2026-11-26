@@ -1,5 +1,5 @@
 {
- "generated_at": 1795616378,
+ "generated_at": 1795701148,
  "id": "kilo",
  "models": [
   {
@@ -425,10 +425,6 @@
   {
    "context": 131072,
    "id": "ibm-granite/granite-4.2-8b"
-  },
-  {
-   "context": 1000000,
-   "id": "inception/mercury-3"
   },
   {
    "context": 262144,
@@ -1599,16 +1595,8 @@
    "id": "thinkingmachines/inkling-small"
   },
   {
-   "context": 1048576,
-   "id": "unbiased/pareto-26.10"
-  },
-  {
-   "context": 1048576,
-   "id": "unbiased/pareto-26.10-preview"
-  },
-  {
-   "context": 262144,
-   "id": "unbiased/pareto-26.9"
+   "context": 131072,
+   "id": "tngtech/deepseek-r1t2-chimera"
   },
   {
    "context": 6144,
@@ -1755,7 +1743,7 @@
    "id": "z-ai/glm-5.3-fast"
   },
   {
-   "context": 1048576,
+   "context": 1048575,
    "id": "z-ai/glm-5.3-flash"
   },
   {
@@ -1833,10 +1821,6 @@
   {
    "context": 1050000,
    "id": "~openai/gpt-terra-latest"
-  },
-  {
-   "context": 1048576,
-   "id": "~unbiased/pareto-latest"
   },
   {
    "context": 500000,

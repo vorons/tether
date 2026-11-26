@@ -1,5 +1,5 @@
 {
- "generated_at": 1795616378,
+ "generated_at": 1795701148,
  "id": "tencent-token-plan",
  "models": [
   {
@@ -39,6 +39,10 @@
    "id": "glm-5.3-flash"
   },
   {
+   "context": 1000000,
+   "id": "glm-5.4"
+  },
+  {
    "context": 256000,
    "id": "hy3"
   },
@@ -68,6 +72,10 @@
   },
   {
    "context": 1048576,
+   "id": "kimi-k3.1-pro"
+  },
+  {
+   "context": 1048576,
    "id": "mimo-v2.6-flash"
   },
   {
@@ -77,6 +85,10 @@
   {
    "context": 1048576,
    "id": "minimax-m3"
+  },
+  {
+   "context": 1000000,
+   "id": "minimax-m3.1-flash"
   }
  ],
  "schema": 1

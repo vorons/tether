@@ -1,5 +1,5 @@
 {
- "generated_at": 1795616378,
+ "generated_at": 1795701148,
  "id": "nvidia",
  "models": [
   {
@@ -63,24 +63,8 @@
    "id": "minimaxai/minimax-m3.1-flash"
   },
   {
-   "context": 32768,
-   "id": "mistralai/magistral-small-2506"
-  },
-  {
-   "context": 65536,
-   "id": "mistralai/mistral-7b-instruct-v0.3"
-  },
-  {
-   "context": 131072,
-   "id": "mistralai/mistral-medium-3-instruct"
-  },
-  {
    "context": 262144,
    "id": "moonshotai/kimi-k2.6"
-  },
-  {
-   "context": 1048576,
-   "id": "moonshotai/kimi-k3"
   },
   {
    "context": 0,
@@ -100,15 +84,7 @@
   },
   {
    "context": 128000,
-   "id": "nvidia/llama-3.1-nemotron-70b-instruct"
-  },
-  {
-   "context": 128000,
    "id": "nvidia/llama-3.1-nemotron-safety-guard-8b-v3"
-  },
-  {
-   "context": 128000,
-   "id": "nvidia/llama-3.1-nemotron-ultra-253b-v1"
   },
   {
    "context": 8192,
@@ -148,14 +124,6 @@
   },
   {
    "context": 128000,
-   "id": "nvidia/rerank-qa-mistral-4b"
-  },
-  {
-   "context": 128000,
-   "id": "nvidia/riva-translate-4b-instruct-v1.1"
-  },
-  {
-   "context": 128000,
    "id": "nvidia/sparsedrive"
   },
   {
@@ -169,14 +137,6 @@
   {
    "context": 0,
    "id": "nvidia/synthetic-video-detector"
-  },
-  {
-   "context": 128000,
-   "id": "nvidia/usdcode"
-  },
-  {
-   "context": 0,
-   "id": "nvidia/usdvalidate"
   },
   {
    "context": 131072,
@@ -201,10 +161,6 @@
   {
    "context": 1048576,
    "id": "stepfun-ai/step-5-preview"
-  },
-  {
-   "context": 1000000,
-   "id": "z-ai/glm-5.3"
   },
   {
    "context": 1000000,

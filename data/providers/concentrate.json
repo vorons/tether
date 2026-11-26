@@ -1,5 +1,5 @@
 {
- "generated_at": 1795616378,
+ "generated_at": 1795701148,
  "id": "concentrate",
  "models": [
   {
@@ -217,6 +217,10 @@
   {
    "context": 1000000,
    "id": "glm-5.3-flash"
+  },
+  {
+   "context": 1000000,
+   "id": "glm-5.3-flashx-legal"
   },
   {
    "context": 1047576,

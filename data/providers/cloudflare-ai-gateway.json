@@ -1,5 +1,5 @@
 {
- "generated_at": 1795616378,
+ "generated_at": 1795701148,
  "id": "cloudflare-ai-gateway",
  "models": [
   {
@@ -183,6 +183,10 @@
    "id": "moonshotai/kimi-k3.1-pro"
   },
   {
+   "context": 1048576,
+   "id": "moonshotai/kimi-k3.1-pro-highspeed"
+  },
+  {
    "context": 1047576,
    "id": "openai/gpt-4.1"
   },
@@ -293,6 +297,10 @@
   {
    "context": 200000,
    "id": "openai/o4-mini"
+  },
+  {
+   "context": 1048576,
+   "id": "particle/particle-1"
   },
   {
    "context": 262144,

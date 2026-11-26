@@ -1,5 +1,5 @@
 {
- "generated_at": 1795616378,
+ "generated_at": 1795701148,
  "id": "prime",
  "models": [
   {
@@ -289,10 +289,6 @@
   {
    "context": 1048576,
    "id": "z-ai/glm-5.2"
-  },
-  {
-   "context": 1048576,
-   "id": "z-ai/glm-5.3-flash"
   }
  ],
  "schema": 1
