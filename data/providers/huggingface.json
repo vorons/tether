@@ -1,5 +1,5 @@
 {
- "generated_at": 1795701148,
+ "generated_at": 1795787427,
  "id": "huggingface",
  "models": [
   {
@@ -27,7 +27,7 @@
    "id": "MiniMaxAI/MiniMax-M2.7"
   },
   {
-   "context": 524288,
+   "context": 1048576,
    "id": "MiniMaxAI/MiniMax-M3"
   },
   {
@@ -47,7 +47,11 @@
    "id": "Qwen/Qwen2.5-Coder-32B-Instruct"
   },
   {
-   "context": 262144,
+   "context": 128000,
+   "id": "Qwen/Qwen2.5-VL-72B-Instruct"
+  },
+  {
+   "context": 131072,
    "id": "Qwen/Qwen3-235B-A22B-Instruct-2507"
   },
   {
@@ -147,6 +151,14 @@
    "id": "Qwen/Qwen3.8-Flash-Next-FP8"
   },
   {
+   "context": 16384,
+   "id": "RekaAI/reka-edge-2603"
+  },
+  {
+   "context": 8192,
+   "id": "Sao10K/L3-8B-Lunaris-v1"
+  },
+  {
    "context": 6144,
    "id": "Undi95/ReMM-SLERP-L2-13B"
   },
@@ -157,6 +169,18 @@
   {
    "context": 1048576,
    "id": "XiaomiMiMo/MiMo-V2.5-Pro"
+  },
+  {
+   "context": 1048576,
+   "id": "XiaomiMiMo/MiMo-V2.6-Flash-MOPD"
+  },
+  {
+   "context": 1048576,
+   "id": "XiaomiMiMo/MiMo-V2.6-Flash-RL"
+  },
+  {
+   "context": 1048576,
+   "id": "XiaomiMiMo/MiMo-V2.6-Pro-RL"
   },
   {
    "context": 131072,
@@ -269,6 +293,10 @@
   {
    "context": 1000000,
    "id": "inclusionAI/Ling-3.1-flash"
+  },
+  {
+   "context": 131072,
+   "id": "inclusionAI/LingSante-3.1-air-VL"
   },
   {
    "context": 131072,

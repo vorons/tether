@@ -1,5 +1,5 @@
 {
- "generated_at": 1795701148,
+ "generated_at": 1795787427,
  "id": "requesty",
  "models": [
   {
@@ -479,10 +479,6 @@
    "id": "grok-4.7"
   },
   {
-   "context": 262144,
-   "id": "hy3"
-  },
-  {
    "context": 65536,
    "id": "inkling"
   },
@@ -701,10 +697,6 @@
   {
    "context": 256000,
    "id": "seed-2.0-pro"
-  },
-  {
-   "context": 262144,
-   "id": "step-3.7-flash"
   },
   {
    "context": 1048576,

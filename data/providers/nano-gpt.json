@@ -1,5 +1,5 @@
 {
- "generated_at": 1795701148,
+ "generated_at": 1795787427,
  "id": "nano-gpt",
  "models": [
   {
@@ -988,6 +988,10 @@
   },
   {
    "context": 262144,
+   "id": "inclusionai/ling-3.0-flash-sante"
+  },
+  {
+   "context": 262144,
    "id": "inclusionai/ling-3.0-flash-vl"
   },
   {
@@ -1005,6 +1009,10 @@
   {
    "context": 262144,
    "id": "inclusionai/ling-3.1-flash"
+  },
+  {
+   "context": 131072,
+   "id": "inclusionai/lingsante-3.1-air-vl"
   },
   {
    "context": 128000,
@@ -1295,11 +1303,11 @@
    "id": "moonshotai/kimi-k2-thinking"
   },
   {
-   "context": 262144,
+   "context": 256000,
    "id": "moonshotai/kimi-k2.5"
   },
   {
-   "context": 262144,
+   "context": 256000,
    "id": "moonshotai/kimi-k2.5:thinking"
   },
   {

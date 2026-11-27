@@ -1,5 +1,5 @@
 {
- "generated_at": 1795701148,
+ "generated_at": 1795787427,
  "id": "cloudflare-ai-gateway",
  "models": [
   {
@@ -145,6 +145,10 @@
   {
    "context": 1048576,
    "id": "google/gemini-4-hydrogen"
+  },
+  {
+   "context": 1048576,
+   "id": "google/gemini-4-neon"
   },
   {
    "context": 1048576,

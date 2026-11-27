@@ -1,5 +1,5 @@
 {
- "generated_at": 1795701148,
+ "generated_at": 1795787427,
  "id": "kilo",
  "models": [
   {
@@ -455,8 +455,8 @@
    "id": "inclusionai/ling-3.1-flash-1019"
   },
   {
-   "context": 1048576,
-   "id": "inclusionai/ling-3.2-flash:free"
+   "context": 131072,
+   "id": "inclusionai/lingsante-3.1-air-vl"
   },
   {
    "context": 128000,
@@ -527,7 +527,7 @@
    "id": "meta-llama/llama-3.2-3b-instruct"
   },
   {
-   "context": 128000,
+   "context": 131072,
    "id": "meta-llama/llama-3.3-70b-instruct"
   },
   {
@@ -713,6 +713,10 @@
   {
    "context": 131072,
    "id": "moonshotai/kimi-k2"
+  },
+  {
+   "context": 262144,
+   "id": "moonshotai/kimi-k2-0905"
   },
   {
    "context": 262144,

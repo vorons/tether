@@ -1,11 +1,7 @@
 {
- "generated_at": 1795701148,
+ "generated_at": 1795787427,
  "id": "concentrate",
  "models": [
-  {
-   "context": 262144,
-   "id": "apodex-1.1-mini"
-  },
   {
    "context": 1048576,
    "id": "beam-1.0-501b-a23b"
@@ -336,10 +332,6 @@
   },
   {
    "context": 256000,
-   "id": "grok-build-0.1"
-  },
-  {
-   "context": 256000,
    "id": "hy3"
   },
   {
@@ -399,27 +391,11 @@
    "id": "minimax-m2"
   },
   {
-   "context": 204800,
+   "context": 196608,
    "id": "minimax-m2-1"
   },
   {
-   "context": 204800,
-   "id": "minimax-m2-1-highspeed"
-  },
-  {
-   "context": 204800,
-   "id": "minimax-m2-5"
-  },
-  {
-   "context": 204800,
-   "id": "minimax-m2-5-highspeed"
-  },
-  {
-   "context": 204800,
-   "id": "minimax-m2-7"
-  },
-  {
-   "context": 204800,
+   "context": 196608,
    "id": "minimax-m2-7-highspeed"
   },
   {
@@ -441,14 +417,6 @@
   {
    "context": 470000,
    "id": "mistral-large-4"
-  },
-  {
-   "context": 128000,
-   "id": "mistral-medium-3"
-  },
-  {
-   "context": 128000,
-   "id": "mistral-medium-3.1"
   },
   {
    "context": 128000,

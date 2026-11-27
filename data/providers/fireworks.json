@@ -1,5 +1,5 @@
 {
- "generated_at": 1795701148,
+ "generated_at": 1795787427,
  "id": "fireworks",
  "models": [
   {
@@ -28,6 +28,14 @@
   },
   {
    "context": 1048576,
+   "id": "accounts/fireworks/models/inkling-2-mini"
+  },
+  {
+   "context": 1048576,
+   "id": "accounts/fireworks/models/inkling-2-small"
+  },
+  {
+   "context": 1048576,
    "id": "accounts/fireworks/models/kimi-k3"
   },
   {
@@ -45,6 +53,14 @@
   {
    "context": 1048576,
    "id": "accounts/fireworks/models/muse-spark-open"
+  },
+  {
+   "context": 262144,
+   "id": "accounts/fireworks/models/nemotron-3-ultra-nvfp4"
+  },
+  {
+   "context": 262144,
+   "id": "accounts/fireworks/models/nemotron-lightning-3p5-30b-a3b"
   },
   {
    "context": 262144,
@@ -133,6 +149,10 @@
   {
    "context": 1048576,
    "id": "accounts/fireworks/routers/kimi-k3-us"
+  },
+  {
+   "context": 1048576,
+   "id": "accounts/fireworks/routers/kimi-k3p1-pro-ultrafast"
   },
   {
    "context": 1048576,

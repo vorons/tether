@@ -1,18 +1,10 @@
 {
- "generated_at": 1795701148,
+ "generated_at": 1795787427,
  "id": "deepinfra",
  "models": [
   {
    "context": 256000,
-   "id": "ByteDance/Seed-1.8"
-  },
-  {
-   "context": 256000,
    "id": "ByteDance/Seed-2.0-code"
-  },
-  {
-   "context": 256000,
-   "id": "ByteDance/Seed-2.0-mini"
   },
   {
    "context": 256000,
@@ -93,6 +85,14 @@
   {
    "context": 1000000,
    "id": "Qwen/Qwen4-Max"
+  },
+  {
+   "context": 8192,
+   "id": "Sao10K/L3-8B-Lunaris-v1-Turbo"
+  },
+  {
+   "context": 131072,
+   "id": "Sao10K/L3.1-70B-Euryale-v2.2"
   },
   {
    "context": 1048576,
@@ -192,6 +192,10 @@
   },
   {
    "context": 131072,
+   "id": "inclusionAI/LingSante-3.1-air-VL"
+  },
+  {
+   "context": 131072,
    "id": "meta-llama/Llama-3.3-70B-Instruct-Turbo"
   },
   {
@@ -245,6 +249,10 @@
   {
    "context": 262144,
    "id": "nvidia/NVIDIA-Nemotron-3.5-Lightning"
+  },
+  {
+   "context": 262144,
+   "id": "nvidia/NVIDIA-Nemotron-3.5-Super-VL"
   },
   {
    "context": 131072,

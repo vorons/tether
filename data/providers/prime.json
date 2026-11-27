@@ -1,5 +1,5 @@
 {
- "generated_at": 1795701148,
+ "generated_at": 1795787427,
  "id": "prime",
  "models": [
   {
@@ -265,6 +265,10 @@
   {
    "context": 262144,
    "id": "qwen/qwen3.8-27b"
+  },
+  {
+   "context": 262144,
+   "id": "qwen/qwen3.8-27b-fast"
   },
   {
    "context": 1048576,

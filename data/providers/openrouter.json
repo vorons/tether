@@ -1,5 +1,5 @@
 {
- "generated_at": 1795701148,
+ "generated_at": 1795787427,
  "id": "openrouter",
  "models": [
   {
@@ -400,7 +400,11 @@
   },
   {
    "context": 1048576,
-   "id": "inclusionai/ling-3.2-flash:free"
+   "id": "inclusionai/ling-3.2-flash"
+  },
+  {
+   "context": 131072,
+   "id": "inclusionai/lingsante-3.1-air-vl"
   },
   {
    "context": 128000,
@@ -597,6 +601,14 @@
   {
    "context": 32000,
    "id": "moondream/moondream3.1-9b-a2b"
+  },
+  {
+   "context": 131072,
+   "id": "moonshotai/kimi-k2"
+  },
+  {
+   "context": 262144,
+   "id": "moonshotai/kimi-k2-0905"
   },
   {
    "context": 262144,
@@ -1127,7 +1139,7 @@
    "id": "qwen/qwen3.7-plus"
   },
   {
-   "context": 1048576,
+   "context": 1000000,
    "id": "qwen/qwen3.8-2.4t-a95b"
   },
   {
@@ -1363,7 +1375,7 @@
    "id": "z-ai/glm-4.5v"
   },
   {
-   "context": 204800,
+   "context": 202752,
    "id": "z-ai/glm-4.6"
   },
   {
