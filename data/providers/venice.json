@@ -1,5 +1,5 @@
 {
- "generated_at": 1795787427,
+ "generated_at": 1795870663,
  "id": "venice",
  "models": [
   {
@@ -292,6 +292,10 @@
   },
   {
    "context": 262144,
+   "id": "nvidia-nemotron-3-5-lightning-30b-a3b"
+  },
+  {
+   "context": 262144,
    "id": "nvidia-nemotron-3-5-super-vl-120b-a12b"
   },
   {
@@ -413,10 +417,6 @@
   {
    "context": 128000,
    "id": "openai-gpt-oss-120b"
-  },
-  {
-   "context": 1000000,
-   "id": "pareto"
   },
   {
    "context": 1000000,

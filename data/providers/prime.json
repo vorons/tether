@@ -1,5 +1,5 @@
 {
- "generated_at": 1795787427,
+ "generated_at": 1795870663,
  "id": "prime",
  "models": [
   {
@@ -93,6 +93,10 @@
   {
    "context": 1048576,
    "id": "google/gemini-4-carbon"
+  },
+  {
+   "context": 1048576,
+   "id": "google/gemini-4-hydrogen"
   },
   {
    "context": 1048576,

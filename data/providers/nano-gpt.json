@@ -1,5 +1,5 @@
 {
- "generated_at": 1795787427,
+ "generated_at": 1795870663,
  "id": "nano-gpt",
  "models": [
   {
@@ -128,10 +128,6 @@
   },
   {
    "context": 262144,
-   "id": "Qwen3.5-27B-Blossom-V6.4-Derestricted"
-  },
-  {
-   "context": 262144,
    "id": "Qwen3.5-27B-BlueStar-v3-Derestricted"
   },
   {
@@ -141,10 +137,6 @@
   {
    "context": 262144,
    "id": "Qwen3.5-27B-Claude-4.6-Opus-Reasoning-Distilled-Derestricted-Lite"
-  },
-  {
-   "context": 262144,
-   "id": "Qwen3.5-27B-Queen-Derestricted"
   },
   {
    "context": 32768,
@@ -501,10 +493,6 @@
   {
    "context": 128000,
    "id": "bytedance/doubao-seed-character"
-  },
-  {
-   "context": 8192,
-   "id": "celeris-1"
   },
   {
    "context": 1048576,
@@ -1011,6 +999,10 @@
    "id": "inclusionai/ling-3.1-flash"
   },
   {
+   "context": 1048576,
+   "id": "inclusionai/ling-3.2-flash"
+  },
+  {
    "context": 131072,
    "id": "inclusionai/lingsante-3.1-air-vl"
   },
@@ -1297,10 +1289,6 @@
   {
    "context": 32000,
    "id": "moondream/moondream3.1-9b-a2b"
-  },
-  {
-   "context": 262144,
-   "id": "moonshotai/kimi-k2-thinking"
   },
   {
    "context": 256000,
@@ -2231,7 +2219,7 @@
    "id": "x-ai/grok-latest"
   },
   {
-   "context": 1048576,
+   "context": 1000000,
    "id": "xiaomi/mimo-v2.5"
   },
   {
@@ -2243,7 +2231,7 @@
    "id": "xiaomi/mimo-v2.5-pro:thinking"
   },
   {
-   "context": 1048576,
+   "context": 1000000,
    "id": "xiaomi/mimo-v2.5:thinking"
   },
   {

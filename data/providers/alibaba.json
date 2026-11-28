@@ -1,5 +1,5 @@
 {
- "generated_at": 1795787427,
+ "generated_at": 1795870663,
  "id": "alibaba",
  "models": [
   {
@@ -25,6 +25,22 @@
   {
    "context": 1048576,
    "id": "kimi-k3.1-pro-prime"
+  },
+  {
+   "context": 262144,
+   "id": "mindlab/macaron-v1-tall"
+  },
+  {
+   "context": 1048576,
+   "id": "mindlab/macaron-v1.1-coding-venti"
+  },
+  {
+   "context": 1048576,
+   "id": "mindlab/macaron-v1.1-venti"
+  },
+  {
+   "context": 1048576,
+   "id": "mindlab/macaron-v1.1-venti-pro"
   },
   {
    "context": 1000000,

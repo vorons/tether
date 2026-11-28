@@ -1,5 +1,5 @@
 {
- "generated_at": 1795787427,
+ "generated_at": 1795870663,
  "id": "requesty",
  "models": [
   {
@@ -13,6 +13,10 @@
   {
    "context": 1000000,
    "id": "claude-fable-5.1@eu"
+  },
+  {
+   "context": 1000000,
+   "id": "claude-fable-5.2"
   },
   {
    "context": 1000000,
@@ -479,6 +483,14 @@
    "id": "grok-4.7"
   },
   {
+   "context": 1048576,
+   "id": "hy4"
+  },
+  {
+   "context": 1048576,
+   "id": "hy4-flash"
+  },
+  {
    "context": 65536,
    "id": "inkling"
   },
@@ -681,6 +693,10 @@
   {
    "context": 1048576,
    "id": "qwen3.8-max"
+  },
+  {
+   "context": 262144,
+   "id": "qwen4-max"
   },
   {
    "context": 256000,

@@ -1,5 +1,5 @@
 {
- "generated_at": 1795787427,
+ "generated_at": 1795870663,
  "id": "openrouter",
  "models": [
   {
@@ -1029,10 +1029,6 @@
   {
    "context": 262144,
    "id": "qwen/qwen3-235b-a22b-2507"
-  },
-  {
-   "context": 128000,
-   "id": "qwen/qwen3-235b-a22b-thinking-2507"
   },
   {
    "context": 40960,

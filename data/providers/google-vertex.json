@@ -1,5 +1,5 @@
 {
- "generated_at": 1795787427,
+ "generated_at": 1795870663,
  "id": "google-vertex",
  "models": [
   {
@@ -79,12 +79,8 @@
    "id": "codestral-2"
   },
   {
-   "context": 163840,
-   "id": "deepseek-ai/deepseek-v3.1-maas"
-  },
-  {
-   "context": 163840,
-   "id": "deepseek-ai/deepseek-v3.2-maas"
+   "context": 1000000,
+   "id": "deepseek-ai/deepseek-v4.1-flash-1017-maas"
   },
   {
    "context": 1048576,
@@ -187,10 +183,6 @@
    "id": "google/gemma-4-26b-a4b-it-maas"
   },
   {
-   "context": 128000,
-   "id": "meta/llama-3.3-70b-instruct-maas"
-  },
-  {
    "context": 524288,
    "id": "meta/llama-4-maverick-17b-128e-instruct-maas"
   },
@@ -207,20 +199,8 @@
    "id": "mistral-small-2503"
   },
   {
-   "context": 262144,
-   "id": "moonshotai/kimi-k2-thinking-maas"
-  },
-  {
    "context": 131072,
    "id": "openai/gpt-oss-120b-maas"
-  },
-  {
-   "context": 131072,
-   "id": "openai/gpt-oss-20b-maas"
-  },
-  {
-   "context": 262144,
-   "id": "qwen/qwen3-235b-a22b-instruct-2507-maas"
   },
   {
    "context": 128000,
@@ -249,14 +229,6 @@
   {
    "context": 524288,
    "id": "xai/grok-4.7"
-  },
-  {
-   "context": 200000,
-   "id": "zai-org/glm-4.7-maas"
-  },
-  {
-   "context": 200000,
-   "id": "zai-org/glm-5-maas"
   },
   {
    "context": 1000000,

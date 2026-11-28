@@ -1,5 +1,5 @@
 {
- "generated_at": 1795787427,
+ "generated_at": 1795870663,
  "id": "llmgateway-providers",
  "models": [
   {
@@ -632,6 +632,10 @@
   },
   {
    "context": 1000000,
+   "id": "canopywave/deepseek-v4-pro-0813"
+  },
+  {
+   "context": 1000000,
    "id": "canopywave/deepseek-v4.1-flash-1017"
   },
   {
@@ -653,6 +657,10 @@
   {
    "context": 262144,
    "id": "canopywave/kimi-k2.6"
+  },
+  {
+   "context": 262144,
+   "id": "canopywave/kimi-k2.7-code"
   },
   {
    "context": 1048576,
@@ -1263,14 +1271,6 @@
    "id": "novita/deepseek-v4.1-flash-latest"
   },
   {
-   "context": 262144,
-   "id": "novita/gemma-4-26b-a4b-it"
-  },
-  {
-   "context": 262144,
-   "id": "novita/gemma-4-31b-it"
-  },
-  {
    "context": 65536,
    "id": "novita/glm-4.5v"
   },
@@ -1337,10 +1337,6 @@
   {
    "context": 1000000,
    "id": "novita/ling-3.1-flash"
-  },
-  {
-   "context": 131072,
-   "id": "novita/llama-3.3-70b-instruct"
   },
   {
    "context": 1048576,
@@ -1557,6 +1553,10 @@
   {
    "context": 1048576,
    "id": "reka-ai/deepseek-v4.1-flash-latest"
+  },
+  {
+   "context": 1048576,
+   "id": "reka-ai/glm-5.3"
   },
   {
    "context": 1048576,

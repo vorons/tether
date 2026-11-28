@@ -1,5 +1,5 @@
 {
- "generated_at": 1795787427,
+ "generated_at": 1795870663,
  "id": "edenai",
  "models": [
   {
@@ -555,7 +555,7 @@
    "id": "hy4-preview"
   },
   {
-   "context": 1048576,
+   "context": 524288,
    "id": "inkling"
   },
   {
@@ -805,10 +805,6 @@
   {
    "context": 200000,
    "id": "o3"
-  },
-  {
-   "context": 200000,
-   "id": "o3-mini"
   },
   {
    "context": 200000,
